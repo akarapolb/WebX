@@ -41,7 +41,7 @@ export async function ensurePublicPermissions(strapi: any) {
   if (!role) return;
 
   const map: Record<string, string[]> = {
-    "api::home-page.home-page": ["find"],
+    "api::home-page.home-page": ["find", "findOne"],
     "api::article.article": ["find", "findOne"],
     "api::service.service": ["find", "findOne"],
     "api::banner.banner": ["find", "findOne"],
@@ -203,6 +203,7 @@ export async function seedTenants(strapi: any) {
       key: "dga", name: "สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)",
       domains: ["localhost", "127.0.0.1", "dga.localhost", "dga.or.th", "www.dga.or.th"],
       active: true,
+      adminEmails: ["dga-editor@dga.local"],
       brand: { orgName: { th: "สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)", en: "Digital Government Development Agency" }, primaryColor: "#1a4fa0", logoUrl: "/assets/image/logo-dga.webp" },
       contact: { phone: "0-2612-6000", address: { th: "อาคารสถาบันเพื่อการยุติธรรมแห่งประเทศไทย (TIJ) ชั้น 4 เลขที่ 999 ถนนแจ้งวัฒนะ แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพฯ 10210", en: "TIJ Building, 4th Fl., 999 Chaeng Watthana Rd, Lak Si, Bangkok 10210" } },
       social: [{ label: "Facebook", url: "https://www.facebook.com/DGAThailand" }, { label: "YouTube", url: "https://www.youtube.com/@DGAThailand" }],
@@ -216,6 +217,7 @@ export async function seedTenants(strapi: any) {
       key: "pea", name: "การไฟฟ้าส่วนภูมิภาค (กฟภ.)",
       domains: ["pea.localhost", "pea.co.th", "www.pea.co.th"],
       active: true,
+      adminEmails: ["pea-editor@pea.local"],
       brand: { orgName: { th: "การไฟฟ้าส่วนภูมิภาค", en: "Provincial Electricity Authority" }, primaryColor: "#6a2c91", logoUrl: "" },
       contact: { phone: "1129", address: { th: "200 ถนนงามวงศ์วาน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ 10900", en: "200 Ngamwongwan Rd, Chatuchak, Bangkok 10900" } },
       social: [{ label: "Facebook", url: "#" }],
@@ -244,6 +246,7 @@ export async function backfillTenant(strapi: any) {
   const dgaId = await dgaTenantId(strapi);
   if (!dgaId) return;
   const uids = [
+    "api::home-page.home-page",
     "api::article.article", "api::service.service", "api::faq.faq", "api::job.job",
     "api::banner.banner", "api::video.video", "api::award.award",
     "api::complaint.complaint", "api::application.application", "api::registration.registration",
@@ -284,7 +287,95 @@ export async function seedTenantBContent(strapi: any) {
   ];
   for (const a of articles) await strapi.documents("api::article.article").create({ locale: "th", ...P, data: { ...a, tenant: pea.id } });
 
-  strapi.log.info("[seed] tenant 'pea' demo content created (services/faqs/articles) ✔");
+  // หน้าแรกของ pea (พิสูจน์ Home แบบ per-tenant)
+  await strapi.documents("api::home-page.home-page").create({
+    locale: "th", ...P,
+    data: {
+      tenant: pea.id,
+      seoTitle: "การไฟฟ้าส่วนภูมิภาค (กฟภ.)",
+      seoDescription: "บริการดิจิทัลของการไฟฟ้าส่วนภูมิภาค — ตรวจสอบค่าไฟ ชำระเงิน แจ้งไฟดับ",
+      hero: {
+        kicker: "บริการไฟฟ้าดิจิทัล", headingLine1: "การไฟฟ้าส่วนภูมิภาค", headingAccent: "บริการครบ จบในที่เดียว",
+        lead: "ตรวจสอบค่าไฟ ชำระเงิน และแจ้งไฟฟ้าขัดข้องออนไลน์ได้ตลอด 24 ชั่วโมง",
+        searchPlaceholder: "ค้นหาบริการ กฟภ.…", typewriterPhrases: ["ตรวจสอบค่าไฟ", "ชำระค่าไฟ", "แจ้งไฟดับ"],
+        popularTags: [{ label: "ค่าไฟ", url: "#" }, { label: "ชำระเงิน", url: "#" }, { label: "แจ้งไฟดับ", url: "#" }], slides: [],
+      },
+      stats: [
+        { icon: "users", value: "20 ล้าน+", label: "ผู้ใช้ไฟฟ้า" },
+        { icon: "shield", value: "99.9%", label: "ความเสถียรของระบบ" },
+        { icon: "clock", value: "1129", label: "ศูนย์บริการ 24 ชม." },
+      ],
+      featuredPromo: {
+        eyebrow: "แอป PEA Smart Plus", title: "จัดการค่าไฟครบ จบในแอปเดียว",
+        description: "ตรวจสอบยอด ชำระเงิน และแจ้งเหตุไฟฟ้าขัดข้องได้ทุกที่ทุกเวลา",
+        items: ["ตรวจสอบค่าไฟ", "ชำระค่าไฟออนไลน์", "แจ้งไฟฟ้าขัดข้อง"],
+        primaryLabel: "ดาวน์โหลดแอป", primaryUrl: "#", secondaryLabel: "เรียนรู้เพิ่มเติม", secondaryUrl: "#",
+      },
+    },
+  });
+
+  strapi.log.info("[seed] tenant 'pea' demo content created (home/services/faqs/articles) ✔");
+}
+
+/* ---------- ให้สิทธิ์ทุก locale แก่ role editor/author ---------- */
+/* locale ที่สร้างทีหลัง (เช่น th) จะไม่ถูกผูกให้ role เดิมอัตโนมัติ → content-manager
+   จะ filter locale:{$in:[]} ทำให้ editor มองไม่เห็นเนื้อหาเลย ต้องเติม locales ให้ permission */
+export async function grantLocalesToEditorRoles(strapi: any) {
+  let locales: string[] = [];
+  try {
+    const list = await strapi.plugin("i18n").service("locales").find();
+    locales = (list || []).map((l: any) => l.code);
+  } catch (e) { return; }
+  if (!locales.length) return;
+
+  // content type ที่เปิด i18n (ต้องมี dimension locale ใน permission)
+  const I18N_SUBJECTS = new Set([
+    "api::home-page.home-page", "api::article.article", "api::service.service", "api::faq.faq",
+    "api::job.job", "api::banner.banner", "api::video.video", "api::award.award",
+  ]);
+  const roles = await strapi.db.query("admin::role").findMany({ where: { code: { $in: ["strapi-editor", "strapi-author"] } } });
+  for (const role of roles) {
+    const perms = await strapi.db.query("admin::permission").findMany({ where: { role: role.id } });
+    let changed = 0;
+    for (const p of perms) {
+      const isCM = typeof p.action === "string" && p.action.startsWith("plugin::content-manager.explorer");
+      if (!isCM || !I18N_SUBJECTS.has(p.subject)) continue;
+      const props = p.properties || {};
+      const cur: string[] = Array.isArray(props.locales) ? props.locales : [];
+      const merged = Array.from(new Set([...cur, ...locales]));
+      if (merged.length !== cur.length) {
+        await strapi.db.query("admin::permission").update({ where: { id: p.id }, data: { properties: { ...props, locales: merged } } });
+        changed++;
+      }
+    }
+    if (changed) strapi.log.info(`[seed] granted locales [${locales.join(",")}] to role ${role.code} (${changed} perms)`);
+  }
+}
+
+/* ---------- Admin editors ผูกกับ tenant (per-tenant RBAC) ---------- */
+export async function seedEditors(strapi: any) {
+  const role = await strapi.db.query("admin::role").findOne({ where: { code: "strapi-editor" } });
+  if (!role) {
+    strapi.log.warn("[seed] editor role (strapi-editor) not found — skip editor seeding");
+    return;
+  }
+  const editors = [
+    { email: "dga-editor@dga.local", firstname: "DGA", lastname: "Editor", password: "DgaEd@2569" },
+    { email: "pea-editor@pea.local", firstname: "PEA", lastname: "Editor", password: "PeaEd@2569" },
+  ];
+  for (const e of editors) {
+    const existing = await strapi.db.query("admin::user").findOne({ where: { email: e.email } });
+    if (existing) continue;
+    try {
+      await strapi.service("admin::user").create({
+        email: e.email, firstname: e.firstname, lastname: e.lastname,
+        password: e.password, roles: [role.id], isActive: true,
+      });
+      strapi.log.info(`[seed] admin editor ${e.email} created (role=Editor)`);
+    } catch (err: any) {
+      strapi.log.warn(`[seed] could not create editor ${e.email}: ${err.message}`);
+    }
+  }
 }
 
 /* ---------- Jobs (อ่านจาก jobs-data.js ของจริงเพื่อความตรงกัน th+en) ---------- */

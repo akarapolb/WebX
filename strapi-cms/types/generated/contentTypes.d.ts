@@ -830,10 +830,10 @@ export interface ApiFaqFaq extends Struct.CollectionTypeSchema {
   };
 }
 
-export interface ApiHomePageHomePage extends Struct.SingleTypeSchema {
+export interface ApiHomePageHomePage extends Struct.CollectionTypeSchema {
   collectionName: 'home_pages';
   info: {
-    description: '\u0E40\u0E19\u0E37\u0E49\u0E2D\u0E2B\u0E32\u0E2B\u0E19\u0E49\u0E32\u0E41\u0E23\u0E01 \u0E2A\u0E1E\u0E23. (Hero, \u0E2A\u0E16\u0E34\u0E15\u0E34, \u0E42\u0E1B\u0E23\u0E42\u0E21\u0E17\u0E40\u0E14\u0E48\u0E19)';
+    description: '\u0E40\u0E19\u0E37\u0E49\u0E2D\u0E2B\u0E32\u0E2B\u0E19\u0E49\u0E32\u0E41\u0E23\u0E01 (Hero, \u0E2A\u0E16\u0E34\u0E15\u0E34, \u0E42\u0E1B\u0E23\u0E42\u0E21\u0E17\u0E40\u0E14\u0E48\u0E19) \u2014 1 \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E15\u0E48\u0E2D tenant';
     displayName: 'Home Page';
     pluralName: 'home-pages';
     singularName: 'home-page';
@@ -884,6 +884,12 @@ export interface ApiHomePageHomePage extends Struct.SingleTypeSchema {
       Schema.Attribute.SetPluginOptions<{
         i18n: {
           localized: true;
+        };
+      }>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
         };
       }>;
     updatedAt: Schema.Attribute.DateTime;
@@ -1163,6 +1169,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   };
   attributes: {
     active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    adminEmails: Schema.Attribute.JSON;
     brand: Schema.Attribute.JSON;
     contact: Schema.Attribute.JSON;
     createdAt: Schema.Attribute.DateTime;

@@ -27,6 +27,10 @@
       "type": "boolean",
       "default": true
     },
+    "adminEmails": {
+      "type": "json",
+      "description": "อีเมลของ admin/editor ที่สังกัด tenant นี้ (per-tenant RBAC) เช่น [\"editor@dga.local\"]"
+    },
     "brand": {
       "type": "json",
       "description": "{ logoUrl, orgName:{th,en}, primaryColor }"

@@ -245,7 +245,7 @@
   function boot() {
     var locale = "&locale=" + LANG;
     Promise.allSettled([
-      get("home-page?populate[hero][populate]=*&populate[featuredPromo][populate]=*&populate[stats]=true" + locale),
+      get("home-pages?populate[hero][populate]=*&populate[featuredPromo][populate]=*&populate[stats]=true&pagination[pageSize]=1" + locale),
       get("services?sort=order:asc&pagination[pageSize]=100" + locale),
       get("banners?sort=order:asc&populate=image&filters[active][$eq]=true&pagination[pageSize]=100" + locale),
       get("articles?sort=publishDate:desc&populate=coverImage&pagination[pageSize]=100" + locale),
@@ -257,7 +257,8 @@
       var v = function (i) { return res[i].status === "fulfilled" ? res[i].value : null; };
       var ok = res.some(function (r) { return r.status === "fulfilled" && r.value; });
       try {
-        renderHero(v(0)); renderStats(v(0)); renderFeatured(v(0));
+        var home = (v(0) && v(0)[0]) || null;   // home-pages เป็น collection (ต่อ tenant) → ใช้รายการแรก
+        renderHero(home); renderStats(home); renderFeatured(home);
         renderServices(v(1)); renderBanners(v(2)); renderArticles(v(3));
         renderVideos(v(4)); renderAwards(v(5)); renderFaqs(v(6));
         buildSearchData(v(1), v(3), v(6), v(7)); // ช่องค้นหา hero + DGA Guide ใช้เนื้อหา CMS

@@ -94,7 +94,33 @@ Auto-email: ส่งอีเมลตอบรับเมื่อสร้�
 
 **dev:** ตั้ง `window.DGA_TENANT='pea'` เพื่อจำลอง tenant อื่นในเครื่อง (prod ใช้ custom domain อัตโนมัติ)
 
+## งวดที่ 4 — Per-tenant RBAC + Home แบบ per-tenant (เพิ่มแล้ว)
+
+**Home page → per-tenant:**
+- เปลี่ยน `home-page` จาก single type เป็น **collection type + tenant relation** (1 home ต่อ tenant)
+- seed home ของทั้ง `dga` และ `pea`; ฝั่งเว็บ `cms.js` ดึง `GET /api/home-pages` (scope ตาม tenant) แล้วใช้รายการแรก
+
+**Per-tenant RBAC ในหลังบ้าน (content-manager):**
+- ผูก admin editor กับ tenant ผ่าน `Tenant.adminEmails` (เช่น dga→`dga-editor@dga.local`)
+- `effectiveTenant()` ใน `src/index.ts`: public → จาก Host; หลังบ้าน → จากอีเมล admin ที่ล็อกอิน;
+  **super admin (ไม่อยู่ใน adminEmails ใด) → null → เห็น/แก้ได้ทุก tenant**
+- Document Service middleware: scope reads, ตั้ง tenant ตอน create, และ **บล็อก update/delete/publish
+  ข้าม tenant (throw ForbiddenError 403)**
+- `grantLocalesToEditorRoles()` — locale ที่สร้างทีหลัง (th) ไม่ถูกผูกให้ role เดิม ทำให้ content-manager
+  filter `locale:{$in:[]}` (editor มองไม่เห็นอะไรเลย) → เติม locales ให้ permission ของ editor/author
+
+**บัญชี editor สาธิต (seed):** `dga-editor@dga.local` / `DgaEd@2569`, `pea-editor@pea.local` / `PeaEd@2569`
+
+**ผลทดสอบ (ผ่าน content-manager API):**
+| ผู้ใช้ | articles | services | homes | jobs |
+|---|---|---|---|---|
+| super admin | 12 (ทั้งหมด) | 9 | 2 | 20 |
+| dga editor | 10 (เฉพาะ DGA) | 6 | 1 | 20 |
+| pea editor | 2 (เฉพาะ PEA) | 3 | 1 | 0 |
+
+dga-editor พยายาม update/delete บทความของ pea → **HTTP 403 (blocked)**
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- per-tenant **RBAC ในหลังบ้าน** (จำกัด editor ให้เห็นเฉพาะ tenant ของตน), เมนู mega จาก CMS
-- เนื้อหา `/en/` ครบทุก collection (ตอนนี้ en มีเฉพาะ home/service/job), แปลง Home เป็น per-tenant
+- จำกัดตัวเลือกใน relation picker ของ editor ให้เห็นเฉพาะ tenant ตน (UI), เมนู mega จาก CMS
+- เนื้อหา `/en/` ครบทุก collection (ตอนนี้ en มีเฉพาะ home/service/job)
 - อัปโหลดไฟล์แนบในฟอร์ม (multipart), full-text ในไฟล์ pdf/docx, MFA หลังบ้าน, SMTP จริง

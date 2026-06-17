@@ -1,11 +1,11 @@
 {
-  "kind": "singleType",
+  "kind": "collectionType",
   "collectionName": "home_pages",
   "info": {
     "singularName": "home-page",
     "pluralName": "home-pages",
     "displayName": "Home Page",
-    "description": "เนื้อหาหน้าแรก สพร. (Hero, สถิติ, โปรโมทเด่น)"
+    "description": "เนื้อหาหน้าแรก (Hero, สถิติ, โปรโมทเด่น) — 1 รายการต่อ tenant"
   },
   "options": {
     "draftAndPublish": true
@@ -16,6 +16,12 @@
     }
   },
   "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
     "seoTitle": {
       "type": "string",
       "pluginOptions": { "i18n": { "localized": true } }
