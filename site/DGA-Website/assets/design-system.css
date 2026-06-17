@@ -6,7 +6,7 @@
    วิธีใช้: <link rel="stylesheet" href="/assets/design-system.css"> แล้วใช้ var(--...)
    ============================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@300;400;500;700&display=swap');
+/* fonts โหลดผ่าน <link preconnect>+stylesheet ใน <head> (perf: เลิก @import) */
 /* production: ควร self-host ฟอนต์ + preload เพื่อคะแนน Lighthouse (TOR 4.1.6) */
 
 /* ============================ TOKENS: LIGHT ============================ */

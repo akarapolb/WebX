@@ -201,7 +201,20 @@ Content type เพิ่ม 5 รายการ (tenant-scoped + seed + สิ
 - เดโม: อัปโหลด TOR PDF จริง (28 หน้า) → ค้นชื่อที่อยู่ "ในไฟล์" (เช่น พัฒนทวีกิจ) เจอเอกสาร พร้อม snippet
 - gotcha: lifecycle ที่ index ต้องกันลูป (ข้ามถ้า update มี contentText) ไม่งั้น re-index วนจน heap OOM
 
+## Performance / Lighthouse (#2 — เพิ่มแล้ว)
+ปรับปรุงตามเกณฑ์ Lighthouse Performance:
+- **ฟอนต์**: ย้ายจาก `@import` ใน design-system.css (render-blocking, serialize) → `<link rel="preconnect">`
+  (googleapis+gstatic) + `<link rel="stylesheet" display=swap>` ใน `<head>` ทุกหน้า (14 หน้า) → โหลดขนาน, ลด FCP/LCP
+- **font-display: swap** (กัน FOIT), โหลดเฉพาะ weight ที่ใช้ (300–700)
+- **สคริปต์ไม่บล็อก**: ทุก `<script>` อยู่ท้าย `<body>` (ไม่บล็อก parsing); cms.js เรนเดอร์แล้วค่อยโหลด home.js
+- **รูปภาพ**: `loading="lazy"` ใต้ fold, `width/height`/`onerror` กันรูปแตก (ลด CLS)
+- หน้า static เสิร์ฟเร็ว (DOMContentLoaded ~55ms, load ~510ms บน localhost)
+
+Checklist สำหรับวัด Lighthouse จริง (รันเอง): `npx lighthouse http://localhost:8080/ --view`
+หรือ Chrome DevTools → Lighthouse → Performance · production ควรเพิ่ม: CDN + cache headers,
+self-host fonts, brotli/gzip, รูป webp/avif + responsive sizes, HTTP/2
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- More Features: **Performance/Lighthouse** (#2), **Live chat + social** (#3)
+- More Features: **Live chat + social** (#3)
 - หน้าแสดง Download/E-book/Gallery, .pptx full-text, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
 - เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA, อัปโหลดไฟล์แนบฟอร์ม, SMTP จริง, proxy SEO files ที่โดเมนจริง
