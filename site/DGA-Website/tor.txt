@@ -1,0 +1,1348 @@
+                                                        
+                                                     1
+
+                      (Terms of Reference: TOR)
+            ()
+
+1.  
+          ( )  .       
+
+      () .. 2561      
+               
+           
+                
+                  
+    
+        
+              
+
+       
+     
+           
+          
+             
+      
+      . 
+   (DGA Website : dga.or.th)        
+      (AI) 
+            
+    
+      Chat AI    GEO (Generative Engine
+   Optimization)  AEO (Answer Engine Optimization)  
+           
+        .     
+
+
+
+ (     ) ...........   ..................            . ...25/5/2569....
+                                                      ...........1...............
+                  (     ) ..........   ............
+                                                     Effective date: 09/04/2569
+  (    ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                    2
+
+2. 
+   2.1             
+           
+         
+   2.2          
+       2     
+   2.3        
+         
+
+3.    
+   3.1 
+   3.2  
+   3.3    
+   3.4           
+   
+    
+   3.5  
+     
+              
+   3.6 
+     
+   3.7       
+   3.8  .  
+        
+    
+   3.9            
+      
+   3.10 
+   (Electronic Government Procurement: e - GP)  
+   3.11       
+
+ 
+
+ (  ) ...........   ..................                ....25/5/2569....
+                                                       . ..........1...............
+                  (    ) ..........     ............
+                                                      Effective date: 09/04/2569
+  (   ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                                                    
+
+                                                                                                3
+
+          (1) / 
+ 1       
+      1    
+
+         (2)     /  
+  
+     1,000,000 
+
+         (3)  
+     
+
+  
+   
+ 
+ 
+  () 
+  90   750,000 
+ 1  4   
+   
+
+          (4)  (2) (3) 
+
+ (e-GP)  
+  
+
+            (1) - (3)         
+ .. 2483 
+ 
+3.12        " "   
+
+      
+           
+  
+    
+
+ 
+
+ (  ) ...........      ..................             ....25/5/2569....
+                                                      . ..........1...............
+                  (  ) ..........      ............
+                                                     Effective date: 09/04/2569
+  (    ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                    4
+
+         
+      
+        
+
+           "
+     
+           /  
+      
+         "
+   3.13  
+   1,500,00  ()  1      
+             
+    .  / 
+      
+
+4.   
+                 (
+
+   )    
+   4.1   
+
+           ()      CI .  
+           Web Content Management System (CMS) 
+           .  
+          
+         4.1.1   Smart
+
+               Phone  Tablet  Google Chrome  Android, Safari  iOS
+         4.1.2  (Desktop)  Microsoft Edge,
+
+               Google Chrome, Mozilla Firefox, Safari    
+         4.1.3    WCAG 2.1  2.2  AA (Level
+
+               AA)  
+                 
+         4.1.4  Mockup  Prototype  .     
+
+ 
+
+ (   ) ...........  ..................               ....25/5/2569....
+                                                     . ..........1...............
+                  (   ) ..........    ............
+                                                    Effective date: 09/04/2569
+  (   ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                                                  
+
+                                                                                               5
+
+    4.1.5  2      
+               (Front End)
+
+    4.1.6  Page Speed Insight 
+           Performance Audit  Lighthouse Performance Scoring    
+             
+
+    4.1.7  UI .
+4.2  2    
+
+          
+      
+       
+     .  
+           
+        .
+4.3  . 
+                .
+4.4   Cloud . 
+            
+4.5  (Configuration) 
+     (Infrastructure),  (System),  (Database) 
+            
+4.6     (Migrate) 
+    4.6.1     
+
+               . 
+    4.6.2      
+
+                 
+    4.6.3       
+
+                .          
+                 
+    4.6.4     .   
+                 
+
+ 
+
+ (    ) ...........   ..................                 . ...25/5/2569....
+                                                          . ..........1...............
+                  (       ) ..........     ............
+                                                         Effective date: 09/04/2569
+  (     ) ..........     ..................
+
+SP-S02-002 Rev.3
+                                                                                                  
+
+                                                                                               6
+
+           4.6.4.1 URL     
+           4.6.4.2 URL      
+           4.6.4.3  2559 ­   
+           4.6.4.4    2559 ­ 
+           4.6.4.5    2559 - 
+           4.6.4.6  2559 .1
+           4.6.4.7   4.6.4.3 ­ 4.6.4.6
+           4.6.4.8    4.6.4.3 ­ 4.6.4.6
+           4.6.4.9       (Publish Date)
+           4.6.4.10.    . 
+    4.6.5   
+               
+    4.6.6 
+           
+            
+    4.6.7        
+              .
+4.7  
+    4.7.1  (Data Validation) 
+                    
+    4.7.2       CAPTCHA 
+            (Login)  Login
+           (Anonymous User)
+    4.7.3  (Encryption)   
+               Secure Sockets
+           Layer (SSL)  Transport Layer Security (TLS) (HTTPS)  
+    4.7.4  (Log File) 
+           
+            ()  Log  Log
+           Server  . 
+    4.7.5 
+            (PDPA)
+
+ 
+
+ (    ) ...........     ..................            . ...25/5/2569....
+                                                     . ..........1...............
+                  (     ) ..........   ............
+                                                     Effective date: 09/04/2569
+  (      ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                                                  
+
+                                                                                              7
+
+    4.7.6         
+          (Vulnerability Scan)  
+           
+
+    4.7.7   
+           .  
+
+    4.7.8     
+           
+                  .
+
+    4.7.9  (Back-Office) 
+           (Login)    (Multi-Factor Authentication: MFA)
+
+    4.7.10  (Cybersecurity Incident)  
+             
+           .  .
+          
+
+4.8  
+    4.8.1    User Acceptance Test (UAT)   . 
+             .   
+            Deploy   Change Advisory Board (CAB)
+    4.8.2          
+    4.8.3 . .
+           
+          
+           
+    4.8.4  
+                
+            
+    4.8.5  . 
+            
+               
+                   .
+
+ 
+
+ (   ) ...........   ..................                . ...25/5/2569....
+                                                       . ..........1...............
+                  (     ) ..........    ............
+                                                      Effective date: 09/04/2569
+  (   ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                    8
+
+     4.9   .  
+                
+           1     .  
+
+     4.10 .  SSL (Secure Socket Layer) Certificate 
+           
+
+     4.11  (Legal Compliance and Good Governance)
+                  
+          4.11.1      .. 2560
+          4.11.2     .. 2562
+          4.11.3      .. 2562
+          4.11.4        .  
+                  IS Policy (Information Security Policy) 
+                  . 
+                 
+
+5.  
+          365     
+
+6.     
+        ()
+
+    
+         
+    
+        
+    
+     / 
+             
+    
+           
+    .. 2560  65 
+
+
+
+ (   ) ...........   ..................                ....25/5/2569....
+                                                       . ..........1...............
+                  (    ) ..........      ............
+                                                       Effective date: 09/04/2569
+  (  ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                 
+                                                              9
+
+ 2560  83 (3)  . 
+ () 
+  20  ()   80
+6.1  11.2 
+
+      100 
+         
+
+                                                        
+                                                         20
+  (1)                                  100 
+                                                          50
+                                                         50
+
+                                                          50
+
+  (2)  (Design & UX/UI)                100                50
+
+                  2.1   Design System  Style Guide 20     50
+                                                          50
+                    (Typography)                          10
+
+                  2.2  layout     20 
+
+                     3 
+
+                  2.3   WCAG 2.1       20 
+
+                   2.2  AA (Level AA)
+
+                  2.4    20 
+
+                  2.5   Mockup         20 
+
+  (3)                                  100 
+
+          
+    
+     
+     
+    
+        
+       
+     80
+
+      2.6  
+         (Price Performance) 
+
+ 
+
+ (    ) ...........      ..................             ....25/5/2569....
+                                                        ...........1...............
+                  (     ) ..........    ............
+                                                        Effective date: 09/04/2569
+  (   ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                   10
+
+                     
+                 ( )    
+                 3  
+                 .     .  
+
+7. 
+       3,000,000  () 
+
+      
+
+8.  
+        4  
+
+        (SSD)  1   
+    
+   8.1  1   10         30    
+
+                
+         1)       
+         2)     
+         3)  (Requirement Analysis Report)   
+
+             
+         4)  (System Architecture)  
+
+                (Server Specifications)
+           4   PDF  Word processor 
+          Spreadsheet      1 
+   8.2  2   40       60  
+                   
+         1)   (Design Concept)   (Sitemap)
+         2)  Mockup  Prototype  (User
+
+             Flow) 
+         3)   (UI Design)   3    
+
+               (Layout) 
+
+ 
+
+ (   ) ...........   ..................                . ...25/5/2569....
+                                                       . ..........1...............
+                  (     ) ..........    ............
+                                                      Effective date: 09/04/2569
+  (     ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                                                     
+
+                                                                                                11
+
+      4)    CMS      
+                 
+            
+
+      5)   
+      6)   
+       4      PDF   Word processor Spreadsheet
+          1 
+ 8.3  3  30         180  
+              
+      1)       (Source Code)  
+
+           
+      2)     Test Script   User Acceptant
+
+          Test Checklist
+      3)    (User Acceptance Test: UAT)  
+
+             
+      4)      (User Manual) 
+
+          
+      5)   (Backup Data)    
+        4      PDF   Word processor  Spreadsheet
+          1 
+8.4  4   20         365  
+             
+           
+      1)     
+      2)       Monitor 
+        Bug 
+      3)      Admin
+      4)  (Penetration Test Report)
+      5) Source Code (Version   Bug  )  License     
+      (Admin Accounts/Passwords)  
+      6)    
+
+ 
+
+ (   ) ...........    ..................                . ...25/5/2569....
+                                                       . ..........1...............
+                  (     ) ..........     ............
+                                                       Effective date: 09/04/2569
+  (   ) ..........     ..................
+
+SP-S02-002 Rev.3
+                                                                                               
+                                                                                          12
+
+     4     PDF   Word processor  Spreadsheet
+        1 
+
+9. 
+   9.1      
+           0.10 
+            
+           .   
+   9.2  9.1   .  
+          
+          (Service Level Agreement
+         : SLA)  10   . 
+           (  1 )   0.035   
+
+10.    
+    1   . 
+                
+   10.1      24  
+   10.2              
+          
+   10.3  (Defect/Error Report) 
+           
+         15    .     
+   10.4      Support Tier 1 & Tier 2
+   10.5        (Incident)  (Service
+         Request) 
+           (E-mail)   Line 
+                 
+                  
+   10.6   
+           .    5   /
+            .
+            
+
+ 
+
+ (  ) ...........    ..................              ....25/5/2569....
+                                                     . ..........1...............
+                  (    ) ..........   ............
+                                                    Effective date: 09/04/2569
+  (  ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                         
+                                                     13
+
+10.7       
+
+              
+
+10.8    
+
+   
+
+     
+
+10.9       (Infrastructure) 
+
+   (Network)  (OS)  
+
+   
+
+    
+
+  
+
+10.10  (Service Level Agreement: SLA) 
+
+         .  
+
+   
+
+     .     .  
+
+         
+
+                      
+
+                                 
+
+ 1 : Critical     15 
+
+                    Onsite  Remote 
+
+                   Access       1  
+
+                                
+
+                               
+
+ 2 :                  30 
+
+                    Onsite  Remote 
+
+                      Access    4 
+
+                                
+
+                               
+
+ 3 :       2 
+
+                    Onsite  Remote  2 
+
+                   Access     
+
+                               
+
+                   
+
+
+
+ (  ) ...........    ..................              ....25/5/2569....
+                                                     ...........1...............
+                  (     ) ..........   ............
+                                                     Effective date: 09/04/2569
+  (   ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                 
+                                                             14
+
+ 4 :                                              4 
+                          Onsite  Remote          5 
+                          Access                 
+                                                 
+
+11. 
+        
+   11.1          
+               3
+   11.2    
+         11.2.1      
+
+                                                        
+   .                          
+
+                                  
+
+     
+
+                                                         
+
+                                                        ( )
+
+  11.2.2         
+
+                  (1)    
+
+                   
+
+                  (2)  (Design & UX/UI)  mockup
+
+                  (3)   
+
+                  (4)     
+
+                  (5)     
+
+                  (6)       
+
+11.3  
+               
+
+      
+        (e-bidding)      
+
+
+
+ (   ) ...........   ..................                 . ...25/5/2569....
+                                                         . ..........1...............
+                  (      ) ..........     ............
+                                                        Effective date: 09/04/2569
+  (  ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                   15
+
+              
+         
+           . 
+               
+          60  
+          
+
+12.     
+         
+
+            /
+             
+       "     " 
+
+13.         
+                  
+      (" ")          
+          "
+      "  
+
+14.     
+      "   "     
+
+             
+           "  "   ""
+
+     ""  
+    ""  "" 
+        
+
+       ""  ()
+    ""     ""
+    ""  
+    
+
+ 
+
+ (      ) ...........  ..................               ....25/5/2569....
+                                                        . ..........1...............
+                  (        ) ..........   ............
+                                                        Effective date: 09/04/2569
+  (     ) ..........      ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                   16
+
+      ""  ""  "" 
+       
+              
+   "" 
+
+             
+    " "            " " 
+           
+
+      ""  
+         ""
+       
+      
+    ""   
+     ""  ""  
+      " "        
+    ""  ""  ""  
+      " "          
+
+15.   
+   15.1 .      
+          
+   15.2 .      
+   15.3   .   
+          .   
+            
+   15.4 .  
+             ()
+   15.5  5 
+          
+   15.6 
+                     . 
+
+ 
+
+ (  ) ...........    ..................                    ....25/5/2569....
+                                                           . ..........1...............
+                  (        ) ..........     ............
+                                                          Effective date: 09/04/2569
+  (    ) ..........   ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                   17
+
+   15.7          .    . 
+            
+            .
+
+   15.8 .    / 
+          (TOR)  
+           . 
+          
+
+   15.9      15    
+
+16.    
+             
+
+     ()
+17.    
+
+   -    ()     (TIJ)
+       4  999        10210E-mail:
+      cmp_division@dga.or.th
+
+   - Website: www.dga.or.th
+   -   0-2612-6000
+
+
+
+ (  ) ...........   ..................                 . ...25/5/2569....
+                                                        . ..........1...............
+                  (     ) ..........     ............
+                                                       Effective date: 09/04/2569
+  (  ) ..........     ..................
+
+SP-S02-002 Rev.3
+                                                            
+                                                        18
+
+                                              
+                       ()
+
+1.    Web Content Management System (CMS)     
+      
+
+2.  (Home Page) 
+   2.1  (Home Page)   
+           
+   2.2     
+      jQuery Script,  Interactive  (Video
+      Background / Hero Section)
+   2.3   Template   
+   2.4  Template     
+      
+   2.5  
+        Smart phone Tablet  
+       
+
+3.   
+   3.1  (Template)    3    
+       Style  Layout  Cascading Style Sheets (CSS)
+   3.2      (Background)
+   3.3      Drag & Drop
+   3.4       (Preview)  
+
+4.   (Content Management System) 
+     
+   4.1          
+   4.2  Tag   
+   4.3    (Relate Content)
+
+ 
+
+ (    ) ...........  ..................                 ....25/5/2569....
+                                                         . ..........1...............
+                  (      ) ..........     ............
+                                                        Effective date: 09/04/2569
+  (     ) ..........     ..................
+
+SP-S02-002 Rev.3
+                                                                                                       
+
+                                                                                                  19
+
+   4.4  (   )   
+       Microsoft Word     
+        (WYSIWYG)
+
+   4.5   Code HTML  
+   4.6   (Document File)   .docx, .doc, .xlsx, .xls, .pptx, .pdf  .zip
+
+        
+   4.7      Embed Code
+   4.8  (Status)         
+   4.9       
+   4.10      
+   4.11         
+   4.12  (Social Network)  Facebook, TikTok,
+
+        Instagram, YouTube, X  LINE 
+   4.13   CMS  .  
+5.       
+   5.1      
+   5.2    WYSIWYG
+   5.3  
+
+           
+   5.4     
+   5.5  (Document File)  
+   5.6     
+   5.7    
+   5.8     
+6.  (Photo Gallery)  
+   6.1        
+   6.2        Drag & Drop
+   6.3  .jpg, .png .webp  (Image Optimization)
+
+         
+
+ 
+
+ (   ) ...........      ..................           . ...25/5/2569....
+                                                      ...........1...............
+                  (     ) ..........   ............
+                                                     Effective date: 09/04/2569
+  (  ) ..........      ..................
+
+SP-S02-002 Rev.3
+                                                                                                       
+
+                                                                                                  20
+
+   6.4       (Alt Text)   
+   6.5   upload file     (Multiple file upload)
+   6.6  Auto Slide
+   6.7  Embed Code    
+   6.8    
+   6.9     
+   6.10   Social Networking  Facebook, LINE  X 
+   6.11   (Watermark)   
+7.     (Video Gallery)  
+   7.1       
+   7.2     
+   7.3    
+   7.4     ( .mp4)  Embed Code
+   7.5        
+   7.6       Full Screen 
+   7.7     (Sync)    YouTube  TikTok 
+   7.8   (Subtitles)  Web Accessibility
+   7.9   Embed Code     
+   7.10   (Thumbnail)     
+   7.11     (Resolution)  
+8.      (Hybrid Search Engine):
+   8.1     (Simple Search)
+   8.2  (Advanced Search)   
+
+         ,  ,   (Keywords)
+   8.3  (Full-text Search)  .pdf, .docx, .xlsx
+
+         .pptx 
+9.      (Government AI Smart Search) 
+
+   .    (AI Smart
+
+
+
+ (    ) ...........   ..................               . ...25/5/2569....
+                                                      ...........1...............
+                  (     ) ..........    ............
+                                                      Effective date: 09/04/2569
+  (   ) ..........     ..................
+
+SP-S02-002 Rev.3
+                                                                                                       
+
+                                                                                                  21
+
+   Search)          
+              
+10.  (Schema Markup  Schema.org) 
+   Generative Engine Optimization (GEO)  Answer Engine Optimization (AEO)  AI
+     
+11.    (Contact Us)  
+   11.1           
+   11.2         
+12.  Live chat     
+13.           
+   13.1      
+   13.2 
+   13.3       
+   13.4      
+   13.5    (Auto Email)  
+   13.6     /e-mail   
+   13.7    
+14.  (Vote)  
+   14.1     
+   14.2  
+   14.3 
+15.  Blog Management   Blog 
+16.       
+   16.1    
+   16.2         
+   16.3         Microsoft Word 
+
+                
+   16.4   
+   16.5   
+
+
+
+ (     ) ...........    ..................           . ...25/5/2569....
+                                                      ...........1...............
+                  (    ) ..........    ............
+                                                     Effective date: 09/04/2569
+  (    ) ..........     ..................
+
+SP-S02-002 Rev.3
+                                                                                                       
+
+                                                                                                  22
+
+17.    
+   17.1       / 
+   17.2                 
+   17.3    
+   17.4   .jpeg, .jpg, .gif, .png
+   17.5   (Document File)  .docx /.xlsx /.pdf  .ppt
+   17.6      Embed Code
+   17.7   
+   17.8    
+   17.9   (Export)  .docx/.xlsx./pdf 
+
+18.  /   /  
+   18.1      / 
+   18.2     /  
+   18.3  (Document File)    
+   18.4    
+   18.5     (Reference)   
+
+19.  e-catalog        / 
+20.    FAQ 
+
+   20.1      FAQ 
+   20.2     
+   20.3  FAQ  Microsoft Word 
+
+                    
+        
+   20.4     
+   20.5   
+   20.6   
+   20.7   
+21.  Download  
+   21.1      
+
+
+
+ (   ) ...........   ..................            ....25/5/2569....
+                                                    . ..........1...............
+                  (    ) ..........  ............
+                                                   Effective date: 09/04/2569
+  (     ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                                                       
+
+                                                                                                  23
+
+   21.2    
+   21.3      .docx, .xlsx, .pdf, .ppt 
+   21.4    
+   21.5   /   
+   21.6    /   
+22.    
+   22.1    
+   22.2 /  
+   22.3  
+   22.4        URL  
+   22.5   
+23.     (Link Management)  
+   23.1       
+   23.2  (Thumbnail)
+   23.3    
+   23.4  
+   23.5         
+   23.6          
+   23.7 / 
+24.   (Top Graphic Management)
+   24.1         / 
+   24.2   
+   24.3    .jpeg, .jpg, .gif, .png
+   24.4    
+25.  (Site Map)   Site Map 
+26.  (Landing Page / Splash Screen Management) 
+    Landing Page 
+          
+
+
+
+ (    ) ........... ..................                ....25/5/2569....
+                                                      ...........1...............
+                  (     ) ..........   ............
+                                                     Effective date: 09/04/2569
+  (     ) ..........      ..................
+
+SP-S02-002 Rev.3
+                                                                                                        
+
+                                                                                                   24
+
+    26.1      Landing Page 
+          (CMS)    (No-code)
+
+    26.2  (Background) 
+           WYSIWYG Editor    HTML/CSS 
+
+    26.3   "  " (Enter Site)        
+    26.4     (Schedule Publish/Unpublish)  Landing Page  
+
+             
+    26.5  Landing Page 
+
+         (Responsive)  Desktop, Tablet  Smart Phone
+27.  map    
+
+    27.1 
+    27.2         
+28.    (Web Analytics & User Behavior)
+    28.1  (Web Analytics):  
+
+           Google
+         Analytics    
+    28.2  (Heatmap Analytics): 
+          (Heatmap)  
+         (Clickmap)  (Scrollmap) 
+          Microsoft Clarity, Hotjar    
+29.      (Cookie Consent Management System)
+     (Cookie)  
+     .. 2562 (PDPA)  
+      
+    29.1  (Cookie Banner)   Pop-up 
+                   
+    29.2     (Cookie Categorization)    
+          (Strictly Necessary Cookies), 
+         (Performance/Analytics Cookies),    (Functional Cookies)
+
+ 
+
+ (     ) ...........  ..................                . ...25/5/2569....
+                                                        . ..........1...............
+                  (    ) ..........      ............
+                                                       Effective date: 09/04/2569
+  (     ) ..........     ..................
+
+SP-S02-002 Rev.3
+                                                                                                   
+
+                                                                                              25
+
+29.3  (Granular Consent) 
+     (Opt-in)  (Opt-out)  
+       
+
+29.4  (Default Setting)  (Non-essential
+     Cookies)    "" (Disabled by default) 
+     
+
+29.5   (Consent Modification)     "  " (Cookie Settings)
+        
+      
+
+29.6  (Consent Log)  
+               
+
+29.7  (Multilingual)   (Cookie Policy)
+       
+
+ 
+
+ (     ) ...........   ..................          . ...25/5/2569....
+                                                    ...........1...............
+                  (    ) ..........  ............
+                                                   Effective date: 09/04/2569
+  (     ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                          
+                                                                      26
+
+                                  .
+                       
+       ()
+
+                                   
+
+1.       
+
+(100 ) ( 20)
+
+  
+
+    3.13  
+
+ 1,500,00  ()  
+
+ 
+
+100        
+
+                    2 
+
+90        
+
+                     2 
+
+80       
+
+                     1 
+
+0    
+
+2.   (Design & UX/UI) (100 ) (   50)
+
+ Design  UX/UI 
+
+ Layout     (Identity)  .
+
+2.1  Design System  Style Guide      (Typography)
+
+   20 
+
+20   Design System  ( Typography, Color Palette,
+
+                  Iconography, UI Components  Buttons, Form Inputs) 
+
+                   ( Figma Component 
+
+                  CSS Framework)
+
+10   Style Guide  (   )  UI Components
+
+                  
+
+0     Design System  Style Guide 
+
+
+
+ (   ) ...........   ..................                . ...25/5/2569....
+                                                        . ..........1...............
+                  (       ) ..........   ............
+                                                       Effective date: 09/04/2569
+  (    ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                                                      
+
+                                                                                                 27
+
+   2.2   layout         3  (3-
+Click Rule)  20 
+ 20    Sitemap  User Flow  "     " (  
+
+               . )           3
+              
+ 10        3      3
+                  User Flow 
+ 0      3    
+              Sitemap 
+  2.3   WCAG 2.1  2.2  AA (Level AA)    
+      20 
+ 20    WCAG  AA   ( Contrast
+              Ratio ,  Screen Reader)   
+               (Accessibility Testing Tools)   
+ 10    WCAG  AA    
+                 
+ 0      WCAG    
+  2.4     (Responsive Design) 20 
+ 20  Responsive Design  3  (Desktop, Tablet, Mobile)  
+                5  ( ,   ,   ,
+               ,   )
+ 10  Responsive Design  3  (Desktop, Tablet, Mobile) 
+                3  ( ,  , )
+ 0    
+ 2.5   Mockup 20 
+ 20     Mockup  Wireframe   Layout   Responsive
+              Design  3   (Desktop, Tablet, Mobile)  
+              5  ( ,  ,  ,
+               ,  )
+ 10     Mockup  Wireframe  Layout  Responsive
+              Design  3   (Desktop, Tablet, Mobile)    
+              3  (  , ,   )
+ 0   Mockup
+
+ 
+
+ (   ) ...........    ..................             . ...25/5/2569....
+                                                     . ..........1...............
+                  (    ) ..........   ............
+                                                    Effective date: 09/04/2569
+  (      ) ..........    ..................
+
+SP-S02-002 Rev.3
+                                                                                                     
+
+                                                                                                28
+
+3.   (100 ) (  10)
+       
+            
+      Critical  High 
+  .    
+
+ 100        
+                Multi Factor Authentication, 
+              session timeout, idle timeout  DR site 
+               RTO  RPO  
+
+ 80         
+                  Multi Factor Authentication, 
+              session timeout, idle timeout
+
+ 60      
+             
+
+ 0     
+
+
+
+ (   ) ...........     ..................             . ...25/5/2569....
+                                                      ...........1...............
+                  (     ) ..........   ............
+                                                     Effective date: 09/04/2569
+  (     ) ..........     ..................
+
+SP-S02-002 Rev.3
+

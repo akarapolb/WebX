@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — ลงทะเบียนผู้ใช้งานระบบ (Register) · เดโมหน้าทำงานจริง (TOR หมวดสาธิต 20%)
+  ใช้ Design System: /assets/design-system.css + /assets/home.css + /assets/complaint.css + /assets/register.css
+  Wizard 3 ขั้นตอน + ตรวจเลขบัตรประชาชน (checksum) + วัดความแข็งแรงรหัสผ่าน + ThaID
+  Accessibility WCAG 2.2 AA · โหมดมืด · Responsive · Schema · PDPA
+-->
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ลงทะเบียนผู้ใช้งานระบบ | สพร. (DGA)</title>
+  <meta name="description" content="สมัครและลงทะเบียนบัญชีผู้ใช้งานระบบกลางภาครัฐ ยืนยันตัวตนด้วย ThaID ปลอดภัยตามมาตรฐาน PDPA — สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)">
+  <link rel="canonical" href="https://www.dga.or.th/register">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/complaint.css">
+  <link rel="stylesheet" href="/assets/register.css">
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"หน้าแรก","item":"https://www.dga.or.th/"},
+    {"@type":"ListItem","position":2,"name":"บริการออนไลน์","item":"https://www.dga.or.th/e-service"},
+    {"@type":"ListItem","position":3,"name":"ลงทะเบียนผู้ใช้งานระบบ","item":"https://www.dga.or.th/register"}
+  ]}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-arrow-l" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v5M12 17.5h.01"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M9.9 5.1A9.8 9.8 0 0 1 12 5c6 0 10 7 10 7a16 16 0 0 1-3 3.6M6.6 6.6A16 16 0 0 0 2 12s4 7 10 7a9.6 9.6 0 0 0 3.6-.7"/><path d="M3 3l18 18"/></symbol>
+  </defs></svg>
+
+  <!-- แถบการเข้าถึง -->
+  <div class="a11y-bar" role="region" aria-label="เครื่องมือการเข้าถึง"><div class="wrap">
+    <span>การเข้าถึง:</span>
+    <button id="fontDown" aria-label="ลดขนาดตัวอักษร">ก-</button>
+    <button id="fontReset" aria-label="ขนาดตัวอักษรปกติ">ก</button>
+    <button id="fontUp" aria-label="เพิ่มขนาดตัวอักษร">ก+</button>
+    <button id="contrastBtn" aria-pressed="false">โหมดความต่างสูง</button>
+    <a href="#main">ข้ามไปเนื้อหา</a>
+    <span class="grow"></span>
+    <a href="/accessibility">แถลงการณ์การเข้าถึง (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="เมนูหลัก">
+        <a href="/">หน้าแรก</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega>บริการ</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>ข่าวสาร</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>บริการออนไลน์</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>เกี่ยวกับ สพร.</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/register.html" aria-current="true" lang="th">TH</a><a href="/en/register.html" lang="en">EN</a></span>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="สลับโหมดมืด"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="เปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>สำหรับประชาชน</h3>
+          <a href="#"><span class="dot"></span>บัตรประชาชนดิจิทัล (ThaID)</a>
+          <a href="#"><span class="dot"></span>แอปทางรัฐ</a>
+          <a href="#"><span class="dot"></span>ตรวจสอบสิทธิ์สวัสดิการ</a>
+          <a href="#"><span class="dot"></span>นัดหมาย/ชำระค่าบริการรัฐ</a></div>
+        <div class="mega-col"><h3>สำหรับหน่วยงานรัฐ</h3>
+          <a href="#"><span class="dot"></span>GDX ศูนย์แลกเปลี่ยนข้อมูล</a>
+          <a href="#"><span class="dot"></span>คลาวด์ภาครัฐ (GDCC)</a>
+          <a href="#"><span class="dot"></span>มาตรฐานรัฐบาลดิจิทัล</a>
+          <a href="#"><span class="dot"></span>สถาบันพัฒนาบุคลากร (TDGA)</a></div>
+        <div class="mega-col"><h3>นักพัฒนา/ธุรกิจ</h3>
+          <a href="#"><span class="dot"></span>API Gateway ภาครัฐ</a>
+          <a href="#"><span class="dot"></span>ข้อมูลเปิดภาครัฐ (Open Data)</a>
+          <a href="#"><span class="dot"></span>BizPortal เริ่มต้นธุรกิจ</a>
+          <a href="#"><span class="dot"></span>จัดซื้อจัดจ้าง (e-GP)</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span>
+        <b>เริ่มใช้ ThaID วันนี้</b><span>ยืนยันตัวตนดิจิทัล ใช้แทนบัตรประชาชนกับบริการภาครัฐ</span>
+        <span class="cta">เริ่มใช้บริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ข่าว &amp; ประกาศ</h3>
+          <a href="/index.html#news"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>ประกาศ สพร.</a>
+          <a href="#"><span class="dot"></span>ประกาศจัดซื้อจัดจ้าง</a></div>
+        <div class="mega-col"><h3>บทความ &amp; ความรู้</h3>
+          <a href="#"><span class="dot"></span>บทความรัฐบาลดิจิทัล</a>
+          <a href="#"><span class="dot"></span>คลังความรู้ (Knowledge)</a>
+          <a href="#"><span class="dot"></span>อินโฟกราฟิก</a></div>
+        <div class="mega-col"><h3>สื่อ &amp; กิจกรรม</h3>
+          <a href="#"><span class="dot"></span>DGA Channel (วิดีโอ)</a>
+          <a href="#"><span class="dot"></span>ปฏิทินกิจกรรม/สัมมนา</a>
+          <a href="#"><span class="dot"></span>รางวัลและผลงาน</a></div>
+      </div>
+      <a class="mega-feature" href="/index.html#news"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>ข่าวเด่นล่าสุด</b><span>ติดตามความเคลื่อนไหวรัฐบาลดิจิทัลและบริการใหม่ของ สพร.</span>
+        <span class="cta">อ่านข่าวทั้งหมด <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ลงทะเบียน &amp; สมัครงาน</h3>
+          <a href="/register.html" aria-current="page"><span class="dot"></span>ลงทะเบียนผู้ใช้งานระบบ</a>
+          <a href="/careers.html"><span class="dot"></span>ระบบรับสมัครงาน (ร่วมงานกับ สพร.)</a>
+          <a href="/application-status.html"><span class="dot"></span>ตรวจสอบสถานะใบสมัคร</a></div>
+        <div class="mega-col"><h3>ร้องเรียน &amp; ข้อเสนอแนะ</h3>
+          <a href="/complaint.html"><span class="dot"></span>ระบบรับเรื่องร้องเรียน</a>
+          <a href="#"><span class="dot"></span>แจ้งปัญหาการใช้งาน</a>
+          <a href="/complaint.html#track"><span class="dot"></span>ติดตามสถานะเรื่องร้องเรียน</a></div>
+        <div class="mega-col"><h3>บริการช่วยเหลือ</h3>
+          <a href="#"><span class="dot"></span>ตรวจสอบสถานะคำขอ</a>
+          <a href="#"><span class="dot"></span>ดาวน์โหลดเอกสาร/แบบฟอร์ม</a>
+          <a href="#"><span class="dot"></span>ศูนย์ช่วยเหลือ (Help Center)</a></div>
+      </div>
+      <a class="mega-feature" href="/register.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span>
+        <b>ลงทะเบียนผู้ใช้งานระบบ</b><span>สมัครบัญชีกลางภาครัฐ ยืนยันตัวตนด้วย ThaID ใช้ได้ทุกบริการ</span>
+        <span class="cta">สมัครออนไลน์ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>องค์กร</h3>
+          <a href="#"><span class="dot"></span>วิสัยทัศน์ &amp; บทบาท</a>
+          <a href="#"><span class="dot"></span>โครงสร้างองค์กร</a>
+          <a href="#"><span class="dot"></span>คณะผู้บริหาร</a></div>
+        <div class="mega-col"><h3>เผยแพร่</h3>
+          <a href="#"><span class="dot"></span>รายงานประจำปี</a>
+          <a href="/index.html#news"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>จัดซื้อจัดจ้างของ สพร.</a></div>
+        <div class="mega-col"><h3>ธรรมาภิบาล</h3>
+          <a href="#"><span class="dot"></span>คุณธรรมและความโปร่งใส (ITA)</a>
+          <a href="#"><span class="dot"></span>ร่วมงานกับเรา</a>
+          <a href="#"><span class="dot"></span>ติดต่อ สพร.</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>รายงานประจำปี 2568</b><span>ผลการดำเนินงานและทิศทางรัฐบาลดิจิทัลของประเทศ</span>
+        <span class="cta">อ่านรายงาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+  </header>
+
+  <!-- Mobile drawer -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="เมนูหลัก">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="ปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">ค้นหาบริการหรือเอกสาร</label>
+      <input id="mq" name="q" type="search" placeholder="ค้นหาบริการหรือเอกสาร…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="เมนูหลัก (อุปกรณ์พกพา)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/register.html" aria-current="true" lang="th">TH</a><a href="/en/register.html" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="#" style="flex:1;justify-content:center">ติดต่อเรา</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="เส้นทางนำทาง"><div class="wrap">
+      <ol>
+        <li><a href="/index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg> หน้าแรก</a></li>
+        <li><a href="/index.html">บริการออนไลน์</a></li>
+        <li aria-current="page">ลงทะเบียนผู้ใช้งานระบบ</li>
+      </ol>
+    </div></nav>
+
+    <!-- Page hero -->
+    <section class="cpl-hero" aria-labelledby="reg-h"><div class="wrap">
+      <div class="cpl-hero__tx">
+        <span class="cpl-eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-id"/></svg> บัญชีกลางภาครัฐ</span>
+        <h1 id="reg-h">ลงทะเบียนผู้ใช้งานระบบ</h1>
+        <p>สมัครบัญชีเดียว ใช้ได้กับบริการดิจิทัลภาครัฐทั้งหมด ยืนยันตัวตนปลอดภัยด้วย <strong>ThaID</strong> และคุ้มครองข้อมูลตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
+        <ul class="cpl-trust">
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> บัญชีเดียวใช้ได้ทุกบริการ</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-id"/></svg> ยืนยันตัวตน ThaID</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> ปลอดภัยตามมาตรฐาน PDPA</li>
+        </ul>
+      </div>
+    </div></section>
+
+    <section class="cpl-wrap"><div class="wrap cpl-layout">
+      <div class="cpl-main">
+        <!-- Stepper -->
+      <ol class="reg-steps" id="regSteps" aria-label="ขั้นตอนการลงทะเบียน">
+        <li class="is-current" aria-current="step"><span class="reg-steps__no" aria-hidden="true">1</span><span class="reg-steps__tx">ข้อมูลบัญชี</span></li>
+        <li><span class="reg-steps__no" aria-hidden="true">2</span><span class="reg-steps__tx">ยืนยันตัวตน</span></li>
+        <li><span class="reg-steps__no" aria-hidden="true">3</span><span class="reg-steps__tx">ยืนยันข้อมูล</span></li>
+      </ol>
+
+      <!-- Loading (โผล่ตอนกดถัดไป ให้ดูเหมือนระบบกำลังบันทึก) -->
+      <div class="cpl-loading" id="regLoading" hidden aria-hidden="true"><span class="spinner"></span></div>
+
+      <form class="cpl-form reg-form" id="regForm" novalidate>
+        <!-- กล่องสรุป error -->
+        <div class="cpl-errsum" id="regErrSum" role="alert" tabindex="-1" hidden>
+          <strong><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> กรุณาตรวจสอบข้อมูลต่อไปนี้</strong>
+          <ul id="regErrList"></ul>
+        </div>
+
+        <!-- ===== Step 1: ข้อมูลบัญชี ===== -->
+        <section class="reg-panel" id="step-1" aria-labelledby="s1h" tabindex="-1">
+          <h2 id="s1h" class="reg-panel__h">ข้อมูลบัญชี</h2>
+
+          <fieldset class="field type-field" role="radiogroup" aria-labelledby="uType-label" aria-describedby="uType-err" aria-required="true">
+            <span class="field-label" id="uType-label">ประเภทผู้ใช้งาน <span class="req" aria-hidden="true">*</span></span>
+            <div class="type-grid type-grid--3">
+              <label class="type-card">
+                <input type="radio" name="utype" value="ประชาชน">
+                <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-user"/></svg></span>
+                <span class="type-card__tx">ประชาชน</span>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="utype" value="เจ้าหน้าที่รัฐ">
+                <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-id"/></svg></span>
+                <span class="type-card__tx">เจ้าหน้าที่รัฐ</span>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="utype" value="นิติบุคคล">
+                <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-build"/></svg></span>
+                <span class="type-card__tx">นิติบุคคล/องค์กร</span>
+              </label>
+            </div>
+            <span class="field-err" id="uType-err" aria-live="polite"></span>
+          </fieldset>
+
+          <div class="field">
+            <label for="rEmail">อีเมล <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic">
+              <svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg>
+              <input type="email" id="rEmail" name="email" autocomplete="email" maxlength="120"
+                     placeholder="name@example.com" aria-describedby="rEmail-err">
+            </div>
+            <span class="field-err" id="rEmail-err" aria-live="polite"></span>
+          </div>
+
+          <div class="field">
+            <label for="rPass">รหัสผ่าน <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic pw-wrap">
+              <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+              <input type="password" id="rPass" name="password" autocomplete="new-password" maxlength="64"
+                     placeholder="อย่างน้อย 8 ตัวอักษร" aria-describedby="rPass-err pw-reqs">
+              <button type="button" class="pw-toggle" id="pwToggle" aria-label="แสดงรหัสผ่าน" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
+            </div>
+            <div class="pw-meter" aria-hidden="true"><div class="pw-meter__bar" id="pwBar"></div></div>
+            <p class="pw-strength" id="pwStrength" aria-live="polite"></p>
+            <ul class="pw-reqs" id="pw-reqs">
+              <li data-req="len"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> อย่างน้อย 8 ตัวอักษร</li>
+              <li data-req="case"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> พิมพ์เล็ก + พิมพ์ใหญ่</li>
+              <li data-req="num"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> มีตัวเลข</li>
+              <li data-req="sym"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> มีอักขระพิเศษ</li>
+            </ul>
+            <span class="field-err" id="rPass-err" aria-live="polite"></span>
+          </div>
+
+          <div class="field">
+            <label for="rPass2">ยืนยันรหัสผ่าน <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic">
+              <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+              <input type="password" id="rPass2" name="password2" autocomplete="new-password" maxlength="64"
+                     placeholder="พิมพ์รหัสผ่านอีกครั้ง" aria-describedby="rPass2-err">
+            </div>
+            <span class="field-err" id="rPass2-err" aria-live="polite"></span>
+          </div>
+        </section>
+
+        <!-- ===== Step 2: ยืนยันตัวตน ===== -->
+        <section class="reg-panel" id="step-2" aria-labelledby="s2h" tabindex="-1" hidden>
+          <h2 id="s2h" class="reg-panel__h">ข้อมูลส่วนตัว &amp; ยืนยันตัวตน</h2>
+
+          <div class="thaid-card" id="thaidCard">
+            <div class="thaid-card__tx">
+              <span class="thaid-card__badge"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> แนะนำ</span>
+              <strong>ยืนยันตัวตนอัตโนมัติด้วย ThaID</strong>
+              <p>เชื่อมต่อ ThaID เพื่อดึงข้อมูลและยืนยันตัวตนทันที ไม่ต้องกรอกเลขบัตรเอง</p>
+            </div>
+            <button type="button" class="btn btn--primary" id="thaidBtn"><svg class="icon" aria-hidden="true"><use href="#i-id"/></svg> เชื่อมต่อ ThaID</button>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="rFirst">ชื่อ <span class="req" aria-hidden="true">*</span></label>
+              <input type="text" id="rFirst" name="firstname" autocomplete="given-name" maxlength="80" aria-describedby="rFirst-err">
+              <span class="field-err" id="rFirst-err" aria-live="polite"></span>
+            </div>
+            <div class="field">
+              <label for="rLast">นามสกุล <span class="req" aria-hidden="true">*</span></label>
+              <input type="text" id="rLast" name="lastname" autocomplete="family-name" maxlength="80" aria-describedby="rLast-err">
+              <span class="field-err" id="rLast-err" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="rNid">เลขประจำตัวประชาชน (13 หลัก) <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic">
+              <svg class="icon" aria-hidden="true"><use href="#i-id"/></svg>
+              <input type="text" id="rNid" name="nid" inputmode="numeric" maxlength="13"
+                     placeholder="x xxxx xxxxx xx x" aria-describedby="rNid-err rNid-hint">
+            </div>
+            <span class="field-hint" id="rNid-hint">ระบบตรวจสอบความถูกต้องของเลขบัตรอัตโนมัติ</span>
+            <span class="field-err" id="rNid-err" aria-live="polite"></span>
+          </div>
+
+          <div class="field field--half">
+            <label for="rPhone">เบอร์โทรศัพท์มือถือ <span class="req" aria-hidden="true">*</span></label>
+            <input type="tel" id="rPhone" name="phone" autocomplete="tel" inputmode="tel" maxlength="20"
+                   placeholder="08x-xxx-xxxx" aria-describedby="rPhone-err">
+            <span class="field-err" id="rPhone-err" aria-live="polite"></span>
+          </div>
+        </section>
+
+        <!-- ===== Step 3: ยืนยันข้อมูล ===== -->
+        <section class="reg-panel" id="step-3" aria-labelledby="s3h" tabindex="-1" hidden>
+          <h2 id="s3h" class="reg-panel__h">ตรวจสอบและยืนยันข้อมูล</h2>
+
+          <dl class="reg-review" id="regReview">
+            <div><dt>ประเภทผู้ใช้งาน</dt><dd data-rev="utype">—</dd></div>
+            <div><dt>อีเมล</dt><dd data-rev="email">—</dd></div>
+            <div><dt>ชื่อ–นามสกุล</dt><dd data-rev="name">—</dd></div>
+            <div><dt>เลขประจำตัวประชาชน</dt><dd data-rev="nid">—</dd></div>
+            <div><dt>เบอร์โทรศัพท์</dt><dd data-rev="phone">—</dd></div>
+            <div><dt>การยืนยันตัวตน</dt><dd data-rev="verify">—</dd></div>
+          </dl>
+
+          <div class="field-check">
+            <input type="checkbox" id="rTerms" name="terms" aria-describedby="rTerms-err">
+            <label for="rTerms">ข้าพเจ้ายอมรับ <a href="#" target="_blank">เงื่อนไขการใช้บริการ</a> <span class="req" aria-hidden="true">*</span>
+              <span class="field-err" id="rTerms-err" aria-live="polite"></span>
+            </label>
+          </div>
+          <div class="field-check cpl-consent">
+            <input type="checkbox" id="rConsent" name="consent" aria-describedby="rConsent-err">
+            <label for="rConsent">ข้าพเจ้ายินยอมให้ สพร. เก็บรวบรวมและใช้ข้อมูลเพื่อสร้างและจัดการบัญชีผู้ใช้งานตาม
+              <a href="#" target="_blank">นโยบายคุ้มครองข้อมูลส่วนบุคคล (PDPA)</a> <span class="req" aria-hidden="true">*</span>
+              <span class="field-err" id="rConsent-err" aria-live="polite"></span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Wizard nav -->
+        <div class="reg-nav">
+          <button type="button" class="btn btn--ghost btn--lg" id="regBack" hidden><svg class="icon" aria-hidden="true"><use href="#i-arrow-l"/></svg> ย้อนกลับ</button>
+          <span class="reg-nav__spacer"></span>
+          <button type="button" class="btn btn--primary btn--lg" id="regNext">ถัดไป <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          <button type="submit" class="btn btn--primary btn--lg" id="regSubmit" hidden>สร้างบัญชี <svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></button>
+        </div>
+        <p class="cpl-note"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> ระบบนี้เป็นการสาธิต (Demo) — ข้อมูลจะถูกบันทึกไว้ในเครื่องของคุณเท่านั้น ไม่ได้ส่งออกไปยังเซิร์ฟเวอร์จริง</p>
+      </form>
+      </div><!-- /.cpl-main -->
+
+      <!-- แผงข้าง: สิ่งที่ต้องเตรียม + ช่องทางช่วยเหลือ (sticky) -->
+      <aside class="cpl-side" aria-label="ข้อมูลและการช่วยเหลือ">
+        <div class="cpl-info reg-prep">
+          <h2 class="reg-prep__h"><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg> เตรียมให้พร้อมก่อนสมัคร</h2>
+          <ul>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-id"/></svg></span><div><strong>บัตรประชาชน</strong><span>เลขประจำตัว 13 หลัก สำหรับยืนยันตัวตน</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-mail"/></svg></span><div><strong>อีเมลที่ใช้งานได้</strong><span>สำหรับยืนยันบัญชีและรับการแจ้งเตือน</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-user"/></svg></span><div><strong>เบอร์มือถือ</strong><span>สำหรับรับรหัส OTP ยืนยันตัวตน</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span><div><strong>แอป ThaID (ถ้ามี)</strong><span>ช่วยให้สมัครได้เร็วและปลอดภัยยิ่งขึ้น</span></div></li>
+          </ul>
+        </div>
+        <div class="cpl-help-card">
+          <span class="cpl-help-card__ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-chat"/></svg></span>
+          <strong>ต้องการความช่วยเหลือ?</strong>
+          <p>ติดต่อศูนย์บริการ DGA Contact Center ตลอด 24 ชั่วโมง</p>
+          <a class="btn btn--primary btn--block" href="tel:026126000"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> โทร 0-2612-6000</a>
+          <button type="button" class="btn btn--ghost btn--block" id="sideAskGuide"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg> ถาม DGA Guide</button>
+        </div>
+        <p class="reg-haveacc">มีบัญชีอยู่แล้ว? <a href="#">เข้าสู่ระบบ</a></p>
+      </aside>
+    </div></section>
+
+    <!-- Popup: สร้างบัญชีสำเร็จ -->
+    <div class="cpl-modal" id="regModal" hidden>
+      <div class="cpl-modal__backdrop" data-close></div>
+      <div class="cpl-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="regOkTitle" aria-describedby="regOkDesc" tabindex="-1">
+        <button type="button" class="cpl-modal__close" id="regModalClose" aria-label="ปิด"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <span class="cpl-success__ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-check"/></svg></span>
+        <h2 id="regOkTitle">สร้างบัญชีเรียบร้อย</h2>
+        <p id="regOkDesc">บัญชีของคุณพร้อมใช้งานแล้ว เราได้ส่งอีเมลยืนยันไปยังที่อยู่ที่ลงทะเบียนไว้</p>
+        <div class="cpl-ref">
+          <span class="cpl-ref__label">รหัสผู้ใช้งาน (Username)</span>
+          <strong id="regUser">—</strong>
+        </div>
+        <div class="cpl-success__btns">
+          <a class="btn btn--primary" href="#">เข้าสู่ระบบ</a>
+          <a class="btn btn--ghost" href="/index.html">กลับหน้าแรก</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+        <p class="footer-org">สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน) (สพร.)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>อาคารสถาบันเพื่อการยุติธรรมแห่งประเทศไทย (TIJ) ชั้น 4 เลขที่ 999 ถนนแจ้งวัฒนะ แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพฯ 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>โทร 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="แผนที่ที่ตั้ง สพร." loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">ดูแผนที่ขนาดใหญ่ <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>บริการ</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">ทางรัฐ</a></li><li><a href="#">Open Data</a></li><li><a href="#">API Gateway</a></li></ul></div>
+      <div><h3>เกี่ยวกับ</h3><ul><li><a href="#">วิสัยทัศน์</a></li><li><a href="/index.html#news">ข่าวสาร</a></li><li><a href="#">ร่วมงานกับเรา</a></li><li><a href="#">ติดต่อเรา</a></li></ul></div>
+      <div><h3>นโยบาย</h3><ul><li><a href="#">นโยบายความเป็นส่วนตัว (PDPA)</a></li><li><a href="#">นโยบายคุกกี้</a></li><li><a href="/accessibility">การเข้าถึง (WCAG)</a></li><li><a href="#">แผนผังเว็บไซต์</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2569 สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">ตั้งค่าคุกกี้</button></div></div>
+  </footer>
+
+  <!-- Cookie Consent (PDPA) -->
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">เว็บไซต์นี้ใช้คุกกี้</h2>
+    <p id="ck-d">เราใช้คุกกี้ที่จำเป็นเพื่อให้เว็บทำงาน และคุกกี้วิเคราะห์เพื่อปรับปรุงบริการ (ปิดเป็นค่าเริ่มต้น) ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">ยอมรับทั้งหมด</button><button class="btn btn--ghost" data-cookie="necessary">เฉพาะที่จำเป็น</button><button class="btn btn--ghost" data-cookie="settings">ตั้งค่า</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+  <script src="/assets/register.js"></script>
+</body>
+</html>

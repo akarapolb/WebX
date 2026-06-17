@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — ตรวจสอบสถานะใบสมัครงาน (Application status) · เดโมหน้าทำงานจริง
+  ใช้ Design System: /assets/design-system.css + /assets/home.css + /assets/complaint.css
+  อ่านเลขที่ใบสมัคร → timeline สถานะ (จาก localStorage / เลขตัวอย่าง) โดย /assets/appstatus.js · 2 ภาษา
+-->
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ตรวจสอบสถานะใบสมัคร | สพร. (DGA)</title>
+  <meta name="description" content="ตรวจสอบสถานะใบสมัครงานกับสำนักงานพัฒนารัฐบาลดิจิทัล (สพร./DGA) ด้วยเลขที่ใบสมัคร ติดตามผลได้ทุกขั้นตอน">
+  <link rel="canonical" href="https://www.dga.or.th/application-status">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/complaint.css">
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"หน้าแรก","item":"https://www.dga.or.th/"},
+    {"@type":"ListItem","position":2,"name":"บริการออนไลน์","item":"https://www.dga.or.th/e-service"},
+    {"@type":"ListItem","position":3,"name":"ตรวจสอบสถานะใบสมัคร","item":"https://www.dga.or.th/application-status"}
+  ]}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v5M12 17.5h.01"/></symbol>
+    <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+  </defs></svg>
+
+  <!-- แถบการเข้าถึง -->
+  <div class="a11y-bar" role="region" aria-label="เครื่องมือการเข้าถึง"><div class="wrap">
+    <span>การเข้าถึง:</span>
+    <button id="fontDown" aria-label="ลดขนาดตัวอักษร">ก-</button>
+    <button id="fontReset" aria-label="ขนาดตัวอักษรปกติ">ก</button>
+    <button id="fontUp" aria-label="เพิ่มขนาดตัวอักษร">ก+</button>
+    <button id="contrastBtn" aria-pressed="false">โหมดความต่างสูง</button>
+    <a href="#main">ข้ามไปเนื้อหา</a>
+    <span class="grow"></span>
+    <a href="/accessibility">แถลงการณ์การเข้าถึง (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="เมนูหลัก">
+        <a href="/">หน้าแรก</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega>บริการ</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>ข่าวสาร</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>บริการออนไลน์</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>เกี่ยวกับ สพร.</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/application-status.html" aria-current="true" lang="th">TH</a><a href="/en/application-status.html" lang="en">EN</a></span>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="สลับโหมดมืด"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="เปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>สำหรับประชาชน</h3>
+          <a href="#"><span class="dot"></span>บัตรประชาชนดิจิทัล (ThaID)</a>
+          <a href="#"><span class="dot"></span>แอปทางรัฐ</a>
+          <a href="#"><span class="dot"></span>ตรวจสอบสิทธิ์สวัสดิการ</a></div>
+        <div class="mega-col"><h3>สำหรับหน่วยงานรัฐ</h3>
+          <a href="#"><span class="dot"></span>GDX ศูนย์แลกเปลี่ยนข้อมูล</a>
+          <a href="#"><span class="dot"></span>คลาวด์ภาครัฐ (GDCC)</a>
+          <a href="#"><span class="dot"></span>มาตรฐานรัฐบาลดิจิทัล</a></div>
+        <div class="mega-col"><h3>นักพัฒนา/ธุรกิจ</h3>
+          <a href="#"><span class="dot"></span>API Gateway ภาครัฐ</a>
+          <a href="#"><span class="dot"></span>ข้อมูลเปิดภาครัฐ (Open Data)</a>
+          <a href="#"><span class="dot"></span>BizPortal เริ่มต้นธุรกิจ</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span>
+        <b>เริ่มใช้ ThaID วันนี้</b><span>ยืนยันตัวตนดิจิทัล ใช้แทนบัตรประชาชนกับบริการภาครัฐ</span>
+        <span class="cta">เริ่มใช้บริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ข่าว &amp; ประกาศ</h3>
+          <a href="/index.html#news"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>ประกาศ สพร.</a>
+          <a href="#"><span class="dot"></span>ประกาศจัดซื้อจัดจ้าง</a></div>
+        <div class="mega-col"><h3>บทความ &amp; ความรู้</h3>
+          <a href="#"><span class="dot"></span>บทความรัฐบาลดิจิทัล</a>
+          <a href="#"><span class="dot"></span>คลังความรู้ (Knowledge)</a>
+          <a href="#"><span class="dot"></span>อินโฟกราฟิก</a></div>
+        <div class="mega-col"><h3>สื่อ &amp; กิจกรรม</h3>
+          <a href="#"><span class="dot"></span>DGA Channel (วิดีโอ)</a>
+          <a href="#"><span class="dot"></span>ปฏิทินกิจกรรม/สัมมนา</a>
+          <a href="#"><span class="dot"></span>รางวัลและผลงาน</a></div>
+      </div>
+      <a class="mega-feature" href="/index.html#news"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>ข่าวเด่นล่าสุด</b><span>ติดตามความเคลื่อนไหวรัฐบาลดิจิทัลและบริการใหม่ของ สพร.</span>
+        <span class="cta">อ่านข่าวทั้งหมด <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ลงทะเบียน &amp; สมัครงาน</h3>
+          <a href="/register.html"><span class="dot"></span>ลงทะเบียนผู้ใช้งานระบบ</a>
+          <a href="/careers.html"><span class="dot"></span>ระบบรับสมัครงาน (ร่วมงานกับ สพร.)</a>
+          <a href="/application-status.html" aria-current="page"><span class="dot"></span>ตรวจสอบสถานะใบสมัคร</a></div>
+        <div class="mega-col"><h3>ร้องเรียน &amp; ข้อเสนอแนะ</h3>
+          <a href="/complaint.html"><span class="dot"></span>ระบบรับเรื่องร้องเรียน</a>
+          <a href="#"><span class="dot"></span>แจ้งปัญหาการใช้งาน</a>
+          <a href="/complaint.html#track"><span class="dot"></span>ติดตามสถานะเรื่องร้องเรียน</a></div>
+        <div class="mega-col"><h3>บริการช่วยเหลือ</h3>
+          <a href="#"><span class="dot"></span>ตรวจสอบสถานะคำขอ</a>
+          <a href="#"><span class="dot"></span>ดาวน์โหลดเอกสาร/แบบฟอร์ม</a>
+          <a href="#"><span class="dot"></span>ศูนย์ช่วยเหลือ (Help Center)</a></div>
+      </div>
+      <a class="mega-feature" href="/careers.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-briefcase"/></svg></span>
+        <b>ร่วมงานกับ สพร.</b><span>ดูตำแหน่งงานที่เปิดรับและสมัครออนไลน์ ขับเคลื่อนรัฐบาลดิจิทัลไปด้วยกัน</span>
+        <span class="cta">ดูตำแหน่งงาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>องค์กร</h3>
+          <a href="#"><span class="dot"></span>วิสัยทัศน์ &amp; บทบาท</a>
+          <a href="#"><span class="dot"></span>โครงสร้างองค์กร</a>
+          <a href="#"><span class="dot"></span>คณะผู้บริหาร</a></div>
+        <div class="mega-col"><h3>เผยแพร่</h3>
+          <a href="#"><span class="dot"></span>รายงานประจำปี</a>
+          <a href="/index.html#news"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>จัดซื้อจัดจ้างของ สพร.</a></div>
+        <div class="mega-col"><h3>ธรรมาภิบาล</h3>
+          <a href="#"><span class="dot"></span>คุณธรรมและความโปร่งใส (ITA)</a>
+          <a href="/careers.html"><span class="dot"></span>ร่วมงานกับเรา</a>
+          <a href="#"><span class="dot"></span>ติดต่อ สพร.</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>รายงานประจำปี 2568</b><span>ผลการดำเนินงานและทิศทางรัฐบาลดิจิทัลของประเทศ</span>
+        <span class="cta">อ่านรายงาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+  </header>
+
+  <!-- Mobile drawer -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="เมนูหลัก">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="ปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">ค้นหาบริการหรือเอกสาร</label>
+      <input id="mq" name="q" type="search" placeholder="ค้นหาบริการหรือเอกสาร…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="เมนูหลัก (อุปกรณ์พกพา)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/application-status.html" aria-current="true" lang="th">TH</a><a href="/en/application-status.html" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="#" style="flex:1;justify-content:center">ติดต่อเรา</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="เส้นทางนำทาง"><div class="wrap">
+      <ol>
+        <li><a href="/index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg> หน้าแรก</a></li>
+        <li><a href="/index.html">บริการออนไลน์</a></li>
+        <li aria-current="page">ตรวจสอบสถานะใบสมัคร</li>
+      </ol>
+    </div></nav>
+
+    <!-- Page hero -->
+    <section class="cpl-hero" aria-labelledby="app-h"><div class="wrap">
+      <div class="cpl-hero__tx">
+        <span class="cpl-eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-briefcase"/></svg> ระบบรับสมัครงาน</span>
+        <h1 id="app-h">ตรวจสอบสถานะใบสมัคร</h1>
+        <p>กรอกเลขที่ใบสมัครที่ได้รับหลังสมัครงาน เพื่อติดตามสถานะการพิจารณาได้ทุกขั้นตอน ตั้งแต่รับใบสมัครจนถึงแจ้งผล</p>
+        <ul class="cpl-trust">
+          <li><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> ตรวจสอบได้ 24 ชั่วโมง</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> ปลอดภัย เป็นความลับ</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> เห็นทุกขั้นตอน</li>
+        </ul>
+      </div>
+    </div></section>
+
+    <section class="cpl-wrap"><div class="wrap cpl-layout">
+      <div class="cpl-main">
+      <form class="cpl-track" id="appForm" novalidate>
+        <div class="field">
+          <label for="appInput">กรอกเลขที่ใบสมัคร</label>
+          <div class="track-row">
+            <input type="text" id="appInput" name="ref" placeholder="เช่น DGA-JOB-2569-100001" autocomplete="off" aria-describedby="appInput-err app-hint">
+            <button type="submit" class="btn btn--primary">ตรวจสอบสถานะ</button>
+          </div>
+          <span class="field-err" id="appInput-err" aria-live="polite"></span>
+          <span class="field-hint" id="app-hint">ทดลองด้วยเลขตัวอย่าง: <button type="button" class="link-btn" id="appDemo">DGA-JOB-2569-100001</button></span>
+        </div>
+      </form>
+
+      <div class="cpl-result" id="appResult" hidden>
+        <div class="cpl-result__head">
+          <div>
+            <span class="cpl-result__label">เลขที่ใบสมัคร</span>
+            <strong id="appRef">—</strong>
+          </div>
+          <span class="cpl-badge" id="appBadge">—</span>
+        </div>
+        <dl class="cpl-result__meta">
+          <div><dt>ตำแหน่งที่สมัคร</dt><dd id="appPos">—</dd></div>
+          <div><dt>วันที่สมัคร</dt><dd id="appDate">—</dd></div>
+        </dl>
+        <h3 class="cpl-timeline__h">สถานะการพิจารณา</h3>
+        <ol class="cpl-timeline" id="appTimeline"></ol>
+      </div>
+
+      <div class="cpl-notfound" id="appNotFound" hidden role="alert">
+        <svg class="icon icon--lg" aria-hidden="true"><use href="#i-alert"/></svg>
+        <p>ไม่พบเลขที่ใบสมัครนี้ในระบบ กรุณาตรวจสอบความถูกต้องอีกครั้ง หรือทดลองด้วยเลขตัวอย่าง</p>
+      </div>
+      </div><!-- /.cpl-main -->
+
+      <!-- แผงข้าง: ขั้นตอน + ช่วยเหลือ -->
+      <aside class="cpl-side" aria-label="ข้อมูลและการช่วยเหลือ">
+        <div class="cpl-info">
+          <h2 class="cpl-info__h"><svg class="icon" aria-hidden="true"><use href="#i-briefcase"/></svg> ขั้นตอนการพิจารณา</h2>
+          <ul>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-doc"/></svg></span><div><strong>รับใบสมัคร</strong><span>ระบบบันทึกและออกเลขที่อ้างอิง</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-search"/></svg></span><div><strong>คัดกรองคุณสมบัติ</strong><span>ทีมสรรหาพิจารณาคุณสมบัติเบื้องต้น</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-users"/></svg></span><div><strong>นัดสัมภาษณ์</strong><span>ติดต่อผู้ผ่านการคัดกรองเพื่อนัดหมาย</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><div><strong>แจ้งผลการพิจารณา</strong><span>แจ้งผลกลับผู้สมัครทางอีเมล</span></div></li>
+          </ul>
+        </div>
+        <div class="cpl-help-card">
+          <span class="cpl-help-card__ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-briefcase"/></svg></span>
+          <strong>ยังไม่ได้สมัครงาน?</strong>
+          <p>ดูตำแหน่งงานที่เปิดรับและสมัครออนไลน์ได้เลย หรือสอบถามเพิ่มเติม</p>
+          <a class="btn btn--primary btn--block" href="/careers.html">ดูตำแหน่งงาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <button type="button" class="btn btn--ghost btn--block" id="sideAskGuide"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg> ถาม DGA Guide</button>
+        </div>
+      </aside>
+    </div></section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+        <p class="footer-org">สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน) (สพร.)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>อาคารสถาบันเพื่อการยุติธรรมแห่งประเทศไทย (TIJ) ชั้น 4 เลขที่ 999 ถนนแจ้งวัฒนะ แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพฯ 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>โทร 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="แผนที่ที่ตั้ง สพร." loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">ดูแผนที่ขนาดใหญ่ <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>บริการ</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">ทางรัฐ</a></li><li><a href="#">Open Data</a></li><li><a href="#">API Gateway</a></li></ul></div>
+      <div><h3>เกี่ยวกับ</h3><ul><li><a href="#">วิสัยทัศน์</a></li><li><a href="/index.html#news">ข่าวสาร</a></li><li><a href="/careers.html">ร่วมงานกับเรา</a></li><li><a href="#">ติดต่อเรา</a></li></ul></div>
+      <div><h3>นโยบาย</h3><ul><li><a href="#">นโยบายความเป็นส่วนตัว (PDPA)</a></li><li><a href="#">นโยบายคุกกี้</a></li><li><a href="/accessibility">การเข้าถึง (WCAG)</a></li><li><a href="#">แผนผังเว็บไซต์</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2569 สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">ตั้งค่าคุกกี้</button></div></div>
+  </footer>
+
+  <!-- Cookie Consent (PDPA) -->
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">เว็บไซต์นี้ใช้คุกกี้</h2>
+    <p id="ck-d">เราใช้คุกกี้ที่จำเป็นเพื่อให้เว็บทำงาน และคุกกี้วิเคราะห์เพื่อปรับปรุงบริการ (ปิดเป็นค่าเริ่มต้น) ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">ยอมรับทั้งหมด</button><button class="btn btn--ghost" data-cookie="necessary">เฉพาะที่จำเป็น</button><button class="btn btn--ghost" data-cookie="settings">ตั้งค่า</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+  <script src="/assets/appstatus.js"></script>
+</body>
+</html>

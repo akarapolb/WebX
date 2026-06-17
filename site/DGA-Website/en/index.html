@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — Home (English) · ฟอนต์หลัก Ubuntu (ผ่าน --font-base override)
+  ใช้ Design System ชุดเดียวกับไทย: /assets/design-system.css + /assets/home.css + /assets/home.js
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digital Government Development Agency (DGA)</title>
+  <meta name="description" content="Digital government services for citizens, public-sector standards and open data from the Digital Government Development Agency (DGA), Thailand.">
+  <link rel="canonical" href="https://www.dga.or.th/en/">
+  <link rel="alternate" hreflang="th" href="https://www.dga.or.th/">
+  <link rel="alternate" hreflang="en" href="https://www.dga.or.th/en/">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <!-- หน้าอังกฤษ: ใช้ Ubuntu เป็นฟอนต์หลัก -->
+  <style>:root{ --font-base: var(--font-en); }</style>
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"GovernmentOrganization","name":"Digital Government Development Agency","alternateName":["DGA","สพร."],"url":"https://www.dga.or.th/en/","logo":"https://www.dga.or.th/assets/logo.png","sameAs":["https://www.facebook.com/DGAThailand","https://www.youtube.com/@DGAThailand"],"contactPoint":{"@type":"ContactPoint","telephone":"+66-2612-6000","contactType":"customer service","areaServed":"TH","availableLanguage":["th","en"]}}
+  </script>
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebSite","url":"https://www.dga.or.th/en/","potentialAction":{"@type":"SearchAction","target":"https://www.dga.or.th/en/search?q={query}","query-input":"required name=query"}}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <a class="skip-link" href="#site-search" style="left:160px">Skip to search</a>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M19 17H6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 14l.9 2.4 2.6.9-2.6.9-.9 2.4-.9-2.4-2.6-.9 2.6-.9z"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-cards" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="8" height="6" rx="1.5"/><rect x="13" y="14" width="8" height="6" rx="1.5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"/></symbol>
+  </defs></svg>
+
+  <div class="a11y-bar" role="region" aria-label="Accessibility tools"><div class="wrap">
+    <span>Accessibility:</span>
+    <button id="fontDown" aria-label="Decrease text size">A-</button>
+    <button id="fontReset" aria-label="Default text size">A</button>
+    <button id="fontUp" aria-label="Increase text size">A+</button>
+    <button id="contrastBtn" aria-pressed="false">High contrast</button>
+    <a href="#main">Skip to content</a>
+    <span class="grow"></span>
+    <a href="/en/accessibility">Accessibility Statement (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="Main menu">
+        <a href="/en/" aria-current="page">Home</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega>Services</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>News</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>Online Services</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>About DGA</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/" lang="th">TH</a><a href="/en/" aria-current="true" lang="en">EN</a></span>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="Open menu"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+    <!-- Services (Citizens / Agencies / Developers-Business) -->
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>For Citizens</h3>
+          <a href="#"><span class="dot"></span>Digital ID (ThaID)</a>
+          <a href="#"><span class="dot"></span>Tang Rath App</a>
+          <a href="#"><span class="dot"></span>Check welfare eligibility</a>
+          <a href="#"><span class="dot"></span>Appointments &amp; payments</a></div>
+        <div class="mega-col"><h3>For Agencies</h3>
+          <a href="#"><span class="dot"></span>GDX Data Exchange</a>
+          <a href="#"><span class="dot"></span>Government Cloud (GDCC)</a>
+          <a href="#"><span class="dot"></span>Digital Gov Standards</a>
+          <a href="#"><span class="dot"></span>TDGA Academy</a></div>
+        <div class="mega-col"><h3>Developers/Business</h3>
+          <a href="#"><span class="dot"></span>Government API Gateway</a>
+          <a href="#"><span class="dot"></span>Open Government Data</a>
+          <a href="#"><span class="dot"></span>BizPortal</a>
+          <a href="#"><span class="dot"></span>e-Procurement (e-GP)</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span>
+        <b>Get ThaID today</b><span>Verify your identity digitally and use it across public services.</span>
+        <span class="cta">Get started <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <!-- News -->
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>News &amp; Notices</h3>
+          <a href="#news"><span class="dot"></span>Press releases</a>
+          <a href="#"><span class="dot"></span>DGA announcements</a>
+          <a href="#"><span class="dot"></span>Procurement notices</a></div>
+        <div class="mega-col"><h3>Articles &amp; Knowledge</h3>
+          <a href="#"><span class="dot"></span>Digital government articles</a>
+          <a href="#"><span class="dot"></span>Knowledge hub</a>
+          <a href="#"><span class="dot"></span>Infographics</a></div>
+        <div class="mega-col"><h3>Media &amp; Events</h3>
+          <a href="#"><span class="dot"></span>DGA Channel (video)</a>
+          <a href="#"><span class="dot"></span>Events &amp; seminars</a>
+          <a href="#"><span class="dot"></span>Awards &amp; achievements</a></div>
+      </div>
+      <a class="mega-feature" href="#news"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Latest headlines</b><span>Follow digital-government updates and DGA's newest services.</span>
+        <span class="cta">Read all news <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <!-- Online Services (registration / recruitment + complaints) -->
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Register &amp; Careers</h3>
+          <a href="/en/register.html"><span class="dot"></span>Register a user account</a>
+          <a href="/en/careers.html"><span class="dot"></span>Job application system (Careers)</a>
+          <a href="/en/application-status.html"><span class="dot"></span>Check application status</a></div>
+        <div class="mega-col"><h3>Complaints &amp; Feedback</h3>
+          <a href="/complaint.html"><span class="dot"></span>Complaint submission system</a>
+          <a href="#"><span class="dot"></span>Report a problem</a>
+          <a href="/complaint.html#track"><span class="dot"></span>Track complaint status</a></div>
+        <div class="mega-col"><h3>Support</h3>
+          <a href="#"><span class="dot"></span>Check request status</a>
+          <a href="#"><span class="dot"></span>Download forms &amp; documents</a>
+          <a href="#"><span class="dot"></span>Help Center</a></div>
+      </div>
+      <a class="mega-feature" href="/complaint.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-shield"/></svg></span>
+        <b>Complaint submission system</b><span>Submit complaints or feedback online and track the status 24/7.</span>
+        <span class="cta">Submit online <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Organization</h3>
+          <a href="#"><span class="dot"></span>Vision &amp; role</a>
+          <a href="#"><span class="dot"></span>Structure</a>
+          <a href="#"><span class="dot"></span>Executives</a></div>
+        <div class="mega-col"><h3>Publications</h3>
+          <a href="#"><span class="dot"></span>Annual reports</a>
+          <a href="#"><span class="dot"></span>News</a>
+          <a href="#"><span class="dot"></span>DGA procurement</a></div>
+        <div class="mega-col"><h3>Governance</h3>
+          <a href="#"><span class="dot"></span>Integrity &amp; transparency (ITA)</a>
+          <a href="#"><span class="dot"></span>Careers</a>
+          <a href="#"><span class="dot"></span>Contact DGA</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Annual Report 2025</b><span>Performance and the national direction for digital government.</span>
+        <span class="cta">Read report <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+  </header>
+
+  <!-- Mobile off-canvas drawer (menu built automatically from mega menu by home.js) -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="Main menu">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="Close menu"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/en/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">Search services or documents</label>
+      <input id="mq" name="q" type="search" placeholder="Search services or documents…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="Main menu (mobile)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/" lang="th">TH</a><a href="/en/" aria-current="true" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="#" style="flex:1;justify-content:center">Contact us</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <section class="home-hero" aria-labelledby="hero-h">
+      <!-- Background slideshow: /assets/image/hero-1..5.png (falls back to color tints if missing) -->
+      <div class="hero-bg" id="heroBg" aria-hidden="true">
+        <div class="hero-slide is-active" style="background-image:url('/assets/image/hero-1.png')"></div>
+        <div class="hero-slide" style="background-image:url('/assets/image/hero-2.png')"></div>
+        <div class="hero-slide" style="background-image:url('/assets/image/hero-3.png')"></div>
+        <div class="hero-slide" style="background-image:url('/assets/image/hero-4.png')"></div>
+        <div class="hero-slide" style="background-image:url('/assets/image/hero-5.png')"></div>
+      </div>
+      <div class="hero-overlay" aria-hidden="true"></div>
+      <div class="wrap">
+        <span class="hero-kicker"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> Trusted digital public services</span>
+        <h1 id="hero-h">Digital government services<br><span class="accent">for everyone</span></h1>
+        <p class="lead">Find public services, documents and data in one place — or ask our AI assistant for precise answers.</p>
+        <form class="hero-search" role="search" id="site-search" action="/en/search" method="get">
+          <span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-search"/></svg></span>
+          <label for="q" class="visually-hidden">Search services, documents or ask AI</label>
+          <input id="q" name="q" type="search" autocomplete="off" data-typewriter
+            data-phrases='["apply for Digital ID (ThaID)","open government data","government EA standards","check welfare eligibility","Ask AI: how to start a business"]'
+            placeholder="e.g. apply for Digital ID, open data, EA standards…">
+          <button class="btn btn--primary" type="submit">Search</button>
+        </form>
+        <p class="hero-hint"><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg> Powered by AI Smart Search</p>
+        <p class="hero-tags" aria-label="Popular searches"><span>Popular:</span><a href="#">ThaID</a><a href="#">Tang Rath</a><a href="#">Open Data</a><a href="#">Standards</a></p>
+      </div>
+      <div class="hero-dots" id="heroDots" data-label="Slide" aria-label="Choose background image"></div>
+    </section>
+
+    <section class="block" aria-labelledby="svc-h">
+      <div class="block__head"><div><span class="eyebrow">Services</span><h2 id="svc-h">Popular services</h2></div>
+        <a class="more" href="#">View all services <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+      <ul class="svc-grid">
+        <li><a class="svc t-orange" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span><span><b>Digital ID</b><span>ThaID identity verification</span></span><span class="go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span></a></li>
+        <li><a class="svc t-blue" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-grid"/></svg></span><span><b>Tang Rath App</b><span>All public services in one app</span></span><span class="go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span></a></li>
+        <li><a class="svc t-green" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-data"/></svg></span><span><b>Open Data</b><span>Open Government Data</span></span><span class="go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span></a></li>
+        <li><a class="svc t-amber" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-build"/></svg></span><span><b>BizPortal</b><span>Start a business end-to-end</span></span><span class="go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span></a></li>
+        <li><a class="svc t-purple" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span><span><b>Digital Standards</b><span>EA framework &amp; guides</span></span><span class="go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span></a></li>
+        <li><a class="svc t-teal" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-book"/></svg></span><span><b>Knowledge Hub</b><span>Digital laws &amp; e-Books</span></span><span class="go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span></a></li>
+      </ul>
+    </section>
+
+    <!-- Highlight banners (carousel) -->
+    <section class="hl" aria-roledescription="carousel" aria-label="Highlights">
+      <div class="hl-wrap">
+        <div class="hl-track" id="hlTrack">
+          <a class="hl-slide n1" href="#" aria-label="Thailand ranks 17th — WASEDA-IAC World Digital Government Ranking 2025"><img src="/assets/image/banner-1.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n2" href="#" aria-label="Highlight banner 2"><img src="/assets/image/banner-2.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n3" href="#" aria-label="Highlight banner 3"><img src="/assets/image/banner-3.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n4" href="#" aria-label="Highlight banner 4"><img src="/assets/image/banner-4.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n5" href="#" aria-label="Highlight banner 5"><img src="/assets/image/banner-5.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n1" href="#" aria-label="Highlight banner 6"><img src="/assets/image/banner-6.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n2" href="#" aria-label="Highlight banner 7"><img src="/assets/image/banner-7.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n3" href="#" aria-label="Highlight banner 8"><img src="/assets/image/banner-8.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n4" href="#" aria-label="Highlight banner 9"><img src="/assets/image/banner-9.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n5" href="#" aria-label="Highlight banner 10"><img src="/assets/image/banner-10.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n1" href="#" aria-label="Highlight banner 11"><img src="/assets/image/banner-11.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+          <a class="hl-slide n2" href="#" aria-label="Highlight banner 12"><img src="/assets/image/banner-12.png" alt="" loading="lazy" onerror="this.style.display='none'"></a>
+        </div>
+        <button class="hl-nav hl-prev" type="button" aria-label="Previous slide"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button class="hl-nav hl-next" type="button" aria-label="Next slide"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+        <span class="hl-count" id="hlCount" aria-hidden="true">1 / 12</span>
+        <div class="hl-dots" id="hlDots" data-label="Slide"></div>
+        <button class="hl-play" id="hlPlay" type="button" data-pause="Pause autoplay" data-play="Play autoplay" aria-label="Pause autoplay"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+      </div>
+    </section>
+  </main>
+
+  <section class="stats-band" aria-label="Service statistics"><div class="wrap">
+    <div class="stat-item">
+      <span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-users"/></svg></span>
+      <div class="stat-body">
+        <b class="stat-num" data-count="30" data-suffix="M+" aria-hidden="true">0</b>
+        <span class="stat-label" aria-hidden="true">users served</span>
+        <span class="visually-hidden">Over 30 million users served</span>
+      </div>
+    </div>
+    <div class="stat-item">
+      <span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-grid"/></svg></span>
+      <div class="stat-body">
+        <b class="stat-num" data-count="1400" data-suffix="+" aria-hidden="true">0</b>
+        <span class="stat-label" aria-hidden="true">digital services</span>
+        <span class="visually-hidden">More than 1,400 digital services</span>
+      </div>
+    </div>
+    <div class="stat-item">
+      <span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-shield"/></svg></span>
+      <div class="stat-body">
+        <b class="stat-num" data-count="99.9" data-decimals="1" data-suffix="%" aria-hidden="true">0</b>
+        <span class="stat-label" aria-hidden="true">system uptime</span>
+        <span class="visually-hidden">99.9 percent system uptime</span>
+      </div>
+    </div>
+    <div class="stat-item">
+      <span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-clock"/></svg></span>
+      <div class="stat-body">
+        <b class="stat-num" aria-hidden="true">24/7</b>
+        <span class="stat-label" aria-hidden="true">support center</span>
+        <span class="visually-hidden">Support center available 24 hours, 7 days a week</span>
+      </div>
+    </div>
+  </div></section>
+
+  <section class="block" aria-labelledby="news-h">
+    <h2 id="news-h" class="visually-hidden">News &amp; Articles</h2>
+    <div class="news-toolbar">
+      <div class="news-tabs" role="tablist" aria-label="News categories">
+        <button class="news-tab" role="tab" id="nt-news" aria-controls="np-news" aria-selected="true" data-tab="news">DGA News</button>
+        <button class="news-tab" role="tab" id="nt-article" aria-controls="np-article" aria-selected="false" tabindex="-1" data-tab="article">Articles</button>
+      </div>
+      <div class="news-view" role="group" aria-label="Display mode">
+        <button type="button" data-view="card" aria-pressed="true" aria-label="Card view"><svg class="icon" aria-hidden="true"><use href="#i-cards"/></svg></button>
+        <button type="button" data-view="grid" aria-pressed="false" aria-label="Grid view"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></button>
+      </div>
+    </div>
+
+    <div class="news-panel" id="np-news" role="tabpanel" aria-labelledby="nt-news" data-tab="news">
+      <div class="news-items">
+        <article class="news-card news-card--feature">
+          <a class="news-thumb" href="#"><img src="/assets/image/news-1.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n1"><svg aria-hidden="true"><use href="#i-grid"/></svg></span><span class="cat">New</span></a>
+          <div class="nc-body">
+            <h3 class="nc-title"><a href="#">DGA holds a follow-up meeting under the Digital Government Integration Plan FY2026 (Project Unlock Clinic)</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>13 Jun 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>25</span></p>
+            <p class="nc-excerpt">As the lead agency for the Digital Government Integration Plan, DGA held a follow-up meeting on the performance of budget-receiving agencies for fiscal year 2026…</p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/news-2.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n2"><svg aria-hidden="true"><use href="#i-doc"/></svg></span><span class="cat">MOU</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">PACC and DGA sign an MOU to strengthen anti-corruption efforts</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>12 Jun 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>25</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/news-3.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n3"><svg aria-hidden="true"><use href="#i-data"/></svg></span><span class="cat">Open Data</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">DGA and the National Statistical Office promote “Open Government Data”</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>9 Jun 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>78</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/news-4.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n4"><svg aria-hidden="true"><use href="#i-shield"/></svg></span><span class="cat">Event</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">DGA joins the royal blessing ceremony for the auspicious occasion</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>3 Jun 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>38</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/news-5.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n5"><svg aria-hidden="true"><use href="#i-users"/></svg></span><span class="cat">Intl</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">DGA welcomes a senior delegation from the Ministry of Finance, Tanzania</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>2 Jun 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>16</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+      </div>
+    </div>
+
+    <div class="news-panel" id="np-article" role="tabpanel" aria-labelledby="nt-article" data-tab="article" hidden>
+      <div class="news-items">
+        <article class="news-card news-card--feature">
+          <a class="news-thumb" href="#"><img src="/assets/image/article-1.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n3"><svg aria-hidden="true"><use href="#i-grid"/></svg></span><span class="cat">Article</span></a>
+          <div class="nc-body">
+            <h3 class="nc-title"><a href="#">“Tang Rath” stands with people with disabilities — equal access to rights and services</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>29 Jul 25</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>268</span></p>
+            <p class="nc-excerpt">Following Pride Month in June, July is recognised worldwide as Disability Pride Month — an important time to advance equal access for people with disabilities…</p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/article-2.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n2"><svg aria-hidden="true"><use href="#i-data"/></svg></span><span class="cat">Data</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">DIGI Data Camp: empowering “data knights” to transform Thai government</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>18 Jul 25</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>904</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/article-3.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n1"><svg aria-hidden="true"><use href="#i-grid"/></svg></span><span class="cat">Tang Rath</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">“Tang Rath” — one app that serves every generation</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>17 Jun 25</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>484</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/article-4.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n4"><svg aria-hidden="true"><use href="#i-build"/></svg></span><span class="cat">CEO Wisdom</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">CEO WISDOM: global standards driving Thailand’s digital economy</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>21 Feb 24</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>188</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+        <article class="news-card"><a class="news-thumb" href="#"><img src="/assets/image/article-5.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n5"><svg aria-hidden="true"><use href="#i-doc"/></svg></span><span class="cat">CEO Wisdom</span></a>
+          <div class="nc-body"><h3 class="nc-title"><a href="#">CEO WISDOM: the Office of Justice Affairs into the digital world</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>9 Nov 23</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>232</span></p>
+            <a class="news-more" href="#">Read more <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></article>
+      </div>
+    </div>
+
+    <div class="news-viewmore"><a class="btn btn--ghost" href="#">View More</a></div>
+  </section>
+
+  <!-- DGA Channel (videos) — soft orange band -->
+  <section class="channel" aria-labelledby="ch-h">
+    <div class="channel-inner">
+      <h2 id="ch-h" class="channel-title">DGA Channel</h2>
+      <div class="ch-toolbar">
+        <div class="ch-tabs" role="tablist" aria-label="Video categories">
+          <button class="ch-tab" role="tab" aria-selected="true" data-cat="all">All</button>
+          <button class="ch-tab" role="tab" aria-selected="false" tabindex="-1" data-cat="std">Standards</button>
+          <button class="ch-tab" role="tab" aria-selected="false" tabindex="-1" data-cat="event">Events</button>
+          <button class="ch-tab" role="tab" aria-selected="false" tabindex="-1" data-cat="talk">Interview</button>
+        </div>
+        <div class="ch-view" role="group" aria-label="Display mode">
+          <button type="button" data-view="grid" aria-pressed="true" aria-label="Grid view"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></button>
+          <button type="button" data-view="list" aria-pressed="false" aria-label="List view"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></button>
+        </div>
+      </div>
+      <div class="ch-grid">
+        <article class="ch-card"><a class="ch-thumb" href="#"><img src="/assets/image/channel-1.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n2"><svg aria-hidden="true"><use href="#i-grid"/></svg></span><span class="ch-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span><span class="ch-dur">12:40</span></a>
+          <div class="ch-body"><h3 class="nc-title"><a href="#">DGA briefing on the national Digital Government Readiness Survey 2026 (Session 1)</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>1 Apr 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>276 views</span></p>
+            <a class="btn btn--ghost ch-more" href="#">Watch</a></div></article>
+        <article class="ch-card"><a class="ch-thumb" href="#"><img src="/assets/image/channel-2.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n3"><svg aria-hidden="true"><use href="#i-doc"/></svg></span><span class="ch-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span><span class="ch-dur">08:15</span></a>
+          <div class="ch-body"><h3 class="nc-title"><a href="#">Public hearing video: draft DGA standard on digital public services</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>20 Mar 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>156 views</span></p>
+            <a class="btn btn--ghost ch-more" href="#">Watch</a></div></article>
+        <article class="ch-card"><a class="ch-thumb" href="#"><img src="/assets/image/channel-3.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n4"><svg aria-hidden="true"><use href="#i-shield"/></svg></span><span class="ch-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span><span class="ch-dur">05:32</span></a>
+          <div class="ch-body"><h3 class="nc-title"><a href="#">DGA invites you: hearing on the draft data classification standard v1.0</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>3 Mar 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>46 views</span></p>
+            <a class="btn btn--ghost ch-more" href="#">Watch</a></div></article>
+        <article class="ch-card"><a class="ch-thumb" href="#"><img src="/assets/image/channel-4.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n1"><svg aria-hidden="true"><use href="#i-data"/></svg></span><span class="ch-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span><span class="ch-dur">03:50</span></a>
+          <div class="ch-body"><h3 class="nc-title"><a href="#">Hearing video: draft data classification standard v1.0</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>27 Feb 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>3 views</span></p>
+            <a class="btn btn--ghost ch-more" href="#">Watch</a></div></article>
+        <article class="ch-card"><a class="ch-thumb" href="#"><img src="/assets/image/channel-5.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n5"><svg aria-hidden="true"><use href="#i-doc"/></svg></span><span class="ch-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span><span class="ch-dur">15:20</span></a>
+          <div class="ch-body"><h3 class="nc-title"><a href="#">DGA public hearing on the draft data interoperability standard</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>24 Feb 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>113 views</span></p>
+            <a class="btn btn--ghost ch-more" href="#">Watch</a></div></article>
+        <article class="ch-card"><a class="ch-thumb" href="#"><img src="/assets/image/channel-6.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="ph n3"><svg aria-hidden="true"><use href="#i-users"/></svg></span><span class="ch-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span><span class="ch-dur">22:10</span></a>
+          <div class="ch-body"><h3 class="nc-title"><a href="#">Digital Gov Thailand: how does Thai digital government score today?</a></h3>
+            <p class="news-meta"><span><svg class="icon" aria-hidden="true"><use href="#i-cal"/></svg>20 Feb 26</span><span><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>80 views</span></p>
+            <a class="btn btn--ghost ch-more" href="#">Watch</a></div></article>
+      </div>
+      <div class="news-viewmore"><a class="btn btn--primary" href="#" style="border-radius:999px">View all</a></div>
+    </div>
+  </section>
+
+  <!-- DGA Auditorium (awards) -->
+  <section class="auditorium" aria-labelledby="aud-h">
+    <div class="aud-inner">
+      <div class="aud-head">
+        <span class="aud-eyebrow">Our pride</span>
+        <h2 id="aud-h" class="aud-title">DGA Auditorium</h2>
+        <p class="aud-sub">National awards and recognition that reaffirm Thailand’s leadership in digital government.</p>
+      </div>
+      <div class="aud-stats">
+        <div class="aud-stat"><b>30+</b><span>National awards</span></div>
+        <div class="aud-stat"><b>5 yrs</b><span>Consecutive excellence</span></div>
+        <div class="aud-stat"><b>#1</b><span>Digital public service</span></div>
+      </div>
+      <div class="awards">
+        <article class="award"><div class="award-stage"><span class="award-spot" aria-hidden="true"></span>
+          <img class="award-img" src="/assets/image/award-1.png" alt="Prime Minister Award 2022" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+          <span class="award-ph" style="display:none" aria-hidden="true"><svg class="icon"><use href="#i-trophy"/></svg></span></div>
+          <div class="award-info"><b class="award-name">Prime Minister Award</b><span class="award-cat">Thailand Cybersecurity Excellence — Public Service</span><span class="award-year">2022</span></div></article>
+        <article class="award"><div class="award-stage"><span class="award-spot" aria-hidden="true"></span>
+          <img class="award-img" src="/assets/image/award-2.png" alt="Prime Minister Award 2022" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+          <span class="award-ph" style="display:none" aria-hidden="true"><svg class="icon"><use href="#i-trophy"/></svg></span></div>
+          <div class="award-info"><b class="award-name">Prime Minister Award</b><span class="award-cat">Cybersecurity Excellence — CSR</span><span class="award-year">2022</span></div></article>
+        <article class="award"><div class="award-stage"><span class="award-spot" aria-hidden="true"></span>
+          <img class="award-img" src="/assets/image/award-3.png" alt="Public Sector Excellence Award" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+          <span class="award-ph" style="display:none" aria-hidden="true"><svg class="icon"><use href="#i-trophy"/></svg></span></div>
+          <div class="award-info"><b class="award-name">Public Sector Excellence Award</b><span class="award-cat">Outstanding Public Service</span><span class="award-year">2023</span></div></article>
+        <article class="award"><div class="award-stage"><span class="award-spot" aria-hidden="true"></span>
+          <img class="award-img" src="/assets/image/award-4.png" alt="Digital Transformation Award" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+          <span class="award-ph" style="display:none" aria-hidden="true"><svg class="icon"><use href="#i-trophy"/></svg></span></div>
+          <div class="award-info"><b class="award-name">Digital Transformation Award</b><span class="award-cat">Service Excellence — 1st place</span><span class="award-year">2023</span></div></article>
+      </div>
+      <div class="aud-cta"><a class="btn" href="#">View all awards</a></div>
+    </div>
+  </section>
+
+  <!-- FAQ — Answer Engine (AEO) + WCAG accordion -->
+  <section class="block faq" aria-labelledby="faq-h">
+    <div class="wrap">
+      <div class="faq__head">
+        <span class="eyebrow">Q&amp;A</span>
+        <h2 id="faq-h">Frequently asked questions</h2>
+        <p class="faq__sub">Short, clear answers to the most common questions about DGA and digital government services. Pick a topic below to see the answer.</p>
+      </div>
+
+      <div class="faq-list">
+        <div class="faq-item">
+          <h3 class="faq-q"><button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-a1" id="faq-q1">
+            <span>What is DGA and what does it do?</span><span class="faq-ic" aria-hidden="true"></span>
+          </button></h3>
+          <div class="faq-a" id="faq-a1" role="region" aria-labelledby="faq-q1"><div>
+            <p>The <b>Digital Government Development Agency (DGA)</b> is the central agency that develops, connects and elevates public services into digital form — such as the “Tang Rath” app, identity verification, and the government's central data infrastructure — so people can reach services conveniently, quickly and securely.</p>
+          </div></div>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-q"><button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-a2" id="faq-q2">
+            <span>What can the “Tang Rath” app do, and how do I download it?</span><span class="faq-ic" aria-hidden="true"></span>
+          </button></h3>
+          <div class="faq-a" id="faq-a2" role="region" aria-labelledby="faq-q2"><div>
+            <p>“Tang Rath” brings government services into one place — check welfare eligibility, pay bills, book agency appointments and view digital official documents. Download it free on iOS and Android, or use it on the web, with identity verified via ThaID.</p>
+          </div></div>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-q"><button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-a3" id="faq-q3">
+            <span>What is ThaID and how do I verify my identity?</span><span class="faq-ic" aria-hidden="true"></span>
+          </button></h3>
+          <div class="faq-a" id="faq-a3" role="region" aria-labelledby="faq-q3"><div>
+            <p><b>ThaID</b> is the government's digital identity verification system, used in place of a physical ID card to access online services securely. Register yourself through the ThaID app, or verify in person at a district office.</p>
+          </div></div>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-q"><button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-a4" id="faq-q4">
+            <span>How can a government agency connect or exchange data with DGA?</span><span class="faq-ic" aria-hidden="true"></span>
+          </button></h3>
+          <div class="faq-a" id="faq-a4" role="region" aria-labelledby="faq-q4"><div>
+            <p>Agencies can connect through the Government Data Exchange (GDX) platform and DGA's Open APIs by submitting a request via the government-agency channel. Our team coordinates access rights, data standards and security in line with PDPA.</p>
+          </div></div>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-q"><button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-a5" id="faq-q5">
+            <span>Is the website accessible for people with disabilities and older users?</span><span class="faq-ic" aria-hidden="true"></span>
+          </button></h3>
+          <div class="faq-a" id="faq-a5" role="region" aria-labelledby="faq-q5"><div>
+            <p>Yes. The site is built to <b>WCAG 2.2 Level AA</b> — fully keyboard operable, screen-reader friendly, with a high-contrast mode, adjustable text size and dark mode, so everyone can access services equally.</p>
+          </div></div>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-q"><button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-a6" id="faq-q6">
+            <span>How and when can I contact DGA or the service center?</span><span class="faq-ic" aria-hidden="true"></span>
+          </button></h3>
+          <div class="faq-a" id="faq-a6" role="region" aria-labelledby="faq-q6"><div>
+            <p>Reach the DGA Contact Center at <b>0-2612-6000</b>, available 24 hours a day, or tap the <b>DGA Guide</b> button at the bottom-right of the screen to ask our smart assistant right away.</p>
+          </div></div>
+        </div>
+      </div>
+
+      <!-- Contact bar -->
+      <div class="faq-help">
+        <div class="faq-help__main">
+          <span class="faq-help__ic" aria-hidden="true"><svg class="icon"><use href="#i-chat"/></svg></span>
+          <div>
+            <strong>Still can't find what you need?</strong>
+            <p>Our team is here for you 24/7 — choose whatever's easiest.</p>
+          </div>
+        </div>
+        <div class="faq-help__btns">
+          <a class="btn btn--primary" href="tel:026126000">Call 0-2612-6000</a>
+          <button type="button" class="btn btn--ghost" id="faqAskGuide">
+            <svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg> Ask DGA Guide
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AEO: FAQPage structured data (Answer Engine / Generative AI) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {"@type":"Question","name":"What is DGA and what does it do?","acceptedAnswer":{"@type":"Answer","text":"The Digital Government Development Agency (DGA) is the central agency that develops, connects and elevates public services into digital form, such as the Tang Rath app, identity verification and the government's central data infrastructure, so people can reach services conveniently, quickly and securely."}},
+      {"@type":"Question","name":"What can the Tang Rath app do, and how do I download it?","acceptedAnswer":{"@type":"Answer","text":"Tang Rath brings government services into one place: check welfare eligibility, pay bills, book agency appointments and view digital official documents. Download it free on iOS and Android, or use it on the web, with identity verified via ThaID."}},
+      {"@type":"Question","name":"What is ThaID and how do I verify my identity?","acceptedAnswer":{"@type":"Answer","text":"ThaID is the government's digital identity verification system, used in place of a physical ID card to access online services securely. Register yourself through the ThaID app, or verify in person at a district office."}},
+      {"@type":"Question","name":"How can a government agency connect or exchange data with DGA?","acceptedAnswer":{"@type":"Answer","text":"Agencies can connect through the Government Data Exchange (GDX) platform and DGA's Open APIs by submitting a request via the government-agency channel. The team coordinates access rights, data standards and security in line with PDPA."}},
+      {"@type":"Question","name":"Is the website accessible for people with disabilities and older users?","acceptedAnswer":{"@type":"Answer","text":"Yes. The site is built to WCAG 2.2 Level AA, fully keyboard operable, screen-reader friendly, with a high-contrast mode, adjustable text size and dark mode, so everyone can access services equally."}},
+      {"@type":"Question","name":"How and when can I contact DGA or the service center?","acceptedAnswer":{"@type":"Answer","text":"Reach the DGA Contact Center at 0-2612-6000, available 24 hours a day, or use the DGA Guide smart assistant on the website."}}
+    ]
+  }
+  </script>
+
+  <!-- Featured promo (moved to bottom, before footer) -->
+  <section class="featured" aria-labelledby="feat-h">
+    <div class="panel">
+      <div><span class="eyebrow" style="color:var(--c-primary);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Government super app</span>
+        <h2 id="feat-h">“Tang Rath” — government services, all in one app</h2>
+        <p>Check eligibility, pay bills, book appointments and access official documents anytime — secured with ThaID identity verification.</p>
+        <ul class="feat-list">
+          <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Check welfare eligibility</li>
+          <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Pay bills &amp; government fees</li>
+          <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Book agency appointments</li>
+          <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Digital official documents</li>
+        </ul>
+        <div class="demo-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px">
+          <a class="btn btn--primary" href="#">Download the app <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="btn btn--ghost" href="#">Learn more</a></div>
+      </div>
+      <div class="art">
+        <img src="/assets/image/thangrath.png" alt="Tang Rath app — new version, available on the app and website" loading="lazy">
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+        <p class="footer-org">Digital Government Development Agency (DGA)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Thailand Institute of Justice (TIJ) Building, 4th Floor, 999 Chaeng Watthana Rd., Thung Song Hong, Lak Si, Bangkok 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>Tel 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="DGA location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">View larger map <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>Services</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">Tang Rath</a></li><li><a href="#">Open Data</a></li><li><a href="#">API Gateway</a></li></ul></div>
+      <div><h3>About</h3><ul><li><a href="#">Vision</a></li><li><a href="#">News</a></li><li><a href="#">Careers</a></li><li><a href="#">Contact</a></li></ul></div>
+      <div><h3>Policy</h3><ul><li><a href="#">Privacy (PDPA)</a></li><li><a href="#">Cookie Policy</a></li><li><a href="/en/accessibility">Accessibility (WCAG)</a></li><li><a href="#">Sitemap</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2026 Digital Government Development Agency</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">Cookie settings</button></div></div>
+  </footer>
+
+  <!-- DGA Guide chatbot (floating button + chat panel) is created by /assets/home.js -->
+
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">This website uses cookies</h2>
+    <p id="ck-d">We use necessary cookies to run the site and analytics cookies to improve services (off by default), in line with Thailand’s Personal Data Protection Act (PDPA).</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">Accept all</button><button class="btn btn--ghost" data-cookie="necessary">Necessary only</button><button class="btn btn--ghost" data-cookie="settings">Settings</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+  <script>document.getElementById('ctaAi')?.addEventListener('click',e=>{e.preventDefault();document.getElementById('aiBtn').click();});</script>
+</body>
+</html>

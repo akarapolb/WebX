@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dga-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "C:/Users/Avalant/ClaudeCode/site/DGA-Website"],
+      "port": 8080
+    }
+  ]
+}

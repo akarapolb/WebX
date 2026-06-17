@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — Register a user account (English) · working demo page
+  Uses Design System: /assets/design-system.css + /assets/home.css + /assets/complaint.css + /assets/register.css
+  3-step wizard + national ID checksum + password strength + ThaID · Ubuntu font
+  Accessibility WCAG 2.2 AA · dark mode · responsive · Schema · PDPA
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Register a user account | DGA</title>
+  <meta name="description" content="Create a single account for all government digital services, verified securely with ThaID and protected under Thailand's PDPA — Digital Government Development Agency (DGA).">
+  <link rel="canonical" href="https://www.dga.or.th/en/register">
+  <link rel="alternate" hreflang="th" href="https://www.dga.or.th/register">
+  <link rel="alternate" hreflang="en" href="https://www.dga.or.th/en/register">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/complaint.css">
+  <link rel="stylesheet" href="/assets/register.css">
+  <!-- English page: use Ubuntu as the base font -->
+  <style>:root{ --font-base: var(--font-en); }</style>
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"Home","item":"https://www.dga.or.th/en/"},
+    {"@type":"ListItem","position":2,"name":"Online Services","item":"https://www.dga.or.th/en/e-service"},
+    {"@type":"ListItem","position":3,"name":"Register a user account","item":"https://www.dga.or.th/en/register"}
+  ]}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-arrow-l" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v5M12 17.5h.01"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M9.9 5.1A9.8 9.8 0 0 1 12 5c6 0 10 7 10 7a16 16 0 0 1-3 3.6M6.6 6.6A16 16 0 0 0 2 12s4 7 10 7a9.6 9.6 0 0 0 3.6-.7"/><path d="M3 3l18 18"/></symbol>
+  </defs></svg>
+
+  <!-- Accessibility bar -->
+  <div class="a11y-bar" role="region" aria-label="Accessibility tools"><div class="wrap">
+    <span>Accessibility:</span>
+    <button id="fontDown" aria-label="Decrease text size">A-</button>
+    <button id="fontReset" aria-label="Default text size">A</button>
+    <button id="fontUp" aria-label="Increase text size">A+</button>
+    <button id="contrastBtn" aria-pressed="false">High contrast</button>
+    <a href="#main">Skip to content</a>
+    <span class="grow"></span>
+    <a href="/en/accessibility">Accessibility Statement (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="Main menu">
+        <a href="/en/">Home</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega>Services</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>News</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>Online Services</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>About DGA</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/register.html" lang="th">TH</a><a href="/en/register.html" aria-current="true" lang="en">EN</a></span>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="Open menu"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Services -->
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>For Citizens</h3>
+          <a href="#"><span class="dot"></span>Digital ID (ThaID)</a>
+          <a href="#"><span class="dot"></span>Tang Rath App</a>
+          <a href="#"><span class="dot"></span>Check welfare eligibility</a>
+          <a href="#"><span class="dot"></span>Appointments &amp; payments</a></div>
+        <div class="mega-col"><h3>For Agencies</h3>
+          <a href="#"><span class="dot"></span>GDX Data Exchange</a>
+          <a href="#"><span class="dot"></span>Government Cloud (GDCC)</a>
+          <a href="#"><span class="dot"></span>Digital Gov Standards</a>
+          <a href="#"><span class="dot"></span>TDGA Academy</a></div>
+        <div class="mega-col"><h3>Developers/Business</h3>
+          <a href="#"><span class="dot"></span>Government API Gateway</a>
+          <a href="#"><span class="dot"></span>Open Government Data</a>
+          <a href="#"><span class="dot"></span>BizPortal</a>
+          <a href="#"><span class="dot"></span>e-Procurement (e-GP)</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span>
+        <b>Get ThaID today</b><span>Verify your identity digitally and use it across public services.</span>
+        <span class="cta">Get started <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <!-- News -->
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>News &amp; Notices</h3>
+          <a href="/en/index.html#news"><span class="dot"></span>Press releases</a>
+          <a href="#"><span class="dot"></span>DGA announcements</a>
+          <a href="#"><span class="dot"></span>Procurement notices</a></div>
+        <div class="mega-col"><h3>Articles &amp; Knowledge</h3>
+          <a href="#"><span class="dot"></span>Digital government articles</a>
+          <a href="#"><span class="dot"></span>Knowledge hub</a>
+          <a href="#"><span class="dot"></span>Infographics</a></div>
+        <div class="mega-col"><h3>Media &amp; Events</h3>
+          <a href="#"><span class="dot"></span>DGA Channel (video)</a>
+          <a href="#"><span class="dot"></span>Events &amp; seminars</a>
+          <a href="#"><span class="dot"></span>Awards &amp; achievements</a></div>
+      </div>
+      <a class="mega-feature" href="/en/index.html#news"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Latest headlines</b><span>Follow digital-government updates and DGA's newest services.</span>
+        <span class="cta">Read all news <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <!-- Online Services -->
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Register &amp; Careers</h3>
+          <a href="/en/register.html" aria-current="page"><span class="dot"></span>Register a user account</a>
+          <a href="/en/careers.html"><span class="dot"></span>Job application system (Careers)</a>
+          <a href="/en/application-status.html"><span class="dot"></span>Check application status</a></div>
+        <div class="mega-col"><h3>Complaints &amp; Feedback</h3>
+          <a href="/en/complaint.html"><span class="dot"></span>Complaint submission system</a>
+          <a href="/en/complaint.html#track"><span class="dot"></span>Track complaint status</a>
+          <a href="#"><span class="dot"></span>Report a problem</a></div>
+        <div class="mega-col"><h3>Support</h3>
+          <a href="#"><span class="dot"></span>Check request status</a>
+          <a href="#"><span class="dot"></span>Download forms &amp; documents</a>
+          <a href="#"><span class="dot"></span>Help Center</a></div>
+      </div>
+      <a class="mega-feature" href="/en/register.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span>
+        <b>Register a user account</b><span>Create one central government account, verified with ThaID, for every service.</span>
+        <span class="cta">Register online <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Organization</h3>
+          <a href="#"><span class="dot"></span>Vision &amp; role</a>
+          <a href="#"><span class="dot"></span>Structure</a>
+          <a href="#"><span class="dot"></span>Executives</a></div>
+        <div class="mega-col"><h3>Publications</h3>
+          <a href="#"><span class="dot"></span>Annual reports</a>
+          <a href="/en/index.html#news"><span class="dot"></span>News</a>
+          <a href="#"><span class="dot"></span>DGA procurement</a></div>
+        <div class="mega-col"><h3>Governance</h3>
+          <a href="#"><span class="dot"></span>Integrity &amp; transparency (ITA)</a>
+          <a href="#"><span class="dot"></span>Careers</a>
+          <a href="#"><span class="dot"></span>Contact DGA</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Annual Report 2025</b><span>Performance and the national direction for digital government.</span>
+        <span class="cta">Read report <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+  </header>
+
+  <!-- Mobile drawer -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="Main menu">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="Close menu"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/en/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">Search services or documents</label>
+      <input id="mq" name="q" type="search" placeholder="Search services or documents…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="Main menu (mobile)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/register.html" lang="th">TH</a><a href="/en/register.html" aria-current="true" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="#" style="flex:1;justify-content:center">Contact us</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="Breadcrumb"><div class="wrap">
+      <ol>
+        <li><a href="/en/index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg> Home</a></li>
+        <li><a href="/en/index.html">Online Services</a></li>
+        <li aria-current="page">Register a user account</li>
+      </ol>
+    </div></nav>
+
+    <!-- Page hero -->
+    <section class="cpl-hero" aria-labelledby="reg-h"><div class="wrap">
+      <div class="cpl-hero__tx">
+        <span class="cpl-eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-id"/></svg> Central government account</span>
+        <h1 id="reg-h">Register a user account</h1>
+        <p>Create one account that works across all government digital services, verified securely with <strong>ThaID</strong> and protected under Thailand's Personal Data Protection Act (PDPA).</p>
+        <ul class="cpl-trust">
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> One account for every service</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-id"/></svg> ThaID identity verification</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> Secured to PDPA standards</li>
+        </ul>
+      </div>
+    </div></section>
+
+    <section class="cpl-wrap"><div class="wrap cpl-layout">
+      <div class="cpl-main">
+        <!-- Stepper -->
+      <ol class="reg-steps" id="regSteps" aria-label="Registration steps">
+        <li class="is-current" aria-current="step"><span class="reg-steps__no" aria-hidden="true">1</span><span class="reg-steps__tx">Account</span></li>
+        <li><span class="reg-steps__no" aria-hidden="true">2</span><span class="reg-steps__tx">Identity</span></li>
+        <li><span class="reg-steps__no" aria-hidden="true">3</span><span class="reg-steps__tx">Confirm</span></li>
+      </ol>
+
+      <!-- Loading (shown when moving to the next step) -->
+      <div class="cpl-loading" id="regLoading" hidden aria-hidden="true"><span class="spinner"></span></div>
+
+      <form class="cpl-form reg-form" id="regForm" novalidate>
+        <!-- Error summary -->
+        <div class="cpl-errsum" id="regErrSum" role="alert" tabindex="-1" hidden>
+          <strong><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> Please check the following</strong>
+          <ul id="regErrList"></ul>
+        </div>
+
+        <!-- ===== Step 1: Account ===== -->
+        <section class="reg-panel" id="step-1" aria-labelledby="s1h" tabindex="-1">
+          <h2 id="s1h" class="reg-panel__h">Account information</h2>
+
+          <fieldset class="field type-field" role="radiogroup" aria-labelledby="uType-label" aria-describedby="uType-err" aria-required="true">
+            <span class="field-label" id="uType-label">User type <span class="req" aria-hidden="true">*</span></span>
+            <div class="type-grid type-grid--3">
+              <label class="type-card">
+                <input type="radio" name="utype" value="Citizen">
+                <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-user"/></svg></span>
+                <span class="type-card__tx">Citizen</span>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="utype" value="Government officer">
+                <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-id"/></svg></span>
+                <span class="type-card__tx">Government officer</span>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="utype" value="Juristic person">
+                <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-build"/></svg></span>
+                <span class="type-card__tx">Juristic person</span>
+              </label>
+            </div>
+            <span class="field-err" id="uType-err" aria-live="polite"></span>
+          </fieldset>
+
+          <div class="field">
+            <label for="rEmail">Email <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic">
+              <svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg>
+              <input type="email" id="rEmail" name="email" autocomplete="email" maxlength="120"
+                     placeholder="name@example.com" aria-describedby="rEmail-err">
+            </div>
+            <span class="field-err" id="rEmail-err" aria-live="polite"></span>
+          </div>
+
+          <div class="field">
+            <label for="rPass">Password <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic pw-wrap">
+              <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+              <input type="password" id="rPass" name="password" autocomplete="new-password" maxlength="64"
+                     placeholder="At least 8 characters" aria-describedby="rPass-err pw-reqs">
+              <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
+            </div>
+            <div class="pw-meter" aria-hidden="true"><div class="pw-meter__bar" id="pwBar"></div></div>
+            <p class="pw-strength" id="pwStrength" aria-live="polite"></p>
+            <ul class="pw-reqs" id="pw-reqs">
+              <li data-req="len"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> At least 8 characters</li>
+              <li data-req="case"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Upper + lower case</li>
+              <li data-req="num"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Contains a number</li>
+              <li data-req="sym"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Contains a symbol</li>
+            </ul>
+            <span class="field-err" id="rPass-err" aria-live="polite"></span>
+          </div>
+
+          <div class="field">
+            <label for="rPass2">Confirm password <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic">
+              <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+              <input type="password" id="rPass2" name="password2" autocomplete="new-password" maxlength="64"
+                     placeholder="Re-enter your password" aria-describedby="rPass2-err">
+            </div>
+            <span class="field-err" id="rPass2-err" aria-live="polite"></span>
+          </div>
+        </section>
+
+        <!-- ===== Step 2: Identity ===== -->
+        <section class="reg-panel" id="step-2" aria-labelledby="s2h" tabindex="-1" hidden>
+          <h2 id="s2h" class="reg-panel__h">Personal details &amp; identity verification</h2>
+
+          <div class="thaid-card" id="thaidCard">
+            <div class="thaid-card__tx">
+              <span class="thaid-card__badge"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> Recommended</span>
+              <strong>Verify automatically with ThaID</strong>
+              <p>Connect ThaID to fetch your details and verify instantly — no need to type your ID number.</p>
+            </div>
+            <button type="button" class="btn btn--primary" id="thaidBtn"><svg class="icon" aria-hidden="true"><use href="#i-id"/></svg> Connect ThaID</button>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="rFirst">First name <span class="req" aria-hidden="true">*</span></label>
+              <input type="text" id="rFirst" name="firstname" autocomplete="given-name" maxlength="80" aria-describedby="rFirst-err">
+              <span class="field-err" id="rFirst-err" aria-live="polite"></span>
+            </div>
+            <div class="field">
+              <label for="rLast">Last name <span class="req" aria-hidden="true">*</span></label>
+              <input type="text" id="rLast" name="lastname" autocomplete="family-name" maxlength="80" aria-describedby="rLast-err">
+              <span class="field-err" id="rLast-err" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="rNid">National ID number (13 digits) <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-ic">
+              <svg class="icon" aria-hidden="true"><use href="#i-id"/></svg>
+              <input type="text" id="rNid" name="nid" inputmode="numeric" maxlength="13"
+                     placeholder="x xxxx xxxxx xx x" aria-describedby="rNid-err rNid-hint">
+            </div>
+            <span class="field-hint" id="rNid-hint">The system validates your ID number automatically.</span>
+            <span class="field-err" id="rNid-err" aria-live="polite"></span>
+          </div>
+
+          <div class="field field--half">
+            <label for="rPhone">Mobile phone <span class="req" aria-hidden="true">*</span></label>
+            <input type="tel" id="rPhone" name="phone" autocomplete="tel" inputmode="tel" maxlength="20"
+                   placeholder="08x-xxx-xxxx" aria-describedby="rPhone-err">
+            <span class="field-err" id="rPhone-err" aria-live="polite"></span>
+          </div>
+        </section>
+
+        <!-- ===== Step 3: Confirm ===== -->
+        <section class="reg-panel" id="step-3" aria-labelledby="s3h" tabindex="-1" hidden>
+          <h2 id="s3h" class="reg-panel__h">Review &amp; confirm</h2>
+
+          <dl class="reg-review" id="regReview">
+            <div><dt>User type</dt><dd data-rev="utype">—</dd></div>
+            <div><dt>Email</dt><dd data-rev="email">—</dd></div>
+            <div><dt>Full name</dt><dd data-rev="name">—</dd></div>
+            <div><dt>National ID</dt><dd data-rev="nid">—</dd></div>
+            <div><dt>Phone</dt><dd data-rev="phone">—</dd></div>
+            <div><dt>Identity verification</dt><dd data-rev="verify">—</dd></div>
+          </dl>
+
+          <div class="field-check">
+            <input type="checkbox" id="rTerms" name="terms" aria-describedby="rTerms-err">
+            <label for="rTerms">I accept the <a href="#" target="_blank">Terms of Service</a> <span class="req" aria-hidden="true">*</span>
+              <span class="field-err" id="rTerms-err" aria-live="polite"></span>
+            </label>
+          </div>
+          <div class="field-check cpl-consent">
+            <input type="checkbox" id="rConsent" name="consent" aria-describedby="rConsent-err">
+            <label for="rConsent">I consent to DGA collecting and using my information to create and manage my account, per the
+              <a href="#" target="_blank">Personal Data Protection Policy (PDPA)</a> <span class="req" aria-hidden="true">*</span>
+              <span class="field-err" id="rConsent-err" aria-live="polite"></span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Wizard nav -->
+        <div class="reg-nav">
+          <button type="button" class="btn btn--ghost btn--lg" id="regBack" hidden><svg class="icon" aria-hidden="true"><use href="#i-arrow-l"/></svg> Back</button>
+          <span class="reg-nav__spacer"></span>
+          <button type="button" class="btn btn--primary btn--lg" id="regNext">Next <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          <button type="submit" class="btn btn--primary btn--lg" id="regSubmit" hidden>Create account <svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></button>
+        </div>
+        <p class="cpl-note"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> This is a demo — your data is stored only in your browser and is not sent to a real server.</p>
+      </form>
+      </div><!-- /.cpl-main -->
+
+      <!-- Side: prepare + help (sticky) -->
+      <aside class="cpl-side" aria-label="Information and help">
+        <div class="cpl-info reg-prep">
+          <h2 class="reg-prep__h"><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg> Before you start</h2>
+          <ul>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-id"/></svg></span><div><strong>National ID card</strong><span>Your 13-digit number for identity verification</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-mail"/></svg></span><div><strong>A working email</strong><span>To confirm your account and receive notifications</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-user"/></svg></span><div><strong>Mobile phone</strong><span>To receive an OTP for verification</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span><div><strong>ThaID app (optional)</strong><span>Makes registration faster and more secure</span></div></li>
+          </ul>
+        </div>
+        <div class="cpl-help-card">
+          <span class="cpl-help-card__ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-chat"/></svg></span>
+          <strong>Need help?</strong>
+          <p>Contact the DGA Contact Center, available 24 hours a day</p>
+          <a class="btn btn--primary btn--block" href="tel:026126000"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> Call 0-2612-6000</a>
+          <button type="button" class="btn btn--ghost btn--block" id="sideAskGuide"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg> Ask DGA Guide</button>
+        </div>
+        <p class="reg-haveacc">Already have an account? <a href="#">Sign in</a></p>
+      </aside>
+    </div></section>
+
+    <!-- Popup: account created -->
+    <div class="cpl-modal" id="regModal" hidden>
+      <div class="cpl-modal__backdrop" data-close></div>
+      <div class="cpl-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="regOkTitle" aria-describedby="regOkDesc" tabindex="-1">
+        <button type="button" class="cpl-modal__close" id="regModalClose" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <span class="cpl-success__ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-check"/></svg></span>
+        <h2 id="regOkTitle">Account created successfully</h2>
+        <p id="regOkDesc">Your account is ready to use. We've sent a confirmation email to the address you registered.</p>
+        <div class="cpl-ref">
+          <span class="cpl-ref__label">Username</span>
+          <strong id="regUser">—</strong>
+        </div>
+        <div class="cpl-success__btns">
+          <a class="btn btn--primary" href="#">Sign in</a>
+          <a class="btn btn--ghost" href="/en/index.html">Back to home</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+        <p class="footer-org">Digital Government Development Agency (DGA)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Thailand Institute of Justice (TIJ) Building, 4th Floor, 999 Chaeng Watthana Rd., Thung Song Hong, Lak Si, Bangkok 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>Tel 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="DGA location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">View larger map <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>Services</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">Tang Rath</a></li><li><a href="#">Open Data</a></li><li><a href="#">API Gateway</a></li></ul></div>
+      <div><h3>About</h3><ul><li><a href="#">Vision</a></li><li><a href="/en/index.html#news">News</a></li><li><a href="#">Careers</a></li><li><a href="#">Contact</a></li></ul></div>
+      <div><h3>Policy</h3><ul><li><a href="#">Privacy (PDPA)</a></li><li><a href="#">Cookie Policy</a></li><li><a href="/en/accessibility">Accessibility (WCAG)</a></li><li><a href="#">Sitemap</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2026 Digital Government Development Agency</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">Cookie settings</button></div></div>
+  </footer>
+
+  <!-- Cookie Consent (PDPA) -->
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">This website uses cookies</h2>
+    <p id="ck-d">We use necessary cookies to run the site and analytics cookies to improve services (off by default), in line with Thailand's Personal Data Protection Act (PDPA).</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">Accept all</button><button class="btn btn--ghost" data-cookie="necessary">Necessary only</button><button class="btn btn--ghost" data-cookie="settings">Settings</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+  <script src="/assets/register.js"></script>
+</body>
+</html>

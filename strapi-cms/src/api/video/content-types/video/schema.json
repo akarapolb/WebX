@@ -1,0 +1,55 @@
+{
+  "kind": "collectionType",
+  "collectionName": "videos",
+  "info": {
+    "singularName": "video",
+    "pluralName": "videos",
+    "displayName": "Video",
+    "description": "วิดีโอ DGA Channel"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"],
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "videoUrl": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "duration": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "categoryKey": {
+      "type": "enumeration",
+      "enum": ["std", "event", "talk"],
+      "default": "std",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "date": {
+      "type": "date",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "views": {
+      "type": "integer",
+      "default": 0,
+      "pluginOptions": { "i18n": { "localized": false } }
+    }
+  }
+}

@@ -1,0 +1,134 @@
+/* =====================================================================
+   register.css — ลงทะเบียนผู้ใช้งานระบบ (wizard)
+   ใช้ร่วมกับ complaint.css (hero/wrap/field/modal/type-card) + design-system tokens
+   ===================================================================== */
+
+/* ---------- Split layout: navy intro + wizard ---------- */
+.reg-split-wrap{ background:var(--c-bg); }
+.reg-split{ max-width:1180px; margin-inline:auto; padding:clamp(24px,4vw,52px) clamp(16px,4vw,40px);
+  display:grid; grid-template-columns:1fr; }
+@media (min-width:940px){
+  .reg-split{ grid-template-columns:minmax(330px,400px) minmax(0,1fr); align-items:stretch;
+    background:var(--c-surface); border:1px solid var(--c-border); border-radius:26px; overflow:hidden;
+    box-shadow:0 30px 70px rgba(19,40,74,.12); padding:0; margin-block:clamp(24px,4vw,48px); }
+}
+
+/* แผงซ้าย navy */
+.reg-aside{ position:relative; overflow:hidden; display:flex; flex-direction:column; color:#fff;
+  background:linear-gradient(160deg,#1C355E 0%,#13284A 100%); padding:clamp(28px,4vw,44px); }
+.reg-aside::before{ content:""; position:absolute; right:-50px; top:-60px; width:220px; height:220px;
+  border-radius:50%; background:radial-gradient(circle,rgba(238,80,32,.40),transparent 70%); pointer-events:none; }
+.reg-aside::after{ content:""; position:absolute; left:-60px; bottom:-70px; width:240px; height:240px;
+  border-radius:50%; background:radial-gradient(circle,rgba(98,150,224,.26),transparent 70%); pointer-events:none; }
+.reg-aside > *{ position:relative; }
+.reg-aside .cpl-eyebrow{ color:#FFB99F; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); }
+.reg-aside h1{ font-size:clamp(1.7rem,2.6vw,2.15rem); line-height:1.2; letter-spacing:-.01em; margin:16px 0 12px; }
+.reg-aside__lead{ color:rgba(255,255,255,.84); line-height:1.7; margin:0 0 28px; }
+.reg-benefits{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:18px; }
+.reg-benefits li{ display:flex; gap:13px; align-items:flex-start; }
+.reg-benefits__ic{ flex:none; width:40px; height:40px; border-radius:12px; display:grid; place-items:center;
+  background:rgba(255,255,255,.12); color:#fff; }
+.reg-benefits__ic .icon{ width:20px; height:20px; }
+.reg-benefits strong{ display:block; font-size:1rem; }
+.reg-benefits li > div span{ display:block; font-size:var(--fs-small); color:rgba(255,255,255,.72); margin-top:2px; line-height:1.55; }
+.reg-aside__foot{ margin-top:auto; padding-top:30px; color:rgba(255,255,255,.72); font-size:var(--fs-small); }
+.reg-aside__foot a{ color:#fff; font-weight:700; text-decoration:underline; }
+
+/* คอลัมน์ฟอร์ม (เลย์เอาต์เก่า — ไม่ได้ใช้แล้ว เก็บไว้กันพัง) */
+.reg-form-col{ background:var(--c-surface); padding:clamp(26px,4vw,44px); min-width:0; }
+@media (max-width:939px){ .reg-form-col{ padding-inline:0; } }
+
+/* แผงข้าง: เตรียมเอกสาร */
+.reg-prep__h{ display:flex; align-items:center; gap:9px; font-size:1.05rem; margin:0 0 18px;
+  padding-bottom:14px; border-bottom:1px solid var(--c-border); }
+.reg-prep__h .icon{ width:20px; height:20px; color:var(--c-primary); }
+.reg-haveacc{ text-align:center; margin:2px 0 0; color:var(--c-text-muted); font-size:var(--fs-small); }
+.reg-haveacc a{ color:var(--c-primary); font-weight:700; text-decoration:none; }
+.reg-haveacc a:hover{ text-decoration:underline; }
+
+/* ---------- Stepper ---------- */
+.reg-steps{ display:flex; list-style:none; margin:0 0 30px; padding:0; }
+.reg-steps li{ flex:1; position:relative; display:flex; flex-direction:column; align-items:center; gap:8px;
+  font-size:var(--fs-small); font-weight:600; color:var(--c-text-muted); text-align:center; }
+.reg-steps li::before{ content:""; position:absolute; top:18px; right:50%; width:100%; height:2px;
+  background:var(--c-border); z-index:0; }
+.reg-steps li:first-child::before{ display:none; }
+.reg-steps li.is-current, .reg-steps li.is-done{ color:var(--c-text); }
+.reg-steps li.is-current{ color:var(--c-primary); }
+.reg-steps li.is-current::before, .reg-steps li.is-done::before{ background:var(--c-primary); }
+.reg-steps__no{ position:relative; z-index:1; width:38px; height:38px; border-radius:50%; display:grid; place-items:center;
+  background:var(--c-surface); border:2px solid var(--c-border); color:var(--c-text-muted); font-weight:800;
+  transition:background .25s, border-color .25s, color .25s; }
+.reg-steps li.is-current .reg-steps__no{ background:var(--c-primary); border-color:var(--c-primary); color:#fff; box-shadow:0 0 0 4px var(--c-primary-50); }
+.reg-steps li.is-done .reg-steps__no{ background:#16a34a; border-color:#16a34a; color:#fff; }
+.reg-steps li.is-done .reg-steps__no::after{ content:"✓"; }
+.reg-steps li.is-done .reg-steps__no{ font-size:0; }
+.reg-steps li.is-done .reg-steps__no::after{ font-size:1rem; }
+@media (max-width:480px){ .reg-steps__tx{ font-size:11px; } }
+
+/* ---------- Panel heading ---------- */
+.reg-panel__h{ font-size:1.3rem; margin:0 0 var(--sp-5); padding-bottom:14px; border-bottom:2px solid var(--c-border); }
+.reg-panel{ animation:cplFadeUp .35s ease both; }
+@media (prefers-reduced-motion:reduce){ .reg-panel{ animation:none; } }
+
+/* type-grid 3 คอลัมน์เสมอบนจอกว้าง */
+.type-grid--3{ grid-template-columns:repeat(3,1fr); }
+
+/* ---------- Input with leading icon ---------- */
+.input-ic{ position:relative; }
+.input-ic > .icon{ position:absolute; left:14px; top:50%; transform:translateY(-50%); width:20px; height:20px;
+  color:var(--c-text-muted); pointer-events:none; }
+.input-ic input{ padding-left:44px; }
+
+/* ---------- Password toggle + meter ---------- */
+.pw-wrap input{ padding-right:46px; }
+.pw-toggle{ position:absolute; right:8px; top:50%; transform:translateY(-50%); width:36px; height:36px;
+  display:grid; place-items:center; border:0; background:none; color:var(--c-text-muted); cursor:pointer; border-radius:8px; }
+.pw-toggle:hover{ color:var(--c-primary); background:var(--c-sunken); }
+.pw-toggle .icon{ width:20px; height:20px; }
+.pw-meter{ height:6px; border-radius:999px; background:var(--c-border); overflow:hidden; margin-top:12px; }
+.pw-meter__bar{ height:100%; width:0; border-radius:999px; background:#dc2626; transition:width .3s ease, background .3s ease; }
+.pw-meter__bar.s1{ width:25%; background:#dc2626; }
+.pw-meter__bar.s2{ width:50%; background:#f59e0b; }
+.pw-meter__bar.s3{ width:75%; background:#3b82f6; }
+.pw-meter__bar.s4{ width:100%; background:#16a34a; }
+.pw-strength{ margin:7px 0 0; font-size:var(--fs-small); font-weight:700; min-height:1.1em; }
+.pw-strength.s1{ color:#dc2626; } .pw-strength.s2{ color:#b45309; }
+.pw-strength.s3{ color:#2563eb; } .pw-strength.s4{ color:#15803d; }
+.pw-reqs{ list-style:none; margin:12px 0 0; padding:0; display:grid; gap:8px; grid-template-columns:1fr 1fr; }
+@media (max-width:480px){ .pw-reqs{ grid-template-columns:1fr; } }
+.pw-reqs li{ display:flex; align-items:center; gap:8px; font-size:var(--fs-small); color:var(--c-text-muted); }
+.pw-reqs li .icon{ flex:none; width:18px; height:18px; padding:3px; border-radius:50%;
+  background:var(--c-border); color:var(--c-surface); transition:background .2s, color .2s; }
+.pw-reqs li.ok{ color:var(--c-text); }
+.pw-reqs li.ok .icon{ background:#16a34a; color:#fff; }
+
+/* ---------- ThaID card ---------- */
+.thaid-card{ display:flex; gap:16px 20px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+  padding:20px 22px; border-radius:16px; border:1.5px solid var(--c-primary);
+  background:var(--c-primary-50); margin-bottom:26px; transition:border-color .25s, background .25s; }
+.thaid-card__tx{ flex:1; min-width:220px; }
+.thaid-card__badge{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:800;
+  letter-spacing:.04em; text-transform:uppercase; color:var(--c-primary); margin-bottom:6px; }
+.thaid-card__badge .icon{ width:14px; height:14px; }
+.thaid-card__tx strong{ display:block; font-size:1.05rem; color:var(--c-text); }
+.thaid-card__tx p{ margin:4px 0 0; font-size:var(--fs-small); color:var(--c-text-muted); line-height:1.55; }
+.thaid-card.is-verified{ border-color:#16a34a; background:rgba(22,163,74,.08); }
+.thaid-card.is-verified .thaid-card__badge{ color:#15803d; }
+
+/* ---------- Review (step 3) ---------- */
+.reg-review{ margin:0 0 24px; padding:6px 22px; background:var(--c-sunken); border:1px solid var(--c-border); border-radius:14px; }
+.reg-review > div{ display:flex; flex-wrap:wrap; gap:6px 16px; justify-content:space-between;
+  padding:14px 0; border-bottom:1px solid var(--c-border); }
+.reg-review > div:last-child{ border-bottom:0; }
+.reg-review dt{ color:var(--c-text-muted); font-size:var(--fs-small); }
+.reg-review dd{ margin:0; font-weight:600; color:var(--c-text); text-align:right; }
+
+/* ---------- Wizard nav ---------- */
+.reg-nav{ display:flex; align-items:center; gap:12px; margin-top:30px; }
+.reg-nav__spacer{ flex:1; }
+@media (max-width:480px){
+  .reg-nav{ flex-wrap:wrap; }
+  .reg-nav .btn{ flex:1; justify-content:center; }
+  .reg-nav__spacer{ display:none; }
+}

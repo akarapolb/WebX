@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<!--
+  DGA Design System — Living Style Guide (เว็บแทน Figma) · เวอร์ชัน Minimal + Dark mode
+  ตอบ TOR เกณฑ์ 2.1 (Design System + Typography เป็น CSS Framework ที่รันได้) + 2.3 (WCAG AA)
+  Framework จริงอยู่ที่ /assets/design-system.css — หน้านี้คือชั้นนำเสนอ
+-->
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DGA Design System | ระบบออกแบบเว็บไซต์ สพร.</title>
+  <meta name="description" content="ระบบออกแบบเว็บไซต์ สพร. — Typography, สี, ไอคอน, ปุ่ม, ฟอร์ม, ตาราง, แท็บ ตามมาตรฐาน WCAG 2.2 AA รองรับโหมดมืด">
+  <!-- ตั้งธีมก่อน render เพื่อกันจอกระพริบ (FOUC) -->
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') ||
+        (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <style>
+    /* ===== ชั้นนำเสนอ (Minimal/Luxury) — แยกจาก Framework ===== */
+    .ds-header{ position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:var(--sp-4);
+      padding:var(--sp-3) clamp(16px,4vw,40px);
+      background:color-mix(in srgb, var(--c-bg) 80%, transparent); backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--c-border); }
+    .ds-logo{ display:flex; align-items:center; gap:var(--sp-3); font-weight:700; color:var(--c-text); letter-spacing:-.01em; }
+    .ds-logo .mark{ width:30px; height:30px; border-radius:9px; background:var(--grad-brand);
+      display:grid; place-items:center; color:#fff; font-size:12px; font-weight:700; box-shadow:var(--shadow-2); }
+    .ds-header nav{ margin-left:auto; display:flex; gap:2px; flex-wrap:wrap; }
+    .ds-header nav a{ padding:8px 13px; border-radius:999px; text-decoration:none; color:var(--c-text-muted);
+      font-size:var(--fs-small); font-weight:500; }
+    .ds-header nav a:hover{ color:var(--c-primary); background:var(--c-primary-50); }
+    @media (max-width:860px){ .ds-header nav{ display:none; } }
+    .theme-btn{ margin-left:var(--sp-2); }
+
+    /* Hero — minimal premium band (โทนเข้ม + แสงส้ม ใช้ได้ทั้ง 2 ธีม) */
+    .hero{ position:relative; overflow:hidden; color:#fff; background:var(--grad-hero);
+      padding:clamp(56px,9vw,112px) clamp(20px,5vw,64px) clamp(72px,10vw,128px); }
+    .hero .wrap{ max-width:var(--container); margin-inline:auto; position:relative; }
+    .hero .kicker{ display:inline-flex; gap:8px; align-items:center; font-size:var(--fs-small); font-weight:500;
+      color:#fff; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.22);
+      padding:6px 14px; border-radius:999px; }
+    .hero h1{ font-size:clamp(2.1rem,5.2vw,3.6rem); font-weight:700; letter-spacing:-.02em;
+      margin:var(--sp-5) 0 var(--sp-4); max-width:18ch; line-height:1.12; }
+    .hero p.lead{ font-size:clamp(1rem,2.1vw,1.2rem); max-width:58ch; opacity:.85; font-weight:300; }
+    .hero .chips{ display:flex; gap:10px; flex-wrap:wrap; margin-top:var(--sp-6); }
+    .hero .chip{ display:inline-flex; align-items:center; gap:8px; font-size:var(--fs-small); font-weight:500;
+      background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); padding:8px 14px; border-radius:12px; }
+
+    /* Stats — การ์ดลอยทับขอบ hero */
+    .stats{ max-width:var(--container); margin:-52px auto 0; position:relative; z-index:2;
+      display:grid; gap:var(--sp-4); grid-template-columns:repeat(2,1fr); padding-inline:clamp(20px,5vw,64px); }
+    @media (min-width:760px){ .stats{ grid-template-columns:repeat(4,1fr); } }
+    .stat{ background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius-lg);
+      padding:var(--sp-5); box-shadow:var(--shadow-2); }
+    .stat b{ display:block; font-size:var(--fs-h2); color:var(--c-primary); letter-spacing:-.02em; line-height:1; }
+    .stat span{ font-size:var(--fs-small); color:var(--c-text-muted); }
+
+    /* Shell */
+    .shell{ max-width:var(--container); margin:var(--sp-8) auto; padding-inline:clamp(20px,5vw,64px);
+      display:grid; gap:var(--sp-8); }
+    @media (min-width:1024px){ .shell{ grid-template-columns:200px 1fr; align-items:start; } }
+    .toc{ position:sticky; top:84px; font-size:var(--fs-small); }
+    .toc h2{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--c-text-muted);
+      margin:var(--sp-4) 0 var(--sp-2); font-weight:600; }
+    .toc a{ display:block; padding:6px 12px; border-radius:8px; text-decoration:none; color:var(--c-text-muted);
+      border-left:2px solid transparent; }
+    .toc a:hover{ color:var(--c-primary); border-left-color:var(--c-action); }
+    @media (max-width:1023px){ .toc{ display:none; } }
+    .content{ display:grid; gap:var(--sp-7); min-width:0; }
+
+    /* Panel (minimal) */
+    .panel{ }
+    .panel__head{ margin-bottom:var(--sp-4); }
+    .panel__head .eyebrow{ display:inline-block; color:var(--c-primary); font-weight:700; font-size:11px;
+      letter-spacing:.1em; text-transform:uppercase; margin:0 0 8px; }
+    .panel__head h2{ font-size:var(--fs-h2); letter-spacing:-.01em; margin:0 0 6px; }
+    .panel__head p{ color:var(--c-text-muted); margin:0; max-width:62ch; }
+    /* Preview surface — clean (ไม่รก) + ป้ายมุม */
+    .canvas{ position:relative; background:var(--c-sunken); border:1px solid var(--c-border);
+      border-radius:var(--radius-lg); padding:var(--sp-6); }
+    .canvas::before{ content:"PREVIEW"; position:absolute; top:10px; right:14px; font-size:10px;
+      letter-spacing:.14em; color:var(--c-text-muted); opacity:.6; font-family:var(--font-en); }
+
+    /* Swatches */
+    .swatches{ display:grid; gap:var(--sp-4); grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); }
+    .swatch{ border:1px solid var(--c-border); border-radius:var(--radius-md); overflow:hidden;
+      background:var(--c-surface); cursor:pointer; width:100%; font:inherit; padding:0; text-align:left;
+      transition:transform .18s, box-shadow .18s; }
+    .swatch:hover{ transform:translateY(-4px); box-shadow:var(--shadow-3); }
+    .swatch .chip-c{ height:80px; display:flex; align-items:flex-end; padding:var(--sp-2); color:#fff; font-weight:600; font-size:var(--fs-small); }
+    .swatch .meta{ padding:var(--sp-3); }
+    .swatch code{ font-family:var(--font-en); font-size:var(--fs-small); }
+    .pill{ display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; margin-top:6px; }
+    .pill--pass{ background:var(--badge-success-bg); color:var(--badge-success-fg); }
+    .pill--large{ background:var(--badge-warning-bg); color:var(--badge-warning-fg); }
+    .pill--aaa{ background:var(--badge-info-bg); color:var(--badge-info-fg); }
+
+    .type-row{ display:flex; align-items:baseline; gap:var(--sp-4); padding:var(--sp-3) 0; border-bottom:1px dashed var(--c-border); flex-wrap:wrap; }
+    .type-row:last-child{ border-bottom:0; }
+    .type-row .label{ width:118px; flex:none; color:var(--c-text-muted); font-size:12px; font-family:var(--font-en); }
+    .demo-row{ display:flex; gap:var(--sp-3); flex-wrap:wrap; align-items:center; }
+    .icon-grid{ display:grid; gap:var(--sp-3); grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); }
+    .icon-cell{ display:flex; flex-direction:column; align-items:center; gap:8px; padding:var(--sp-4) var(--sp-2);
+      border:1px solid var(--c-border); border-radius:var(--radius-md); background:var(--c-surface); font-size:11px; color:var(--c-text-muted); }
+    .icon-cell .icon{ width:24px; height:24px; color:var(--c-text); }
+    .token-grid{ display:grid; gap:var(--sp-3); grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); }
+    .box{ background:var(--c-surface); border:1px solid var(--c-primary); color:var(--c-primary);
+      border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:12px; font-family:var(--font-en); }
+    .breadcrumb{ display:flex; gap:var(--sp-2); list-style:none; padding:0; margin:0; font-size:var(--fs-small); flex-wrap:wrap; }
+    .breadcrumb li::after{ content:"›"; margin-left:var(--sp-2); color:var(--c-text-muted); }
+    .breadcrumb li:last-child::after{ content:""; }
+    .alert{ display:flex; gap:var(--sp-3); padding:var(--sp-3) var(--sp-4); border-radius:var(--radius-md);
+      border-left:4px solid; margin:var(--sp-2) 0; background:var(--c-surface); }
+    .alert .icon{ flex:none; margin-top:2px; }
+    .alert--info{ border-color:var(--c-secondary); } .alert--info .icon{ color:var(--c-secondary); }
+    .alert--success{ border-color:var(--c-success); } .alert--success .icon{ color:var(--c-success); }
+    .alert--danger{ border-color:var(--c-danger); } .alert--danger .icon{ color:var(--c-danger); }
+    .card:hover{ transform:translateY(-4px); box-shadow:var(--shadow-3); transition:transform .18s, box-shadow .18s; }
+    .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--c-text); color:var(--c-bg);
+      padding:10px 18px; border-radius:999px; box-shadow:var(--shadow-3); opacity:0; transition:opacity .2s; pointer-events:none; font-size:var(--fs-small); }
+    .toast.show{ opacity:1; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+
+  <!-- ===== SVG icon sprite (ชุดไอคอนเส้นเดียวทั้งระบบ, currentColor) ===== -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17h.01"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v6H4V5h6"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- ===== Header ===== -->
+  <header class="ds-header">
+    <span class="ds-logo"><span class="mark" aria-hidden="true">DGA</span> Design System</span>
+    <nav aria-label="ลัดไปยังหมวด">
+      <a href="#typography">Typography</a><a href="#color">สี</a><a href="#icons">ไอคอน</a>
+      <a href="#buttons">ปุ่ม</a><a href="#tabs">แท็บ</a><a href="#table">ตาราง</a><a href="#a11y">A11y</a>
+    </nav>
+    <button class="btn btn--ghost btn--icon theme-btn" id="themeBtn" aria-pressed="false" aria-label="สลับโหมดมืด">
+      <svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg>
+    </button>
+  </header>
+
+  <!-- ===== Hero ===== -->
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="wrap">
+      <span class="kicker"><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg> TOR เกณฑ์ 2.1 · Design System + Typography</span>
+      <h1 id="hero-h">ระบบออกแบบที่หรู สะอาด และพร้อมใช้งานจริง</h1>
+      <p class="lead">CSS Framework + Living Style Guide ที่รันได้บนเบราว์เซอร์ — กดดู ทดสอบ contrast,
+        responsive และโหมดมืดได้ทันที ยึดอัตลักษณ์สีส้ม DGA และผ่าน <span lang="en">WCAG 2.2 AA</span>.</p>
+      <div class="chips">
+        <span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg> Kanit <span lang="en">+ Ubuntu</span></span>
+        <span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> <span lang="en">WCAG 2.2 AA</span></span>
+        <span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg> Light / Dark</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Stats ===== -->
+  <div class="stats">
+    <div class="stat"><b>2</b><span>ฟอนต์: Kanit · Ubuntu</span></div>
+    <div class="stat"><b>16</b><span>ไอคอนเส้นเดียวทั้งระบบ</span></div>
+    <div class="stat"><b>12+</b><span>คอมโพเนนต์พร้อมใช้</span></div>
+    <div class="stat"><b>AA</b><span>ผ่าน WCAG 2.2 ทุกธีม</span></div>
+  </div>
+
+  <!-- ===== Shell ===== -->
+  <div class="shell">
+    <nav class="toc" aria-label="สารบัญระบบออกแบบ">
+      <h2>มูลฐาน</h2>
+      <a href="#typography">Typography</a><a href="#color">สี</a><a href="#icons">ไอคอน</a><a href="#spacing">ระยะห่าง</a>
+      <h2>คอมโพเนนต์</h2>
+      <a href="#buttons">ปุ่ม</a><a href="#badges">Badge สถานะ</a><a href="#forms">ฟอร์ม</a><a href="#cards">การ์ด</a>
+      <a href="#tabs">แท็บ</a><a href="#table">ตาราง</a><a href="#accordion">Accordion</a>
+      <a href="#pagination">Pagination</a><a href="#modal">Modal</a><a href="#nav">นำทาง</a><a href="#feedback">แจ้งเตือน</a>
+      <h2>มาตรฐาน</h2>
+      <a href="#a11y">Accessibility</a>
+    </nav>
+
+    <main class="content" id="main">
+
+      <!-- TYPOGRAPHY -->
+      <section class="panel" id="typography" aria-labelledby="t-h">
+        <div class="panel__head"><span class="eyebrow">Foundation</span><h2 id="t-h">Typography</h2>
+          <p>ไทยใช้ <strong>Kanit</strong> · อังกฤษใช้ <strong>Ubuntu</strong> · line-height 1.6 รองรับวรรณยุกต์ · scale 1.250</p></div>
+        <div class="canvas">
+          <div class="type-row"><span class="label">Kanit · ไทย</span><span style="font-size:var(--fs-h2)">รัฐบาลดิจิทัลเพื่อประชาชน ๑๒๓๔๕</span></div>
+          <div class="type-row"><span class="label">Ubuntu · EN</span><span lang="en" style="font-size:var(--fs-h2)">Digital Government in Action</span></div>
+          <div class="type-row"><span class="label">Display · 48</span><span style="font-size:var(--fs-display);font-weight:700">บริการภาครัฐ</span></div>
+          <div class="type-row"><span class="label">H1 · 40</span><span style="font-size:var(--fs-h1);font-weight:600">หัวเรื่องหลัก</span></div>
+          <div class="type-row"><span class="label">H2 · 28</span><span style="font-size:var(--fs-h2);font-weight:600">หัวเรื่องรอง</span></div>
+          <div class="type-row"><span class="label">Body · 16</span><span>เนื้อความปกติ อ่านสบายตา เหมาะกับเอกสารราชการ</span></div>
+          <div class="type-row"><span class="label">Weights</span><span class="demo-row">
+            <span style="font-weight:300">Light</span><span style="font-weight:400">Regular</span>
+            <span style="font-weight:500">Medium</span><span style="font-weight:600">SemiBold</span><span style="font-weight:700">Bold</span></span></div>
+        </div>
+      </section>
+
+      <!-- COLOR -->
+      <section class="panel" id="color" aria-labelledby="c-h">
+        <div class="panel__head"><span class="eyebrow">Foundation</span><h2 id="c-h">สี (Color)</h2>
+          <p>อิงอัตลักษณ์จริง DGA — คลิกที่สีเพื่อคัดลอกรหัส · ทุกสีระบุค่า contrast และสถานะ WCAG</p></div>
+        <div class="canvas">
+          <div class="swatches">
+            <button class="swatch" data-copy="#EE5020"><span class="chip-c" style="background:#EE5020">Brand</span><span class="meta"><code>#EE5020</code><br><span class="pill pill--large">ใหญ่/UI · 3.62:1</span></span></button>
+            <button class="swatch" data-copy="#C2410C"><span class="chip-c" style="background:#C2410C">Action</span><span class="meta"><code>#C2410C</code><br><span class="pill pill--pass">AA · 4.9:1</span></span></button>
+            <button class="swatch" data-copy="#13497A"><span class="chip-c" style="background:#13497A">Secondary</span><span class="meta"><code>#13497A</code><br><span class="pill pill--pass">AA</span></span></button>
+            <button class="swatch" data-copy="#1E7B34"><span class="chip-c" style="background:#1E7B34">Success</span><span class="meta"><code>#1E7B34</code><br><span class="pill pill--pass">AA</span></span></button>
+            <button class="swatch" data-copy="#8A5A00"><span class="chip-c" style="background:#8A5A00">Warning</span><span class="meta"><code>#8A5A00</code><br><span class="pill pill--pass">AA</span></span></button>
+            <button class="swatch" data-copy="#B3261E"><span class="chip-c" style="background:#B3261E">Danger</span><span class="meta"><code>#B3261E</code><br><span class="pill pill--pass">AA</span></span></button>
+            <button class="swatch" data-copy="#18181B"><span class="chip-c" style="background:#18181B">Text</span><span class="meta"><code>#18181B</code><br><span class="pill pill--aaa">AAA</span></span></button>
+          </div>
+          <div class="alert alert--info" style="margin-top:var(--sp-5)"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+            <div><strong>กฎการใช้สี:</strong> สีสด <code>#EE5020</code> ใช้กับ Hero/ตัวใหญ่ (3:1). ข้อความ/ลิงก์/ปุ่ม ใช้ส้มเข้ม <code>#C2410C</code> (4.9:1). โหมดมืดสลับเป็นส้มสว่าง <code>#FF7A45</code> อัตโนมัติ.</div></div>
+        </div>
+      </section>
+
+      <!-- ICONS -->
+      <section class="panel" id="icons" aria-labelledby="i-h">
+        <div class="panel__head"><span class="eyebrow">Foundation</span><h2 id="i-h">ชุดไอคอน (Iconography)</h2>
+          <p>ไอคอนเส้นเดียว (stroke 2px) ใช้ <code>currentColor</code> → เปลี่ยนสี/ขนาดตามบริบท และเข้ากับทุกธีม</p></div>
+        <div class="canvas">
+          <div class="icon-grid">
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>search</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>home</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>user</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg>document</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>download</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>arrow</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>check</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>info</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>alert</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>external</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg>globe</span>
+            <span class="icon-cell"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>close</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SPACING -->
+      <section class="panel" id="spacing" aria-labelledby="s-h">
+        <div class="panel__head"><span class="eyebrow">Foundation</span><h2 id="s-h">ระยะห่าง · มุม · เงา</h2>
+          <p>ทุกระยะอิงกริด 8px เพื่อจังหวะสม่ำเสมอ</p></div>
+        <div class="canvas">
+          <div class="token-grid">
+            <div class="box" style="height:6px">4</div><div class="box" style="height:10px">8</div>
+            <div class="box" style="height:14px">12</div><div class="box" style="height:18px">16</div>
+            <div class="box" style="height:26px">24</div><div class="box" style="height:34px">32</div><div class="box" style="height:50px">48</div>
+          </div>
+          <div class="demo-row" style="margin-top:var(--sp-4)">
+            <span class="box" style="width:92px;height:58px;border-radius:var(--radius-sm)">sm 8</span>
+            <span class="box" style="width:92px;height:58px;border-radius:var(--radius-md)">md 12</span>
+            <span class="box" style="width:92px;height:58px;border-radius:var(--radius-lg)">lg 18</span>
+            <span class="box" style="width:120px;height:58px;border:0;background:var(--c-surface);box-shadow:var(--shadow-2)">shadow-2</span>
+            <span class="box" style="width:120px;height:58px;border:0;background:var(--c-surface);box-shadow:var(--shadow-3)">shadow-3</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- BUTTONS -->
+      <section class="panel" id="buttons" aria-labelledby="b-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="b-h">ปุ่ม (Buttons)</h2>
+          <p>สูง ≥44px · มีไอคอนได้ · สถานะ hover/focus/disabled</p></div>
+        <div class="canvas"><div class="demo-row">
+          <button class="btn btn--primary"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> ปุ่มหลัก</button>
+          <button class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> ปุ่มรอง</button>
+          <button class="btn btn--primary" disabled>ปิดใช้งาน</button>
+          <a class="btn btn--primary" href="#buttons">เริ่มใช้บริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div></div>
+      </section>
+
+      <!-- BADGES -->
+      <section class="panel" id="badges" aria-labelledby="bd-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="bd-h">Badge สถานะ</h2>
+          <p>สีอ่อน+ข้อความเข้ม (ผ่าน AA ทั้ง 2 ธีม) · มีจุดหรือไอคอนช่วยสื่อ ไม่พึ่งสีอย่างเดียว</p></div>
+        <div class="canvas"><div class="demo-row">
+          <span class="badge badge--success badge--dot">เผยแพร่แล้ว</span>
+          <span class="badge badge--warning badge--dot">รอตรวจ</span>
+          <span class="badge badge--danger badge--dot">หมดอายุ</span>
+          <span class="badge badge--info badge--dot">ร่าง</span>
+          <span class="badge badge--neutral">ทั่วไป</span>
+          <span class="badge badge--success"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> สำเร็จ</span>
+        </div></div>
+      </section>
+
+      <!-- FORMS -->
+      <section class="panel" id="forms" aria-labelledby="f-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="f-h">ฟอร์ม (Forms)</h2>
+          <p>ทุก input มี label · error ผูก <code>aria-describedby</code> + <code>aria-invalid</code> (WCAG 3.3.1)</p></div>
+        <div class="canvas">
+          <div class="grid grid--3">
+            <div class="field"><label for="d-name">ชื่อ-นามสกุล</label><input class="input" id="d-name" type="text" placeholder="เช่น สมชาย ใจดี"><p class="field__hint">กรอกตามบัตรประชาชน</p></div>
+            <div class="field"><label for="d-email">อีเมล</label><input class="input" id="d-email" type="email" aria-invalid="true" aria-describedby="d-email-err" value="abc@"><p class="field__error" id="d-email-err">รูปแบบอีเมลไม่ถูกต้อง</p></div>
+            <div class="field"><label for="d-topic">หัวข้อ</label><select class="select" id="d-topic"><option>บริการประชาชน</option><option>หน่วยงานรัฐ</option><option>นักพัฒนา/ธุรกิจ</option></select></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CARDS -->
+      <section class="panel" id="cards" aria-labelledby="cd-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="cd-h">การ์ด — “บริการยอดนิยม”</h2>
+          <p>เข้าบริการได้ใน 1 คลิก · hover ยกตัวขึ้น</p></div>
+        <div class="canvas"><ul class="grid grid--3" style="list-style:none;padding:0;margin:0">
+          <li class="card"><h3 class="card__title">แอปทางรัฐ</h3><p>รวมบริการภาครัฐในแอปเดียว</p><a class="btn btn--ghost" href="#cards">ดูบริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+          <li class="card"><h3 class="card__title">บัตรประชาชนดิจิทัล</h3><p>ยืนยันตัวตน ThaID</p><a class="btn btn--ghost" href="#cards">เริ่มใช้งาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+          <li class="card"><h3 class="card__title">Open Data</h3><p>ชุดข้อมูลเปิดภาครัฐ</p><a class="btn btn--ghost" href="#cards">ค้นหาข้อมูล <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        </ul></div>
+      </section>
+
+      <!-- TABS -->
+      <section class="panel" id="tabs" aria-labelledby="tab-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="tab-h">แท็บ (Tabs)</h2>
+          <p>เข้าถึงด้วยคีย์บอร์ด (← → สลับแท็บ) · <code>role="tablist/tab/tabpanel"</code></p></div>
+        <div class="canvas">
+          <div class="tabs">
+            <div class="tabs__list" role="tablist" aria-label="ประเภทผู้ใช้บริการ">
+              <button class="tab" role="tab" id="tab-1" aria-controls="tp-1" aria-selected="true">ประชาชน</button>
+              <button class="tab" role="tab" id="tab-2" aria-controls="tp-2" aria-selected="false" tabindex="-1">หน่วยงานรัฐ</button>
+              <button class="tab" role="tab" id="tab-3" aria-controls="tp-3" aria-selected="false" tabindex="-1">นักพัฒนา</button>
+            </div>
+            <div class="tabpanel" role="tabpanel" id="tp-1" aria-labelledby="tab-1" tabindex="0">บริการสำหรับประชาชน เช่น แอปทางรัฐ, ThaID, ตรวจสอบสิทธิ์</div>
+            <div class="tabpanel" role="tabpanel" id="tp-2" aria-labelledby="tab-2" tabindex="0" hidden>มาตรฐาน EA, คู่มือ, แบบฟอร์ม, อบรม TDGA</div>
+            <div class="tabpanel" role="tabpanel" id="tp-3" aria-labelledby="tab-3" tabindex="0" hidden>API Gateway, Open Data, GovTech, e-GP</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TABLE -->
+      <section class="panel" id="table" aria-labelledby="tb-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="tb-h">ตาราง (Table)</h2>
+          <p>เลื่อนแนวนอนบนจอเล็ก (responsive) · หัวตาราง <code>&lt;th&gt;</code> เพื่อ screen reader</p></div>
+        <div class="canvas"><div class="table-wrap"><table class="table">
+          <caption>ตัวอย่างรายการเอกสารดาวน์โหลด</caption>
+          <thead><tr><th>ชื่อเอกสาร</th><th>ประเภท</th><th>วันที่</th><th>สถานะ</th></tr></thead>
+          <tbody>
+            <tr><td>มาตรฐานรัฐบาลดิจิทัล</td><td>PDF</td><td>12 มิ.ย. 2569</td><td><span class="badge badge--success badge--dot">เผยแพร่</span></td></tr>
+            <tr><td>คู่มือ API Gateway</td><td>DOCX</td><td>05 มิ.ย. 2569</td><td><span class="badge badge--info badge--dot">ร่าง</span></td></tr>
+            <tr><td>แบบฟอร์มขอใช้บริการ</td><td>XLSX</td><td>28 พ.ค. 2569</td><td><span class="badge badge--warning badge--dot">รอตรวจ</span></td></tr>
+          </tbody>
+        </table></div></div>
+      </section>
+
+      <!-- ACCORDION -->
+      <section class="panel" id="accordion" aria-labelledby="ac-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="ac-h">Accordion / FAQ</h2>
+          <p>ใช้ <code>&lt;details&gt;</code> เดิมของเบราว์เซอร์ → เข้าถึงได้และทำงานแม้ JS ปิด</p></div>
+        <div class="canvas"><div class="accordion">
+          <details open><summary>ThaID ใช้แทนบัตรประชาชนได้ไหม? <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="acc__body">ใช้แสดงตนกับหน่วยงานที่รองรับได้ตามที่กฎหมายกำหนด</div></details>
+          <details><summary>ลืมรหัส PIN ต้องทำอย่างไร? <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="acc__body">เลือก “ลืมรหัส” ในแอปแล้วยืนยันตัวตนใหม่</div></details>
+          <details><summary>ขอใช้บริการ API Gateway อย่างไร? <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="acc__body">ลงทะเบียนหน่วยงาน → ยื่นคำขอ → รับ API Key</div></details>
+        </div></div>
+      </section>
+
+      <!-- PAGINATION -->
+      <section class="panel" id="pagination" aria-labelledby="pg-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="pg-h">Pagination</h2>
+          <p>ปุ่ม ≥44px · หน้าปัจจุบันใช้ <code>aria-current="page"</code></p></div>
+        <div class="canvas"><nav aria-label="แบ่งหน้า"><ul class="pagination">
+          <li><span class="is-disabled" aria-disabled="true">ก่อนหน้า</span></li>
+          <li><a href="#pagination" aria-current="page">1</a></li>
+          <li><a href="#pagination">2</a></li><li><a href="#pagination">3</a></li>
+          <li><span>…</span></li><li><a href="#pagination">9</a></li>
+          <li><a href="#pagination">ถัดไป</a></li>
+        </ul></nav></div>
+      </section>
+
+      <!-- MODAL -->
+      <section class="panel" id="modal" aria-labelledby="md-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="md-h">Modal (Dialog)</h2>
+          <p>ใช้ <code>&lt;dialog&gt;</code> เดิม → focus trap + ปิดด้วย Esc ได้เอง (เข้าถึงได้)</p></div>
+        <div class="canvas">
+          <button class="btn btn--primary" id="openModal"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg> เปิดหน้าต่าง</button>
+          <dialog class="modal" id="demoModal" aria-labelledby="modal-title">
+            <div class="modal__head"><h3 id="modal-title" style="margin:0">ยืนยันการดำเนินการ</h3>
+              <button class="btn btn--ghost btn--icon" id="closeModal" aria-label="ปิด"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+            <div class="modal__body">คุณต้องการดำเนินการต่อหรือไม่? การกระทำนี้จะถูกบันทึกในระบบ</div>
+            <div class="modal__foot"><button class="btn btn--ghost" data-close>ยกเลิก</button><button class="btn btn--primary" data-close>ยืนยัน</button></div>
+          </dialog>
+        </div>
+      </section>
+
+      <!-- NAV -->
+      <section class="panel" id="nav" aria-labelledby="n-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="n-h">นำทาง (Navigation)</h2>
+          <p>เมนู task-based แก้ปัญหาเมนู 3+ ชั้นของเว็บเดิม · breadcrumb ช่วยทั้ง UX และ AEO</p></div>
+        <div class="canvas">
+          <nav aria-label="เส้นทางนำทาง"><ol class="breadcrumb">
+            <li><a href="#nav"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg></a></li>
+            <li><a href="#nav">บริการประชาชน</a></li><li aria-current="page">บัตรประชาชนดิจิทัล</li>
+          </ol></nav>
+          <div class="demo-row" style="margin-top:var(--sp-4)">
+            <span class="btn btn--ghost">ประชาชน</span><span class="btn btn--ghost">หน่วยงานรัฐ</span>
+            <span class="btn btn--ghost">นักพัฒนา/ธุรกิจ</span><span class="btn btn--ghost">เกี่ยวกับ สพร.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- FEEDBACK -->
+      <section class="panel" id="feedback" aria-labelledby="fb-h">
+        <div class="panel__head"><span class="eyebrow">Component</span><h2 id="fb-h">แจ้งเตือน (Feedback)</h2>
+          <p>ทุกสถานะมีไอคอน + ข้อความ ไม่พึ่งสีอย่างเดียว (WCAG 1.4.1)</p></div>
+        <div class="canvas">
+          <div class="alert alert--info"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><div><strong>ข้อมูล:</strong> ระบบจะปิดปรับปรุงวันอาทิตย์ 02:00–04:00</div></div>
+          <div class="alert alert--success"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><div><strong>สำเร็จ:</strong> ส่งแบบฟอร์มเรียบร้อยแล้ว</div></div>
+          <div class="alert alert--danger"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div><strong>ผิดพลาด:</strong> ไม่สามารถบันทึกได้ กรุณาลองใหม่</div></div>
+        </div>
+      </section>
+
+      <!-- A11Y -->
+      <section class="panel" id="a11y" aria-labelledby="a-h">
+        <div class="panel__head"><span class="eyebrow">Standard · TOR เกณฑ์ 2.3</span><h2 id="a-h">Accessibility (WCAG 2.2 AA)</h2>
+          <p>ออกแบบให้ผ่าน AA ตั้งแต่ระดับระบบ ทั้งโหมดสว่างและมืด — ตรวจด้วย axe / Lighthouse / WAVE / NVDA</p></div>
+        <div class="canvas"><ul style="margin:0; padding-left:1.2em; line-height:1.9">
+          <li>Contrast ข้อความ ≥ 4.5:1 ทั้ง 2 ธีม</li>
+          <li>โฟกัสมองเห็นชัดด้วย <code>:focus-visible</code> (2.4.11)</li>
+          <li>เข้าถึงทุกอย่างด้วยคีย์บอร์ด + skip link (2.1.1, 2.4.1)</li>
+          <li>แท็บ/Modal ทำงานตามแพตเทิร์น ARIA · Target ≥ 44px (2.5.8)</li>
+          <li>เคารพ <code>prefers-reduced-motion</code> (2.3.3)</li>
+        </ul></div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    /* ---------- Theme toggle (จำค่าใน localStorage) ---------- */
+    const root = document.documentElement, themeBtn = document.getElementById('themeBtn');
+    function syncThemeBtn(){
+      const dark = root.getAttribute('data-theme') === 'dark';
+      themeBtn.setAttribute('aria-pressed', String(dark));
+      themeBtn.querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+    }
+    syncThemeBtn();
+    themeBtn.addEventListener('click', () => {
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('dga-theme', next); } catch(e){}
+      syncThemeBtn();
+    });
+
+    /* ---------- Swatch copy ---------- */
+    const toast = document.getElementById('toast');
+    let toastT;
+    document.querySelectorAll('.swatch').forEach(btn => btn.addEventListener('click', async () => {
+      const hex = btn.dataset.copy;
+      try { await navigator.clipboard.writeText(hex); } catch(e){}
+      toast.textContent = 'คัดลอกแล้ว: ' + hex; toast.classList.add('show');
+      clearTimeout(toastT); toastT = setTimeout(()=>toast.classList.remove('show'), 1400);
+    }));
+
+    /* ---------- Tabs (keyboard accessible) ---------- */
+    document.querySelectorAll('.tabs').forEach(group => {
+      const tabs = [...group.querySelectorAll('[role=tab]')];
+      function select(tab){
+        tabs.forEach(t => {
+          const on = t === tab;
+          t.setAttribute('aria-selected', String(on));
+          t.tabIndex = on ? 0 : -1;
+          group.querySelector('#' + t.getAttribute('aria-controls')).hidden = !on;
+        });
+      }
+      tabs.forEach((tab, i) => {
+        tab.addEventListener('click', () => select(tab));
+        tab.addEventListener('keydown', e => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+            e.preventDefault();
+            const dir = e.key === 'ArrowRight' ? 1 : -1;
+            const next = tabs[(i + dir + tabs.length) % tabs.length];
+            next.focus(); select(next);
+          }
+        });
+      });
+    });
+
+    /* ---------- Modal (native dialog) ---------- */
+    const dlg = document.getElementById('demoModal');
+    document.getElementById('openModal').addEventListener('click', () => dlg.showModal());
+    dlg.querySelectorAll('[data-close], #closeModal').forEach(b => b.addEventListener('click', () => dlg.close()));
+  </script>
+</body>
+</html>

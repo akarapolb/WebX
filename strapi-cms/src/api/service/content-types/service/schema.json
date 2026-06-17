@@ -1,0 +1,51 @@
+{
+  "kind": "collectionType",
+  "collectionName": "services",
+  "info": {
+    "singularName": "service",
+    "pluralName": "services",
+    "displayName": "Service",
+    "description": "บริการยอดนิยม (การ์ดบริการบนหน้าแรก)"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "description": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "icon": {
+      "type": "enumeration",
+      "enum": ["i-id", "i-grid", "i-data", "i-build", "i-doc", "i-book", "i-shield", "i-users"],
+      "default": "i-grid",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "colorTheme": {
+      "type": "enumeration",
+      "enum": ["orange", "blue", "green", "amber", "purple", "teal"],
+      "default": "blue",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "url": {
+      "type": "string",
+      "default": "#",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "order": {
+      "type": "integer",
+      "default": 0,
+      "pluginOptions": { "i18n": { "localized": false } }
+    }
+  }
+}

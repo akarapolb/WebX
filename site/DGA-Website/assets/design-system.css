@@ -1,0 +1,210 @@
+/* ============================================================================
+   DGA Design System — CSS Framework + Design Tokens
+   ตอบ TOR ข้อ 2.1 (Design System + Typography) และ 2.3 (WCAG 2.2 AA)
+   ฟอนต์: ไทย = Kanit, อังกฤษ = Ubuntu
+   รองรับ Light / Dark mode ผ่าน [data-theme="dark"] บน <html>
+   วิธีใช้: <link rel="stylesheet" href="/assets/design-system.css"> แล้วใช้ var(--...)
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@300;400;500;700&display=swap');
+/* production: ควร self-host ฟอนต์ + preload เพื่อคะแนน Lighthouse (TOR 4.1.6) */
+
+/* ============================ TOKENS: LIGHT ============================ */
+:root {
+  /* ---- Typography ---- */
+  --font-th: 'Kanit', system-ui, sans-serif;     /* ไทย (ค่าเริ่มต้น) */
+  --font-en: 'Ubuntu', system-ui, sans-serif;    /* อังกฤษ */
+  --font-base: var(--font-th);
+  --fs-display: 2.986rem; --fs-h1: 2.488rem; --fs-h2: 1.728rem; --fs-h3: 1.44rem;
+  --fs-body-lg: 1.125rem; --fs-body: 1rem; --fs-small: .875rem;
+  --lh-tight: 1.25; --lh-base: 1.6;              /* ไทยต้องการ line-height สูง */
+
+  /* ---- Brand / Action (คงที่ทั้ง 2 ธีม) ---- */
+  --c-brand: #EE5020;        /* สีอัตลักษณ์ DGA — Hero/แบนเนอร์/ตัวใหญ่ (3.62:1) */
+  --c-brand-2: #D63B12;
+  --c-action: #C2410C;       /* พื้นปุ่มหลัก — ข้อความขาวบนสีนี้ = 4.9:1 (AA) */
+  --c-action-700: #9A3412;   /* hover/active */
+
+  /* ---- Semantic (ปรับตามธีม) ---- */
+  --c-primary: #C2410C;      /* ข้อความ/ลิงก์/แอคเซนต์ (บนพื้นอ่อน 4.9:1) */
+  --c-primary-700: #9A3412;
+  --c-primary-50: #FFF3EC;   /* tint พื้นอ่อน */
+  --c-secondary: #13497A;
+  --c-success: #1E7B34; --c-warning: #8A5A00; --c-danger: #B3261E;
+
+  /* ---- Surfaces / Text / Border ---- */
+  --c-text: #18181B;         /* 15:1 บนพื้นขาว */
+  --c-text-muted: #5B5F66;   /* ~7:1 */
+  --c-text-invert: #FFFFFF;
+  --c-bg: #FAFAF8;           /* พื้นเพจโทนอุ่นนวล */
+  --c-surface: #FFFFFF;      /* การ์ด */
+  --c-sunken: #F5F4F0;       /* พื้นพรีวิว/หัวตาราง */
+  --c-border: #ECEAE6;
+  --c-border-strong: #DCD8D1;
+  --c-focus: #13497A;        /* วงโฟกัสน้ำเงิน — ตัดกับส้ม/ขาว (WCAG 2.4.11) */
+
+  /* ---- Badge (soft) ---- */
+  --badge-neutral-bg:#EEEDEA; --badge-neutral-fg:#3F4148;
+  --badge-success-bg:#E5F4E8; --badge-success-fg:#1E7B34;
+  --badge-warning-bg:#FBEFD6; --badge-warning-fg:#8A5A00;
+  --badge-danger-bg:#FBE3E1;  --badge-danger-fg:#B3261E;
+  --badge-info-bg:#E7EEF8;    --badge-info-fg:#13497A;
+
+  /* ---- Gradients / Shadow ---- */
+  --grad-brand: linear-gradient(135deg, #FF6A3D 0%, #EE5020 45%, #D63B12 100%);
+  --grad-hero: radial-gradient(120% 140% at 85% 0%, rgba(238,80,32,.55), transparent 55%), linear-gradient(160deg,#1c1d22 0%, #111216 100%);
+  --shadow-1: 0 1px 2px rgba(20,18,16,.05), 0 1px 3px rgba(20,18,16,.07);
+  --shadow-2: 0 8px 24px -10px rgba(214,59,18,.18), 0 2px 8px -4px rgba(20,18,16,.10);
+  --shadow-3: 0 24px 50px -18px rgba(214,59,18,.30), 0 10px 20px -12px rgba(20,18,16,.18);
+
+  /* ---- Spacing / Radius / Layout ---- */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px; --sp-7:48px; --sp-8:64px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:18px; --radius-xl:24px;
+  --container:1440px; --tap-min:24px;
+}
+
+/* ============================ TOKENS: DARK ============================ */
+[data-theme="dark"] {
+  --c-primary:#FF7A45;       /* ส้มสว่างขึ้น — บนพื้นมืด 7.4:1 (AA) */
+  --c-primary-700:#FF9466;
+  --c-primary-50: rgba(255,122,69,.12);
+  --c-secondary:#7FB1E6;
+  --c-success:#5FD27A; --c-warning:#E5B567; --c-danger:#F2877F;
+
+  --c-text:#F4F4F5; --c-text-muted:#A6A8AE; --c-text-invert:#16110E;
+  --c-bg:#0F1012; --c-surface:#16171B; --c-sunken:#1B1C21;
+  --c-border:#2A2B31; --c-border-strong:#3A3B43;
+  --c-focus:#FFB000;
+
+  --badge-neutral-bg:rgba(255,255,255,.08); --badge-neutral-fg:#D4D4D8;
+  --badge-success-bg:rgba(46,160,67,.18);   --badge-success-fg:#6EDB87;
+  --badge-warning-bg:rgba(229,181,103,.16); --badge-warning-fg:#F0C07A;
+  --badge-danger-bg:rgba(242,135,127,.16);  --badge-danger-fg:#F8A39C;
+  --badge-info-bg:rgba(127,177,230,.16);    --badge-info-fg:#9CC4EE;
+
+  --shadow-1:0 1px 2px rgba(0,0,0,.4);
+  --shadow-2:0 8px 24px -10px rgba(0,0,0,.55);
+  --shadow-3:0 24px 50px -18px rgba(0,0,0,.65);
+}
+
+/* ============================ BASE ============================ */
+* { box-sizing:border-box; }
+html { font-size:100%; -webkit-text-size-adjust:100%; color-scheme: light dark; }
+body {
+  margin:0; font-family:var(--font-base); font-size:var(--fs-body); line-height:var(--lh-base);
+  color:var(--c-text); background:var(--c-bg);
+  transition: background .25s ease, color .25s ease;
+}
+[lang="en"], .en { font-family:var(--font-en); }
+h1,h2,h3 { line-height:var(--lh-tight); font-weight:600; margin:0 0 var(--sp-3); }
+h1{font-size:var(--fs-h1);} h2{font-size:var(--fs-h2);} h3{font-size:var(--fs-h3);}
+p{margin:0 0 var(--sp-4);}
+a{color:var(--c-primary); text-underline-offset:2px;}
+
+:focus-visible { outline:3px solid var(--c-focus); outline-offset:2px; border-radius:var(--radius-sm); }
+
+.skip-link{ position:absolute; left:8px; top:-48px; background:var(--c-action); color:#fff;
+  padding:var(--sp-2) var(--sp-4); border-radius:var(--radius-sm); z-index:1000; transition:top .15s; }
+.skip-link:focus{ top:8px; }
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ animation-duration:.001ms!important; transition-duration:.001ms!important; }
+}
+
+/* ============================ ICONS ============================ */
+/* ใช้ <svg class="icon"><use href="#i-search"/></svg> ร่วมกับ sprite ในหน้า */
+.icon{ width:1.25em; height:1.25em; display:inline-block; vertical-align:-.15em;
+  fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.icon--lg{ width:1.6em; height:1.6em; }
+
+/* ============================ BUTTON ============================ */
+.btn{ display:inline-flex; align-items:center; gap:var(--sp-2); min-height:44px; padding:10px 20px;
+  font:inherit; font-weight:500; line-height:1; border:1px solid transparent; border-radius:var(--radius-md);
+  cursor:pointer; text-decoration:none; transition:background .15s, border-color .15s, transform .12s; }
+.btn:active{ transform:translateY(1px); }
+.btn--primary{ background:var(--c-action); color:#fff; }      /* ข้อความขาว 4.9:1 */
+.btn--primary:hover{ background:var(--c-action-700); }
+.btn--ghost{ background:transparent; color:var(--c-primary); border-color:var(--c-border-strong); }
+.btn--ghost:hover{ border-color:var(--c-primary); background:var(--c-primary-50); }
+.btn--icon{ padding:10px; }                                   /* ปุ่มไอคอนล้วน */
+.btn[disabled]{ opacity:.45; cursor:not-allowed; }
+
+/* ============================ FORM ============================ */
+.field{ margin-bottom:var(--sp-4); }
+.field>label{ display:block; font-weight:500; margin-bottom:var(--sp-1); }
+.input,.select,.textarea{ width:100%; min-height:44px; padding:10px 12px; font:inherit; color:var(--c-text);
+  background:var(--c-surface); border:1px solid var(--c-border-strong); border-radius:var(--radius-md); }
+.input:focus,.select:focus,.textarea:focus{ border-color:var(--c-primary); }
+.input[aria-invalid="true"]{ border-color:var(--c-danger); }
+.field__error{ color:var(--c-danger); font-size:var(--fs-small); margin-top:var(--sp-1); }
+.field__hint{ color:var(--c-text-muted); font-size:var(--fs-small); margin-top:var(--sp-1); }
+
+/* ============================ CARD ============================ */
+.card{ background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-1); padding:var(--sp-5); }
+.card__title{ font-size:var(--fs-h3); margin-bottom:var(--sp-2); }
+
+/* ============================ BADGE / STATUS ============================ */
+.badge{ display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-small); font-weight:600;
+  line-height:1; padding:5px 11px; border-radius:999px; }
+.badge .icon{ width:1em; height:1em; }
+.badge--neutral{ background:var(--badge-neutral-bg); color:var(--badge-neutral-fg); }
+.badge--success{ background:var(--badge-success-bg); color:var(--badge-success-fg); }
+.badge--warning{ background:var(--badge-warning-bg); color:var(--badge-warning-fg); }
+.badge--danger{ background:var(--badge-danger-bg);  color:var(--badge-danger-fg); }
+.badge--info{ background:var(--badge-info-bg);    color:var(--badge-info-fg); }
+.badge--dot::before{ content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+
+/* ============================ TABLE ============================ */
+.table-wrap{ overflow-x:auto; border:1px solid var(--c-border); border-radius:var(--radius-lg); }
+.table{ width:100%; border-collapse:collapse; font-size:var(--fs-body); }
+.table caption{ text-align:left; padding:var(--sp-3) var(--sp-4); color:var(--c-text-muted); font-size:var(--fs-small); }
+.table th,.table td{ text-align:left; padding:12px 16px; border-bottom:1px solid var(--c-border); }
+.table thead th{ background:var(--c-sunken); font-weight:600; white-space:nowrap; }
+.table tbody tr:last-child td{ border-bottom:0; }
+.table tbody tr:hover{ background:var(--c-primary-50); }
+
+/* ============================ TABS ============================ */
+.tabs__list{ display:flex; gap:var(--sp-1); border-bottom:1px solid var(--c-border); flex-wrap:wrap; }
+.tab{ appearance:none; background:none; border:0; font:inherit; font-weight:500; cursor:pointer;
+  padding:12px 16px; color:var(--c-text-muted); border-bottom:2px solid transparent; margin-bottom:-1px; }
+.tab[aria-selected="true"]{ color:var(--c-primary); border-bottom-color:var(--c-action); }
+.tab:hover{ color:var(--c-text); }
+.tabpanel{ padding:var(--sp-5) 0; }
+.tabpanel[hidden]{ display:none; }
+
+/* ============================ ACCORDION (native <details>) ============================ */
+.accordion{ border:1px solid var(--c-border); border-radius:var(--radius-lg); overflow:hidden; }
+.accordion details{ border-bottom:1px solid var(--c-border); }
+.accordion details:last-child{ border-bottom:0; }
+.accordion summary{ list-style:none; cursor:pointer; padding:16px 18px; font-weight:600;
+  display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); }
+.accordion summary::-webkit-details-marker{ display:none; }
+.accordion summary .icon{ transition:transform .2s; flex:none; color:var(--c-primary); }
+.accordion details[open] summary .icon{ transform:rotate(180deg); }
+.accordion .acc__body{ padding:0 18px 18px; color:var(--c-text-muted); }
+
+/* ============================ MODAL (native <dialog>) ============================ */
+dialog.modal{ border:0; border-radius:var(--radius-xl); padding:0; max-width:480px; width:calc(100% - 32px);
+  background:var(--c-surface); color:var(--c-text); box-shadow:var(--shadow-3); }
+dialog.modal::backdrop{ background:rgba(10,8,6,.55); backdrop-filter:blur(2px); }
+.modal__head{ padding:var(--sp-5) var(--sp-5) 0; display:flex; align-items:start; justify-content:space-between; gap:var(--sp-3); }
+.modal__body{ padding:var(--sp-3) var(--sp-5); color:var(--c-text-muted); }
+.modal__foot{ padding:var(--sp-4) var(--sp-5) var(--sp-5); display:flex; gap:var(--sp-3); justify-content:flex-end; }
+
+/* ============================ PAGINATION ============================ */
+.pagination{ display:flex; gap:6px; list-style:none; padding:0; margin:0; flex-wrap:wrap; }
+.pagination a,.pagination span{ display:inline-flex; align-items:center; justify-content:center;
+  min-width:44px; height:44px; padding:0 10px; border-radius:var(--radius-md);
+  border:1px solid var(--c-border-strong); text-decoration:none; color:var(--c-text); }
+.pagination a:hover{ border-color:var(--c-primary); color:var(--c-primary); }
+.pagination [aria-current="page"]{ background:var(--c-action); color:#fff; border-color:var(--c-action); }
+.pagination .is-disabled{ opacity:.4; pointer-events:none; }
+
+/* ============================ LAYOUT / UTIL ============================ */
+.container{ max-width:var(--container); margin-inline:auto; padding-inline:var(--sp-4); }
+.grid{ display:grid; gap:var(--sp-5); }
+@media (min-width:768px){ .grid--3{ grid-template-columns:repeat(2,1fr);} }
+@media (min-width:1024px){ .grid--3{ grid-template-columns:repeat(3,1fr);} }
+.visually-hidden{ position:absolute!important; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }

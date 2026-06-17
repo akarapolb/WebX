@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — Complaint submission system / e-Complaint (English) · working demo page
+  Uses Design System: /assets/design-system.css + /assets/home.css + /assets/complaint.css
+  Real form + validation + reference number + status tracking (client-side demo)
+  Accessibility WCAG 2.2 AA · dark mode · responsive · Schema · PDPA · Ubuntu font
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Complaint submission system | DGA</title>
+  <meta name="description" content="Submit a complaint, suggestion or report a problem with public services online. Get a reference number and track the status 24/7 — Digital Government Development Agency (DGA).">
+  <link rel="canonical" href="https://www.dga.or.th/en/complaint">
+  <link rel="alternate" hreflang="th" href="https://www.dga.or.th/complaint">
+  <link rel="alternate" hreflang="en" href="https://www.dga.or.th/en/complaint">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/complaint.css">
+  <!-- English page: use Ubuntu as the base font -->
+  <style>:root{ --font-base: var(--font-en); }</style>
+
+  <!-- Schema.org: breadcrumb (GEO) -->
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"Home","item":"https://www.dga.or.th/en/"},
+    {"@type":"ListItem","position":2,"name":"Online Services","item":"https://www.dga.or.th/en/e-service"},
+    {"@type":"ListItem","position":3,"name":"Complaint submission system","item":"https://www.dga.or.th/en/complaint"}
+  ]}
+  </script>
+  <!-- Schema.org: government service (AEO) -->
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"GovernmentService","name":"DGA Complaint Submission System","serviceType":"Complaints and feedback handling","provider":{"@type":"GovernmentOrganization","name":"Digital Government Development Agency","alternateName":["DGA","สพร."]},"areaServed":"TH","availableChannel":{"@type":"ServiceChannel","serviceUrl":"https://www.dga.or.th/en/complaint","servicePhone":"+66-2612-6000","availableLanguage":["th","en"]}}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v5M12 17.5h.01"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 14l.9 2.4 2.6.9-2.6.9-.9 2.4-.9-2.4-2.6-.9 2.6-.9z"/></symbol>
+  </defs></svg>
+
+  <!-- Accessibility bar -->
+  <div class="a11y-bar" role="region" aria-label="Accessibility tools"><div class="wrap">
+    <span>Accessibility:</span>
+    <button id="fontDown" aria-label="Decrease text size">A-</button>
+    <button id="fontReset" aria-label="Default text size">A</button>
+    <button id="fontUp" aria-label="Increase text size">A+</button>
+    <button id="contrastBtn" aria-pressed="false">High contrast</button>
+    <a href="#main">Skip to content</a>
+    <span class="grow"></span>
+    <a href="/en/accessibility">Accessibility Statement (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="Main menu">
+        <a href="/en/">Home</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega>Services</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>News</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>Online Services</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>About DGA</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/complaint.html" lang="th">TH</a><a href="/en/complaint.html" aria-current="true" lang="en">EN</a></span>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="Open menu"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Services -->
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>For Citizens</h3>
+          <a href="#"><span class="dot"></span>Digital ID (ThaID)</a>
+          <a href="#"><span class="dot"></span>Tang Rath App</a>
+          <a href="#"><span class="dot"></span>Check welfare eligibility</a>
+          <a href="#"><span class="dot"></span>Appointments &amp; payments</a></div>
+        <div class="mega-col"><h3>For Agencies</h3>
+          <a href="#"><span class="dot"></span>GDX Data Exchange</a>
+          <a href="#"><span class="dot"></span>Government Cloud (GDCC)</a>
+          <a href="#"><span class="dot"></span>Digital Gov Standards</a>
+          <a href="#"><span class="dot"></span>TDGA Academy</a></div>
+        <div class="mega-col"><h3>Developers/Business</h3>
+          <a href="#"><span class="dot"></span>Government API Gateway</a>
+          <a href="#"><span class="dot"></span>Open Government Data</a>
+          <a href="#"><span class="dot"></span>BizPortal</a>
+          <a href="#"><span class="dot"></span>e-Procurement (e-GP)</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-id"/></svg></span>
+        <b>Get ThaID today</b><span>Verify your identity digitally and use it across public services.</span>
+        <span class="cta">Get started <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <!-- News -->
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>News &amp; Notices</h3>
+          <a href="/en/index.html#news"><span class="dot"></span>Press releases</a>
+          <a href="#"><span class="dot"></span>DGA announcements</a>
+          <a href="#"><span class="dot"></span>Procurement notices</a></div>
+        <div class="mega-col"><h3>Articles &amp; Knowledge</h3>
+          <a href="#"><span class="dot"></span>Digital government articles</a>
+          <a href="#"><span class="dot"></span>Knowledge hub</a>
+          <a href="#"><span class="dot"></span>Infographics</a></div>
+        <div class="mega-col"><h3>Media &amp; Events</h3>
+          <a href="#"><span class="dot"></span>DGA Channel (video)</a>
+          <a href="#"><span class="dot"></span>Events &amp; seminars</a>
+          <a href="#"><span class="dot"></span>Awards &amp; achievements</a></div>
+      </div>
+      <a class="mega-feature" href="/en/index.html#news"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Latest headlines</b><span>Follow digital-government updates and DGA's newest services.</span>
+        <span class="cta">Read all news <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <!-- Online Services -->
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Register &amp; Careers</h3>
+          <a href="/en/register.html"><span class="dot"></span>Register a user account</a>
+          <a href="/en/careers.html"><span class="dot"></span>Job application system (Careers)</a>
+          <a href="/en/application-status.html"><span class="dot"></span>Check application status</a></div>
+        <div class="mega-col"><h3>Complaints &amp; Feedback</h3>
+          <a href="/en/complaint.html" aria-current="page"><span class="dot"></span>Complaint submission system</a>
+          <a href="/en/complaint.html#track"><span class="dot"></span>Track complaint status</a>
+          <a href="#"><span class="dot"></span>Report a problem</a></div>
+        <div class="mega-col"><h3>Support</h3>
+          <a href="#"><span class="dot"></span>Check request status</a>
+          <a href="#"><span class="dot"></span>Download forms &amp; documents</a>
+          <a href="#"><span class="dot"></span>Help Center</a></div>
+      </div>
+      <a class="mega-feature" href="/en/complaint.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-shield"/></svg></span>
+        <b>Complaint submission system</b><span>Submit complaints or feedback online and track the status 24/7.</span>
+        <span class="cta">Submit online <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Organization</h3>
+          <a href="#"><span class="dot"></span>Vision &amp; role</a>
+          <a href="#"><span class="dot"></span>Structure</a>
+          <a href="#"><span class="dot"></span>Executives</a></div>
+        <div class="mega-col"><h3>Publications</h3>
+          <a href="#"><span class="dot"></span>Annual reports</a>
+          <a href="/en/index.html#news"><span class="dot"></span>News</a>
+          <a href="#"><span class="dot"></span>DGA procurement</a></div>
+        <div class="mega-col"><h3>Governance</h3>
+          <a href="#"><span class="dot"></span>Integrity &amp; transparency (ITA)</a>
+          <a href="#"><span class="dot"></span>Careers</a>
+          <a href="#"><span class="dot"></span>Contact DGA</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Annual Report 2025</b><span>Performance and the national direction for digital government.</span>
+        <span class="cta">Read report <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+  </header>
+
+  <!-- Mobile off-canvas drawer (menu built automatically from mega menu by home.js) -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="Main menu">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="Close menu"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/en/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">Search services or documents</label>
+      <input id="mq" name="q" type="search" placeholder="Search services or documents…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="Main menu (mobile)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/complaint.html" lang="th">TH</a><a href="/en/complaint.html" aria-current="true" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="#" style="flex:1;justify-content:center">Contact us</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="Breadcrumb"><div class="wrap">
+      <ol>
+        <li><a href="/en/index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg> Home</a></li>
+        <li><a href="/en/index.html">Online Services</a></li>
+        <li aria-current="page">Complaint submission system</li>
+      </ol>
+    </div></nav>
+
+    <!-- Page hero -->
+    <section class="cpl-hero" aria-labelledby="cpl-h"><div class="wrap">
+      <div class="cpl-hero__tx">
+        <span class="cpl-eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> Government online service</span>
+        <h1 id="cpl-h">Complaint submission system</h1>
+        <p>Submit a complaint, suggestion or report a problem with public services, and receive a <strong>reference number</strong> to track the status at every step. Your data is protected under Thailand's Personal Data Protection Act (PDPA).</p>
+        <ul class="cpl-trust">
+          <li><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> Secure &amp; confidential</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> Available 24 hours</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Trackable status</li>
+        </ul>
+      </div>
+    </div></section>
+
+    <section class="cpl-wrap"><div class="wrap cpl-layout">
+      <div class="cpl-main">
+      <!-- Tabs -->
+      <div class="cpl-tabs" role="tablist" aria-label="Choose a service">
+        <button id="tab-file" role="tab" aria-selected="true" aria-controls="panel-file" class="cpl-tab">
+          <svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg> File a complaint
+        </button>
+        <button id="tab-track" role="tab" aria-selected="false" tabindex="-1" aria-controls="panel-track" class="cpl-tab">
+          <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> Track status
+        </button>
+      </div>
+
+      <!-- Loading overlay (shown when switching tabs) -->
+      <div class="cpl-loading" id="cplLoading" hidden aria-hidden="true"><span class="spinner"></span></div>
+
+      <!-- ===== Panel 1: complaint form ===== -->
+      <div id="panel-file" role="tabpanel" aria-labelledby="tab-file" class="cpl-panel">
+        <form class="cpl-form" id="cplForm" novalidate>
+          <!-- Error summary (shown on failed submit) -->
+          <div class="cpl-errsum" id="cplErrSum" role="alert" tabindex="-1" hidden>
+            <strong><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> Please check the following</strong>
+            <ul id="cplErrList"></ul>
+          </div>
+
+          <fieldset class="cpl-fs">
+            <legend><span class="leg-no" aria-hidden="true">1</span> Complaint details</legend>
+
+            <fieldset class="field type-field" role="radiogroup" aria-labelledby="cType-label" aria-describedby="cType-err" aria-required="true">
+              <span class="field-label" id="cType-label">Category <span class="req" aria-hidden="true">*</span></span>
+              <div class="type-grid">
+                <label class="type-card">
+                  <input type="radio" name="type" value="Delayed / no service">
+                  <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-clock"/></svg></span>
+                  <span class="type-card__tx">Delayed / no service</span>
+                </label>
+                <label class="type-card">
+                  <input type="radio" name="type" value="Staff conduct">
+                  <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-user"/></svg></span>
+                  <span class="type-card__tx">Staff conduct</span>
+                </label>
+                <label class="type-card">
+                  <input type="radio" name="type" value="System / website / app issue">
+                  <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-grid"/></svg></span>
+                  <span class="type-card__tx">System / web / app issue</span>
+                </label>
+                <label class="type-card">
+                  <input type="radio" name="type" value="Personal data (PDPA)">
+                  <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span>
+                  <span class="type-card__tx">Personal data (PDPA)</span>
+                </label>
+                <label class="type-card">
+                  <input type="radio" name="type" value="Corruption / transparency">
+                  <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-alert"/></svg></span>
+                  <span class="type-card__tx">Corruption / transparency</span>
+                </label>
+                <label class="type-card">
+                  <input type="radio" name="type" value="Suggestion">
+                  <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-spark"/></svg></span>
+                  <span class="type-card__tx">Suggestion</span>
+                </label>
+                <label class="type-card">
+                  <input type="radio" name="type" value="Other">
+                  <span class="type-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-doc"/></svg></span>
+                  <span class="type-card__tx">Other</span>
+                </label>
+              </div>
+              <span class="field-err" id="cType-err" aria-live="polite"></span>
+            </fieldset>
+
+            <div class="field">
+              <label for="cSubject">Subject <span class="req" aria-hidden="true">*</span></label>
+              <input type="text" id="cSubject" name="subject" required aria-required="true" maxlength="120"
+                     placeholder="e.g. The website crashed while submitting documents" aria-describedby="cSubject-err">
+              <span class="field-err" id="cSubject-err" aria-live="polite"></span>
+            </div>
+
+            <div class="field">
+              <label for="cAgency">Related agency / service <span class="opt">(optional)</span></label>
+              <input type="text" id="cAgency" name="agency" maxlength="120" placeholder="e.g. Tang Rath app, ThaID">
+            </div>
+
+            <div class="field">
+              <label for="cDetail">Details <span class="req" aria-hidden="true">*</span></label>
+              <textarea id="cDetail" name="detail" required aria-required="true" rows="6" maxlength="1000"
+                        placeholder="Describe what happened, the date/time, and what you'd like done" aria-describedby="cDetail-err cDetail-count"></textarea>
+              <div class="field-meta">
+                <span class="field-err" id="cDetail-err" aria-live="polite"></span>
+                <span class="char-count" id="cDetail-count" aria-live="off">0 / 1000</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="cFile">Attachment <span class="opt">(optional · image or PDF, max 5MB)</span></label>
+              <label class="file-drop" for="cFile">
+                <svg class="icon icon--lg" aria-hidden="true"><use href="#i-upload"/></svg>
+                <span id="cFileText">Choose a file or drag it here</span>
+              </label>
+              <input type="file" id="cFile" name="file" accept="image/*,.pdf" class="visually-hidden" aria-describedby="cFile-err">
+              <span class="field-err" id="cFile-err" aria-live="polite"></span>
+            </div>
+          </fieldset>
+
+          <fieldset class="cpl-fs">
+            <legend><span class="leg-no" aria-hidden="true">2</span> Your details</legend>
+
+            <div class="field-check">
+              <input type="checkbox" id="cAnon" name="anonymous">
+              <label for="cAnon">Submit anonymously <span class="opt">(we won't be able to reply to you individually)</span></label>
+            </div>
+
+            <div class="cpl-person" id="cplPerson">
+              <div class="field-row">
+                <div class="field">
+                  <label for="cName">Full name <span class="req" aria-hidden="true">*</span></label>
+                  <input type="text" id="cName" name="name" autocomplete="name" maxlength="120" aria-describedby="cName-err">
+                  <span class="field-err" id="cName-err" aria-live="polite"></span>
+                </div>
+                <div class="field">
+                  <label for="cEmail">Email <span class="req" aria-hidden="true">*</span></label>
+                  <input type="email" id="cEmail" name="email" autocomplete="email" maxlength="120"
+                         placeholder="name@example.com" aria-describedby="cEmail-err">
+                  <span class="field-err" id="cEmail-err" aria-live="polite"></span>
+                </div>
+              </div>
+              <div class="field field--half">
+                <label for="cPhone">Phone <span class="opt">(optional)</span></label>
+                <input type="tel" id="cPhone" name="phone" autocomplete="tel" maxlength="20"
+                       inputmode="tel" placeholder="08x-xxx-xxxx" aria-describedby="cPhone-err">
+                <span class="field-err" id="cPhone-err" aria-live="polite"></span>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="field-check cpl-consent">
+            <input type="checkbox" id="cConsent" name="consent" required aria-required="true" aria-describedby="cConsent-err">
+            <label for="cConsent">I consent to DGA collecting and using the information above to handle my complaint, per the
+              <a href="#" target="_blank">Personal Data Protection Policy (PDPA)</a> <span class="req" aria-hidden="true">*</span>
+              <span class="field-err" id="cConsent-err" aria-live="polite"></span>
+            </label>
+          </div>
+
+          <div class="cpl-actions">
+            <button type="submit" class="btn btn--primary btn--lg">Submit complaint <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+            <button type="reset" class="btn btn--ghost btn--lg">Clear form</button>
+          </div>
+          <p class="cpl-note"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> This is a demo — your data is stored only in your browser and is not sent to a real server.</p>
+        </form>
+      </div>
+
+      <!-- ===== Panel 2: track status ===== -->
+      <div id="panel-track" role="tabpanel" aria-labelledby="tab-track" class="cpl-panel" hidden>
+        <form class="cpl-track" id="cplTrackForm" novalidate>
+          <div class="field">
+            <label for="trackRef">Enter your complaint reference number</label>
+            <div class="track-row">
+              <input type="text" id="trackRef" name="ref" placeholder="e.g. DGA-CMP-2569-100001" autocomplete="off" aria-describedby="track-hint">
+              <button type="submit" class="btn btn--primary">Track status</button>
+            </div>
+            <span class="field-hint" id="track-hint">Try the sample reference: <button type="button" class="link-btn" id="trackDemo">DGA-CMP-2569-100001</button></span>
+          </div>
+        </form>
+
+        <div class="cpl-result" id="cplResult" hidden>
+          <div class="cpl-result__head">
+            <div>
+              <span class="cpl-result__label">Reference number</span>
+              <strong id="resRef">—</strong>
+            </div>
+            <span class="cpl-badge" id="resBadge">—</span>
+          </div>
+          <dl class="cpl-result__meta">
+            <div><dt>Category</dt><dd id="resType">—</dd></div>
+            <div><dt>Subject</dt><dd id="resSubject">—</dd></div>
+            <div><dt>Submitted</dt><dd id="resDate">—</dd></div>
+          </dl>
+          <h3 class="cpl-timeline__h">Progress status</h3>
+          <ol class="cpl-timeline" id="resTimeline"></ol>
+        </div>
+
+        <div class="cpl-notfound" id="cplNotFound" hidden role="alert">
+          <svg class="icon icon--lg" aria-hidden="true"><use href="#i-alert"/></svg>
+          <p>No complaint found for this reference. Please check it again, or try the sample reference.</p>
+        </div>
+      </div>
+      </div><!-- /.cpl-main -->
+
+      <!-- Side: service info + help (sticky) -->
+      <aside class="cpl-side" aria-label="Information and help">
+        <div class="cpl-info">
+          <ul>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-clock"/></svg></span><div><strong>Takes about 2 minutes</strong><span>Fill in a few details and get your reference number instantly</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span><div><strong>Kept confidential</strong><span>Your data is protected to PDPA standards</span></div></li>
+            <li><span class="cpl-info__ic" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><div><strong>Reply within 3 business days</strong><span>Track progress through the status system</span></div></li>
+          </ul>
+        </div>
+        <div class="cpl-help-card">
+          <span class="cpl-help-card__ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-chat"/></svg></span>
+          <strong>Need help?</strong>
+          <p>Contact the DGA Contact Center, available 24 hours a day</p>
+          <a class="btn btn--primary btn--block" href="tel:026126000"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> Call 0-2612-6000</a>
+          <button type="button" class="btn btn--ghost btn--block" id="sideAskGuide"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg> Ask DGA Guide</button>
+        </div>
+      </aside>
+    </div></section>
+
+    <!-- Popup: submitted successfully -->
+    <div class="cpl-modal" id="cplModal" hidden>
+      <div class="cpl-modal__backdrop" data-close></div>
+      <div class="cpl-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="cplOkTitle" aria-describedby="cplOkDesc" tabindex="-1">
+        <button type="button" class="cpl-modal__close" id="cplModalClose" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <span class="cpl-success__ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-check"/></svg></span>
+        <h2 id="cplOkTitle">Complaint submitted successfully</h2>
+        <p id="cplOkDesc">Save your reference number to track the status. Staff will act on it within 3 business days.</p>
+        <div class="cpl-ref">
+          <span class="cpl-ref__label">Complaint reference number</span>
+          <strong id="cplRefNo">—</strong>
+          <button type="button" class="btn btn--ghost btn--sm" id="cplCopy"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg> Copy</button>
+        </div>
+        <div class="cpl-success__btns">
+          <button type="button" class="btn btn--primary" id="cplGoTrack">Track this complaint</button>
+          <button type="button" class="btn btn--ghost" id="cplNew">Submit another</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+        <p class="footer-org">Digital Government Development Agency (DGA)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Thailand Institute of Justice (TIJ) Building, 4th Floor, 999 Chaeng Watthana Rd., Thung Song Hong, Lak Si, Bangkok 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>Tel 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="DGA location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">View larger map <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>Services</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">Tang Rath</a></li><li><a href="#">Open Data</a></li><li><a href="#">API Gateway</a></li></ul></div>
+      <div><h3>About</h3><ul><li><a href="#">Vision</a></li><li><a href="/en/index.html#news">News</a></li><li><a href="#">Careers</a></li><li><a href="#">Contact</a></li></ul></div>
+      <div><h3>Policy</h3><ul><li><a href="#">Privacy (PDPA)</a></li><li><a href="#">Cookie Policy</a></li><li><a href="/en/accessibility">Accessibility (WCAG)</a></li><li><a href="#">Sitemap</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2026 Digital Government Development Agency</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">Cookie settings</button></div></div>
+  </footer>
+
+  <!-- Cookie Consent (PDPA) -->
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">This website uses cookies</h2>
+    <p id="ck-d">We use necessary cookies to run the site and analytics cookies to improve services (off by default), in line with Thailand's Personal Data Protection Act (PDPA).</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">Accept all</button><button class="btn btn--ghost" data-cookie="necessary">Necessary only</button><button class="btn btn--ghost" data-cookie="settings">Settings</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+  <script src="/assets/complaint.js"></script>
+</body>
+</html>

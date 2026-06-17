@@ -1,0 +1,46 @@
+{
+  "kind": "singleType",
+  "collectionName": "home_pages",
+  "info": {
+    "singularName": "home-page",
+    "pluralName": "home-pages",
+    "displayName": "Home Page",
+    "description": "เนื้อหาหน้าแรก สพร. (Hero, สถิติ, โปรโมทเด่น)"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
+  "attributes": {
+    "seoTitle": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "seoDescription": {
+      "type": "text",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "hero": {
+      "type": "component",
+      "repeatable": false,
+      "component": "home.hero",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "stats": {
+      "type": "component",
+      "repeatable": true,
+      "component": "home.stat",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "featuredPromo": {
+      "type": "component",
+      "repeatable": false,
+      "component": "home.featured-promo",
+      "pluginOptions": { "i18n": { "localized": true } }
+    }
+  }
+}
