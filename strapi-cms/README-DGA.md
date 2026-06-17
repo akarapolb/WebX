@@ -216,10 +216,11 @@ self-host fonts, brotli/gzip, รูป webp/avif + responsive sizes, HTTP/2
 
 ## Live chat + social channels (#3 — เพิ่มแล้ว)
 - `Tenant.liveChat.channels = [{ type:'line'|'messenger'|'facebook'|'phone', label, url }]` (ตั้งต่อ tenant)
-- `assets/livechat.js` แทรกแถบ "แชตสดกับเจ้าหน้าที่ผ่าน:" ลงในวิดเจ็ต DGA Guide → ปุ่ม LINE/Messenger/Facebook/โทร
-  (สีตามแบรนด์ช่องทาง) เปิดช่องทางจริงในแท็บใหม่ · resolve คืน liveChat ต่อ tenant
-- ทดสอบแล้ว: dga = LINE/Messenger/Facebook/โทร, pea = LINE/Facebook/โทร
-- หมายเหตุ: หลังแก้ `cms.js` ต้อง hard refresh (Ctrl+Shift+R) ครั้งเดียวเพื่อล้าง cache JS เดิม
+- `assets/livechat.js` = **ปุ่ม "แชตสด" ลอยมุมซ้ายล่าง** (วิดเจ็ตอิสระ มองเห็นชัด ไม่ต้องเปิดแชต AI ก่อน)
+  → คลิกเปิด popup ช่องทาง LINE/Messenger/Facebook/โทร (สีตามแบรนด์) เปิดช่องทางจริงในแท็บใหม่
+- resolve คืน `liveChat` ต่อ tenant · ทดสอบแล้ว: dga = LINE/Messenger/Facebook/โทร, pea = LINE/Facebook/โทร
+- **cache-busting**: เพิ่ม `?v=N` ต่อท้าย cms.js/search-cms.js/jobs-cms.js ในทุกหน้า เพื่อให้เบราว์เซอร์โหลด JS ใหม่
+  (เลี่ยงปัญหา cache JS เดิม) — บั๊มเลข v เมื่อแก้ไฟล์ loader
 
 ## ยังไม่ได้ทำ (งวดถัดไป)
 - หน้าแสดง Download/E-book/Gallery, .pptx full-text, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
