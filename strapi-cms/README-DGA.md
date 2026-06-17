@@ -157,7 +157,23 @@ PEA seed: home, 3 services, 5 news, 3 FAQ, 2 jobs, โลโก้ `assets/image
 โหลด consent.js อัตโนมัติทุกหน้า (ผ่าน cms.js/search-cms.js) · ทดสอบแล้ว: accept→โหลด analytics+log,
 reject→ไม่โหลด, log เข้า CMS ผูก tenant ถูกต้อง, ไม่มี console error
 
+## Security pack (เพิ่มแล้ว — TOR Security)
+
+- **MFA หลังบ้าน (TOTP)**: `middlewares/admin-mfa.ts` กั้นการเปิดหน้า `/admin` ในเบราว์เซอร์ →
+  redirect ไป `/api/mfa` ให้กรอกรหัส 6 หลักจากแอป Authenticator ก่อน (ตั้งคุกกี้ลงนาม 8 ชม.)
+  - คีย์เดโม: **`JBSWY3DPEHPK3PXP`** (เพิ่มลง Google Authenticator/Authy แบบ manual key) — หน้า MFA แสดงคีย์+otpauth ให้
+  - ตั้งค่า: `MFA_SECRET` (base32), `MFA_ENABLED=false` เพื่อปิด, `MFA_COOKIE_SECRET`
+- **Rate limiting**: `middlewares/rate-limit.ts` — ล็อกอิน/MFA 10 ครั้ง/10 นาที, POST /api 60 ครั้ง/นาที → 429
+- **Audit Log**: ทุกการเขียนของ admin (create/update/delete/publish) ถูกบันทึกลง `audit-log`
+  (action, contentType, entryId, adminEmail, tenantKey, at) ผ่าน Document Service middleware
+- **Session/idle timeout**: `config/admin.ts` `auth.options.expiresIn` = `ADMIN_SESSION_TTL` (ดีฟอลต์ 30m)
+- **CAPTCHA**: backend พร้อม (`/api/captcha` + `middlewares/captcha-guard.ts` + `assets/captcha.js`) —
+  ปิดเป็นค่าเริ่มต้น (`CAPTCHA_ENABLED=true` เพื่อเปิด) รอ wire ช่องในฟอร์มให้ครบก่อน
+
+> ⚠️ เปิด MFA แล้ว: เข้า http://localhost:1337/admin จะเจอหน้า MFA ก่อน — ใส่คีย์เดโมในแอป Authenticator
+> หรือใส่ `MFA_ENABLED=false` ใน `.env` เพื่อปิดชั่วคราว
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- จำกัดตัวเลือกใน relation picker ของ editor ให้เห็นเฉพาะ tenant ตน (UI), เมนู mega จาก CMS
-- เนื้อหา `/en/` ครบทุก collection (ตอนนี้ en มีเฉพาะ home/service/job), รูปจริงของ PEA (ตอนนี้ใช้ placeholder)
-- อัปโหลดไฟล์แนบในฟอร์ม (multipart), full-text ในไฟล์ pdf/docx, MFA หลังบ้าน, SMTP จริง, GEO/AEO (sitemap/schema ต่อหน้า)
+- #3 โมดูลเนื้อหา (Download, Popup, Vote, e-book, Photo Gallery) · #2 GEO/AEO+SEO (schema ต่อหน้า, sitemap.xml, robots, llms.txt)
+- wire ช่อง CAPTCHA ในฟอร์ม + เปิดใช้, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
+- เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA, อัปโหลดไฟล์แนบฟอร์ม, full-text ในไฟล์, SMTP จริง

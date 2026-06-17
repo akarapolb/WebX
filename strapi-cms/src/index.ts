@@ -16,6 +16,7 @@ const SCOPED = new Set([
 ]);
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
+const WRITE_ACTIONS = new Set(['create', 'update', 'delete', 'publish', 'unpublish']);
 
 /** แคช email(admin/editor) → tenant สำหรับ per-tenant RBAC หลังบ้าน */
 let adminCache: { at: number; map: Map<string, { key: string; id: number }> } = { at: 0, map: new Map() };
@@ -53,30 +54,47 @@ export default {
   register({ strapi }: { strapi: Core.Strapi }) {
     (strapi.documents as any).use(async (context: any, next: any) => {
       if (!SCOPED.has(context.uid)) return next();
-      const eff = await effectiveTenant(strapi);
-      if (!eff) return next(); // super admin / seed / ไม่มี tenant → ไม่ scope
-
       const action = context.action;
+      const reqCtx: any = (strapi as any).requestContext?.get?.();
+      const adminEmail = reqCtx?.state?.user?.email;
+      const eff = await effectiveTenant(strapi);
       context.params = context.params || {};
 
-      if (READS.has(action)) {
-        const tf = { tenant: { key: eff.key } };
-        context.params.filters = context.params.filters ? { $and: [context.params.filters, tf] } : tf;
-      } else if (action === 'create') {
-        context.params.data = { ...(context.params.data || {}), tenant: eff.id };
-      } else if (GUARDED.has(action)) {
-        // กันไม่ให้แก้/ลบ/เผยแพร่ ข้อมูลของ tenant อื่น
-        const docId = context.params.documentId;
-        if (docId) {
-          const existing = await strapi.db.query(context.uid).findOne({ where: { documentId: docId }, populate: { tenant: true } });
-          const owner = existing?.tenant?.key;
-          if (owner && owner !== eff.key) {
-            throw new errors.ForbiddenError('ไม่มีสิทธิ์ดำเนินการกับข้อมูลของหน่วยงานอื่น (cross-tenant)');
+      if (eff) {
+        if (READS.has(action)) {
+          const tf = { tenant: { key: eff.key } };
+          context.params.filters = context.params.filters ? { $and: [context.params.filters, tf] } : tf;
+        } else if (action === 'create') {
+          context.params.data = { ...(context.params.data || {}), tenant: eff.id };
+        } else if (GUARDED.has(action)) {
+          // กันไม่ให้แก้/ลบ/เผยแพร่ ข้อมูลของ tenant อื่น
+          const docId = context.params.documentId;
+          if (docId) {
+            const existing = await strapi.db.query(context.uid).findOne({ where: { documentId: docId }, populate: { tenant: true } });
+            const owner = existing?.tenant?.key;
+            if (owner && owner !== eff.key) {
+              throw new errors.ForbiddenError('ไม่มีสิทธิ์ดำเนินการกับข้อมูลของหน่วยงานอื่น (cross-tenant)');
+            }
           }
+          if (action === 'update') context.params.data = { ...(context.params.data || {}), tenant: eff.id };
         }
-        if (action === 'update') context.params.data = { ...(context.params.data || {}), tenant: eff.id };
       }
-      return next();
+
+      const result = await next();
+
+      // Audit Log — บันทึกการเขียนของผู้ดูแลหลังบ้าน (รวม super admin)
+      if (adminEmail && WRITE_ACTIONS.has(action)) {
+        try {
+          await strapi.db.query('api::audit-log.audit-log').create({
+            data: {
+              action, contentType: context.uid,
+              entryId: (result && result.documentId) || context.params.documentId || null,
+              adminEmail, tenantKey: eff ? eff.key : null, at: new Date(),
+            },
+          });
+        } catch (e) { /* ไม่ให้ audit ล้มแล้วกระทบงานหลัก */ }
+      }
+      return result;
     });
   },
 

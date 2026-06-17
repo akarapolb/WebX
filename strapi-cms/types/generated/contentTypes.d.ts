@@ -590,6 +590,40 @@ export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiAuditLogAuditLog extends Struct.CollectionTypeSchema {
+  collectionName: 'audit_logs';
+  info: {
+    description: '\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E01\u0E32\u0E23\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E41\u0E1B\u0E25\u0E07\u0E40\u0E19\u0E37\u0E49\u0E2D\u0E2B\u0E32\u0E43\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E1A\u0E49\u0E32\u0E19 (\u0E43\u0E04\u0E23/\u0E17\u0E33\u0E2D\u0E30\u0E44\u0E23/\u0E40\u0E21\u0E37\u0E48\u0E2D\u0E44\u0E23)';
+    displayName: 'Audit Log';
+    pluralName: 'audit-logs';
+    singularName: 'audit-log';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    action: Schema.Attribute.String;
+    adminEmail: Schema.Attribute.String;
+    at: Schema.Attribute.DateTime;
+    contentType: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    entryId: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::audit-log.audit-log'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    tenantKey: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiAwardAward extends Struct.CollectionTypeSchema {
   collectionName: 'awards';
   info: {
@@ -1822,6 +1856,7 @@ declare module '@strapi/strapi' {
       'admin::user': AdminUser;
       'api::application.application': ApiApplicationApplication;
       'api::article.article': ApiArticleArticle;
+      'api::audit-log.audit-log': ApiAuditLogAuditLog;
       'api::award.award': ApiAwardAward;
       'api::banner.banner': ApiBannerBanner;
       'api::complaint.complaint': ApiComplaintComplaint;

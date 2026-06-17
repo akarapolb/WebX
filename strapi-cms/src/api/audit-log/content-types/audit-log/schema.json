@@ -1,0 +1,21 @@
+{
+  "kind": "collectionType",
+  "collectionName": "audit_logs",
+  "info": {
+    "singularName": "audit-log",
+    "pluralName": "audit-logs",
+    "displayName": "Audit Log",
+    "description": "บันทึกการเปลี่ยนแปลงเนื้อหาในหลังบ้าน (ใคร/ทำอะไร/เมื่อไร)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "action": { "type": "string" },
+    "contentType": { "type": "string" },
+    "entryId": { "type": "string" },
+    "adminEmail": { "type": "string" },
+    "tenantKey": { "type": "string" },
+    "at": { "type": "datetime" }
+  }
+}
