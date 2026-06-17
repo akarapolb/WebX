@@ -218,7 +218,7 @@ export async function seedTenants(strapi: any) {
       domains: ["pea.localhost", "pea.co.th", "www.pea.co.th"],
       active: true,
       adminEmails: ["pea-editor@pea.local"],
-      brand: { orgName: { th: "การไฟฟ้าส่วนภูมิภาค", en: "Provincial Electricity Authority" }, primaryColor: "#6a2c91", logoUrl: "" },
+      brand: { orgName: { th: "การไฟฟ้าส่วนภูมิภาค", en: "Provincial Electricity Authority" }, primaryColor: "#6a2c91", logoUrl: "/assets/image/pea-logo.svg" },
       contact: { phone: "1129", address: { th: "200 ถนนงามวงศ์วาน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ 10900", en: "200 Ngamwongwan Rd, Chatuchak, Bangkok 10900" } },
       social: [{ label: "Facebook", url: "#" }],
       footerColumns: [
@@ -278,14 +278,24 @@ export async function seedTenantBContent(strapi: any) {
   const faqs = [
     { order: 1, question: "ตรวจสอบค่าไฟฟ้าออนไลน์ได้อย่างไร?", answer: "เข้าสู่ระบบบริการ PEA Smart Plus หรือเว็บไซต์ กฟภ. กรอกหมายเลขผู้ใช้ไฟฟ้า เพื่อดูยอดค่าไฟและประวัติการใช้ย้อนหลังได้ทันที" },
     { order: 2, question: "แจ้งไฟฟ้าดับต้องทำอย่างไร?", answer: "โทร 1129 PEA Contact Center ตลอด 24 ชั่วโมง หรือแจ้งผ่านแอป PEA Smart Plus พร้อมระบุพื้นที่และหมายเลขผู้ใช้ไฟฟ้า" },
+    { order: 3, question: "ชำระค่าไฟผ่านช่องทางใดได้บ้าง?", answer: "ชำระได้ผ่านแอป PEA Smart Plus, Mobile Banking, เคาน์เตอร์เซอร์วิส, ที่ทำการ กฟภ. ทุกสาขา และตู้รับชำระอัตโนมัติ" },
   ];
   for (const f of faqs) await strapi.documents("api::faq.faq").create({ locale: "th", ...P, data: { ...f, tenant: pea.id } });
 
   const articles = [
-    { kind: "news", categoryLabel: "ประชาสัมพันธ์", title: "กฟภ. เปิดบริการชำระค่าไฟผ่าน PEA Smart Plus", publishDate: "2026-06-10", views: 12, excerpt: "การไฟฟ้าส่วนภูมิภาคยกระดับบริการดิจิทัล…", featured: true },
-    { kind: "news", categoryLabel: "บริการ", title: "กฟภ. ขยายจุดให้บริการแจ้งไฟดับออนไลน์ทั่วประเทศ", publishDate: "2026-06-05", views: 9, excerpt: "" },
+    { kind: "news", categoryLabel: "ประชาสัมพันธ์", title: "กฟภ. เปิดบริการชำระค่าไฟผ่าน PEA Smart Plus", publishDate: "2026-06-10", views: 1280, excerpt: "การไฟฟ้าส่วนภูมิภาคยกระดับบริการดิจิทัล เปิดให้ผู้ใช้ไฟฟ้าชำระค่าไฟและตรวจสอบยอดผ่านแอปได้ทุกที่ทุกเวลา…", featured: true },
+    { kind: "news", categoryLabel: "บริการ", title: "กฟภ. ขยายจุดให้บริการแจ้งไฟดับออนไลน์ทั่วประเทศ", publishDate: "2026-06-05", views: 940, excerpt: "" },
+    { kind: "news", categoryLabel: "พลังงานสะอาด", title: "กฟภ. ส่งเสริมติดตั้งโซลาร์รูฟท็อปสำหรับครัวเรือน", publishDate: "2026-06-01", views: 612, excerpt: "" },
+    { kind: "news", categoryLabel: "กิจกรรม", title: "กฟภ. จัดอบรมการใช้พลังงานอย่างมีประสิทธิภาพให้ชุมชน", publishDate: "2026-05-28", views: 333, excerpt: "" },
+    { kind: "news", categoryLabel: "ความปลอดภัย", title: "กฟภ. รณรงค์ความปลอดภัยการใช้ไฟฟ้าในฤดูฝน", publishDate: "2026-05-20", views: 488, excerpt: "" },
   ];
   for (const a of articles) await strapi.documents("api::article.article").create({ locale: "th", ...P, data: { ...a, tenant: pea.id } });
+
+  const peaJobs = [
+    { jobId: "pea-elec-eng", deptKey: "tech", typeKey: "fulltime", openings: 3, title: "วิศวกรไฟฟ้า", dept: "ฝ่ายวิศวกรรมระบบจำหน่าย", type: "พนักงานประจำ", location: "ทั่วประเทศ", salary: "30,000–55,000 บาท/เดือน", deadline: "31 ส.ค. 2569", summary: "ออกแบบ ดูแล และพัฒนาระบบจำหน่ายไฟฟ้าให้มั่นคงและปลอดภัย", responsibilities: ["ออกแบบและปรับปรุงระบบจำหน่ายไฟฟ้า", "ดูแลบำรุงรักษาอุปกรณ์ในพื้นที่", "วิเคราะห์และแก้ไขเหตุขัดข้อง"], qualifications: ["ปริญญาตรีวิศวกรรมไฟฟ้า", "มีใบประกอบวิชาชีพ (กว.)", "ปฏิบัติงานต่างจังหวัดได้"], benefits: ["ประกันสุขภาพและชีวิต", "ที่พักสวัสดิการ", "กองทุนสำรองเลี้ยงชีพ"] },
+    { jobId: "pea-data-analyst", deptKey: "data", typeKey: "fulltime", openings: 1, title: "นักวิเคราะห์ข้อมูลการใช้ไฟฟ้า", dept: "ฝ่ายข้อมูลและสารสนเทศ", type: "พนักงานประจำ", location: "กรุงเทพฯ", salary: "35,000–60,000 บาท/เดือน", deadline: "15 ก.ย. 2569", summary: "วิเคราะห์ข้อมูลการใช้ไฟฟ้าเพื่อวางแผนและพยากรณ์ความต้องการ", responsibilities: ["วิเคราะห์ข้อมูลการใช้ไฟฟ้า", "จัดทำรายงานและ dashboard", "พยากรณ์ความต้องการพลังงาน"], qualifications: ["ปริญญาตรีสถิติ/วิทยาการข้อมูล", "ใช้ SQL และ Python ได้", "ประสบการณ์อย่างน้อย 2 ปี"], benefits: ["ประกันสุขภาพและชีวิต", "ทำงานแบบไฮบริด", "กองทุนสำรองเลี้ยงชีพ"] },
+  ];
+  for (const j of peaJobs) await strapi.documents("api::job.job").create({ locale: "th", ...P, data: { ...j, tenant: pea.id } });
 
   // หน้าแรกของ pea (พิสูจน์ Home แบบ per-tenant)
   await strapi.documents("api::home-page.home-page").create({

@@ -76,7 +76,7 @@
     // 1) ดึงจาก Strapi CMS ก่อน (endpoint ปลอดภัย ค้นด้วย ref)
     try {
       const base = window.DGA_CMS_URL || 'http://localhost:1337';
-      const r = await fetch(base + '/api/applications/track/' + encodeURIComponent(ref), { headers: { Accept: 'application/json' } });
+      const r = await fetch(base + '/api/applications/track/' + encodeURIComponent(ref) + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { headers: { Accept: 'application/json' } });
       if (r.ok) { const j = await r.json(); if (j && j.data) { render(j.data); return; } }
     } catch (e) { /* ออฟไลน์ → ใช้ fallback ด้านล่าง */ }
     // 2) fallback: เลขตัวอย่าง / localStorage

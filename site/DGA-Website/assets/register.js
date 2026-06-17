@@ -304,7 +304,7 @@
     };
     const done = (username) => { $('#regUser').textContent = username; openModal(); };
     const base = window.DGA_CMS_URL || 'http://localhost:1337';
-    fetch(base + '/api/registrations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
+    fetch(base + '/api/registrations' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(j => done((j.data && j.data.username) || fallbackUser))
       .catch(() => done(fallbackUser));

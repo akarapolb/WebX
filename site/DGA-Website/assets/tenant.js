@@ -10,6 +10,9 @@
   var T = window.DGA_TENANT ? "&tenant=" + encodeURIComponent(window.DGA_TENANT) : "";
   var tv = function (o) { return o && typeof o === "object" ? (o[LANG] || o.th || "") : (o || ""); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  function hex(c) { c = String(c).replace("#", ""); if (c.length === 3) c = c.split("").map(function (x) { return x + x; }).join(""); return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)]; }
+  function rgba(c, a) { var v = hex(c); return "rgba(" + v[0] + "," + v[1] + "," + v[2] + "," + a + ")"; }
+  function shade(c, pct) { var v = hex(c), f = function (x) { return Math.max(0, Math.min(255, Math.round(x * (100 + pct) / 100))); }; return "rgb(" + f(v[0]) + "," + f(v[1]) + "," + f(v[2]) + ")"; }
 
   function setTextKeepIcon(el, text) {
     if (!el) return;
@@ -19,6 +22,19 @@
   }
 
   function apply(t) {
+    // แบรนด์: สีหลัก + โลโก้ (รีแบรนด์ทั้งไซต์ตาม tenant)
+    if (t.brand) {
+      if (t.brand.primaryColor) {
+        var c = t.brand.primaryColor, root = document.documentElement.style;
+        root.setProperty("--c-primary", c);
+        root.setProperty("--c-primary-700", shade(c, -22));
+        root.setProperty("--c-primary-50", rgba(c, 0.10));
+      }
+      if (t.brand.logoUrl) {
+        var alt = tv(t.brand.orgName) || t.name || "";
+        document.querySelectorAll("img.logo").forEach(function (im) { im.src = t.brand.logoUrl; im.setAttribute("alt", alt); });
+      }
+    }
     // ชื่อหน่วยงานใน footer
     if (t.brand && t.brand.orgName) {
       var org = document.querySelector(".footer-org");

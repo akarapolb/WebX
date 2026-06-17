@@ -6,6 +6,15 @@
    ============================================================================ */
 (function () {
   "use strict";
+  if (!window.DGA_TENANT) {
+    try {
+      var qp = new URLSearchParams(location.search).get("tenant");
+      var host = location.hostname, sub = host.split(".")[0];
+      if (qp) { window.DGA_TENANT = qp; sessionStorage.setItem("dga-tenant", qp); }
+      else if (host.indexOf(".localhost") > 0 && sub && sub !== "www") window.DGA_TENANT = sub;
+      else { var ss = sessionStorage.getItem("dga-tenant"); if (ss) window.DGA_TENANT = ss; }
+    } catch (e) {}
+  }
   var STRAPI = window.DGA_CMS_URL || "http://localhost:1337";
   var LANG = document.documentElement.lang === "en" ? "en" : "th";
   var T = window.DGA_TENANT ? "&tenant=" + encodeURIComponent(window.DGA_TENANT) : "";

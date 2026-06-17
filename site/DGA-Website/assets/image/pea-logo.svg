@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 46" width="150" height="46" role="img" aria-label="การไฟฟ้าส่วนภูมิภาค (กฟภ.)">
+  <rect x="2" y="7" width="44" height="32" rx="7" fill="#6a2c91"/>
+  <path d="M26 13l-7 11h5l-1 9 8-12h-5z" fill="#ffd34d"/>
+  <text x="54" y="25" font-family="Kanit, 'Segoe UI', Arial, sans-serif" font-size="15" font-weight="700" fill="#6a2c91">กฟภ.</text>
+  <text x="54" y="38" font-family="Kanit, 'Segoe UI', Arial, sans-serif" font-size="8.5" fill="#7a7a7a">การไฟฟ้าส่วนภูมิภาค</text>
+</svg>

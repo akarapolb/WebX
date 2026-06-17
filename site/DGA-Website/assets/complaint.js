@@ -330,7 +330,7 @@
       };
       // ส่งเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่เรื่อง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
       const base = window.DGA_CMS_URL || 'http://localhost:1337';
-      fetch(base + '/api/complaints', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
+      fetch(base + '/api/complaints' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
         .then(r => r.ok ? r.json() : Promise.reject(r.status))
         .then(j => finishOk(j.data.ref))
         .catch(() => finishOk(genRef()));
@@ -396,7 +396,7 @@
       // 1) ดึงจาก Strapi CMS ก่อน (endpoint ปลอดภัย ค้นด้วย ref)
       try {
         const base = window.DGA_CMS_URL || 'http://localhost:1337';
-        const r = await fetch(base + '/api/complaints/track/' + encodeURIComponent(ref), { headers: { Accept: 'application/json' } });
+        const r = await fetch(base + '/api/complaints/track/' + encodeURIComponent(ref) + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { headers: { Accept: 'application/json' } });
         if (r.ok) { const j = await r.json(); if (j && j.data && Array.isArray(j.data.steps)) { render(j.data); return; } }
       } catch (e) { /* ออฟไลน์ → ใช้ fallback */ }
       // 2) fallback: เลขตัวอย่าง / localStorage

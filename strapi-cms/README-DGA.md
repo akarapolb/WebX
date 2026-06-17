@@ -120,7 +120,25 @@ Auto-email: ส่งอีเมลตอบรับเมื่อสร้�
 
 dga-editor พยายาม update/delete บทความของ pea → **HTTP 403 (blocked)**
 
+## สาธิต 2 tenants (DGA + PEA)
+
+เปิดหน้าเว็บเดียวกัน แต่เลือก tenant ได้ — เนื้อหา/แบรนด์/footer เปลี่ยนตาม tenant อัตโนมัติ:
+- **DGA** (สีน้ำเงิน, เนื้อหาเต็ม): http://localhost:8080/  หรือ  http://localhost:8080/?tenant=dga
+- **PEA** (สีม่วง, เนื้อหา กฟภ.): http://localhost:8080/?tenant=pea
+
+กลไก (dev): `?tenant=<key>` → จำใน `sessionStorage` ต่อแท็บ (เปิด 2 แท็บเทียบกันได้) → หรือ subdomain `pea.localhost`
+prod: ใช้ **custom domain** (Host header) เซิร์ฟเวอร์ resolve ให้เอง ไม่ต้องมี query
+
+ฝั่งเว็บที่ทำให้สลับ tenant ได้:
+- `cms.js`/`search-cms.js`/`jobs-cms.js` อ่าน `?tenant=` ตั้ง `window.DGA_TENANT` แล้วแนบ `&tenant=` ทุก request
+- `tenant.js` ใช้ `brand.primaryColor` รีคัลเลอร์ (`--c-primary`) + เปลี่ยนโลโก้ + footer ต่อ tenant
+- ฟอร์ม (สมัครงาน/ร้องเรียน/ลงทะเบียน) และการติดตามสถานะ แนบ tenant ไปด้วย → ข้อมูลเข้า tenant ถูกต้อง
+- `cms.js` แยก "ดึงไม่ได้" (คงของเดิม) ออกจาก "tenant ไม่มีข้อมูล" (ซ่อน section นั้น) → PEA ไม่มี
+  แบนเนอร์/วิดีโอ/รางวัล/แท็บบทความ จะ**ซ่อนทั้ง section** ไม่ค้างเนื้อหา DGA
+
+PEA seed: home, 3 services, 5 news, 3 FAQ, 2 jobs, โลโก้ `assets/image/pea-logo.svg`
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
 - จำกัดตัวเลือกใน relation picker ของ editor ให้เห็นเฉพาะ tenant ตน (UI), เมนู mega จาก CMS
-- เนื้อหา `/en/` ครบทุก collection (ตอนนี้ en มีเฉพาะ home/service/job)
+- เนื้อหา `/en/` ครบทุก collection (ตอนนี้ en มีเฉพาะ home/service/job), รูปจริงของ PEA (ตอนนี้ใช้ placeholder)
 - อัปโหลดไฟล์แนบในฟอร์ม (multipart), full-text ในไฟล์ pdf/docx, MFA หลังบ้าน, SMTP จริง

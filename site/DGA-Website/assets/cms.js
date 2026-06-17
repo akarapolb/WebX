@@ -7,6 +7,17 @@
 (function () {
   "use strict";
 
+  // ---- เลือก tenant (dev): ?tenant=pea → จำใน sessionStorage (ต่อแท็บ) → subdomain (pea.localhost) ----
+  if (!window.DGA_TENANT) {
+    try {
+      var qp = new URLSearchParams(location.search).get("tenant");
+      var host = location.hostname, sub = host.split(".")[0];
+      if (qp) { window.DGA_TENANT = qp; sessionStorage.setItem("dga-tenant", qp); }
+      else if (host.indexOf(".localhost") > 0 && sub && sub !== "www") window.DGA_TENANT = sub;
+      else { var ss = sessionStorage.getItem("dga-tenant"); if (ss) window.DGA_TENANT = ss; }
+    } catch (e) {}
+  }
+
   var STRAPI = window.DGA_CMS_URL || "http://localhost:1337";
   var LANG = document.documentElement.lang === "en" ? "en" : "th";
   var TQS = window.DGA_TENANT ? "&tenant=" + encodeURIComponent(window.DGA_TENANT) : "";
@@ -82,10 +93,14 @@
         h.popularTags.map(function (t) { return '<a href="' + esc(t.url || "#") + '">' + esc(t.label) + "</a>"; }).join("");
     }
     var bg = document.getElementById("heroBg");
-    if (bg && h.slides && h.slides.length) {
-      bg.innerHTML = h.slides.map(function (s, i) {
-        return '<div class="hero-slide' + (i === 0 ? " is-active" : "") + '" style="background-image:url(\'' + mediaUrl(s) + "')\"></div>";
-      }).join("");
+    if (bg) {
+      if (h.slides && h.slides.length) {
+        bg.innerHTML = h.slides.map(function (s, i) {
+          return '<div class="hero-slide' + (i === 0 ? " is-active" : "") + '" style="background-image:url(\'' + mediaUrl(s) + "')\"></div>";
+        }).join("");
+      } else {
+        bg.innerHTML = ""; // tenant ไม่มีสไลด์ → ใช้พื้นหลังไล่เฉดสี ไม่ค้างรูป tenant อื่น
+      }
     }
   }
 
@@ -113,7 +128,7 @@
 
   function renderServices(items) {
     var grid = document.querySelector(".svc-grid");
-    if (!grid || !items || !items.length) return;
+    if (!grid || items == null) return;
     grid.innerHTML = items.map(function (s) {
       return '<li><a class="svc t-' + esc(s.colorTheme || "blue") + '" href="' + esc(s.url || "#") + '">' +
         '<span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#' + esc(s.icon || "i-grid") + '"/></svg></span>' +
@@ -124,7 +139,10 @@
 
   function renderBanners(items) {
     var track = document.getElementById("hlTrack");
-    if (!track || !items || !items.length) return;
+    if (!track || items == null) return;        // ดึงไม่ได้ → คงของเดิม
+    var sec = track.closest(".hl");
+    if (!items.length) { if (sec) sec.style.display = "none"; return; }  // tenant ไม่มีแบนเนอร์ → ซ่อนทั้ง section
+    if (sec) sec.style.display = "";
     track.innerHTML = items.map(function (b, i) {
       var n = "n" + ((i % 5) + 1);
       return '<a class="hl-slide ' + n + '" href="' + esc(b.url || "#") + '" aria-label="' + esc(b.label || "") + '">' +
@@ -135,7 +153,7 @@
   function newsCard(a, feature) {
     var img = mediaUrl(a.coverImage);
     var thumb = '<a class="news-thumb" href="#">' +
-      (img ? '<img src="' + img + '" alt="" loading="lazy" onerror="this.remove()">' : "") +
+      (img ? '<img src="' + img + '" alt="" loading="lazy" onerror="this.remove()">' : '<span class="ph n3"><svg aria-hidden="true"><use href="#i-doc"/></svg></span>') +
       (a.categoryLabel ? '<span class="cat">' + esc(a.categoryLabel) + "</span>" : "") + "</a>";
     var meta = '<p class="news-meta"><span>' + icon("i-cal") + fmtDate(a.publishDate) + "</span>" +
       "<span>" + icon("i-eye") + fmtViews(a.views) + "</span></p>";
@@ -147,22 +165,28 @@
   }
 
   function renderArticles(items) {
-    if (!items) return;
+    if (items == null) return;                  // ดึงไม่ได้ → คงของเดิม
     var news = items.filter(function (a) { return a.kind === "news"; });
     var arts = items.filter(function (a) { return a.kind === "article"; });
     function fill(panelTab, list) {
       var box = document.querySelector('.news-panel[data-tab="' + panelTab + '"] .news-items');
-      if (!box || !list.length) return;
+      if (!box) return;
       var ordered = list.slice().sort(function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0); });
       box.innerHTML = ordered.map(function (a, i) { return newsCard(a, i === 0); }).join("");
     }
     fill("news", news);
     fill("article", arts);
+    // ซ่อนแท็บ "บทความ" ถ้า tenant นี้ไม่มีบทความ
+    var atab = document.getElementById("nt-article");
+    if (atab) atab.style.display = arts.length ? "" : "none";
   }
 
   function renderVideos(items) {
     var grid = document.querySelector(".channel .ch-grid");
-    if (!grid || !items || !items.length) return;
+    if (!grid || items == null) return;
+    var sec = grid.closest(".channel");
+    if (!items.length) { if (sec) sec.style.display = "none"; return; }
+    if (sec) sec.style.display = "";
     grid.innerHTML = items.map(function (v) {
       var img = mediaUrl(v.thumbnail);
       return '<article class="ch-card"><a class="ch-thumb" href="' + esc(v.videoUrl || "#") + '">' +
@@ -178,7 +202,10 @@
 
   function renderAwards(items) {
     var box = document.querySelector(".awards");
-    if (!box || !items || !items.length) return;
+    if (!box || items == null) return;
+    var sec = box.closest(".auditorium");
+    if (!items.length) { if (sec) sec.style.display = "none"; return; }
+    if (sec) sec.style.display = "";
     box.innerHTML = items.map(function (w) {
       var img = mediaUrl(w.image);
       return '<article class="award"><div class="award-stage"><span class="award-spot" aria-hidden="true"></span>' +
@@ -193,7 +220,10 @@
 
   function renderFaqs(items) {
     var list = document.querySelector(".faq .faq-list");
-    if (!list || !items || !items.length) return;
+    if (!list || items == null) return;
+    var sec = list.closest(".faq");
+    if (!items.length) { if (sec) sec.style.display = "none"; return; }
+    if (sec) sec.style.display = "";
     list.innerHTML = items.map(function (f, i) {
       var qid = "faq-q" + (i + 1), aid = "faq-a" + (i + 1);
       return '<div class="faq-item"><h3 class="faq-q">' +
@@ -232,7 +262,7 @@
       '<div class="demo-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px">' +
       '<a class="btn btn--primary" href="' + esc(p.primaryUrl || "#") + '">' + esc(p.primaryLabel || "") + " " + icon("i-arrow") + "</a>" +
       '<a class="btn btn--ghost" href="' + esc(p.secondaryUrl || "#") + '">' + esc(p.secondaryLabel || "") + "</a></div></div>" +
-      '<div class="art"><img src="' + mediaUrl(p.image) + '" alt="' + esc(p.title) + '" loading="lazy"></div>';
+      '<div class="art"><img src="' + mediaUrl(p.image) + '" alt="' + esc(p.title) + '" loading="lazy" onerror="this.style.display=\'none\'"></div>';
   }
 
   /* ---------- boot ---------- */
