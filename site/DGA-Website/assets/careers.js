@@ -229,6 +229,29 @@
         </div>
       </div></section>`;
 
+    /* ----- JSON-LD: JobPosting + Breadcrumb (GEO/AEO/SEO) ----- */
+    (function () {
+      const EMP = { fulltime: 'FULL_TIME', contract: 'CONTRACTOR', internship: 'INTERN' };
+      const org = LANG === 'en' ? 'Digital Government Development Agency (DGA)' : 'สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)';
+      const ld = {
+        '@context': 'https://schema.org', '@type': 'JobPosting',
+        title: t(job.title), description: t(job.summary) || t(job.title),
+        employmentType: EMP[job.typeKey] || 'FULL_TIME',
+        hiringOrganization: { '@type': 'GovernmentOrganization', name: org },
+        jobLocation: { '@type': 'Place', address: { '@type': 'PostalAddress', addressLocality: t(job.location), addressCountry: 'TH' } },
+        directApply: true
+      };
+      const crumb = {
+        '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: LANG === 'en' ? 'Home' : 'หน้าแรก', item: jobBase },
+          { '@type': 'ListItem', position: 2, name: LANG === 'en' ? 'Careers' : 'ร่วมงานกับเรา', item: jobBase + 'careers.html' },
+          { '@type': 'ListItem', position: 3, name: t(job.title) }
+        ]
+      };
+      [ld, crumb].forEach(function (o) { const s = document.createElement('script'); s.type = 'application/ld+json'; s.textContent = JSON.stringify(o); document.head.appendChild(s); });
+    })();
+
     /* ----- Apply modal ----- */
     const modal = $('#applyModal'), dialog = modal.querySelector('.cpl-modal__dialog');
     const formView = $('#applyFormView'), doneView = $('#applyDone');

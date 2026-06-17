@@ -15,6 +15,7 @@ const config: Core.Config.Middlewares = [
   'strapi::poweredBy',
   'global::rate-limit',
   'global::admin-mfa',
+  'global::seo',
   'strapi::query',
   'strapi::body',
   'global::tenant',

@@ -181,7 +181,18 @@ Content type เพิ่ม 5 รายการ (tenant-scoped + seed + สิ
 
 ทดสอบแล้ว: popup dga vs pea แยกกัน, poll โหวต 97→98 persist, frontend popup+poll ทำงาน
 
+## GEO/AEO + SEO #2 (เพิ่มแล้ว)
+`middlewares/seo.ts` เสิร์ฟ 3 ไฟล์ที่ root แบบ dynamic ต่อ tenant (resolve จาก Host):
+- **`/robots.txt`** — allow + AI crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-Extended) + ลิงก์ sitemap
+- **`/sitemap.xml`** — สร้างจาก CMS: หน้าหลัก + งานทุกตำแหน่ง (`job.html?id=`) ใช้โดเมนของ tenant
+  (dga → https://dga.or.th, pea → https://pea.co.th)
+- **`/llms.txt`** — สรุปเนื้อหา (org, บริการ, หน้าหลัก, FAQ, ติดต่อ) จาก CMS สำหรับ Generative AI
+- **JSON-LD ต่อหน้า**: `careers.js` ฝัง **JobPosting** + **BreadcrumbList** ในหน้างาน (`job.html`)
+  (หน้าแรกมี GovernmentOrganization + WebSite + FAQPage อยู่แล้ว)
+
+ทดสอบแล้ว: robots/sitemap/llms แยกตาม tenant, sitemap มี 20 งาน, JobPosting+Breadcrumb บนหน้างาน
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- #2 GEO/AEO+SEO (schema ต่อหน้า, sitemap.xml, robots, llms.txt, Answer Block)
 - หน้าแสดง Download/E-book/Gallery, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
 - เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA/ไฟล์จริง, อัปโหลดไฟล์แนบฟอร์ม, full-text ในไฟล์, SMTP จริง
+- proxy `/sitemap.xml` `/robots.txt` `/llms.txt` ที่โดเมนจริง → CMS (production)
