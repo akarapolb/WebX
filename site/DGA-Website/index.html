@@ -21,6 +21,32 @@
       var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
     }catch(e){} })();
   </script>
+  <!-- เลือก tenant + cloak จอจนกว่าเนื้อหา tenant จะพร้อม (กันจอกระพริบเป็น DGA ก่อน) -->
+  <script>
+    (function(){ try{
+      var qp = new URLSearchParams(location.search).get('tenant');
+      if (qp){ window.DGA_TENANT = qp; sessionStorage.setItem('dga-tenant', qp); }
+      else { var h=location.hostname, s=h.split('.')[0];
+        if (h.indexOf('.localhost')>0 && s && s!=='www') window.DGA_TENANT = s;
+        else { var ss=sessionStorage.getItem('dga-tenant'); if (ss) window.DGA_TENANT = ss; } }
+      var C={dga:'#1a4fa0', pea:'#6a2c91'}, c=C[window.DGA_TENANT||'dga'];
+      if (c) document.documentElement.style.setProperty('--c-primary', c);  // ตั้งสีทันที กันสีกระพริบ (ทุก tenant)
+      // cloak เฉพาะ tenant ที่เนื้อหา static (DGA) ไม่ตรง → DGA โหลดปกติไม่มีสปินเนอร์
+      if (window.DGA_TENANT && window.DGA_TENANT !== 'dga') {
+        document.documentElement.classList.add('cms-cloak');
+        setTimeout(function(){ document.documentElement.classList.remove('cms-cloak'); }, 4000); // กันจอค้างถ้า JS ล้มเหลว
+      }
+    }catch(e){} })();
+  </script>
+  <style>
+    html.cms-cloak body{ overflow:hidden; }
+    html.cms-cloak body > *:not(.cms-splash){ visibility:hidden !important; }
+    .cms-splash{ position:fixed; inset:0; z-index:99999; display:grid; place-items:center; background:var(--c-bg,#fff); transition:opacity .25s ease; }
+    .cms-splash__sp{ width:44px; height:44px; border-radius:50%; border:4px solid rgba(128,128,128,.25); border-top-color:var(--c-primary,#1a4fa0); animation:cmsspin .8s linear infinite; }
+    html:not(.cms-cloak) .cms-splash{ opacity:0; visibility:hidden; pointer-events:none; }
+    @keyframes cmsspin{ to{ transform:rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce){ .cms-splash__sp{ animation:none; } }
+  </style>
   <link rel="stylesheet" href="/assets/design-system.css">
   <link rel="stylesheet" href="/assets/home.css">
 
@@ -33,6 +59,7 @@
   </script>
 </head>
 <body>
+  <div class="cms-splash" aria-hidden="true"><div class="cms-splash__sp"></div></div>
   <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
   <a class="skip-link" href="#site-search" style="left:180px">ข้ามไปยังช่องค้นหา</a>
 

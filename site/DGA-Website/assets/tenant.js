@@ -68,11 +68,14 @@
     document.documentElement.setAttribute("data-tenant", t.key || "");
   }
 
+  function uncloak() { document.documentElement.classList.remove("cms-cloak"); }
+
   function run() {
     fetch(STRAPI + "/api/tenants/resolve?_=1" + T, { headers: { Accept: "application/json" } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) { if (j && j.data) apply(j.data); })
-      .catch(function () {});
+      .catch(function () {})
+      .then(uncloak);   // เผยหน้าเว็บหลังรีแบรนด์เสร็จ (ทั้งกรณีสำเร็จ/ล้มเหลว)
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
