@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<!-- ค้นหาแบบไฮบริด (TOR 8): Simple + Advanced + Full-text ในไฟล์ -->
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ค้นหา | DGA</title>
+  <meta name="description" content="ค้นหาเนื้อหา บริการ เอกสาร และไฟล์ภายในเว็บไซต์ สพร.">
+  <meta name="robots" content="noindex">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      var qp=new URLSearchParams(location.search).get('tenant');
+      if(qp){ window.DGA_TENANT=qp; sessionStorage.setItem('dga-tenant',qp); }
+      else { var h=location.hostname,s=h.split('.')[0]; if(h.indexOf('.localhost')>0&&s&&s!=='www') window.DGA_TENANT=s; else { var ss=sessionStorage.getItem('dga-tenant'); if(ss) window.DGA_TENANT=ss; } }
+      var C={dga:'#1a4fa0',pea:'#6a2c91'},c=C[window.DGA_TENANT||'dga']; if(c) document.documentElement.style.setProperty('--c-primary',c);
+    }catch(e){} })();
+  </script>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <style>
+    .srch-wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px}
+    .srch-hero h1{font-size:28px;margin:0 0 6px}.srch-hero p{color:var(--c-text-muted);margin:0 0 18px}
+    .srch-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+    .srch-bar input[type=search]{flex:1;min-width:220px}
+    .srch-adv{background:var(--c-surface);border:1px solid var(--c-border);border-radius:14px;padding:16px 18px;margin-bottom:22px}
+    .srch-adv summary{font-weight:600;cursor:pointer;font-size:14px}
+    .srch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:14px}
+    .srch-grid h4{margin:0 0 8px;font-size:12.5px;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.04em}
+    .srch-chk{display:flex;align-items:center;gap:7px;font-size:13.5px;margin-bottom:6px}
+    .srch-meta{font-size:13px;color:var(--c-text-muted);margin-bottom:14px}
+    .srch-item{display:block;border:1px solid var(--c-border);border-radius:12px;padding:14px 16px;margin-bottom:10px;text-decoration:none;color:inherit;transition:.15s}
+    .srch-item:hover{border-color:var(--c-primary);background:var(--c-primary-50)}
+    .srch-item .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--c-primary-50);color:var(--c-primary);margin-bottom:6px}
+    .srch-item h3{margin:0 0 4px;font-size:15.5px}.srch-item p{margin:0;font-size:13px;color:var(--c-text-muted);line-height:1.5}
+    .srch-item .ft{font-size:11.5px;color:var(--c-text-muted);margin-top:6px}
+    mark{background:var(--c-primary-50);color:var(--c-primary);padding:0 2px;border-radius:3px}
+  </style>
+</head>
+<body>
+  <header class="site-header"><div class="bar">
+    <a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA" width="150" height="46"></a>
+    <nav class="main-nav" aria-label="เมนูหลัก"><a href="/">หน้าแรก</a><a href="/careers.html">ร่วมงาน</a><a href="/complaint.html">ร้องเรียน</a></nav>
+    <div class="header-tools">
+      <span class="lang-switch"><a href="/search.html" aria-current="true" lang="th">TH</a><a href="/en/" lang="en">EN</a></span>
+      <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="สลับโหมดมืด">◐</button>
+      <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="เปิดเมนู">☰</button>
+    </div>
+  </div></header>
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="เมนูหลัก"><div class="drawer__head"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA" width="124" height="38"><button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="ปิดเมนู">✕</button></div><nav class="drawer__nav" id="drawerNav"></nav></aside>
+
+  <main id="main"><div class="srch-wrap">
+    <div class="srch-hero">
+      <h1>ค้นหา</h1>
+      <p>ค้นหาเนื้อหา บริการ เอกสาร และข้อความภายในไฟล์ (PDF/DOCX/XLSX) ภายในเว็บไซต์</p>
+      <form class="srch-bar" id="searchForm" role="search">
+        <input id="q" name="q" type="search" placeholder="พิมพ์คำค้นหา…" autocomplete="off" aria-label="คำค้นหา">
+        <button class="btn btn--primary" type="submit">ค้นหา</button>
+      </form>
+    </div>
+    <details class="srch-adv" id="advBox">
+      <summary>ค้นหาขั้นสูง (Advanced Search)</summary>
+      <div class="srch-grid">
+        <div><h4>กลุ่มเนื้อหา</h4><div id="typeChecks"></div></div>
+        <div><h4>ช่วงวันที่เผยแพร่</h4>
+          <label class="srch-chk">จาก <input type="date" id="from" class="input"></label>
+          <label class="srch-chk">ถึง <input type="date" id="to" class="input"></label>
+        </div>
+        <div><h4>ประเภทไฟล์เอกสาร</h4>
+          <select id="fileType" class="select"><option value="">ทั้งหมด</option><option value="pdf">PDF</option><option value="docx">DOCX</option><option value="xlsx">XLSX</option></select>
+        </div>
+      </div>
+    </details>
+    <p class="srch-meta" id="searchMeta"></p>
+    <div id="searchResults" aria-live="polite"></div>
+  </div></main>
+
+  <footer class="site-footer"><div class="wrap">
+    <div class="footer-brand"><a class="brand" href="/"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA" width="150" height="46"></a>
+      <p class="footer-org">สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน) (สพร.)</p>
+      <address class="footer-addr"><span class="footer-addr__line">อาคาร TIJ ชั้น 4 เลขที่ 999 ถนนแจ้งวัฒนะ กรุงเทพฯ 10210</span><a class="footer-addr__line" href="tel:026126000">โทร 0-2612-6000</a></address></div>
+    <div><h3>บริการ</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">ทางรัฐ</a></li></ul></div>
+    <div><h3>เกี่ยวกับ</h3><ul><li><a href="#">วิสัยทัศน์</a></li><li><a href="/careers.html">ร่วมงาน</a></li></ul></div>
+    <div><h3>นโยบาย</h3><ul><li><a href="#">PDPA</a></li><li><a href="#">คุกกี้</a></li></ul></div>
+  </div><div class="footer-bottom"><div class="wrap"><span>© 2569 สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)</span><button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">ตั้งค่าคุกกี้</button></div></div></footer>
+
+  <script src="/assets/home.js"></script>
+  <script src="/assets/tenant.js"></script>
+  <script src="/assets/consent.js"></script>
+  <script src="/assets/search-page.js"></script>
+</body>
+</html>

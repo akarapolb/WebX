@@ -11,6 +11,7 @@
     "cover": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
     "file": { "type": "media", "multiple": false, "allowedTypes": ["files"] },
     "year": { "type": "string" },
-    "order": { "type": "integer", "default": 0 }
+    "order": { "type": "integer", "default": 0 },
+    "contentText": { "type": "text", "description": "ข้อความที่สกัดจากไฟล์ (Full-text Search) — ระบบเติมอัตโนมัติ" }
   }
 }

@@ -488,10 +488,24 @@ export async function seedModules(strapi: any) {
   const P = { status: "published" as const };
 
   if ((await strapi.documents("api::download.download").count()) === 0) {
-    const items = [
-      { title: "แบบฟอร์มขอเชื่อมต่อระบบ (GDX)", description: "คำขอเชื่อมต่อแลกเปลี่ยนข้อมูลภาครัฐ", category: "แบบฟอร์ม", fileType: "PDF", fileSize: "240 KB", order: 1 },
-      { title: "คู่มือการใช้งานแอปทางรัฐ", description: "คู่มือสำหรับประชาชน", category: "คู่มือ", fileType: "PDF", fileSize: "1.8 MB", order: 2 },
-      { title: "รายงานประจำปี 2568", description: "ผลการดำเนินงาน สพร.", category: "รายงาน", fileType: "PDF", fileSize: "5.2 MB", order: 3 },
+    // อัปโหลดไฟล์ TOR จริง → lifecycle สกัด full-text อัตโนมัติ (สาธิต TOR 8.3)
+    let torFileId: number | null = null;
+    try {
+      const torPath = path.resolve(process.cwd(), "..", "site", "DGA-Website", "(TOR) DGA-69-0177 1.pdf");
+      if (fs.existsSync(torPath)) {
+        const stats = fs.statSync(torPath);
+        const [up] = await strapi.plugin("upload").service("upload").upload({
+          data: { fileInfo: { name: "TOR-DGA-69-0177.pdf", alternativeText: "TOR DGA-69-0177" } },
+          files: { filepath: torPath, originalFileName: "TOR-DGA-69-0177.pdf", mimetype: "application/pdf", size: stats.size },
+        });
+        torFileId = up?.id ?? null;
+      }
+    } catch (e: any) { strapi.log.warn("[seed] TOR upload failed: " + e.message); }
+
+    const items: any[] = [
+      { title: "เอกสาร TOR DGA-69-0177 (ขอบเขตงาน)", description: "ขอบเขตของงานจ้างพัฒนาระบบเว็บไซต์ สพร.", category: "จัดซื้อจัดจ้าง", fileType: "PDF", order: 1, file: torFileId },
+      { title: "แบบฟอร์มขอเชื่อมต่อระบบ (GDX)", description: "คำขอเชื่อมต่อแลกเปลี่ยนข้อมูลภาครัฐ", category: "แบบฟอร์ม", fileType: "PDF", fileSize: "240 KB", order: 2 },
+      { title: "คู่มือการใช้งานแอปทางรัฐ", description: "คู่มือสำหรับประชาชน", category: "คู่มือ", fileType: "PDF", fileSize: "1.8 MB", order: 3 },
     ];
     for (const d of items) await strapi.documents("api::download.download").create({ ...P, data: { ...d, tenant: dga.id } });
   }
@@ -518,4 +532,29 @@ export async function seedModules(strapi: any) {
     if (pea) await strapi.documents("api::poll.poll").create({ ...P, data: { tenant: pea.id, question: "ช่องทางใดที่คุณใช้ชำระค่าไฟบ่อยที่สุด?", options: [{ label: "PEA Smart Plus", votes: 28 }, { label: "Mobile Banking", votes: 31 }, { label: "เคาน์เตอร์เซอร์วิส", votes: 15 }], active: true, totalVotes: 74 } });
   }
   strapi.log.info("[seed] content modules seeded (download/ebook/gallery/popup/poll) ✔");
+}
+
+/* ---------- Full-text demo (TOR 8.3): อัปโหลด TOR จริง → สกัดข้อความ → ค้นได้ ---------- */
+export async function seedFulltextDemo(strapi: any) {
+  const dga = (await strapi.documents("api::tenant.tenant").findMany({ filters: { key: "dga" }, fields: ["key"], limit: 1 }))[0];
+  if (!dga) return;
+  const indexed = await strapi.db.query("api::download.download").findMany({ where: { contentText: { $notNull: true } }, select: ["id"], limit: 1 });
+  if (indexed.length) return; // มีเอกสารที่ index แล้ว
+  let torFileId: number | null = null;
+  try {
+    const torPath = path.resolve(process.cwd(), "..", "site", "DGA-Website", "(TOR) DGA-69-0177 1.pdf");
+    if (!fs.existsSync(torPath)) { strapi.log.warn("[seed] TOR pdf not found — skip full-text demo"); return; }
+    const stats = fs.statSync(torPath);
+    const [up] = await strapi.plugin("upload").service("upload").upload({
+      data: { fileInfo: { name: "TOR-DGA-69-0177.pdf", alternativeText: "TOR DGA-69-0177" } },
+      files: { filepath: torPath, originalFileName: "TOR-DGA-69-0177.pdf", mimetype: "application/pdf", size: stats.size },
+    });
+    torFileId = up?.id ?? null;
+  } catch (e: any) { strapi.log.warn("[seed] TOR upload failed: " + e.message); return; }
+  if (!torFileId) return;
+  await strapi.documents("api::download.download").create({
+    status: "published",
+    data: { tenant: dga.id, title: "เอกสาร TOR DGA-69-0177 (ขอบเขตงาน)", description: "ขอบเขตของงานจ้างพัฒนาระบบเว็บไซต์ สพร. — ค้นข้อความภายในไฟล์ได้ (Full-text)", category: "จัดซื้อจัดจ้าง", fileType: "PDF", order: 1, file: torFileId },
+  });
+  strapi.log.info("[seed] TOR full-text demo download created (lifecycle จะสกัดข้อความ)");
 }

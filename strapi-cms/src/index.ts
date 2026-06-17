@@ -3,7 +3,7 @@ import { errors } from '@strapi/utils';
 import {
   ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedDemos,
   seedTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
-  ensureTenantAnalytics, seedModules,
+  ensureTenantAnalytics, seedModules, seedFulltextDemo,
 } from './seed/seed';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) */
@@ -112,6 +112,7 @@ export default {
       await backfillTenant(strapi);
       await seedTenantBContent(strapi);
       await seedModules(strapi);
+      await seedFulltextDemo(strapi);
       await ensureTenantAnalytics(strapi);
       await seedEditors(strapi);
       await grantLocalesToEditorRoles(strapi);

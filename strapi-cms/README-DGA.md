@@ -192,7 +192,16 @@ Content type เพิ่ม 5 รายการ (tenant-scoped + seed + สิ
 
 ทดสอบแล้ว: robots/sitemap/llms แยกตาม tenant, sitemap มี 20 งาน, JobPosting+Breadcrumb บนหน้างาน
 
+## Hybrid Search (TOR 8) — เพิ่มแล้ว
+- **8.1 Simple**: `GET /api/search?q=` ค้นทุกเนื้อหา (article/service/faq/job/download/ebook) scope ตาม tenant
+- **8.2 Advanced**: ตัวกรอง `types` (กลุ่มเนื้อหา), `from`/`to` (ช่วงวันที่), `fileType` (pdf/docx/xlsx), keyword
+- **8.3 Full-text ในไฟล์**: lifecycle ของ Download/E-book สกัดข้อความจากไฟล์ที่แนบ (`src/utils/extract-text.ts`
+  ใช้ pdf-parse/mammoth/xlsx) → เก็บใน `contentText` → ค้นเจอข้อความภายในไฟล์ได้
+- หน้า **`search.html`** + `assets/search-page.js`: ฟอร์มค้นหาขั้นสูง + ไฮไลต์คำค้น + snippet จากในไฟล์ + ลิงก์เปิดไฟล์
+- เดโม: อัปโหลด TOR PDF จริง (28 หน้า) → ค้นชื่อที่อยู่ "ในไฟล์" (เช่น พัฒนทวีกิจ) เจอเอกสาร พร้อม snippet
+- gotcha: lifecycle ที่ index ต้องกันลูป (ข้ามถ้า update มี contentText) ไม่งั้น re-index วนจน heap OOM
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- หน้าแสดง Download/E-book/Gallery, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
-- เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA/ไฟล์จริง, อัปโหลดไฟล์แนบฟอร์ม, full-text ในไฟล์, SMTP จริง
-- proxy `/sitemap.xml` `/robots.txt` `/llms.txt` ที่โดเมนจริง → CMS (production)
+- More Features: **Performance/Lighthouse** (#2), **Live chat + social** (#3)
+- หน้าแสดง Download/E-book/Gallery, .pptx full-text, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
+- เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA, อัปโหลดไฟล์แนบฟอร์ม, SMTP จริง, proxy SEO files ที่โดเมนจริง

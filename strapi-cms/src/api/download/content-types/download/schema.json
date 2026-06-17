@@ -12,6 +12,7 @@
     "fileType": { "type": "string" },
     "fileSize": { "type": "string" },
     "downloads": { "type": "integer", "default": 0 },
-    "order": { "type": "integer", "default": 0 }
+    "order": { "type": "integer", "default": 0 },
+    "contentText": { "type": "text", "configurable": true, "description": "ข้อความที่สกัดจากไฟล์ (Full-text Search) — ระบบเติมอัตโนมัติ" }
   }
 }
