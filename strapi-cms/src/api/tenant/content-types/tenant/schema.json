@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tenants",
+  "info": {
+    "singularName": "tenant",
+    "pluralName": "tenants",
+    "displayName": "Tenant",
+    "description": "หน่วยงาน/ลูกค้า (multi-tenant) + ตั้งค่าแบรนด์/เมนู/footer ต่อ tenant"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "key": {
+      "type": "uid",
+      "required": true
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "domains": {
+      "type": "json",
+      "description": "รายการโดเมนของ tenant นี้ เช่น [\"dga.or.th\",\"dga.localhost\"]"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "brand": {
+      "type": "json",
+      "description": "{ logoUrl, orgName:{th,en}, primaryColor }"
+    },
+    "contact": {
+      "type": "json",
+      "description": "{ phone, address:{th,en}, mapEmbed }"
+    },
+    "social": {
+      "type": "json",
+      "description": "[{ label, url }]"
+    },
+    "footerColumns": {
+      "type": "json",
+      "description": "[{ heading:{th,en}, links:[{ label:{th,en}, url }] }]"
+    }
+  }
+}

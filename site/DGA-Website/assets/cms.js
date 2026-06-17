@@ -9,6 +9,7 @@
 
   var STRAPI = window.DGA_CMS_URL || "http://localhost:1337";
   var LANG = document.documentElement.lang === "en" ? "en" : "th";
+  var TQS = window.DGA_TENANT ? "&tenant=" + encodeURIComponent(window.DGA_TENANT) : "";
   var TH_MONTHS = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
   var EN_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -39,12 +40,24 @@
     return '<svg class="icon" aria-hidden="true"><use href="#' + id + '"/></svg>';
   }
   function get(path) {
-    return fetch(STRAPI + "/api/" + path, { headers: { Accept: "application/json" } })
+    return fetch(STRAPI + "/api/" + path + TQS, { headers: { Accept: "application/json" } })
       .then(function (r) {
         if (!r.ok) throw new Error(path + " → HTTP " + r.status);
         return r.json();
       })
       .then(function (j) { return j.data; });
+  }
+
+  // สร้างชุดข้อมูลค้นหา/แชตบอท (window.DGA_DATA) จากเนื้อหา CMS ของ tenant ปัจจุบัน
+  function buildSearchData(services, articles, faqs, jobs) {
+    var bi = function (v) { var o = {}; o[LANG] = v == null ? "" : v; return o; };
+    var jb = LANG === "en" ? "/en/" : "/";
+    var items = [];
+    (articles || []).forEach(function (a) { items.push({ icon: "i-doc", url: "#", cat: bi(a.categoryLabel || (LANG === "en" ? "News" : "ข่าว")), title: bi(a.title), desc: bi(a.excerpt || ""), kw: (a.title || "") + " " + (a.excerpt || ""), answer: bi(a.excerpt || a.title) }); });
+    (services || []).forEach(function (s) { items.push({ icon: s.icon || "i-grid", url: s.url || "#", cat: bi(LANG === "en" ? "Service" : "บริการ"), title: bi(s.title), desc: bi(s.description || ""), kw: (s.title || "") + " " + (s.description || ""), answer: bi(s.description || s.title) }); });
+    (faqs || []).forEach(function (f) { items.push({ icon: "i-chat", url: "#", cat: bi(LANG === "en" ? "FAQ" : "คำถามที่พบบ่อย"), title: bi(f.question), desc: bi(f.answer || ""), kw: (f.question || "") + " " + (f.answer || ""), answer: bi(f.answer || "") }); });
+    (jobs || []).forEach(function (j) { items.push({ icon: "i-users", url: jb + "careers.html?id=" + j.jobId, cat: bi(LANG === "en" ? "Careers" : "ร่วมงานกับเรา"), title: bi(j.title), desc: bi(j.summary || ""), kw: (j.title || "") + " " + (j.summary || ""), answer: bi(j.summary || j.title) }); });
+    if (items.length) window.DGA_DATA = { items: items };
   }
 
   /* ---------- renderers ---------- */
@@ -239,6 +252,7 @@
       get("videos?sort=date:desc&populate=thumbnail&pagination[pageSize]=100" + locale),
       get("awards?sort=order:asc&populate=image&pagination[pageSize]=100" + locale),
       get("faqs?sort=order:asc&pagination[pageSize]=100" + locale),
+      get("jobs?sort=jobId:asc&pagination[pageSize]=100" + locale),
     ]).then(function (res) {
       var v = function (i) { return res[i].status === "fulfilled" ? res[i].value : null; };
       var ok = res.some(function (r) { return r.status === "fulfilled" && r.value; });
@@ -246,6 +260,7 @@
         renderHero(v(0)); renderStats(v(0)); renderFeatured(v(0));
         renderServices(v(1)); renderBanners(v(2)); renderArticles(v(3));
         renderVideos(v(4)); renderAwards(v(5)); renderFaqs(v(6));
+        buildSearchData(v(1), v(3), v(6), v(7)); // ช่องค้นหา hero + DGA Guide ใช้เนื้อหา CMS
         if (ok) { document.documentElement.setAttribute("data-cms", "live");
           console.info("%c[DGA] เนื้อหาโหลดจาก Strapi CMS แล้ว", "color:#0a7"); }
       } catch (e) {
@@ -254,7 +269,8 @@
     }).catch(function (e) {
       console.warn("[DGA] เรียก CMS ไม่สำเร็จ — ใช้เนื้อหา static เดิม", e);
     }).finally(function () {
-      loadHomeJs(); // โหลด home.js หลังเรนเดอร์เสมอ (ทั้งกรณีสำเร็จและล้มเหลว)
+      loadHomeJs();                         // โหลด home.js หลังเรนเดอร์เสมอ
+      var ts = document.createElement("script"); ts.src = "/assets/tenant.js"; document.body.appendChild(ts); // footer/แบรนด์ต่อ tenant
     });
   }
 

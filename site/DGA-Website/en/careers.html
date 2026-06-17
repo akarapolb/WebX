@@ -276,8 +276,8 @@
     <div class="row"><button class="btn btn--primary" data-cookie="all">Accept all</button><button class="btn btn--ghost" data-cookie="necessary">Necessary only</button><button class="btn btn--ghost" data-cookie="settings">Settings</button></div>
   </section>
 
-  <script src="/assets/search-data.js"></script>
-  <script src="/assets/home.js"></script>
+  <!-- search-cms.js: builds search/chatbot dataset from CMS (tenant), then loads home.js + tenant.js -->
+  <script src="/assets/search-cms.js"></script>
   <!-- jobs-cms.js loads jobs from Strapi CMS, then careers.js (falls back to jobs-data.js) -->
   <script src="/assets/jobs-cms.js"></script>
 </body>

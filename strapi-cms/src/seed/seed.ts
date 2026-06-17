@@ -196,6 +196,97 @@ export async function seedContent(strapi: any) {
   strapi.log.info("[seed] DGA home content seeded successfully ✔");
 }
 
+/* ---------- Tenants (multi-tenant registry + ตั้งค่าแบรนด์/footer ต่อ tenant) ---------- */
+export async function seedTenants(strapi: any) {
+  const want = [
+    {
+      key: "dga", name: "สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)",
+      domains: ["localhost", "127.0.0.1", "dga.localhost", "dga.or.th", "www.dga.or.th"],
+      active: true,
+      brand: { orgName: { th: "สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)", en: "Digital Government Development Agency" }, primaryColor: "#1a4fa0", logoUrl: "/assets/image/logo-dga.webp" },
+      contact: { phone: "0-2612-6000", address: { th: "อาคารสถาบันเพื่อการยุติธรรมแห่งประเทศไทย (TIJ) ชั้น 4 เลขที่ 999 ถนนแจ้งวัฒนะ แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพฯ 10210", en: "TIJ Building, 4th Fl., 999 Chaeng Watthana Rd, Lak Si, Bangkok 10210" } },
+      social: [{ label: "Facebook", url: "https://www.facebook.com/DGAThailand" }, { label: "YouTube", url: "https://www.youtube.com/@DGAThailand" }],
+      footerColumns: [
+        { heading: { th: "บริการ", en: "Services" }, links: [{ label: { th: "ThaID", en: "ThaID" }, url: "#" }, { label: { th: "ทางรัฐ", en: "Thang Rath" }, url: "#" }, { label: { th: "Open Data", en: "Open Data" }, url: "#" }, { label: { th: "API Gateway", en: "API Gateway" }, url: "#" }] },
+        { heading: { th: "เกี่ยวกับ", en: "About" }, links: [{ label: { th: "วิสัยทัศน์", en: "Vision" }, url: "#" }, { label: { th: "ข่าวสาร", en: "News" }, url: "#" }, { label: { th: "ร่วมงานกับเรา", en: "Careers" }, url: "/careers.html" }, { label: { th: "ติดต่อเรา", en: "Contact" }, url: "#" }] },
+        { heading: { th: "นโยบาย", en: "Policies" }, links: [{ label: { th: "นโยบายความเป็นส่วนตัว (PDPA)", en: "Privacy (PDPA)" }, url: "#" }, { label: { th: "นโยบายคุกกี้", en: "Cookie policy" }, url: "#" }, { label: { th: "การเข้าถึง (WCAG)", en: "Accessibility (WCAG)" }, url: "/accessibility" }, { label: { th: "แผนผังเว็บไซต์", en: "Sitemap" }, url: "#" }] },
+      ],
+    },
+    {
+      key: "pea", name: "การไฟฟ้าส่วนภูมิภาค (กฟภ.)",
+      domains: ["pea.localhost", "pea.co.th", "www.pea.co.th"],
+      active: true,
+      brand: { orgName: { th: "การไฟฟ้าส่วนภูมิภาค", en: "Provincial Electricity Authority" }, primaryColor: "#6a2c91", logoUrl: "" },
+      contact: { phone: "1129", address: { th: "200 ถนนงามวงศ์วาน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ 10900", en: "200 Ngamwongwan Rd, Chatuchak, Bangkok 10900" } },
+      social: [{ label: "Facebook", url: "#" }],
+      footerColumns: [
+        { heading: { th: "บริการ", en: "Services" }, links: [{ label: { th: "ตรวจสอบค่าไฟ", en: "Check bill" }, url: "#" }, { label: { th: "ชำระค่าไฟ", en: "Pay bill" }, url: "#" }, { label: { th: "แจ้งไฟดับ", en: "Report outage" }, url: "#" }] },
+        { heading: { th: "เกี่ยวกับ", en: "About" }, links: [{ label: { th: "เกี่ยวกับ กฟภ.", en: "About PEA" }, url: "#" }, { label: { th: "ติดต่อ", en: "Contact" }, url: "#" }] },
+      ],
+    },
+  ];
+  for (const t of want) {
+    const exists = await strapi.documents("api::tenant.tenant").findMany({ filters: { key: t.key }, limit: 1 });
+    if (!exists.length) {
+      await strapi.documents("api::tenant.tenant").create({ data: t });
+      strapi.log.info(`[seed] tenant '${t.key}' created`);
+    }
+  }
+}
+
+async function dgaTenantId(strapi: any): Promise<number | null> {
+  const rows = await strapi.documents("api::tenant.tenant").findMany({ filters: { key: "dga" }, fields: ["key"], limit: 1 });
+  return rows[0] ? rows[0].id : null;
+}
+
+/* ---------- Backfill: ผูกเนื้อหาเดิมที่ยังไม่มี tenant ให้เป็น 'dga' (idempotent) ---------- */
+export async function backfillTenant(strapi: any) {
+  const dgaId = await dgaTenantId(strapi);
+  if (!dgaId) return;
+  const uids = [
+    "api::article.article", "api::service.service", "api::faq.faq", "api::job.job",
+    "api::banner.banner", "api::video.video", "api::award.award",
+    "api::complaint.complaint", "api::application.application", "api::registration.registration",
+  ];
+  for (const uid of uids) {
+    const rows = await strapi.db.query(uid).findMany({ where: { tenant: null }, select: ["id"], limit: 10000 });
+    for (const r of rows) {
+      await strapi.db.query(uid).update({ where: { id: r.id }, data: { tenant: dgaId } });
+    }
+    if (rows.length) strapi.log.info(`[seed] backfilled tenant=dga on ${rows.length} rows of ${uid}`);
+  }
+}
+
+/* ---------- เนื้อหาของ tenant ที่ 2 (pea) เพื่อพิสูจน์ data isolation ของ Search ---------- */
+export async function seedTenantBContent(strapi: any) {
+  const pea = (await strapi.documents("api::tenant.tenant").findMany({ filters: { key: "pea" }, fields: ["key"], limit: 1 }))[0];
+  if (!pea) return;
+  const existing = await strapi.db.query("api::service.service").findMany({ where: { tenant: pea.id }, select: ["id"], limit: 1 });
+  if (existing.length) return; // seed แล้ว
+  const P = { status: "published" as const };
+
+  const services = [
+    { title: "ตรวจสอบค่าไฟฟ้า", description: "เช็กยอดค่าไฟและประวัติการใช้", icon: "i-data", colorTheme: "purple", url: "#", order: 1 },
+    { title: "ชำระค่าไฟออนไลน์", description: "จ่ายบิลผ่านช่องทางดิจิทัล", icon: "i-build", colorTheme: "amber", url: "#", order: 2 },
+    { title: "แจ้งไฟฟ้าขัดข้อง", description: "แจ้งเหตุไฟดับและติดตามสถานะ", icon: "i-shield", colorTheme: "blue", url: "#", order: 3 },
+  ];
+  for (const s of services) await strapi.documents("api::service.service").create({ locale: "th", ...P, data: { ...s, tenant: pea.id } });
+
+  const faqs = [
+    { order: 1, question: "ตรวจสอบค่าไฟฟ้าออนไลน์ได้อย่างไร?", answer: "เข้าสู่ระบบบริการ PEA Smart Plus หรือเว็บไซต์ กฟภ. กรอกหมายเลขผู้ใช้ไฟฟ้า เพื่อดูยอดค่าไฟและประวัติการใช้ย้อนหลังได้ทันที" },
+    { order: 2, question: "แจ้งไฟฟ้าดับต้องทำอย่างไร?", answer: "โทร 1129 PEA Contact Center ตลอด 24 ชั่วโมง หรือแจ้งผ่านแอป PEA Smart Plus พร้อมระบุพื้นที่และหมายเลขผู้ใช้ไฟฟ้า" },
+  ];
+  for (const f of faqs) await strapi.documents("api::faq.faq").create({ locale: "th", ...P, data: { ...f, tenant: pea.id } });
+
+  const articles = [
+    { kind: "news", categoryLabel: "ประชาสัมพันธ์", title: "กฟภ. เปิดบริการชำระค่าไฟผ่าน PEA Smart Plus", publishDate: "2026-06-10", views: 12, excerpt: "การไฟฟ้าส่วนภูมิภาคยกระดับบริการดิจิทัล…", featured: true },
+    { kind: "news", categoryLabel: "บริการ", title: "กฟภ. ขยายจุดให้บริการแจ้งไฟดับออนไลน์ทั่วประเทศ", publishDate: "2026-06-05", views: 9, excerpt: "" },
+  ];
+  for (const a of articles) await strapi.documents("api::article.article").create({ locale: "th", ...P, data: { ...a, tenant: pea.id } });
+
+  strapi.log.info("[seed] tenant 'pea' demo content created (services/faqs/articles) ✔");
+}
+
 /* ---------- Jobs (อ่านจาก jobs-data.js ของจริงเพื่อความตรงกัน th+en) ---------- */
 export async function seedJobs(strapi: any) {
   const count = await strapi.documents("api::job.job").count();

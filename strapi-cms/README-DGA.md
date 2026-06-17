@@ -67,7 +67,34 @@ Auto-email: ส่งอีเมลตอบรับเมื่อสร้�
 - แก้ seam ใน `careers.js` (ส่งใบสมัคร), `complaint.js` (ยื่น+ติดตาม), `appstatus.js` (ตรวจสถานะ), `register.js` (ลงทะเบียน)
 - หน้า `/en/careers.html`, `/en/job.html` ใช้ตัวโหลดเดียวกัน (อ่าน locale จาก `<html lang>`)
 
+## งวดที่ 3 — Multi-tenant + Hybrid Search/AI + Navigation/Global (เพิ่มแล้ว)
+
+**Multi-tenant (Shared DB + tenant field, ระบุด้วย custom domain):**
+- **Tenant** content type = ทะเบียนหน่วยงาน + ตั้งค่าแบรนด์/ติดต่อ/social/footer ต่อ tenant
+  (seed 2 ราย: `dga`, `pea` เพื่อพิสูจน์ data isolation)
+- เพิ่ม `tenant` relation ในทุก content type + backfill ของเดิมเป็น `dga`
+- **HTTP middleware** (`src/middlewares/tenant.ts`): resolve tenant จาก `?tenant=` → `X-Tenant` → Host
+- **Document Service middleware** (`src/index.ts` register): บังคับ scope ใต้ชั้น validate ของ REST
+  อ่าน tenant จาก `strapi.requestContext` → ฉีด filter ตอนอ่าน / ตั้ง tenant ตอน create
+  (ตอน seed ไม่มี request context จึงไม่ถูก scope — seed ข้าม tenant ได้)
+- Admin (content-manager) ไม่ถูก scope → super admin เห็นทุก tenant (per-tenant RBAC = งานถัดไป)
+- ตรวจแล้ว: `?tenant=dga` เห็นเฉพาะ DGA, `?tenant=pea` เห็นเฉพาะ PEA แยกขาดกัน
+
+**Hybrid Search + AI Smart Search (tenant-scoped):**
+- `GET /api/search?q=&locale=&limit=` — ค้น keyword จาก article/service/faq/job ใน tenant นั้น
+- `GET /api/ai/answer?q=&locale=` — คำตอบสั้น + แหล่งอ้างอิง (จาก FAQ/เนื้อหา CMS)
+- ฝั่งเว็บ: `assets/search-cms.js` (และ `cms.js` สำหรับหน้าแรก) สร้าง `window.DGA_DATA`
+  จากเนื้อหา CMS → ช่องค้นหา hero + แชตบอท **DGA Guide ตอบจากเนื้อหา CMS จริง**
+
+**Navigation/Global ต่อ tenant:**
+- `assets/tenant.js` ดึง `GET /api/tenants/resolve` (เซิร์ฟเวอร์ใช้ Host) แล้วอัปเดต
+  ชื่อหน่วยงาน/ที่อยู่/เบอร์/คอลัมน์ลิงก์/ลิขสิทธิ์ ใน footer ทุกหน้า + ตั้ง `data-tenant`
+- ทุกหน้า (ยกเว้นหน้าแรกไทยที่ใช้ cms.js) เปลี่ยน `search-data.js`+`home.js` → `search-cms.js`
+  (โหลด home.js + tenant.js ให้เอง)
+
+**dev:** ตั้ง `window.DGA_TENANT='pea'` เพื่อจำลอง tenant อื่นในเครื่อง (prod ใช้ custom domain อัตโนมัติ)
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- ต่อ API หน้า `/en/` ที่เหลือ (complaint/register/application-status), Navigation/Global (เมนู mega, footer)
-- Hybrid Search + AI Smart Search จากเนื้อหา CMS, อัปโหลดไฟล์แนบในฟอร์ม (multipart)
-- MFA หลังบ้าน, SMTP จริง, Web Analytics/Heatmap, Cookie consent log
+- per-tenant **RBAC ในหลังบ้าน** (จำกัด editor ให้เห็นเฉพาะ tenant ของตน), เมนู mega จาก CMS
+- เนื้อหา `/en/` ครบทุก collection (ตอนนี้ en มีเฉพาะ home/service/job), แปลง Home เป็น per-tenant
+- อัปโหลดไฟล์แนบในฟอร์ม (multipart), full-text ในไฟล์ pdf/docx, MFA หลังบ้าน, SMTP จริง

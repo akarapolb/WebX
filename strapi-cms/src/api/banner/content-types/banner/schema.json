@@ -16,6 +16,12 @@
     }
   },
   "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
     "label": {
       "type": "string",
       "pluginOptions": { "i18n": { "localized": true } }

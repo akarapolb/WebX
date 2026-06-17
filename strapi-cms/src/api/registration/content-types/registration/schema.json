@@ -11,6 +11,11 @@
     "draftAndPublish": false
   },
   "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
     "username": {
       "type": "string",
       "unique": true

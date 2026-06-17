@@ -604,8 +604,8 @@
     <div class="row"><button class="btn btn--primary" data-cookie="all">Accept all</button><button class="btn btn--ghost" data-cookie="necessary">Necessary only</button><button class="btn btn--ghost" data-cookie="settings">Settings</button></div>
   </section>
 
-  <script src="/assets/search-data.js"></script>
-  <script src="/assets/home.js"></script>
+  <!-- search-cms.js: builds search/chatbot dataset from CMS (tenant), then loads home.js + tenant.js -->
+  <script src="/assets/search-cms.js"></script>
   <script>document.getElementById('ctaAi')?.addEventListener('click',e=>{e.preventDefault();document.getElementById('aiBtn').click();});</script>
 </body>
 </html>
