@@ -184,6 +184,8 @@
      ==================================================================== */
   const form = $('#cplForm');
   if (form) {
+    // CAPTCHA: โหลด helper แล้วแทรกช่องโจทย์ก่อนปุ่มส่ง
+    (function () { function go() { window.DGACaptcha && DGACaptcha.mount(form); } if (window.DGACaptcha) go(); else { const s = document.createElement('script'); s.src = '/assets/captcha.js'; s.onload = go; document.head.appendChild(s); } })();
     const anon = $('#cAnon'), person = $('#cplPerson');
     const detail = $('#cDetail'), detailCount = $('#cDetail-count');
     const fileInput = $('#cFile'), fileDrop = $('.file-drop'), fileText = $('#cFileText');
@@ -330,10 +332,11 @@
       };
       // ส่งเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่เรื่อง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
       const base = window.DGA_CMS_URL || 'http://localhost:1337';
-      fetch(base + '/api/complaints' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      const cap = window.DGACaptcha ? DGACaptcha.get(form) : {};
+      fetch(base + '/api/complaints' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) })
+        .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(form); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
         .then(j => finishOk(j.data.ref))
-        .catch(() => finishOk(genRef()));
+        .catch(err => { if (err && err.captcha) return; finishOk(genRef()); });
     });
 
     /* --- ปุ่มใน popup --- */

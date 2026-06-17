@@ -233,6 +233,8 @@
     const modal = $('#applyModal'), dialog = modal.querySelector('.cpl-modal__dialog');
     const formView = $('#applyFormView'), doneView = $('#applyDone');
     const aForm = $('#applyForm');
+    // CAPTCHA: โหลด helper แล้วแทรกช่องโจทย์ก่อนปุ่มส่งในฟอร์มสมัคร
+    (function () { function go() { window.DGACaptcha && DGACaptcha.mount(aForm); } if (window.DGACaptcha) go(); else { const s = document.createElement('script'); s.src = '/assets/captcha.js'; s.onload = go; document.head.appendChild(s); } })();
     let lastFocus = null;
 
     $('#applyJobTitle').textContent = t(job.title);
@@ -296,10 +298,11 @@
       const saveLocal = ref => { try { const apps = JSON.parse(localStorage.getItem('dga-applications') || '{}'); apps[ref] = { ref, position: job.title, name: payload.name, email: payload.email, date: { th: ds('th'), en: ds('en') }, stage: 0 }; localStorage.setItem('dga-applications', JSON.stringify(apps)); } catch (e) {} };
       // ส่งใบสมัครเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่อ้างอิง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
       const base = window.DGA_CMS_URL || 'http://localhost:1337';
-      fetch(base + '/api/applications' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      const cap = window.DGACaptcha ? DGACaptcha.get(aForm) : {};
+      fetch(base + '/api/applications' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) })
+        .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(aForm); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
         .then(j => { const ref = j.data.ref; saveLocal(ref); showDone(ref); })
-        .catch(() => { const ref = 'DGA-JOB-' + (new Date().getFullYear() + 543) + '-' + (100000 + Math.floor(Math.random() * 899999)); saveLocal(ref); showDone(ref); });
+        .catch(err => { if (err && err.captcha) return; const ref = 'DGA-JOB-' + (new Date().getFullYear() + 543) + '-' + (100000 + Math.floor(Math.random() * 899999)); saveLocal(ref); showDone(ref); });
     });
   }
 })();

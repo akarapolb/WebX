@@ -1,7 +1,7 @@
 /* CAPTCHA แบบเลขคณิตง่าย ๆ (ออกโจทย์ฝั่งเซิร์ฟเวอร์ เก็บคำตอบ in-memory + TTL) */
 import crypto from 'crypto';
 
-export const CAPTCHA_ENABLED = process.env.CAPTCHA_ENABLED === 'true'; // ค่าเริ่มต้น: ปิด (เปิดเมื่อ wire ฟอร์มครบ)
+export const CAPTCHA_ENABLED = process.env.CAPTCHA_ENABLED !== 'false'; // ค่าเริ่มต้น: เปิด (ฟอร์ม wire ครบแล้ว)
 const store = new Map<string, { a: number; exp: number }>();
 const TTL = 5 * 60 * 1000;
 

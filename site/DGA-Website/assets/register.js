@@ -286,6 +286,9 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
 
+  // CAPTCHA: แทรกช่องโจทย์ก่อนปุ่มยืนยัน (ขั้นตอนที่ 3)
+  (function () { function go() { window.DGACaptcha && DGACaptcha.mount(form, '#regSubmit'); } if (window.DGACaptcha) go(); else { const s = document.createElement('script'); s.src = '/assets/captcha.js'; s.onload = go; document.head.appendChild(s); } })();
+
   /* --- ส่งฟอร์ม (ขั้นตอนสุดท้าย) --- */
   form.addEventListener('submit', e => {
     e.preventDefault();
@@ -304,10 +307,11 @@
     };
     const done = (username) => { $('#regUser').textContent = username; openModal(); };
     const base = window.DGA_CMS_URL || 'http://localhost:1337';
-    fetch(base + '/api/registrations' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    const cap = window.DGACaptcha ? DGACaptcha.get(form) : {};
+    fetch(base + '/api/registrations' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) })
+      .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(form); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
       .then(j => done((j.data && j.data.username) || fallbackUser))
-      .catch(() => done(fallbackUser));
+      .catch(err => { if (err && err.captcha) return; done(fallbackUser); });
   });
 
   syncUtype();
