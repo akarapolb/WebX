@@ -173,7 +173,15 @@ reject→ไม่โหลด, log เข้า CMS ผูก tenant ถูก�
 > ⚠️ เปิด MFA แล้ว: เข้า http://localhost:1337/admin จะเจอหน้า MFA ก่อน — ใส่คีย์เดโมในแอป Authenticator
 > หรือใส่ `MFA_ENABLED=false` ใน `.env` เพื่อปิดชั่วคราว
 
+## โมดูลเนื้อหา #3 (เพิ่มแล้ว)
+Content type เพิ่ม 5 รายการ (tenant-scoped + seed + สิทธิ์ public):
+- **Download** (ศูนย์ดาวน์โหลด), **E-book**, **Gallery** (อัลบั้มภาพ) — API พร้อม จัดการในหลังบ้าน
+- **Popup** (ประกาศ) → `assets/modules.js` เด้งโมดอลบนหน้าเว็บตาม tenant (เด้งครั้งเดียว/เครื่อง)
+- **Poll/Vote** → วิดเจ็ตโหวตบนหน้าแรก + `POST /api/polls/:documentId/vote` (โหวตแล้วแสดงผล %)
+
+ทดสอบแล้ว: popup dga vs pea แยกกัน, poll โหวต 97→98 persist, frontend popup+poll ทำงาน
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- #3 โมดูลเนื้อหา (Download, Popup, Vote, e-book, Photo Gallery) · #2 GEO/AEO+SEO (schema ต่อหน้า, sitemap.xml, robots, llms.txt)
-- wire ช่อง CAPTCHA ในฟอร์ม + เปิดใช้, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
-- เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA, อัปโหลดไฟล์แนบฟอร์ม, full-text ในไฟล์, SMTP จริง
+- #2 GEO/AEO+SEO (schema ต่อหน้า, sitemap.xml, robots, llms.txt, Answer Block)
+- หน้าแสดง Download/E-book/Gallery, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
+- เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA/ไฟล์จริง, อัปโหลดไฟล์แนบฟอร์ม, full-text ในไฟล์, SMTP จริง

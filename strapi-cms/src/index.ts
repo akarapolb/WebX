@@ -3,7 +3,7 @@ import { errors } from '@strapi/utils';
 import {
   ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedDemos,
   seedTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
-  ensureTenantAnalytics,
+  ensureTenantAnalytics, seedModules,
 } from './seed/seed';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) */
@@ -13,6 +13,7 @@ const SCOPED = new Set([
   'api::banner.banner', 'api::video.video', 'api::award.award',
   'api::complaint.complaint', 'api::application.application', 'api::registration.registration',
   'api::consent-log.consent-log',
+  'api::download.download', 'api::ebook.ebook', 'api::gallery.gallery', 'api::popup.popup', 'api::poll.poll',
 ]);
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
@@ -110,6 +111,7 @@ export default {
       await seedDemos(strapi);
       await backfillTenant(strapi);
       await seedTenantBContent(strapi);
+      await seedModules(strapi);
       await ensureTenantAnalytics(strapi);
       await seedEditors(strapi);
       await grantLocalesToEditorRoles(strapi);

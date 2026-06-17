@@ -1,0 +1,15 @@
+{
+  "kind": "collectionType",
+  "collectionName": "galleries",
+  "info": { "singularName": "gallery", "pluralName": "galleries", "displayName": "Gallery", "description": "อัลบั้มภาพ (Photo Gallery)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "coverImage": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "images": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "date": { "type": "date" },
+    "order": { "type": "integer", "default": 0 }
+  }
+}

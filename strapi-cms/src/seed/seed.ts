@@ -55,6 +55,11 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::application.application": ["create"],
     "api::registration.registration": ["create"],
     "api::consent-log.consent-log": ["create"],
+    "api::download.download": ["find", "findOne"],
+    "api::ebook.ebook": ["find", "findOne"],
+    "api::gallery.gallery": ["find", "findOne"],
+    "api::popup.popup": ["find", "findOne"],
+    "api::poll.poll": ["find", "findOne"],
   };
 
   for (const [uid, actions] of Object.entries(map)) {
@@ -251,6 +256,7 @@ export async function backfillTenant(strapi: any) {
     "api::article.article", "api::service.service", "api::faq.faq", "api::job.job",
     "api::banner.banner", "api::video.video", "api::award.award",
     "api::complaint.complaint", "api::application.application", "api::registration.registration",
+    "api::download.download", "api::ebook.ebook", "api::gallery.gallery", "api::popup.popup", "api::poll.poll",
   ];
   for (const uid of uids) {
     const rows = await strapi.db.query(uid).findMany({ where: { tenant: null }, select: ["id"], limit: 10000 });
@@ -472,4 +478,44 @@ export async function seedDemos(strapi: any) {
     });
     strapi.log.info("[seed] demo application DGA-JOB-2569-100001 created");
   }
+}
+
+/* ---------- โมดูลเนื้อหา (#3): Download / E-book / Gallery / Popup / Poll ---------- */
+export async function seedModules(strapi: any) {
+  const dga = (await strapi.documents("api::tenant.tenant").findMany({ filters: { key: "dga" }, fields: ["key"], limit: 1 }))[0];
+  const pea = (await strapi.documents("api::tenant.tenant").findMany({ filters: { key: "pea" }, fields: ["key"], limit: 1 }))[0];
+  if (!dga) return;
+  const P = { status: "published" as const };
+
+  if ((await strapi.documents("api::download.download").count()) === 0) {
+    const items = [
+      { title: "แบบฟอร์มขอเชื่อมต่อระบบ (GDX)", description: "คำขอเชื่อมต่อแลกเปลี่ยนข้อมูลภาครัฐ", category: "แบบฟอร์ม", fileType: "PDF", fileSize: "240 KB", order: 1 },
+      { title: "คู่มือการใช้งานแอปทางรัฐ", description: "คู่มือสำหรับประชาชน", category: "คู่มือ", fileType: "PDF", fileSize: "1.8 MB", order: 2 },
+      { title: "รายงานประจำปี 2568", description: "ผลการดำเนินงาน สพร.", category: "รายงาน", fileType: "PDF", fileSize: "5.2 MB", order: 3 },
+    ];
+    for (const d of items) await strapi.documents("api::download.download").create({ ...P, data: { ...d, tenant: dga.id } });
+  }
+  if ((await strapi.documents("api::ebook.ebook").count()) === 0) {
+    const items = [
+      { title: "กรอบการพัฒนารัฐบาลดิจิทัล (EA)", author: "สพร.", year: "2567", description: "แนวทางสถาปัตยกรรมองค์กรภาครัฐ", order: 1 },
+      { title: "มาตรฐานบริการดิจิทัลภาครัฐ", author: "สพร.", year: "2568", description: "หลักเกณฑ์มาตรฐานบริการดิจิทัล", order: 2 },
+    ];
+    for (const e of items) await strapi.documents("api::ebook.ebook").create({ ...P, data: { ...e, tenant: dga.id } });
+  }
+  if ((await strapi.documents("api::gallery.gallery").count()) === 0) {
+    const items = [
+      { title: "งานสัมมนารัฐบาลดิจิทัล 2568", description: "ภาพบรรยากาศงานสัมมนา", date: "2025-08-15", order: 1 },
+      { title: "พิธีลงนาม MOU หน่วยงานพันธมิตร", description: "ความร่วมมือภาครัฐ", date: "2025-06-10", order: 2 },
+    ];
+    for (const g of items) await strapi.documents("api::gallery.gallery").create({ ...P, data: { ...g, tenant: dga.id } });
+  }
+  if ((await strapi.documents("api::popup.popup").count()) === 0) {
+    await strapi.documents("api::popup.popup").create({ ...P, data: { tenant: dga.id, title: "เริ่มใช้ ThaID วันนี้", body: "ยืนยันตัวตนดิจิทัล ใช้แทนบัตรประชาชนกับบริการภาครัฐทั่วประเทศ ลงทะเบียนฟรีผ่านแอป ThaID", linkUrl: "#", linkLabel: "เริ่มใช้งาน", active: true, priority: 1 } });
+    if (pea) await strapi.documents("api::popup.popup").create({ ...P, data: { tenant: pea.id, title: "ชำระค่าไฟผ่าน PEA Smart Plus", body: "สะดวก ทุกที่ทุกเวลา ตรวจสอบยอดและชำระค่าไฟผ่านแอปเดียว", linkUrl: "#", linkLabel: "ดาวน์โหลดแอป", active: true, priority: 1 } });
+  }
+  if ((await strapi.documents("api::poll.poll").count()) === 0) {
+    await strapi.documents("api::poll.poll").create({ ...P, data: { tenant: dga.id, question: "บริการดิจิทัลภาครัฐใดที่คุณใช้บ่อยที่สุด?", options: [{ label: "ThaID", votes: 42 }, { label: "ทางรัฐ", votes: 35 }, { label: "ข้อมูลเปิดภาครัฐ", votes: 12 }, { label: "BizPortal", votes: 8 }], active: true, totalVotes: 97 } });
+    if (pea) await strapi.documents("api::poll.poll").create({ ...P, data: { tenant: pea.id, question: "ช่องทางใดที่คุณใช้ชำระค่าไฟบ่อยที่สุด?", options: [{ label: "PEA Smart Plus", votes: 28 }, { label: "Mobile Banking", votes: 31 }, { label: "เคาน์เตอร์เซอร์วิส", votes: 15 }], active: true, totalVotes: 74 } });
+  }
+  strapi.log.info("[seed] content modules seeded (download/ebook/gallery/popup/poll) ✔");
 }

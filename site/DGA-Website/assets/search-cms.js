@@ -48,5 +48,6 @@
     load("/assets/home.js");
     load("/assets/tenant.js");
     load("/assets/consent.js");
+    load("/assets/modules.js");
   });
 })();

@@ -1,0 +1,13 @@
+{
+  "kind": "collectionType",
+  "collectionName": "polls",
+  "info": { "singularName": "poll", "pluralName": "polls", "displayName": "Poll", "description": "โพล/แบบสำรวจความคิดเห็น (Vote)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "question": { "type": "string", "required": true },
+    "options": { "type": "json", "description": "[{ label, votes }]" },
+    "active": { "type": "boolean", "default": true },
+    "totalVotes": { "type": "integer", "default": 0 }
+  }
+}

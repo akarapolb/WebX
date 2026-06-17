@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "downloads",
+  "info": { "singularName": "download", "pluralName": "downloads", "displayName": "Download", "description": "ศูนย์ดาวน์โหลดเอกสาร/แบบฟอร์ม" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "category": { "type": "string" },
+    "file": { "type": "media", "multiple": false, "allowedTypes": ["files", "images"] },
+    "fileType": { "type": "string" },
+    "fileSize": { "type": "string" },
+    "downloads": { "type": "integer", "default": 0 },
+    "order": { "type": "integer", "default": 0 }
+  }
+}
