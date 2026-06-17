@@ -46,6 +46,10 @@
     "footerColumns": {
       "type": "json",
       "description": "[{ heading:{th,en}, links:[{ label:{th,en}, url }] }]"
+    },
+    "analytics": {
+      "type": "json",
+      "description": "{ ga4: 'G-XXXX', clarity: 'xxxx', enabled: true } — โหลดเมื่อผู้ใช้ยินยอมคุกกี้วิเคราะห์"
     }
   }
 }

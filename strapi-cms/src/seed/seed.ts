@@ -54,6 +54,7 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::complaint.complaint": ["create"],
     "api::application.application": ["create"],
     "api::registration.registration": ["create"],
+    "api::consent-log.consent-log": ["create"],
   };
 
   for (const [uid, actions] of Object.entries(map)) {
@@ -325,6 +326,22 @@ export async function seedTenantBContent(strapi: any) {
   });
 
   strapi.log.info("[seed] tenant 'pea' demo content created (home/services/faqs/articles) ✔");
+}
+
+/* ---------- ตั้งค่า analytics ตัวอย่างให้ tenant (ถ้ายังว่าง) — idempotent ----------
+   ใช้ค่า demo (ไม่ส่งข้อมูลจริง) ผู้ดูแลเปลี่ยนเป็น GA4/Clarity ID จริงได้ในหลังบ้าน */
+export async function ensureTenantAnalytics(strapi: any) {
+  const demo: Record<string, any> = {
+    dga: { ga4: "G-DEMO-DGA", clarity: "demoDGA", enabled: true },
+    pea: { ga4: "G-DEMO-PEA", clarity: "demoPEA", enabled: true },
+  };
+  const tenants = await strapi.db.query("api::tenant.tenant").findMany({ select: ["id", "key", "analytics"], limit: 500 });
+  for (const t of tenants) {
+    if (t.analytics == null && demo[t.key]) {
+      await strapi.db.query("api::tenant.tenant").update({ where: { id: t.id }, data: { analytics: demo[t.key] } });
+      strapi.log.info(`[seed] set demo analytics for tenant ${t.key}`);
+    }
+  }
 }
 
 /* ---------- ให้สิทธิ์ทุก locale แก่ role editor/author ---------- */

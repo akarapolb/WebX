@@ -106,12 +106,7 @@
 
   /* ---- DGA Guide chatbot ถูกสร้างในส่วนท้าย (ดูบล็อก "DGA Guide") ---- */
 
-  /* ---- Cookie consent (PDPA) ---- */
-  const cookie = document.getElementById('cookie');
-  if (cookie && !localStorage.getItem('dga-cookie')) cookie.hidden = false;
-  function setCookie(v){ try{localStorage.setItem('dga-cookie', v)}catch(e){} cookie.hidden = true; }
-  cookie?.querySelectorAll('[data-cookie]').forEach(b=>b.addEventListener('click', ()=>setCookie(b.dataset.cookie)));
-  document.getElementById('cookieSettings')?.addEventListener('click', ()=>{ cookie.hidden = false; cookie.querySelector('button').focus(); });
+  /* ---- Cookie consent (PDPA) — จัดการโดย /assets/consent.js (granular + consent log + analytics) ---- */
 
   /* ---- Scroll reveal / action animation (ปิดถ้าผู้ใช้ขอลดการเคลื่อนไหว) ---- */
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;

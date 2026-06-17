@@ -775,6 +775,41 @@ export interface ApiComplaintComplaint extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiConsentLogConsentLog extends Struct.CollectionTypeSchema {
+  collectionName: 'consent_logs';
+  info: {
+    description: '\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E01\u0E32\u0E23\u0E43\u0E2B\u0E49\u0E04\u0E27\u0E32\u0E21\u0E22\u0E34\u0E19\u0E22\u0E2D\u0E21\u0E04\u0E38\u0E01\u0E01\u0E35\u0E49 (PDPA) \u2014 \u0E40\u0E01\u0E47\u0E1A\u0E44\u0E27\u0E49\u0E40\u0E1B\u0E47\u0E19\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19';
+    displayName: 'Consent Log';
+    pluralName: 'consent-logs';
+    singularName: 'consent-log';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    action: Schema.Attribute.String;
+    categories: Schema.Attribute.JSON;
+    consentId: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    language: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::consent-log.consent-log'
+    > &
+      Schema.Attribute.Private;
+    path: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    userAgent: Schema.Attribute.Text;
+  };
+}
+
 export interface ApiFaqFaq extends Struct.CollectionTypeSchema {
   collectionName: 'faqs';
   info: {
@@ -1170,6 +1205,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   attributes: {
     active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     adminEmails: Schema.Attribute.JSON;
+    analytics: Schema.Attribute.JSON;
     brand: Schema.Attribute.JSON;
     contact: Schema.Attribute.JSON;
     createdAt: Schema.Attribute.DateTime;
@@ -1789,6 +1825,7 @@ declare module '@strapi/strapi' {
       'api::award.award': ApiAwardAward;
       'api::banner.banner': ApiBannerBanner;
       'api::complaint.complaint': ApiComplaintComplaint;
+      'api::consent-log.consent-log': ApiConsentLogConsentLog;
       'api::faq.faq': ApiFaqFaq;
       'api::home-page.home-page': ApiHomePageHomePage;
       'api::job.job': ApiJobJob;

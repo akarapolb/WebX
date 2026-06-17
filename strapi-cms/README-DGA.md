@@ -138,7 +138,26 @@ prod: ใช้ **custom domain** (Host header) เซิร์ฟเวอร�
 
 PEA seed: home, 3 services, 5 news, 3 FAQ, 2 jobs, โลโก้ `assets/image/pea-logo.svg`
 
+## PDPA Cookie Consent + Web Analytics/Heatmap (เพิ่มแล้ว)
+
+**Cookie Consent (PDPA) — `assets/consent.js`:**
+- หมวด granular: **จำเป็น** (ล็อกเปิด) / **วิเคราะห์** / **การตลาด** — ค่าเริ่มต้น **OFF (opt-in)**
+- 2 ภาษา (อ่านจาก `<html lang>`), แบนเนอร์ + แผงตั้งค่า (toggle), เปิดใหม่ได้จากปุ่ม footer "ตั้งค่าคุกกี้"
+- เก็บตัวเลือกใน localStorage + **บันทึก consent log ลง CMS** (`POST /api/consent-logs`, scope ตาม tenant)
+- โหลดมาแทน cookie banner เดิม (ลบบล็อกคุกกี้ออกจาก `home.js`)
+
+**Consent Log** (content type): public **create เท่านั้น** (ไม่เปิดอ่านสาธารณะ — PDPA) เก็บ
+`consentId, action, categories, language, path, userAgent, tenant` · ผูก tenant อัตโนมัติด้วย middleware
+
+**Web Analytics + Heatmap:**
+- `Tenant.analytics = { ga4, clarity, enabled }` (ตั้งต่อ tenant ในหลังบ้าน) · resolve คืนค่ามาด้วย
+- `consent.js` โหลด **GA4 (gtag) + Microsoft Clarity เฉพาะเมื่อผู้ใช้ยินยอมหมวด "วิเคราะห์"** เท่านั้น
+- ค่า seed เป็น demo (`G-DEMO-*`) → consent.js ตรวจเจอ `demo` แล้ว log แทนการเรียกจริง; ใส่ ID จริงเมื่อ deploy
+
+โหลด consent.js อัตโนมัติทุกหน้า (ผ่าน cms.js/search-cms.js) · ทดสอบแล้ว: accept→โหลด analytics+log,
+reject→ไม่โหลด, log เข้า CMS ผูก tenant ถูกต้อง, ไม่มี console error
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
 - จำกัดตัวเลือกใน relation picker ของ editor ให้เห็นเฉพาะ tenant ตน (UI), เมนู mega จาก CMS
 - เนื้อหา `/en/` ครบทุก collection (ตอนนี้ en มีเฉพาะ home/service/job), รูปจริงของ PEA (ตอนนี้ใช้ placeholder)
-- อัปโหลดไฟล์แนบในฟอร์ม (multipart), full-text ในไฟล์ pdf/docx, MFA หลังบ้าน, SMTP จริง
+- อัปโหลดไฟล์แนบในฟอร์ม (multipart), full-text ในไฟล์ pdf/docx, MFA หลังบ้าน, SMTP จริง, GEO/AEO (sitemap/schema ต่อหน้า)

@@ -1,0 +1,38 @@
+{
+  "kind": "collectionType",
+  "collectionName": "consent_logs",
+  "info": {
+    "singularName": "consent-log",
+    "pluralName": "consent-logs",
+    "displayName": "Consent Log",
+    "description": "บันทึกการให้ความยินยอมคุกกี้ (PDPA) — เก็บไว้เป็นหลักฐาน"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "consentId": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "categories": {
+      "type": "json"
+    },
+    "language": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "userAgent": {
+      "type": "text"
+    }
+  }
+}

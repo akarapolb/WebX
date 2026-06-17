@@ -302,6 +302,7 @@
     }).finally(function () {
       loadHomeJs();                         // โหลด home.js หลังเรนเดอร์เสมอ
       var ts = document.createElement("script"); ts.src = "/assets/tenant.js"; document.body.appendChild(ts); // footer/แบรนด์ต่อ tenant
+      var cs = document.createElement("script"); cs.src = "/assets/consent.js"; document.body.appendChild(cs); // คุกกี้ PDPA + analytics
     });
   }
 

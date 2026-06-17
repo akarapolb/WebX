@@ -47,5 +47,6 @@
   }).catch(function () {}).then(function () {
     load("/assets/home.js");
     load("/assets/tenant.js");
+    load("/assets/consent.js");
   });
 })();
