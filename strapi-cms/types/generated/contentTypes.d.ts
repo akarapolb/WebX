@@ -1418,6 +1418,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     domains: Schema.Attribute.JSON;
     footerColumns: Schema.Attribute.JSON;
     key: Schema.Attribute.UID & Schema.Attribute.Required;
+    liveChat: Schema.Attribute.JSON;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',

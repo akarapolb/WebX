@@ -49,5 +49,6 @@
     load("/assets/tenant.js");
     load("/assets/consent.js");
     load("/assets/modules.js");
+    load("/assets/livechat.js");
   });
 })();

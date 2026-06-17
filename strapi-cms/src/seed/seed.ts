@@ -558,3 +558,27 @@ export async function seedFulltextDemo(strapi: any) {
   });
   strapi.log.info("[seed] TOR full-text demo download created (lifecycle จะสกัดข้อความ)");
 }
+
+/* ---------- Live chat / social channels ต่อ tenant (idempotent) ---------- */
+export async function ensureTenantLiveChat(strapi: any) {
+  const demo: Record<string, any> = {
+    dga: { channels: [
+      { type: "line", label: "LINE: @DGA", url: "https://line.me/R/ti/p/@dga" },
+      { type: "messenger", label: "Messenger", url: "https://m.me/DGAThailand" },
+      { type: "facebook", label: "Facebook", url: "https://facebook.com/DGAThailand" },
+      { type: "phone", label: "โทร 0-2612-6000", url: "tel:026126000" },
+    ] },
+    pea: { channels: [
+      { type: "line", label: "LINE: @PEA", url: "https://line.me/R/ti/p/@pea" },
+      { type: "facebook", label: "Facebook PEA", url: "https://facebook.com/PEAElectric" },
+      { type: "phone", label: "โทร 1129", url: "tel:1129" },
+    ] },
+  };
+  const tenants = await strapi.db.query("api::tenant.tenant").findMany({ select: ["id", "key", "liveChat"], limit: 500 });
+  for (const t of tenants) {
+    if (t.liveChat == null && demo[t.key]) {
+      await strapi.db.query("api::tenant.tenant").update({ where: { id: t.id }, data: { liveChat: demo[t.key] } });
+      strapi.log.info(`[seed] set live-chat channels for tenant ${t.key}`);
+    }
+  }
+}

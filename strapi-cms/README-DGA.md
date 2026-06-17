@@ -214,7 +214,13 @@ Checklist สำหรับวัด Lighthouse จริง (รันเอ�
 หรือ Chrome DevTools → Lighthouse → Performance · production ควรเพิ่ม: CDN + cache headers,
 self-host fonts, brotli/gzip, รูป webp/avif + responsive sizes, HTTP/2
 
+## Live chat + social channels (#3 — เพิ่มแล้ว)
+- `Tenant.liveChat.channels = [{ type:'line'|'messenger'|'facebook'|'phone', label, url }]` (ตั้งต่อ tenant)
+- `assets/livechat.js` แทรกแถบ "แชตสดกับเจ้าหน้าที่ผ่าน:" ลงในวิดเจ็ต DGA Guide → ปุ่ม LINE/Messenger/Facebook/โทร
+  (สีตามแบรนด์ช่องทาง) เปิดช่องทางจริงในแท็บใหม่ · resolve คืน liveChat ต่อ tenant
+- ทดสอบแล้ว: dga = LINE/Messenger/Facebook/โทร, pea = LINE/Facebook/โทร
+- หมายเหตุ: หลังแก้ `cms.js` ต้อง hard refresh (Ctrl+Shift+R) ครั้งเดียวเพื่อล้าง cache JS เดิม
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- More Features: **Live chat + social** (#3)
 - หน้าแสดง Download/E-book/Gallery, .pptx full-text, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
 - เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA, อัปโหลดไฟล์แนบฟอร์ม, SMTP จริง, proxy SEO files ที่โดเมนจริง

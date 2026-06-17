@@ -50,6 +50,10 @@
     "analytics": {
       "type": "json",
       "description": "{ ga4: 'G-XXXX', clarity: 'xxxx', enabled: true } — โหลดเมื่อผู้ใช้ยินยอมคุกกี้วิเคราะห์"
+    },
+    "liveChat": {
+      "type": "json",
+      "description": "{ channels: [{ type:'line'|'messenger'|'facebook'|'phone', label, url }] } — ช่องทางแชตสด/โซเชียล"
     }
   }
 }

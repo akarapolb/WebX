@@ -304,6 +304,7 @@
       var ts = document.createElement("script"); ts.src = "/assets/tenant.js"; document.body.appendChild(ts); // footer/แบรนด์ต่อ tenant
       var cs = document.createElement("script"); cs.src = "/assets/consent.js"; document.body.appendChild(cs); // คุกกี้ PDPA + analytics
       var ms = document.createElement("script"); ms.src = "/assets/modules.js"; document.body.appendChild(ms); // popup + poll
+      var lc = document.createElement("script"); lc.src = "/assets/livechat.js"; document.body.appendChild(lc); // live chat + social
     });
   }
 

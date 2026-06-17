@@ -20,7 +20,7 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
       data: {
         key: t.key, name: t.name, brand: t.brand,
         contact: t.contact, social: t.social, footerColumns: t.footerColumns,
-        analytics: t.analytics,
+        analytics: t.analytics, liveChat: t.liveChat,
       },
     };
   },
