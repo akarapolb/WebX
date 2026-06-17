@@ -305,22 +305,35 @@
       }
       errSum.hidden = true;
 
-      // บันทึกเรื่อง
-      const ref = genRef();
-      const record = {
-        ref, type: (form.querySelector('input[name="type"]:checked') || {}).value || '',
+      const anonChecked = anon.checked;
+      const cAgency = $('#cAgency');
+      const steps = T.newSteps.map((s, i) => ({ t: s.t, time: i === 0 ? today() : '—', d: s.d }));
+      const payload = {
+        type: (form.querySelector('input[name="type"]:checked') || {}).value || '',
         subject: $('#cSubject').value.trim(),
-        date: today(), stage: 0,
-        steps: T.newSteps.map((s, i) => ({ t: s.t, time: i === 0 ? today() : '—', d: s.d }))
+        agency: cAgency ? cAgency.value.trim() : '',
+        detail: $('#cDetail').value.trim(),
+        anonymous: anonChecked,
+        name: anonChecked ? '' : $('#cName').value.trim(),
+        email: anonChecked ? '' : $('#cEmail').value.trim(),
+        phone: anonChecked ? '' : $('#cPhone').value.trim(),
+        date: today(), steps
       };
-      const store = readStore(); store[ref] = record; writeStore(store);
-
-      // รีเซ็ตฟอร์มให้พร้อมใช้ใหม่ แล้วเด้ง popup แจ้งสำเร็จ
-      $('#cplRefNo').textContent = ref;
-      form.reset(); updateCount(); showFile(); clearTypeErr(); syncTypeCards();
-      person.classList.remove('is-disabled'); person.querySelectorAll('input').forEach(i => i.disabled = false);
-      form.querySelectorAll('[aria-invalid]').forEach(clearError);
-      openModal();
+      // เด้ง popup สำเร็จ + เก็บสำเนา localStorage ให้ติดตามได้แม้ออฟไลน์
+      const finishOk = (ref) => {
+        try { const store = readStore(); store[ref] = { ref, type: payload.type, subject: payload.subject, date: payload.date, stage: 0, steps }; writeStore(store); } catch (e) {}
+        $('#cplRefNo').textContent = ref;
+        form.reset(); updateCount(); showFile(); clearTypeErr(); syncTypeCards();
+        person.classList.remove('is-disabled'); person.querySelectorAll('input').forEach(i => i.disabled = false);
+        form.querySelectorAll('[aria-invalid]').forEach(clearError);
+        openModal();
+      };
+      // ส่งเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่เรื่อง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
+      const base = window.DGA_CMS_URL || 'http://localhost:1337';
+      fetch(base + '/api/complaints', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(j => finishOk(j.data.ref))
+        .catch(() => finishOk(genRef()));
     });
 
     /* --- ปุ่มใน popup --- */
@@ -377,9 +390,16 @@
       result.hidden = false;
     }
 
-    function lookup(ref) {
+    async function lookup(ref) {
       ref = (ref || '').trim().toUpperCase();
       if (!ref) return;
+      // 1) ดึงจาก Strapi CMS ก่อน (endpoint ปลอดภัย ค้นด้วย ref)
+      try {
+        const base = window.DGA_CMS_URL || 'http://localhost:1337';
+        const r = await fetch(base + '/api/complaints/track/' + encodeURIComponent(ref), { headers: { Accept: 'application/json' } });
+        if (r.ok) { const j = await r.json(); if (j && j.data && Array.isArray(j.data.steps)) { render(j.data); return; } }
+      } catch (e) { /* ออฟไลน์ → ใช้ fallback */ }
+      // 2) fallback: เลขตัวอย่าง / localStorage
       const rec = DEMO[ref] || readStore()[ref];
       if (rec) render(rec);
       else { result.hidden = true; notFound.hidden = false; }

@@ -1,0 +1,52 @@
+{
+  "kind": "collectionType",
+  "collectionName": "applications",
+  "info": {
+    "singularName": "application",
+    "pluralName": "applications",
+    "displayName": "Application",
+    "description": "ใบสมัครงาน (รับจากฟอร์มสาธารณะ)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "ref": {
+      "type": "string",
+      "unique": true
+    },
+    "jobId": {
+      "type": "string"
+    },
+    "position": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "note": {
+      "type": "text"
+    },
+    "stage": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 3
+    },
+    "date": {
+      "type": "string"
+    },
+    "resume": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images", "files"]
+    }
+  }
+}

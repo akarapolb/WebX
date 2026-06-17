@@ -46,7 +46,28 @@ CMS แบบ Headless สำหรับเว็บไซต์ สพร. (dg
   ถ้า API ล่ม จะ fallback ไปใช้เนื้อหา static เดิมโดยอัตโนมัติ
 - ตั้งโดเมน API ได้ที่ `window.DGA_CMS_URL` (ดีฟอลต์ `http://localhost:1337`)
 
+## งวดที่ 2 — งาน/ฟอร์ม/ใบสมัคร (เพิ่มแล้ว)
+Content Types เพิ่มเติม:
+| Type | ใช้ที่ | สิทธิ์สาธารณะ | หมายเหตุ |
+|---|---|---|---|
+| Job | careers.html / job.html (+/en/) | find, findOne | i18n th/en, seed 20 ตำแหน่งจาก jobs-data.js |
+| Complaint | complaint.html (ยื่น+ติดตาม) | **create เท่านั้น** | ออกเลข `DGA-CMP-<พ.ศ.>-<6หลัก>` + auto-email |
+| Application | job.html (ฟอร์มสมัคร) + application-status.html | **create เท่านั้น** | ออกเลข `DGA-JOB-<พ.ศ.>-<6หลัก>` + auto-email |
+| Registration | register.html | **create เท่านั้น** | สร้าง username ฝั่งเซิร์ฟเวอร์ (ไม่เก็บรหัสผ่าน) |
+
+ความปลอดภัย (PDPA): ฟอร์มเปิดเฉพาะ `create` — **ไม่เปิด** find/findOne สาธารณะ (กันข้อมูลรั่ว)
+การติดตามสถานะใช้ endpoint แยกที่ค้นด้วย ref เท่านั้น:
+- `GET /api/complaints/track/:ref` · `GET /api/applications/track/:ref`
+
+Auto-email: ส่งอีเมลตอบรับเมื่อสร้างเรื่อง/ใบสมัคร (ผ่าน lifecycle) — dev ใช้ provider `sendmail`
+(ไม่ส่งจริงจนกว่าจะตั้งค่า SMTP ใน production; ระบบจะ log ไว้แทน)
+
+ฝั่งหน้าเว็บ (ต่อ API + fallback เป็นพฤติกรรมเดิมถ้า API ล่ม):
+- `assets/jobs-cms.js` : โหลดงาน th+en ประกอบเป็น `window.DGA_JOBS` แล้วโหลด `careers.js`
+- แก้ seam ใน `careers.js` (ส่งใบสมัคร), `complaint.js` (ยื่น+ติดตาม), `appstatus.js` (ตรวจสถานะ), `register.js` (ลงทะเบียน)
+- หน้า `/en/careers.html`, `/en/job.html` ใช้ตัวโหลดเดียวกัน (อ่าน locale จาก `<html lang>`)
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- Job/Careers, ฟอร์มรับเรื่องร้องเรียน/ลงทะเบียน/ตรวจสอบสถานะ (collection + auto email)
-- ต่อ API ให้หน้า `/en/` และหน้าอื่น ๆ
-- Navigation/Global (เมนู mega, footer), Hybrid Search, MFA หลังบ้าน
+- ต่อ API หน้า `/en/` ที่เหลือ (complaint/register/application-status), Navigation/Global (เมนู mega, footer)
+- Hybrid Search + AI Smart Search จากเนื้อหา CMS, อัปโหลดไฟล์แนบในฟอร์ม (multipart)
+- MFA หลังบ้าน, SMTP จริง, Web Analytics/Heatmap, Cookie consent log

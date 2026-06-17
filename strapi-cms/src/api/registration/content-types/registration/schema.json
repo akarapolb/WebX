@@ -1,0 +1,41 @@
+{
+  "kind": "collectionType",
+  "collectionName": "registrations",
+  "info": {
+    "singularName": "registration",
+    "pluralName": "registrations",
+    "displayName": "Registration",
+    "description": "คำขอลงทะเบียนผู้ใช้งานระบบ (ไม่เก็บรหัสผ่าน)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "username": {
+      "type": "string",
+      "unique": true
+    },
+    "utype": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "firstname": {
+      "type": "string"
+    },
+    "lastname": {
+      "type": "string"
+    },
+    "nidMasked": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "verified": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

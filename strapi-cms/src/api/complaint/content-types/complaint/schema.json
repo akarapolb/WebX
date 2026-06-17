@@ -1,0 +1,62 @@
+{
+  "kind": "collectionType",
+  "collectionName": "complaints",
+  "info": {
+    "singularName": "complaint",
+    "pluralName": "complaints",
+    "displayName": "Complaint",
+    "description": "เรื่องร้องเรียน/ข้อเสนอแนะ (รับจากฟอร์มสาธารณะ)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "ref": {
+      "type": "string",
+      "unique": true
+    },
+    "type": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "agency": {
+      "type": "string"
+    },
+    "detail": {
+      "type": "text"
+    },
+    "anonymous": {
+      "type": "boolean",
+      "default": false
+    },
+    "name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 3
+    },
+    "date": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "json"
+    },
+    "attachment": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images", "files"]
+    }
+  }
+}

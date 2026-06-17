@@ -290,11 +290,24 @@
   form.addEventListener('submit', e => {
     e.preventDefault();
     if (showErrors(validateStep(2))) return;
-    // สร้าง username จาก local-part ของอีเมล + เลขสุ่ม
+    // username สำรอง (กรณีออฟไลน์) จาก local-part ของอีเมล + เลขสุ่ม
     const local = ($('#rEmail').value.split('@')[0] || 'user').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 16) || 'user';
-    const username = local + (1000 + Math.floor(Math.random() * 9000));
-    $('#regUser').textContent = username;
-    openModal();
+    const fallbackUser = local + (1000 + Math.floor(Math.random() * 9000));
+    const nidRaw = ($('#rNid').value || '').replace(/\D/g, '');
+    // หมายเหตุ: ไม่ส่งรหัสผ่านไปเก็บใน CMS (ความปลอดภัย/PDPA)
+    const payload = {
+      utype: (form.querySelector('input[name="utype"]:checked') || {}).value || '',
+      email: $('#rEmail').value.trim(),
+      firstname: $('#rFirst').value.trim(), lastname: $('#rLast').value.trim(),
+      nidMasked: nidRaw ? nidRaw.slice(0, 1) + '-••••-•••••-••-' + nidRaw.slice(-1) : '',
+      phone: $('#rPhone').value.trim(), verified: !!verified
+    };
+    const done = (username) => { $('#regUser').textContent = username; openModal(); };
+    const base = window.DGA_CMS_URL || 'http://localhost:1337';
+    fetch(base + '/api/registrations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(j => done((j.data && j.data.username) || fallbackUser))
+      .catch(() => done(fallbackUser));
   });
 
   syncUtype();

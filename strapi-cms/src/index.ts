@@ -1,5 +1,5 @@
 import type { Core } from '@strapi/strapi';
-import { ensureThaiLocale, ensurePublicPermissions, seedContent } from './seed/seed';
+import { ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedDemos } from './seed/seed';
 
 export default {
   /**
@@ -18,6 +18,8 @@ export default {
     try {
       await ensureThaiLocale(strapi);
       await seedContent(strapi);
+      await seedJobs(strapi);
+      await seedDemos(strapi);
       await ensurePublicPermissions(strapi);
     } catch (err) {
       strapi.log.error('[bootstrap] seed/setup failed: ' + (err as Error).stack);

@@ -284,17 +284,22 @@
         return;
       }
       sum.hidden = true;
-      const ref = 'DGA-JOB-' + (new Date().getFullYear() + 543) + '-' + (100000 + Math.floor(Math.random() * 899999));
-      // บันทึกใบสมัครลง localStorage เพื่อใช้ตรวจสอบสถานะภายหลัง
-      try {
-        const M = { th: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
-        const d = new Date(), ds = l => d.getDate() + ' ' + M[l][d.getMonth()] + ' ' + (d.getFullYear() + (l === 'th' ? 543 : 0));
-        const apps = JSON.parse(localStorage.getItem('dga-applications') || '{}');
-        apps[ref] = { ref, position: job.title, name: $('#aName').value.trim(), email: $('#aEmail').value.trim(), date: { th: ds('th'), en: ds('en') }, stage: 0 };
-        localStorage.setItem('dga-applications', JSON.stringify(apps));
-      } catch (e) {}
-      $('#applyRef').textContent = ref;
-      formView.hidden = true; doneView.hidden = false; dialog.focus();
+      const M = { th: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
+      const d = new Date(), ds = l => d.getDate() + ' ' + M[l][d.getMonth()] + ' ' + (d.getFullYear() + (l === 'th' ? 543 : 0));
+      const note = $('#aNote');
+      const payload = {
+        jobId: job.id, position: t(job.title),
+        name: $('#aName').value.trim(), email: $('#aEmail').value.trim(),
+        phone: $('#aPhone').value.trim(), note: note ? note.value.trim() : '', date: ds(LANG)
+      };
+      const showDone = ref => { $('#applyRef').textContent = ref; formView.hidden = true; doneView.hidden = false; dialog.focus(); };
+      const saveLocal = ref => { try { const apps = JSON.parse(localStorage.getItem('dga-applications') || '{}'); apps[ref] = { ref, position: job.title, name: payload.name, email: payload.email, date: { th: ds('th'), en: ds('en') }, stage: 0 }; localStorage.setItem('dga-applications', JSON.stringify(apps)); } catch (e) {} };
+      // ส่งใบสมัครเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่อ้างอิง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
+      const base = window.DGA_CMS_URL || 'http://localhost:1337';
+      fetch(base + '/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: payload }) })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(j => { const ref = j.data.ref; saveLocal(ref); showDone(ref); })
+        .catch(() => { const ref = 'DGA-JOB-' + (new Date().getFullYear() + 543) + '-' + (100000 + Math.floor(Math.random() * 899999)); saveLocal(ref); showDone(ref); });
     });
   }
 })();

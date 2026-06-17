@@ -1,0 +1,83 @@
+{
+  "kind": "collectionType",
+  "collectionName": "jobs",
+  "info": {
+    "singularName": "job",
+    "pluralName": "jobs",
+    "displayName": "Job",
+    "description": "ตำแหน่งงาน (ร่วมงานกับ สพร.)"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
+  "attributes": {
+    "jobId": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "deptKey": {
+      "type": "enumeration",
+      "enum": ["tech", "data", "design", "security", "pm", "corporate"],
+      "default": "tech",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "typeKey": {
+      "type": "enumeration",
+      "enum": ["fulltime", "contract", "internship"],
+      "default": "fulltime",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "openings": {
+      "type": "integer",
+      "default": 1,
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "title": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "dept": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "type": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "location": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "salary": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "deadline": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "summary": {
+      "type": "text",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "responsibilities": {
+      "type": "json",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "qualifications": {
+      "type": "json",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "benefits": {
+      "type": "json",
+      "pluginOptions": { "i18n": { "localized": true } }
+    }
+  }
+}

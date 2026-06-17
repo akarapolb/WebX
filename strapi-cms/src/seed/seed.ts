@@ -4,6 +4,7 @@
    ===================================================================== */
 import fs from "fs";
 import path from "path";
+import vm from "vm";
 import {
   homeTH, homeEN, servicesTH, servicesEN, banners,
   news, articles, videos, awards, faqs,
@@ -47,6 +48,12 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::video.video": ["find", "findOne"],
     "api::award.award": ["find", "findOne"],
     "api::faq.faq": ["find", "findOne"],
+    "api::job.job": ["find", "findOne"],
+    // ฟอร์มสาธารณะ: เปิดเฉพาะ create (ไม่เปิด find/findOne เพื่อกันข้อมูลรั่ว/PDPA)
+    // การติดตามสถานะใช้ route /track/:ref แบบ auth:false แยกต่างหาก
+    "api::complaint.complaint": ["create"],
+    "api::application.application": ["create"],
+    "api::registration.registration": ["create"],
   };
 
   for (const [uid, actions] of Object.entries(map)) {
@@ -187,4 +194,73 @@ export async function seedContent(strapi: any) {
   }
 
   strapi.log.info("[seed] DGA home content seeded successfully ✔");
+}
+
+/* ---------- Jobs (อ่านจาก jobs-data.js ของจริงเพื่อความตรงกัน th+en) ---------- */
+export async function seedJobs(strapi: any) {
+  const count = await strapi.documents("api::job.job").count();
+  if (count > 0) {
+    strapi.log.info("[seed] jobs already present — skipping");
+    return;
+  }
+  const jobsFile = path.resolve(process.cwd(), "..", "site", "DGA-Website", "assets", "jobs-data.js");
+  if (!fs.existsSync(jobsFile)) {
+    strapi.log.warn("[seed] jobs-data.js not found — skipping jobs");
+    return;
+  }
+  const sandbox: any = { window: {} };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(jobsFile, "utf8"), sandbox);
+  const jobs = sandbox.window.DGA_JOBS || [];
+  const P = { status: "published" as const };
+
+  for (const j of jobs) {
+    const shared = { jobId: j.id, deptKey: j.deptKey, typeKey: j.typeKey, openings: j.openings };
+    const loc = (lng: "th" | "en") => ({
+      ...shared,
+      title: j.title?.[lng], dept: j.dept?.[lng], type: j.type?.[lng],
+      location: j.location?.[lng], salary: j.salary?.[lng], deadline: j.deadline?.[lng],
+      summary: j.summary?.[lng],
+      responsibilities: j.responsibilities?.[lng] || [],
+      qualifications: j.qualifications?.[lng] || [],
+      benefits: j.benefits?.[lng] || [],
+    });
+    const doc = await strapi.documents("api::job.job").create({ locale: "th", ...P, data: loc("th") });
+    await strapi.documents("api::job.job").update({ documentId: doc.documentId, locale: "en", ...P, data: loc("en") });
+  }
+  strapi.log.info(`[seed] seeded ${jobs.length} jobs (th+en) ✔`);
+}
+
+/* ---------- รายการสาธิตสำหรับหน้า "ติดตามสถานะ" (ให้ปุ่มตัวอย่างทำงานกับ API) ---------- */
+export async function seedDemos(strapi: any) {
+  if ((await strapi.documents("api::complaint.complaint").count()) === 0) {
+    await strapi.documents("api::complaint.complaint").create({
+      data: {
+        ref: "DGA-CMP-2569-100001",
+        type: "ปัญหาระบบ/เว็บไซต์/แอป",
+        subject: "ตัวอย่าง: เข้าสู่ระบบ ThaID ไม่ได้",
+        detail: "รายการตัวอย่างสำหรับสาธิตการติดตามสถานะเรื่องร้องเรียน",
+        anonymous: false, name: "ผู้ยื่นตัวอย่าง", email: "", phone: "",
+        date: "10 มิ.ย. 2569", stage: 2,
+        steps: [
+          { t: "รับเรื่องแล้ว", time: "10 มิ.ย. 2569", d: "ระบบได้รับเรื่องร้องเรียนของท่าน" },
+          { t: "มอบหมายผู้รับผิดชอบ", time: "11 มิ.ย. 2569", d: "ส่งต่อให้หน่วยงานที่เกี่ยวข้อง" },
+          { t: "กำลังดำเนินการ", time: "12 มิ.ย. 2569", d: "อยู่ระหว่างตรวจสอบและแก้ไข" },
+          { t: "ดำเนินการเสร็จสิ้น", time: "—", d: "" },
+        ],
+      },
+    });
+    strapi.log.info("[seed] demo complaint DGA-CMP-2569-100001 created");
+  }
+  if ((await strapi.documents("api::application.application").count()) === 0) {
+    await strapi.documents("api::application.application").create({
+      data: {
+        ref: "DGA-JOB-2569-100001", jobId: "fullstack-dev",
+        position: "นักพัฒนาระบบ (Full-stack Developer)",
+        name: "ผู้สมัครตัวอย่าง", email: "", phone: "",
+        date: "10 มิ.ย. 2569", stage: 2,
+      },
+    });
+    strapi.log.info("[seed] demo application DGA-JOB-2569-100001 created");
+  }
 }

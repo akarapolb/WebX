@@ -69,10 +69,17 @@
     result.hidden = false;
   }
 
-  function lookup(ref) {
+  async function lookup(ref) {
     ref = (ref || '').trim().toUpperCase();
     if (!ref) { input.setAttribute('aria-invalid', 'true'); $('#appInput-err').textContent = T.vRef; return; }
     input.removeAttribute('aria-invalid'); $('#appInput-err').textContent = '';
+    // 1) ดึงจาก Strapi CMS ก่อน (endpoint ปลอดภัย ค้นด้วย ref)
+    try {
+      const base = window.DGA_CMS_URL || 'http://localhost:1337';
+      const r = await fetch(base + '/api/applications/track/' + encodeURIComponent(ref), { headers: { Accept: 'application/json' } });
+      if (r.ok) { const j = await r.json(); if (j && j.data) { render(j.data); return; } }
+    } catch (e) { /* ออฟไลน์ → ใช้ fallback ด้านล่าง */ }
+    // 2) fallback: เลขตัวอย่าง / localStorage
     const rec = DEMO[ref] || read()[ref];
     if (rec) render(rec); else { result.hidden = true; notFound.hidden = false; }
   }
