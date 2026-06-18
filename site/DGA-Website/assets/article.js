@@ -42,6 +42,8 @@
     close(); return out.join("");
   }
   function thDate(d) { try { return new Date(d).toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" }); } catch (e) { return d || ""; } }
+  // CKEditor (preset HTML) เก็บเป็น HTML; เนื้อหาเดิมเป็น Markdown → เลือกเรนเดอร์ให้ถูก
+  function renderBody(s) { return /<(p|h[1-6]|ul|ol|table|div|strong|em|span|figure|img|a|br)[ >]/i.test(s) ? s : md(s); }
 
   function render(a) {
     document.title = a.title + " | สพร. (DGA)";
@@ -63,7 +65,7 @@
       "<h1>" + esc(a.title) + "</h1>" +
       '<div class="art__meta"><span>📅 ' + esc(thDate(a.publishDate)) + "</span><span>👁 " + nf(a.views) + " เข้าชม</span></div>" +
       (cover ? '<img class="art__cover" src="' + cover + '" alt="' + esc(a.title) + '">' : "") +
-      '<div class="art__body">' + md(a.body || a.excerpt || "") + "</div>" +
+      '<div class="art__body">' + renderBody(a.body || a.excerpt || "") + "</div>" +
       (tags ? '<div class="art__tags">' + tags + "</div>" : "") +
       relHtml + "</article>";
   }

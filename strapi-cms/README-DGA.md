@@ -307,6 +307,14 @@ self-host fonts, brotli/gzip, รูป webp/avif + responsive sizes, HTTP/2
   → E2E: เพิ่มช่องทาง X → บันทึก → DB 5 ช่องทาง → **ปุ่ม "แชตสด" หน้าเว็บแสดง X ทันที** (loop ปิดครบ)
 - Console modules ครบ: Analytics · Content (SSO) · Branding · Users · Chat
 
+## TOR ข้อ 4 (CMS core) — ครบ 4.1–4.4 (เสร็จ + E2E)
+- **4.1 เพิ่ม/ลบ/แก้/เรียงลำดับ เนื้อหา + เมนูหลัก**: content CRUD+order ✅ + **เมนูหลักจาก CMS** (content type `menu-item` + `menu.js` สร้าง mega-menu จาก `/api/menu-items` ต่อ tenant)
+- **4.2 Tag เพื่อค้นหา**: `article.tags`/`blog.tags` (json) → แสดงบนการ์ด+หน้าบทความ, กรอง `news.html?tag=`, ค้นใน Hybrid Search (เพิ่ม tags ใน kw + `status:'published'`)
+- **4.3 Related Content**: `article.related` (self manyToMany) → `article.html` แสดง "ข่าวที่เกี่ยวข้อง"
+- **4.4 WYSIWYG คล้าย Word**: ติดตั้ง **`@_sh/strapi-plugin-ckeditor` (CKEditor 5)** → `article.body`/`blog.body` เป็น customField `plugin::ckeditor5.CKEditor` (preset HTML: ใส่สี/แทรกตาราง/วางจาก Word/อัปรูป)
+  → `article.js` `renderBody()` เรนเดอร์ HTML(CKEditor) หรือ Markdown(เดิม) อัตโนมัติ · E2E: หน้าบทความ render ตาราง+ข้อความสี+หัวข้อ
+- ทั้งหมด verify E2E ในเบราว์เซอร์ · ไม่มี console error
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
 - Production: Docker/PostgreSQL/DR, SMTP จริง, .pptx full-text, form file upload (multipart)
 - หน้าแสดง Download/E-book/Gallery, .pptx full-text, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS

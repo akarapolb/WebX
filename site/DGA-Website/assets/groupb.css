@@ -94,3 +94,9 @@
 /* แท็กบนการ์ดข่าว */
 .gb-cardtags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .gb-cardtags span { font-size: 11px; background: var(--c-sunken); color: var(--c-text-muted); padding: 2px 8px; border-radius: 999px; }
+/* เนื้อหาจาก CKEditor (HTML): ตาราง/สี/รูป */
+.art__body table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.art__body th, .art__body td { border: 1px solid var(--c-border-strong); padding: 8px 12px; text-align: left; }
+.art__body th { background: var(--c-sunken); }
+.art__body img { max-width: 100%; border-radius: var(--radius-md); }
+.art__body figure { margin: 16px 0; }

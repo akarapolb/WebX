@@ -8,7 +8,7 @@
     "slug": { "type": "uid", "targetField": "title" },
     "category": { "type": "string" },
     "excerpt": { "type": "text" },
-    "body": { "type": "richtext" },
+    "body": { "type": "customField", "customField": "plugin::ckeditor5.CKEditor", "options": { "preset": "defaultHtml" } },
     "coverImage": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
     "author": { "type": "string" },
     "publishDate": { "type": "date" },
