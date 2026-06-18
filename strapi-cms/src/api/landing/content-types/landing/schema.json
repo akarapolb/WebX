@@ -28,6 +28,22 @@
     "seoDescription": {
       "type": "text"
     },
+    "enterSiteLabel": {
+      "type": "string",
+      "description": "ข้อความปุ่มเข้าสู่เว็บหลัก (TOR ข้อ 26.3)"
+    },
+    "enterSiteUrl": {
+      "type": "string",
+      "default": "index.html"
+    },
+    "publishStart": {
+      "type": "datetime",
+      "description": "ตั้งเวลาเริ่มแสดง Landing (TOR ข้อ 26.4)"
+    },
+    "publishEnd": {
+      "type": "datetime",
+      "description": "ตั้งเวลาสิ้นสุดแสดง Landing"
+    },
     "blocks": {
       "type": "dynamiczone",
       "components": [

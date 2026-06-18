@@ -47,6 +47,18 @@
       "type": "boolean",
       "default": true,
       "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "clicks": {
+      "type": "integer",
+      "default": 0,
+      "description": "จำนวนการคลิก (TOR ข้อ 22.5)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "impressions": {
+      "type": "integer",
+      "default": 0,
+      "description": "จำนวนการแสดงผล (TOR ข้อ 22.5)",
+      "pluginOptions": { "i18n": { "localized": false } }
     }
   }
 }

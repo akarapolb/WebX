@@ -130,7 +130,14 @@
 
   // ---------- News (+ แท็ก 4.2: แสดง/กรอง + ลิงก์ไปหน้ารายละเอียด) ----------
   function renderNews(items) {
-    items = items.filter(function (a) { return (a.kind || "news") !== "blog"; });
+    var now = Date.now();
+    items = items.filter(function (a) { return (a.kind || "news") !== "blog"; })
+      // 4.9 ช่วงเวลาแสดงผล: ซ่อนถ้ายังไม่ถึง displayStart หรือเลย displayEnd
+      .filter(function (a) {
+        if (a.displayStart && new Date(a.displayStart).getTime() > now) return false;
+        if (a.displayEnd && new Date(a.displayEnd).getTime() < now) return false;
+        return true;
+      });
     if (!items.length) { root.innerHTML = '<p class="gb-empty">ยังไม่มีข่าว</p>'; return; }
     var tagFilter = new URLSearchParams(location.search).get("tag");
     function cards(list) {

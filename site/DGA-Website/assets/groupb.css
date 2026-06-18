@@ -100,3 +100,7 @@
 .art__body th { background: var(--c-sunken); }
 .art__body img { max-width: 100%; border-radius: var(--radius-md); }
 .art__body figure { margin: 16px 0; }
+/* ปุ่มแชร์โซเชียล (4.12) */
+.art__share { display: flex; align-items: center; gap: 8px; margin: 18px 0; flex-wrap: wrap; }
+.share-btn { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 999px; border: 1px solid var(--c-border-strong); color: var(--sc, var(--c-text-muted)); text-decoration: none; transition: background .15s, color .15s; }
+.share-btn:hover { background: var(--sc, var(--c-text-muted)); color: #fff; border-color: var(--sc, var(--c-text-muted)); }

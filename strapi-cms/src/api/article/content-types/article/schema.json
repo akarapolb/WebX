@@ -85,6 +85,16 @@
       "target": "api::article.article",
       "description": "ข่าว/บทความที่เกี่ยวข้อง (TOR ข้อ 4.3 Relate Content)",
       "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "displayStart": {
+      "type": "datetime",
+      "description": "วันเวลาเริ่มแสดงผล (TOR ข้อ 4.9)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "displayEnd": {
+      "type": "datetime",
+      "description": "วันเวลาสิ้นสุดการแสดงผล (TOR ข้อ 4.9)",
+      "pluginOptions": { "i18n": { "localized": false } }
     }
   }
 }

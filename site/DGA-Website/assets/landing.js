@@ -110,6 +110,10 @@
       var fn = renderers[b.__component];
       return fn ? fn(b) : "";
     }).join("");
+    // ปุ่ม "เข้าสู่เว็บหลัก" (TOR 26.3)
+    var enterLabel = landing.enterSiteLabel || "เข้าสู่เว็บไซต์หลัก";
+    var enterUrl = landing.enterSiteUrl || "index.html";
+    html += '<section class="l-cta l-cta--light"><div class="l-cta__inner"><a class="btn btn--primary btn--lg" href="' + esc(enterUrl) + '">' + esc(enterLabel) + " →</a></div></section>";
     root.innerHTML = html || "";
     // โหลดส่วนแบรนด์/ฟุตเตอร์ต่อ tenant (เหมือนหน้าอื่น)
     var ts = document.createElement("script"); ts.src = "/assets/tenant.js"; document.body.appendChild(ts);
@@ -127,6 +131,10 @@
     .then(function (j) {
       var item = j && j.data && j.data[0];
       if (!item) { state("ไม่พบหน้านี้", "หน้า Landing ที่ขอ (" + slug + ") ไม่มีอยู่ หรือยังไม่ได้เผยแพร่"); return; }
+      // ตั้งเวลาเปิด/ปิด (TOR 26.4)
+      var now = Date.now();
+      if (item.publishStart && new Date(item.publishStart).getTime() > now) { state("ยังไม่เปิดให้บริการ", "หน้านี้จะเปิดในวันที่ " + new Date(item.publishStart).toLocaleString("th-TH")); return; }
+      if (item.publishEnd && new Date(item.publishEnd).getTime() < now) { state("สิ้นสุดการแสดงผล", "หน้านี้สิ้นสุดการแสดงผลแล้ว"); return; }
       render(item);
     })
     .catch(function () {

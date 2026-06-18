@@ -67,7 +67,10 @@
       (cover ? '<img class="art__cover" src="' + cover + '" alt="' + esc(a.title) + '">' : "") +
       '<div class="art__body">' + renderBody(a.body || a.excerpt || "") + "</div>" +
       (tags ? '<div class="art__tags">' + tags + "</div>" : "") +
+      '<div class="art__share" data-share></div>' +
       relHtml + "</article>";
+    // โหลดปุ่มแชร์โซเชียล (TOR 4.12)
+    var sc = document.createElement("script"); sc.src = "/assets/share.js?v=1"; document.body.appendChild(sc);
   }
 
   var slug = new URLSearchParams(location.search).get("slug");

@@ -10,6 +10,8 @@ const MAP: Record<string, { uid: string; field: string }> = {
   faq: { uid: 'api::faq.faq', field: 'views' },
   article: { uid: 'api::article.article', field: 'views' },
   blog: { uid: 'api::blog.blog', field: 'views' },
+  banner: { uid: 'api::banner.banner', field: 'clicks' },
+  'banner-view': { uid: 'api::banner.banner', field: 'impressions' },
 };
 
 export default {

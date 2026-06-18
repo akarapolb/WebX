@@ -12,6 +12,8 @@
     "file": { "type": "media", "multiple": false, "allowedTypes": ["files"] },
     "year": { "type": "string" },
     "order": { "type": "integer", "default": 0 },
-    "contentText": { "type": "text", "description": "ข้อความที่สกัดจากไฟล์ (Full-text Search) — ระบบเติมอัตโนมัติ" }
+    "contentText": { "type": "text", "description": "ข้อความที่สกัดจากไฟล์ (Full-text Search) — ระบบเติมอัตโนมัติ" },
+    "reference": { "type": "string", "description": "แหล่งที่มา/อ้างอิง (TOR ข้อ 18.5)" },
+    "referenceDate": { "type": "date", "description": "วันที่อ้างอิง" }
   }
 }
