@@ -13,6 +13,7 @@ const config: Core.Config.Middlewares = [
     },
   },
   'strapi::poweredBy',
+  'global::traffic-log',
   'global::rate-limit',
   'global::admin-mfa',
   'global::seo',
