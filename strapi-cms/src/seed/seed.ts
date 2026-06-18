@@ -55,6 +55,7 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::application.application": ["create"],
     "api::registration.registration": ["create"],
     "api::consent-log.consent-log": ["create"],
+    "api::contact-message.contact-message": ["create"],
     "api::download.download": ["find", "findOne"],
     "api::ebook.ebook": ["find", "findOne"],
     "api::gallery.gallery": ["find", "findOne"],
@@ -269,7 +270,7 @@ export async function backfillTenant(strapi: any) {
     "api::landing.landing",
     "api::blog.blog", "api::catalog.catalog", "api::weblink.weblink", "api::top-graphic.top-graphic",
     "api::event.event", "api::location.location", "api::sitemap-node.sitemap-node",
-    "api::menu-item.menu-item",
+    "api::menu-item.menu-item", "api::contact-message.contact-message",
   ];
   for (const uid of uids) {
     const rows = await strapi.db.query(uid).findMany({ where: { tenant: null }, select: ["id"], limit: 10000 });
@@ -444,6 +445,7 @@ export async function seedCmsCore(strapi: any) {
       { menu: "eservice", column: "ร้องเรียน & ข้อเสนอแนะ", label: "ระบบรับเรื่องร้องเรียน", url: "complaint.html", order: 1 },
       { menu: "eservice", column: "บริการช่วยเหลือ", label: "ดาวน์โหลดเอกสาร", url: "download.html", order: 1 },
       { menu: "eservice", column: "บริการช่วยเหลือ", label: "คำถามที่พบบ่อย (FAQ)", url: "faq.html", order: 2 },
+      { menu: "eservice", column: "บริการช่วยเหลือ", label: "ติดต่อสอบถาม", url: "contact.html", order: 3 },
       { menu: "about", column: "องค์กร", label: "วิสัยทัศน์ & บทบาท", url: "#", order: 1 },
       { menu: "about", column: "เผยแพร่", label: "แผนที่ & ติดต่อ", url: "map.html", order: 1 },
       { menu: "about", column: "ธรรมาภิบาล & ลิงก์", label: "ลิงก์ที่เกี่ยวข้อง", url: "links.html", order: 1 },

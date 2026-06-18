@@ -9,5 +9,11 @@ export default {
       handler: 'application.track',
       config: { auth: false },
     },
+    {
+      method: 'POST',
+      path: '/applications/submit',
+      handler: 'application.submit',
+      config: { auth: false },
+    },
   ],
 };

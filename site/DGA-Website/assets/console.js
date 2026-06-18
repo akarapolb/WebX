@@ -213,7 +213,23 @@
     }).join("");
     el.innerHTML =
       '<div class="wx-card" style="margin-bottom:20px"><p style="margin:0;color:var(--c-text-muted)">จัดการเนื้อหาผ่าน Strapi Content Manager — ระบบบังคับสิทธิ์ให้เห็น/แก้เฉพาะข้อมูลของหน่วยงานคุณโดยอัตโนมัติ (multi-tenant RBAC)</p></div>' +
+      '<div class="wx-card" style="margin-bottom:20px"><h2 style="margin:0 0 6px;color:var(--c-text);font-size:var(--fs-h3)">ส่งออกข้อมูลฟอร์ม (Excel)</h2>' +
+      '<p style="margin:0 0 12px;color:var(--c-text-muted);font-size:var(--fs-small)">ดาวน์โหลดข้อมูลที่ประชาชนส่งเข้ามาเป็นไฟล์ .xlsx (TOR 17.9)</p>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+      ['application:ใบสมัครงาน', 'complaint:เรื่องร้องเรียน', 'registration:ลงทะเบียน', 'contact:ข้อความติดต่อ'].map(function (x) {
+        var p = x.split(':'); return '<button class="btn btn--ghost wx-export" data-t="' + p[0] + '">⬇ ' + p[1] + '</button>';
+      }).join("") + "</div></div>" +
       '<div class="wx-tiles">' + tiles + "</div>";
+    el.querySelectorAll(".wx-export").forEach(function (b) { b.onclick = function () { exportForm(b.getAttribute("data-t")); }; });
+  }
+
+  function exportForm(type) {
+    fetch(STRAPI + "/api/console/export?type=" + type + "&tenant=" + encodeURIComponent(currentTenant), { headers: { Authorization: "Bearer " + tok() } })
+      .then(function (r) { if (!r.ok) throw new Error(); return r.blob(); })
+      .then(function (blob) {
+        var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = type + "-" + currentTenant + ".xlsx";
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+      }).catch(function () { alert("ส่งออกไม่สำเร็จ"); });
   }
 
   // ---------- view: branding (เทมเพลต/สี/พื้นหลัง/ลายน้ำ) ----------

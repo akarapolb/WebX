@@ -965,6 +965,42 @@ export interface ApiConsentLogConsentLog extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiContactMessageContactMessage
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'contact_messages';
+  info: {
+    description: '\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D\u0E08\u0E32\u0E01\u0E41\u0E1A\u0E1A\u0E1F\u0E2D\u0E23\u0E4C\u0E21 Contact Us (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 11.2)';
+    displayName: 'Contact Message';
+    pluralName: 'contact-messages';
+    singularName: 'contact-message';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    email: Schema.Attribute.Email;
+    handled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::contact-message.contact-message'
+    > &
+      Schema.Attribute.Private;
+    message: Schema.Attribute.Text & Schema.Attribute.Required;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    subject: Schema.Attribute.String;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiDownloadDownload extends Struct.CollectionTypeSchema {
   collectionName: 'downloads';
   info: {
@@ -2438,6 +2474,7 @@ declare module '@strapi/strapi' {
       'api::catalog.catalog': ApiCatalogCatalog;
       'api::complaint.complaint': ApiComplaintComplaint;
       'api::consent-log.consent-log': ApiConsentLogConsentLog;
+      'api::contact-message.contact-message': ApiContactMessageContactMessage;
       'api::download.download': ApiDownloadDownload;
       'api::ebook.ebook': ApiEbookEbook;
       'api::event.event': ApiEventEvent;

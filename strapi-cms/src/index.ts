@@ -17,7 +17,7 @@ const SCOPED = new Set([
   'api::landing.landing',
   'api::blog.blog', 'api::catalog.catalog', 'api::weblink.weblink', 'api::top-graphic.top-graphic',
   'api::event.event', 'api::location.location', 'api::sitemap-node.sitemap-node',
-  'api::menu-item.menu-item',
+  'api::menu-item.menu-item', 'api::contact-message.contact-message',
 ]);
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);

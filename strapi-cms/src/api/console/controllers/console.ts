@@ -84,6 +84,37 @@ location.replace(redirect);
     ctx.body = { ok: true, tenant: target.key, brand: data.brand, template: data.template, watermark: data.watermark, liveChat: data.liveChat };
   },
 
+  /** ส่งออกข้อมูลฟอร์มเป็น Excel (TOR ข้อ 17.9) — admin-only, scope ตาม tenant */
+  async exportData(ctx: any) {
+    const strapi = (global as any).strapi;
+    const XLSX = require('xlsx');
+    const MAP: Record<string, string> = {
+      application: 'api::application.application',
+      complaint: 'api::complaint.complaint',
+      registration: 'api::registration.registration',
+      contact: 'api::contact-message.contact-message',
+    };
+    const type = String(ctx.query.type || 'application');
+    const uid = MAP[type];
+    if (!uid) { ctx.status = 400; ctx.body = { error: 'ชนิดข้อมูลไม่ถูกต้อง' }; return; }
+    const tenantId = ctx.state?.tenantId;
+    const where = tenantId ? { tenant: tenantId } : {};
+    const rows = await strapi.db.query(uid).findMany({ where, limit: 10000, orderBy: { id: 'desc' } });
+    const clean = rows.map((r: any) => {
+      const o: any = { ...r };
+      delete o.id; delete o.documentId; delete o.tenant; delete o.createdById; delete o.updatedById; delete o.locale;
+      if (o.steps) o.steps = undefined;
+      return o;
+    });
+    const ws = XLSX.utils.json_to_sheet(clean);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, type);
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    ctx.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    ctx.set('Content-Disposition', `attachment; filename="${type}-${tenantId || 'all'}.xlsx"`);
+    ctx.body = buf;
+  },
+
   /** รายชื่อผู้ดูแล (admin users) + อีเมลที่เป็นผู้ดูแลของ tenant นั้น */
   async users(ctx: any) {
     const strapi = (global as any).strapi;

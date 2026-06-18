@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!-- DGA Website — ติดต่อสอบถาม (Contact Us) TOR ภาคผนวก ก ข้อ 11 · CMS (Strapi) -->
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ติดต่อสอบถาม | สพร. (DGA)</title>
+  <meta name="description" content="ติดต่อสอบถามสำนักงานพัฒนารัฐบาลดิจิทัล (สพร.) — ที่อยู่ เบอร์โทร อีเมล และแบบฟอร์มติดต่อ">
+  <script>(function(){try{var t=localStorage.getItem('dga-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/groupa.css">
+  <style>
+    .ct-grid{display:grid;grid-template-columns:1fr 1.3fr;gap:28px;max-width:980px;margin:0 auto;padding:0 20px}
+    .ct-info{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-lg);padding:24px}
+    .ct-info h2{font-size:var(--fs-h3);margin:0 0 14px;color:var(--c-text)}
+    .ct-info p{color:var(--c-text-muted);line-height:var(--lh-base);margin:0 0 10px}
+    .ct-form{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-lg);padding:24px}
+    .ct-form label{display:block;font-size:var(--fs-small);color:var(--c-text);margin:0 0 6px;margin-top:14px}
+    .ct-form input,.ct-form textarea{width:100%;padding:11px 13px;border:1px solid var(--c-border-strong);border-radius:var(--radius-sm);background:var(--c-bg);color:var(--c-text);font:inherit}
+    .ct-form textarea{min-height:120px;resize:vertical}
+    .ct-msg{margin-top:12px;font-size:var(--fs-small)}
+    @media(max-width:760px){.ct-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+  <header class="site-header" style="border-bottom:1px solid var(--c-border)">
+    <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;max-width:980px;margin:0 auto">
+      <a href="index.html" style="text-decoration:none;color:var(--c-text);font-weight:600">← สพร. หน้าแรก</a>
+    </div>
+  </header>
+  <main id="main">
+    <div class="ga-head"><h1>ติดต่อสอบถาม</h1><p>ส่งข้อความถึงเรา หรือดูช่องทางติดต่อด้านล่าง</p></div>
+    <div class="ga-sec ct-grid">
+      <div class="ct-info">
+        <h2>สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)</h2>
+        <p>📍 ชั้น 17 อาคารบางกอกไทยทาวเวอร์ ถนนรางน้ำ แขวงถนนพญาไท เขตราชเทวี กรุงเทพฯ 10400</p>
+        <p>☎️ <a href="tel:026126000" style="color:var(--c-primary)">0-2612-6000</a></p>
+        <p>✉️ <a href="mailto:contact@dga.or.th" style="color:var(--c-primary)">contact@dga.or.th</a></p>
+        <p>🕘 จันทร์–ศุกร์ 08.30–16.30 น.</p>
+        <p style="margin-top:16px"><a class="btn btn--ghost" href="map.html">ดูแผนที่ที่ตั้ง →</a></p>
+      </div>
+      <form class="ct-form" id="ctForm" novalidate>
+        <h2 style="font-size:var(--fs-h3);margin:0 0 4px;color:var(--c-text)">แบบฟอร์มติดต่อ</h2>
+        <label for="ctName">ชื่อ–นามสกุล *</label><input id="ctName" required>
+        <label for="ctEmail">อีเมล</label><input id="ctEmail" type="email">
+        <label for="ctPhone">เบอร์โทรศัพท์</label><input id="ctPhone">
+        <label for="ctSubject">หัวข้อ</label><input id="ctSubject">
+        <label for="ctMessage">ข้อความ *</label><textarea id="ctMessage" required></textarea>
+        <div id="ctCaptcha" style="margin-top:14px"></div>
+        <button class="btn btn--primary" type="submit" style="margin-top:16px;width:100%">ส่งข้อความ</button>
+        <div class="ct-msg" id="ctMsg" role="status"></div>
+      </form>
+    </div>
+  </main>
+  <script src="/assets/contact.js?v=1"></script>
+</body>
+</html>

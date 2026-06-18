@@ -18,6 +18,12 @@ export default {
     },
     {
       method: 'GET',
+      path: '/console/export',
+      handler: 'console.exportData',
+      config: { auth: false, policies: ['global::admin-only'] },
+    },
+    {
+      method: 'GET',
       path: '/console/users',
       handler: 'console.users',
       config: { auth: false, policies: ['global::admin-only'] },
