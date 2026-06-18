@@ -222,6 +222,84 @@ self-host fonts, brotli/gzip, รูป webp/avif + responsive sizes, HTTP/2
 - **cache-busting**: เพิ่ม `?v=N` ต่อท้าย cms.js/search-cms.js/jobs-cms.js ในทุกหน้า เพื่อให้เบราว์เซอร์โหลด JS ใหม่
   (เลี่ยงปัญหา cache JS เดิม) — บั๊มเลข v เมื่อแก้ไฟล์ loader
 
+## Landing/Splash page builder (no-code) — เพิ่มแล้ว (TOR โมดูล Landing/Splash)
+- **Content type `Landing`** (collection, draft&publish, ผูก tenant): `title`, `slug` (uid), `active`, `seoDescription`, `blocks` (**Dynamic Zone**)
+- **บล็อกสำเร็จรูป** (`src/components/block/`): `hero`, `richtext`, `image`, `cta-banner`, `feature-grid` (+`feature-item`)
+  → แอดมินกด **เพิ่ม/ลาก/สลับบล็อก** ในหลังบ้าน พิมพ์ข้อความ-อัปรูปเองได้ **โดยไม่เขียนโค้ด** = no-code page builder
+- **หน้าเรนเดอร์**: `site/DGA-Website/landing.html` (shell ว่าง) + `assets/landing.js` (ดึง CMS → เรนเดอร์บล็อกตามลำดับ) + `assets/landing.css`
+  → เปิดด้วย `landing.html?slug=<slug>` เช่น `landing.html?slug=thaid` · รองรับ `?tenant=` (multi-tenant)
+  → `landing.js` มี markdown ย่อ (## ### , รายการเลข/จุด, **ตัวหนา**) สำหรับบล็อก rich text
+- **Multi-tenant**: `landing` อยู่ใน SCOPED (index.ts) + backfill + public perm (find/findOne) — ทดสอบแล้ว pea เปิด landing ของ dga ไม่ได้ (data isolation)
+- seed ตัวอย่าง: `seedLanding()` สร้างหน้า `thaid` (hero + feature-grid 3 + richtext + cta) ให้ dga
+- **gotcha**: component UID = ชื่อไฟล์ (`richtext.json` → `block.richtext` ไม่ใช่ `block.rich-text`) — ถ้า dynamic zone อ้างผิดจะ 500 ที่ `getDeepPopulate`; แก้ index.ts (entry) แล้ว watcher ไม่ reload → ต้อง restart Strapi เอง
+- populate ที่ใช้: `?populate[blocks][populate]=*` (ใช้ `curl -g` เพื่อกัน glob `[ ]`)
+
+## Web Analytics dashboard (หลังบ้าน) — เพิ่มแล้ว (TOR โมดูล Web Analytics + Heatmap)
+- **API**: `GET /api/analytics/summary` (`src/api/analytics/`) — สรุปสถิติ first-party ต่อ tenant
+  → นับเนื้อหา (เฉพาะ published), ฟอร์มที่ได้รับ (**จำนวนรวมเท่านั้น — ไม่เปิดเผยตัวเรคคอร์ด/PDPA**), ความยินยอมคุกกี้, บทความยอดนิยม (ตาม views), ผลโพล, กิจกรรมแอดมินล่าสุด, ค่า GA4/Clarity ต่อ tenant
+  → tenant จาก `ctx.state.tenantId` (ตั้งโดย tenant middleware จาก `?tenant=`)
+- **ความปลอดภัย**: policy `global::admin-only` (`src/policies/admin-only.ts`) — ต้องส่ง Bearer admin token
+  → **gotcha**: Strapi 5.48 admin login คืน token แบบ **opaque (session) ไม่ใช่ JWT** → verify ด้วย ADMIN_JWT_SECRET ไม่ได้; policy จึง **self-call `/admin/users/me`** ของ Strapi เอง ถ้าคืน 200 = admin จริง (ทนทุกเวอร์ชัน) · custom api ไม่รองรับ `type:'admin'` mount ที่ root → ใช้ content-api route + policy แทน
+- **หน้าแดชบอร์ด**: `site/DGA-Website/analytics.html` + `assets/analytics.js` + `assets/analytics.css`
+  → login ด้วยบัญชี Strapi Admin (POST `/admin/login` → เก็บ token ใน sessionStorage) → KPI cards + แท่งสัดส่วน + ตัวสลับ tenant + ลิงก์ GA4/Clarity ภายนอก · `<meta robots noindex>`
+  → ทดสอบแล้ว: dga (เนื้อหา 101, views 2,258, consent 80%) สลับเป็น pea (15, 3,653, Clarity=demoPEA) — **ข้อมูลแยกต่อ tenant** · ไม่มี token = 403
+
+## WebX Console — หลังบ้านรวมศูนย์ต่อ tenant (SPA) — กำลังสร้าง
+แนวคิด: ล็อกอินบัญชี Strapi Admin **ครั้งเดียว** → หน้าแรกหลังบ้าน **แบรนด์ตาม tenant** → โมดูล (Analytics/Content/Users/Chat/Branding). ยังเป็น **backend เดียว (Strapi)**; Console = admin frontend ที่คุย API.
+- **Context API**: `GET /api/console/context` (`src/api/console/`, policy `global::admin-only`)
+  → คืน `{ admin:{email,firstname,isSuper}, tenants:[{key,name,brand}] }` · super admin = ทุก tenant, editor = เฉพาะ tenant ที่อีเมลอยู่ใน `adminEmails` (isSuper เช็คจาก role `strapi-super-admin`)
+- **SPA**: `site/DGA-Website/console.html` + `assets/console.js` + `assets/console.css` (ใช้คลาส `a-*` จาก analytics.css ในวิว Analytics)
+  → sidebar + topbar + hash router · `--wx-accent` = `brand.primaryColor` ต่อ tenant · ตัวสลับ tenant (super admin)
+- **Increment 1 (เสร็จ)**: shell + login เดียว + Home(ไทล์) + **Analytics** (พับของเดิมเข้า) + **Content** (ลิงก์เข้า Strapi content-manager ต่อ type, RBAC อัตโนมัติ)
+  → verify: login → 5 ไทล์, สลับ dga(#1a4fa0/สพร.)↔pea(#6a2c91/กฟภ.) accent+แบรนด์เปลี่ยนสด, Analytics 101/2,258/4/80%, ไม่มี console error
+- **Increment 2+ (ค้าง)**: Users (จัดการ admin/editor ต่อ tenant), Chat (liveChat channels + AI), Branding (brand/contact/social) — ปุ่มขึ้น "เร็ว ๆ นี้" รอสร้าง
+- หน้า standalone เดิม `analytics.html` ยังใช้ได้ (ใช้ token เดียวกัน)
+- **SSO เข้า Strapi Admin (ไม่ล็อกอินซ้ำ)** — เสร็จแล้ว:
+  → Console กับ Strapi admin คนละ origin (:8080 vs :1337) → ใช้ **bridge page** ที่ Strapi เสิร์ฟ: `GET /api/sso/bridge` + `/api/sso/bridge.js`
+  → Console ส่ง admin token ทาง **URL fragment** (`#token=...&redirect=/admin`) — ไม่ขึ้น server log; bridge.js เขียน `localStorage['jwtToken']=JSON.stringify(token)` + `localStorage['isLoggedIn']='true'` (คีย์ที่ Strapi 5 admin ใช้) แล้ว `location.replace(redirect)`
+  → **gotcha**: CSP ของ Strapi (helmet) = `script-src 'self'` บล็อก inline script → ต้องแยก logic เป็นไฟล์ JS **same-origin** (`/api/sso/bridge.js`) ไม่ใช่ inline; redirect จำกัดเฉพาะ `/admin*` กัน open-redirect
+  → ไทล์ Content ใน Console สร้างลิงก์ผ่าน bridge อัตโนมัติ (`strapiAdmin()` ใน console.js) → คลิกแล้วเข้า content-manager โดยไม่ล็อกอินซ้ำ
+
+## Group A — ปิด gap โมดูล TOR ที่ขาด (กำลังทำ)
+หลักการ: **Strapi = backend เดียวเสมอ** (ทุก type มี tenant + SCOPED + backfill + perm + draft&publish); Console = ประตูหน้าเดียว; custom view เฉพาะที่ UX ต้องการ
+- **กลุ่มแรก (เสร็จ + E2E ผ่าน):** Blog (#15) · e-catalog (#19) · Web Link (#23) · Top Graphic (#24)
+  → content types: `blog`, `catalog`, `weblink`, `top-graphic` (+ seed dga) · public perm find/findOne · เพิ่มในวิว Content ของ Console (แก้ผ่าน Strapi via SSO)
+  → หน้าแสดง: `blog.html` · `catalog.html` · `links.html` (Top Graphic strip) — ใช้ `assets/groupa.js` (ตัวเดียว, `body[data-ga-page]`) + `assets/groupa.css`
+  → E2E (เบราว์เซอร์): blog 3 โพสต์, catalog 3 การ์ด, links 4 ลิงก์/3 กลุ่ม + top-graphic strip, ไม่มี console error, isolation pea=0
+- **กลุ่มที่สอง (เสร็จ + E2E ผ่าน):** ปฏิทินกิจกรรม (#16) · Map (#27) · Sitemap manager (#25)
+  → content types: `event`, `location`, `sitemap-node` (+ seed dga) · public perm find/findOne · เพิ่มในวิว Content ของ Console
+  → หน้าแสดง: `calendar.html` (+`assets/calendar.js` มุมมองเดือน/สัปดาห์/วัน, คลิกดูรายละเอียด) · `map.html` (+`assets/map.js`, Leaflet+OSM, ปุ่มหาจุดใกล้สุด Geolocation+Haversine) · `sitemap.html` (groupa.js page=sitemap)
+  → E2E: ปฏิทิน มิ.ย.2569 4 กิจกรรมวางถูกวัน + สลับวิว, แผนที่ 4 หมุด+12 tiles+รายการ, sitemap 4 กลุ่ม/12 ลิงก์, ไม่มี console error
+  → **Group A ครบ 7/7 โมดูล** (Blog, e-catalog, Link, Top Graphic, ปฏิทิน, Map, Sitemap)
+
+## Group B — หน้าแสดงผล + สถิติ (เสร็จ + E2E ผ่าน)
+ปิด gap TOR: Photo Gallery (#6) · Video Gallery (#7) · Download (#21) · FAQ (#20) · News (#5)
+- **Stat endpoint**: `POST /api/stat {type, documentId}` (`src/api/stat/`, public) → +1 ตัวนับ (gallery/faq เพิ่มฟิลด์ `views`; video.views, download.downloads มีอยู่แล้ว); อัปเดตเวอร์ชัน published
+- **enrichGroupB seeder**: แนบรูปจริงให้ gallery (cover + 5–6 ภาพ) + thumbnail จริง + YouTube (วิดีโอโอเพนซอร์ส) ให้ video
+- **หน้าแสดง**: `gallery.html` (lightbox) · `video.html` (modal + YouTube embed) · `download.html` (หมวด + ตัวนับดาวน์โหลด) · `faq.html` (accordion + ค้นหา + **FAQPage JSON-LD/AEO**) · `news.html` (กรองหมวด) — ใช้ `assets/groupb.js` (ตัวเดียว, `body[data-gb-page]`) + `assets/groupb.css`
+- **E2E (เบราว์เซอร์)**: gallery 2 อัลบั้ม+lightbox, video 6+embed, download 4 หมวด, faq 6+accordion+ค้นหา+schema, news 10+10 ตัวกรอง · ไม่มี console error
+- **Stat full-stack verified**: คลิกแล้วตัวนับขึ้นจริง (gallery/video/faq) · เพิ่ม gallery/video เข้าวิว Content ของ Console
+- **นำทาง**: ลิงก์ Group B เข้า mega-menu + footer ทุกหน้า full-nav (video/gallery/download/faq/news)
+
+## Template (no-code) + Watermark + Subtitle + Console Branding (เสร็จ + E2E)
+ปิด gap TOR: เทมเพลต 3 แบบ (#3) · ลายน้ำคลังภาพ (#6.11) · ซับไตเติลวิดีโอ (#7.8)
+- **Tenant config**: เพิ่มฟิลด์ `template {preset:'a'|'b'|'c', background}` + `watermark {enabled, text}`; video เพิ่ม `subtitles` (media .vtt); resolve คืน template/watermark
+- **เทมเพลต 3 แบบ (no-code)**: `assets/templates.css` (A มาตรฐาน / B คม-กระชับ / C โค้งมน-โปร่ง) คุม style+layout ด้วย CSS ผ่าน `html[data-template]`; `tenant.js` ใส่ data-template + background ต่อ tenant
+- **Console Branding view** (`console.js` viewBranding — ไทล์ "แบรนด์/เว็บไซต์" = live): เลือกเทมเพลต (พรีวิวย่อ 3 แบบ) + สีแบรนด์ + สีพื้นหลัง + ลายน้ำ (เปิด/ปิด+ข้อความ) → **บันทึก** `PUT /api/console/branding` (admin-only, super=?tenant, editor=ของตน)
+- **Watermark**: `groupb.js` คลังภาพ → overlay ข้อความลายน้ำบนรูป+lightbox เมื่อ tenant เปิด (CSS `.gb-wm`)
+- **Subtitle**: video modal — YouTube ใส่ `cc_load_policy=1` (เปิด captions); ไฟล์ตรง ใช้ `<video><track .vtt>`
+- **E2E**: watermark 2 อัลบั้ม+lightbox "สพร. • DGA" · home ได้ data-template="a" · Console เลือก B→บันทึก→DB preset b→**หน้าแรกเปลี่ยนเป็นแบบ B ทันที** · ไม่มี console error · seed: dga=A, pea=B
+- หมายเหตุ: 3.3 Drag&Drop จัดวาง = ส่งมอบผ่าน Landing/Splash no-code page builder (Dynamic Zone) ที่ทำไว้แล้ว
+
+## Media processing — Image optimize + Video auto-resolution (เสร็จ + E2E)
+- **Image auto-optimization** (TOR #6.3): `config/plugins.ts` → upload `{ sizeOptimization, responsiveDimensions, autoOrientation, breakpoints }`
+  → อัปโหลดภาพ → sharp สร้าง thumbnail/small/medium/large + บีบอัดอัตโนมัติ (article-1.jpg 138KB → small 49KB ~-64%)
+  → `media(m, size)` ใน groupa.js/groupb.js เลือกขนาดเหมาะ (gallery/video grid=small, news=medium, lightbox=เต็ม) — ลด LCP/แบนด์วิดท์ (ช่วยคะแนน Performance #4.1.6)
+  → `enrichGroupB` re-upload ภาพ gallery ที่ยังไม่มี formats อัตโนมัติ · E2E: gallery โหลด `small_*.jpeg` 49KB จริง
+- **Video auto-resolution** (TOR #7.11): วิดีโอเล่นผ่าน **YouTube embed = adaptive streaming เนทีฟ** (player ปรับความละเอียดอัตโนมัติตามแบนด์วิดท์ — ไม่ fix vq); ไฟล์ตรงใช้ `<video>` ปรับคุณภาพเนทีฟ + รองรับหลาย `<source>` ได้
+  → (adaptive แท้สำหรับไฟล์โฮสต์เองต้องมี HLS/DASH transcoding pipeline — นอกขอบเขต config CMS)
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
+- WebX Console modules: Users / Chat (Branding เสร็จแล้ว)
 - หน้าแสดง Download/E-book/Gallery, .pptx full-text, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
 - เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA, อัปโหลดไฟล์แนบฟอร์ม, SMTP จริง, proxy SEO files ที่โดเมนจริง

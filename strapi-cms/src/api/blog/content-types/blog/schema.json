@@ -1,0 +1,18 @@
+{
+  "kind": "collectionType",
+  "collectionName": "blogs",
+  "info": { "singularName": "blog", "pluralName": "blogs", "displayName": "Blog", "description": "บล็อก (TOR ภาคผนวก ก ข้อ 15)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title" },
+    "category": { "type": "string" },
+    "excerpt": { "type": "text" },
+    "body": { "type": "richtext" },
+    "coverImage": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "author": { "type": "string" },
+    "publishDate": { "type": "date" },
+    "views": { "type": "integer", "default": 0 },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}

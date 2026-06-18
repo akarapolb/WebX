@@ -1,0 +1,10 @@
+{
+  "collectionName": "components_block_feature_items",
+  "info": { "displayName": "Block: Feature item", "icon": "bulletList", "description": "รายการคุณสมบัติ" },
+  "options": {},
+  "attributes": {
+    "icon": { "type": "enumeration", "enum": ["i-id", "i-grid", "i-data", "i-build", "i-doc", "i-book", "i-shield", "i-users", "i-check", "i-chat"], "default": "i-check" },
+    "title": { "type": "string" },
+    "text": { "type": "text" }
+  }
+}

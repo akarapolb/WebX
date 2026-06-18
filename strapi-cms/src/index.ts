@@ -3,7 +3,7 @@ import { errors } from '@strapi/utils';
 import {
   ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedDemos,
   seedTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
-  ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat,
+  ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB,
 } from './seed/seed';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) */
@@ -14,6 +14,9 @@ const SCOPED = new Set([
   'api::complaint.complaint', 'api::application.application', 'api::registration.registration',
   'api::consent-log.consent-log',
   'api::download.download', 'api::ebook.ebook', 'api::gallery.gallery', 'api::popup.popup', 'api::poll.poll',
+  'api::landing.landing',
+  'api::blog.blog', 'api::catalog.catalog', 'api::weblink.weblink', 'api::top-graphic.top-graphic',
+  'api::event.event', 'api::location.location', 'api::sitemap-node.sitemap-node',
 ]);
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
@@ -110,6 +113,9 @@ export default {
       await seedJobs(strapi);
       await seedDemos(strapi);
       await backfillTenant(strapi);
+      await seedLanding(strapi);
+      await seedGroupA(strapi);
+      await enrichGroupB(strapi);
       await seedTenantBContent(strapi);
       await seedModules(strapi);
       await seedFulltextDemo(strapi);

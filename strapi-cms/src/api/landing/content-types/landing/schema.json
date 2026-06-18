@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "landings",
+  "info": {
+    "singularName": "landing",
+    "pluralName": "landings",
+    "displayName": "Landing",
+    "description": "หน้า Landing/Splash สร้างแบบ no-code ด้วยการวางบล็อก (Dynamic Zone)"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "title",
+      "required": true
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "seoDescription": {
+      "type": "text"
+    },
+    "blocks": {
+      "type": "dynamiczone",
+      "components": [
+        "block.hero",
+        "block.richtext",
+        "block.image",
+        "block.cta-banner",
+        "block.feature-grid"
+      ]
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    }
+  }
+}

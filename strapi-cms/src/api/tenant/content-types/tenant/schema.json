@@ -54,6 +54,14 @@
     "liveChat": {
       "type": "json",
       "description": "{ channels: [{ type:'line'|'messenger'|'facebook'|'phone', label, url }] } — ช่องทางแชตสด/โซเชียล"
+    },
+    "template": {
+      "type": "json",
+      "description": "{ preset:'a'|'b'|'c', background:'#hex' } — เทมเพลตสำเร็จรูป 3 แบบ + สีพื้นหลัง (no-code, TOR ภาคผนวก ก ข้อ 3)"
+    },
+    "watermark": {
+      "type": "json",
+      "description": "{ enabled:bool, text:string } — ลายน้ำบนรูปคลังภาพ (TOR ภาคผนวก ก ข้อ 6.11)"
     }
   }
 }

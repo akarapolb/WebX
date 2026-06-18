@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "events",
+  "info": { "singularName": "event", "pluralName": "events", "displayName": "Event (ปฏิทินกิจกรรม)", "description": "ปฏิทินกิจกรรม (TOR ภาคผนวก ก ข้อ 16)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "start": { "type": "datetime", "required": true },
+    "end": { "type": "datetime" },
+    "allDay": { "type": "boolean", "default": false },
+    "location": { "type": "string" },
+    "description": { "type": "text" },
+    "category": { "type": "string" },
+    "color": { "type": "enumeration", "enum": ["blue", "amber", "green", "purple", "red"], "default": "blue" },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}

@@ -60,6 +60,14 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::gallery.gallery": ["find", "findOne"],
     "api::popup.popup": ["find", "findOne"],
     "api::poll.poll": ["find", "findOne"],
+    "api::landing.landing": ["find", "findOne"],
+    "api::blog.blog": ["find", "findOne"],
+    "api::catalog.catalog": ["find", "findOne"],
+    "api::weblink.weblink": ["find", "findOne"],
+    "api::top-graphic.top-graphic": ["find", "findOne"],
+    "api::event.event": ["find", "findOne"],
+    "api::location.location": ["find", "findOne"],
+    "api::sitemap-node.sitemap-node": ["find", "findOne"],
   };
 
   for (const [uid, actions] of Object.entries(map)) {
@@ -257,6 +265,9 @@ export async function backfillTenant(strapi: any) {
     "api::banner.banner", "api::video.video", "api::award.award",
     "api::complaint.complaint", "api::application.application", "api::registration.registration",
     "api::download.download", "api::ebook.ebook", "api::gallery.gallery", "api::popup.popup", "api::poll.poll",
+    "api::landing.landing",
+    "api::blog.blog", "api::catalog.catalog", "api::weblink.weblink", "api::top-graphic.top-graphic",
+    "api::event.event", "api::location.location", "api::sitemap-node.sitemap-node",
   ];
   for (const uid of uids) {
     const rows = await strapi.db.query(uid).findMany({ where: { tenant: null }, select: ["id"], limit: 10000 });
@@ -265,6 +276,205 @@ export async function backfillTenant(strapi: any) {
     }
     if (rows.length) strapi.log.info(`[seed] backfilled tenant=dga on ${rows.length} rows of ${uid}`);
   }
+}
+
+/* ---------- ตัวอย่างหน้า Landing (no-code page builder) ของ dga ---------- */
+export async function seedLanding(strapi: any) {
+  const dgaId = await dgaTenantId(strapi);
+  if (!dgaId) return;
+  const existing = await strapi.db.query("api::landing.landing").findMany({ where: { slug: "thaid" }, select: ["id"], limit: 1 });
+  if (existing.length) return; // seed แล้ว
+  await strapi.documents("api::landing.landing").create({
+    status: "published",
+    data: {
+      title: "ThaID — พิสูจน์และยืนยันตัวตนดิจิทัล",
+      slug: "thaid",
+      active: true,
+      seoDescription: "บริการพิสูจน์และยืนยันตัวตนทางดิจิทัลของภาครัฐ สมัครครั้งเดียว ใช้ได้กับบริการรัฐทั่วประเทศ",
+      tenant: dgaId,
+      blocks: [
+        {
+          __component: "block.hero",
+          kicker: "Digital ID",
+          heading: "ThaID — ดิจิทัลไอดีของคนไทย",
+          subheading: "พิสูจน์และยืนยันตัวตนทางดิจิทัลครั้งเดียว ใช้บริการภาครัฐได้ทุกที่ ทุกเวลา ปลอดภัยตามมาตรฐาน",
+          ctaLabel: "เริ่มลงทะเบียน",
+          ctaUrl: "register.html",
+          align: "center",
+        },
+        {
+          __component: "block.feature-grid",
+          heading: "ทำไมต้อง ThaID",
+          columns: "3",
+          items: [
+            { icon: "i-id", title: "ยืนยันตัวตนครั้งเดียว", text: "สมัครครั้งเดียวใช้ได้กับบริการภาครัฐที่รองรับทั่วประเทศ" },
+            { icon: "i-shield", title: "ปลอดภัยมาตรฐานสูง", text: "เข้ารหัสข้อมูลและยืนยันตัวตนหลายชั้นตามมาตรฐานสากล" },
+            { icon: "i-check", title: "สะดวก รวดเร็ว", text: "ลดการเดินทางและการใช้เอกสารกระดาษ ทำธุรกรรมได้จากมือถือ" },
+          ],
+        },
+        {
+          __component: "block.richtext",
+          body: "## ขั้นตอนการลงทะเบียน\n\n1. ดาวน์โหลดแอป ThaID\n2. ถ่ายรูปบัตรประชาชนและยืนยันใบหน้า\n3. ตั้งรหัส PIN เพื่อใช้งาน\n\nเมื่อลงทะเบียนเสร็จ ท่านสามารถใช้ ThaID เข้าสู่ระบบบริการภาครัฐที่รองรับได้ทันที",
+        },
+        {
+          __component: "block.cta-banner",
+          heading: "พร้อมเริ่มใช้งานแล้วหรือยัง?",
+          text: "ลงทะเบียน ThaID วันนี้ เพื่อเข้าถึงบริการดิจิทัลภาครัฐได้อย่างสะดวกปลอดภัย",
+          buttonLabel: "ลงทะเบียนเลย",
+          buttonUrl: "register.html",
+          theme: "primary",
+        },
+      ],
+    },
+  });
+  strapi.log.info("[seed] demo landing 'thaid' created for dga");
+}
+
+/* ---------- Group A: Blog / e-catalog / Web Link / Top Graphic (ปิด gap TOR ภาคผนวก ก) ---------- */
+export async function seedGroupA(strapi: any) {
+  const dgaId = await dgaTenantId(strapi);
+  if (!dgaId) return;
+  const P = { status: "published" as const };
+
+  if ((await strapi.db.query("api::blog.blog").count()) === 0) {
+    const blogs = [
+      { title: "เปิดมุมมอง: รัฐบาลดิจิทัลกับชีวิตประจำวัน", category: "บทความ", author: "ทีมบรรณาธิการ สพร.", publishDate: "2026-06-10", views: 420, excerpt: "บริการดิจิทัลภาครัฐเปลี่ยนวิธีที่ประชาชนติดต่อราชการอย่างไร", body: "## รัฐบาลดิจิทัลใกล้ตัวกว่าที่คิด\n\nตั้งแต่การยืนยันตัวตนด้วย ThaID ไปจนถึงการรับบริการผ่านแอป “ทางรัฐ” เทคโนโลยีดิจิทัลช่วยลดเวลาและเอกสารกระดาษ" },
+      { title: "เบื้องหลังการออกแบบบริการที่ยึดประชาชนเป็นศูนย์กลาง", category: "ดีไซน์", author: "ทีม UX สพร.", publishDate: "2026-06-04", views: 268, excerpt: "หลักคิด Human-Centered Design ในบริการภาครัฐ", body: "## ออกแบบจากความต้องการจริง\n\nการวิจัยผู้ใช้และการทดสอบกับประชาชนคือหัวใจของบริการที่ดี" },
+      { title: "ความมั่นคงปลอดภัยไซเบอร์ที่ทุกคนควรรู้", category: "ความปลอดภัย", author: "ทีมความมั่นคงปลอดภัย", publishDate: "2026-05-29", views: 173, excerpt: "เคล็ดลับป้องกันภัยไซเบอร์เบื้องต้นสำหรับประชาชน", body: "## ตั้งรหัสผ่านให้แข็งแรง\n\nใช้รหัสผ่านที่ไม่ซ้ำกันและเปิด MFA ทุกครั้งที่ทำได้" },
+    ];
+    for (const b of blogs) await strapi.documents("api::blog.blog").create({ ...P, data: { ...b, tenant: dgaId } });
+    strapi.log.info("[seed] blogs created (dga)");
+  }
+
+  if ((await strapi.db.query("api::catalog.catalog").count()) === 0) {
+    const cats = [
+      { title: "คู่มือบริการดิจิทัลภาครัฐ 2569", description: "รวมบริการดิจิทัลที่ประชาชนใช้ได้จริง พร้อมขั้นตอน", category: "คู่มือ", order: 1 },
+      { title: "แคตตาล็อกมาตรฐานข้อมูลภาครัฐ", description: "มาตรฐานและแนวทางการเชื่อมโยงข้อมูลระหว่างหน่วยงาน", category: "มาตรฐาน", order: 2 },
+      { title: "บริการ API ของ สพร.", description: "รายการ API กลางสำหรับนักพัฒนาภาครัฐ", category: "นักพัฒนา", order: 3 },
+    ];
+    for (const c of cats) await strapi.documents("api::catalog.catalog").create({ ...P, data: { ...c, tenant: dgaId } });
+    strapi.log.info("[seed] catalogs created (dga)");
+  }
+
+  if ((await strapi.db.query("api::weblink.weblink").count()) === 0) {
+    const links = [
+      { title: "ระบบ e-Service ภาครัฐ", url: "https://www.egov.go.th", description: "ศูนย์รวมบริการอิเล็กทรอนิกส์ภาครัฐ", displayType: "button", openNewTab: true, category: "บริการ", order: 1 },
+      { title: "พอร์ทัลข้อมูลเปิดภาครัฐ", url: "https://data.go.th", description: "Open Government Data ของประเทศไทย", displayType: "button", openNewTab: true, category: "ข้อมูลเปิด", order: 2 },
+      { title: "แอปพลิเคชัน ทางรัฐ", url: "https://www.dga.or.th", description: "บริการภาครัฐในแอปเดียว", displayType: "button", openNewTab: true, category: "บริการ", order: 3 },
+      { title: "ศูนย์เทคโนโลยีสารสนเทศภาครัฐ", url: "https://www.dga.or.th", description: "ความรู้และมาตรฐานดิจิทัลภาครัฐ", displayType: "button", openNewTab: true, category: "ความรู้", order: 4 },
+    ];
+    for (const l of links) await strapi.documents("api::weblink.weblink").create({ ...P, data: { ...l, tenant: dgaId } });
+    strapi.log.info("[seed] weblinks created (dga)");
+  }
+
+  if ((await strapi.db.query("api::top-graphic.top-graphic").count()) === 0) {
+    const tops = [
+      { title: "ประกาศ: ยกระดับบริการดิจิทัลภาครัฐ 2569", linkUrl: "landing.html?slug=thaid", transition: "fade", order: 1 },
+      { title: "เปิดรับฟังความคิดเห็นแผนพัฒนารัฐบาลดิจิทัล", linkUrl: "#", transition: "slide", order: 2 },
+    ];
+    for (const t of tops) await strapi.documents("api::top-graphic.top-graphic").create({ ...P, data: { ...t, tenant: dgaId } });
+    strapi.log.info("[seed] top-graphics created (dga)");
+  }
+
+  if ((await strapi.db.query("api::event.event").count()) === 0) {
+    const events = [
+      { title: "เปิดรับฟังความคิดเห็นแผนพัฒนารัฐบาลดิจิทัล", start: "2026-06-12T00:00:00.000Z", allDay: true, category: "ประชาพิจารณ์", color: "green", location: "ออนไลน์", description: "ร่วมแสดงความคิดเห็นต่อร่างแผนพัฒนารัฐบาลดิจิทัล" },
+      { title: "อบรมการใช้งาน ThaID สำหรับเจ้าหน้าที่", start: "2026-06-20T02:00:00.000Z", end: "2026-06-20T06:00:00.000Z", category: "อบรม", color: "blue", location: "สพร. ชั้น 17", description: "อบรมเชิงปฏิบัติการการพิสูจน์และยืนยันตัวตนดิจิทัล" },
+      { title: "สัมมนารัฐบาลดิจิทัล 2569", start: "2026-06-25T06:00:00.000Z", end: "2026-06-25T09:00:00.000Z", category: "สัมมนา", color: "amber", location: "ศูนย์ประชุมแห่งชาติสิริกิติ์", description: "ทิศทางรัฐบาลดิจิทัลและบริการภาครัฐยุคใหม่" },
+      { title: "Workshop: Open Government Data", start: "2026-06-28T03:00:00.000Z", end: "2026-06-28T08:00:00.000Z", category: "เวิร์กช็อป", color: "purple", location: "DGA Academy", description: "ปฏิบัติการการเปิดเผยและใช้ประโยชน์ข้อมูลภาครัฐ" },
+    ];
+    for (const e of events) await strapi.documents("api::event.event").create({ ...P, data: { ...e, tenant: dgaId } });
+    strapi.log.info("[seed] events created (dga)");
+  }
+
+  if ((await strapi.db.query("api::location.location").count()) === 0) {
+    const locs = [
+      { name: "สพร. (สำนักงานใหญ่) อาคาร TIJ", lat: 13.8869, lng: 100.561, address: "ชั้น 4 อาคาร TIJ เลขที่ 999 ถนนแจ้งวัฒนะ แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพฯ 10210", phone: "0-2612-6000", category: "สำนักงาน" },
+      { name: "ศูนย์ราชการเฉลิมพระเกียรติ แจ้งวัฒนะ", lat: 13.8896, lng: 100.565, address: "ถนนแจ้งวัฒนะ เขตหลักสี่ กรุงเทพฯ", phone: "0-2142-1234", category: "จุดบริการ" },
+      { name: "DGA Academy (อาคารบางกอกไทยทาวเวอร์)", lat: 13.7563, lng: 100.5388, address: "ถนนรางน้ำ เขตราชเทวี กรุงเทพฯ", phone: "0-2612-6060", category: "ฝึกอบรม" },
+      { name: "จุดบริการ ทางรัฐ (สยาม)", lat: 13.746, lng: 100.534, address: "สยามสแควร์ เขตปทุมวัน กรุงเทพฯ", phone: "1111", category: "จุดบริการ" },
+    ];
+    for (const l of locs) await strapi.documents("api::location.location").create({ ...P, data: { ...l, tenant: dgaId } });
+    strapi.log.info("[seed] locations created (dga)");
+  }
+
+  if ((await strapi.db.query("api::sitemap-node.sitemap-node").count()) === 0) {
+    const nodes = [
+      { group: "บริการประชาชน", label: "ลงทะเบียน ThaID", url: "register.html", order: 1 },
+      { group: "บริการประชาชน", label: "ตรวจสอบสถานะ", url: "application-status.html", order: 2 },
+      { group: "บริการประชาชน", label: "รับเรื่องร้องเรียน", url: "complaint.html", order: 3 },
+      { group: "ข้อมูลและข่าวสาร", label: "ข่าวประชาสัมพันธ์", url: "index.html", order: 1 },
+      { group: "ข้อมูลและข่าวสาร", label: "บล็อก", url: "blog.html", order: 2 },
+      { group: "ข้อมูลและข่าวสาร", label: "แคตตาล็อก (e-catalog)", url: "catalog.html", order: 3 },
+      { group: "ข้อมูลและข่าวสาร", label: "ปฏิทินกิจกรรม", url: "calendar.html", order: 4 },
+      { group: "เกี่ยวกับเรา", label: "หน้าแรก", url: "index.html", order: 1 },
+      { group: "เกี่ยวกับเรา", label: "ลิงก์ที่เกี่ยวข้อง", url: "links.html", order: 2 },
+      { group: "เกี่ยวกับเรา", label: "แผนที่ที่ตั้ง", url: "map.html", order: 3 },
+      { group: "เกี่ยวกับเรา", label: "ค้นหา", url: "search.html", order: 4 },
+      { group: "ร่วมงานกับเรา", label: "ตำแหน่งงาน", url: "careers.html", order: 1 },
+    ];
+    for (const n of nodes) await strapi.documents("api::sitemap-node.sitemap-node").create({ ...P, data: { ...n, tenant: dgaId } });
+    strapi.log.info("[seed] sitemap-nodes created (dga)");
+  }
+}
+
+/* ---------- Enrich Group B: แนบรูปให้ gallery + thumbnail/YouTube ให้ video (เดโมจริง) ---------- */
+export async function enrichGroupB(strapi: any) {
+  const cache = new Map<string, number | null>();
+  async function up(file: string): Promise<number | null> {
+    if (cache.has(file)) return cache.get(file)!;
+    const fp = path.join(IMG_DIR, file);
+    if (!fs.existsSync(fp)) { cache.set(file, null); return null; }
+    const st = fs.statSync(fp);
+    const [u] = await strapi.plugin("upload").service("upload").upload({
+      data: { fileInfo: { name: file, alternativeText: file } },
+      files: { filepath: fp, originalFileName: file, mimetype: mimeOf(file), size: st.size },
+    });
+    const id = u?.id ?? null; cache.set(file, id); return id;
+  }
+
+  // galleries: แนบ cover + images ถ้ายังว่าง
+  const gals = await strapi.documents("api::gallery.gallery").findMany({ populate: ["images"], limit: 50 });
+  const poolA = ["article-1.jpg", "article-2.jpg", "article-3.jpg", "article-4.jpg", "article-5.jpg"];
+  const poolB = ["banner-1.png", "banner-2.png", "banner-3.png", "banner-4.png", "banner-5.png", "banner-6.png"];
+  let gi = 0;
+  for (const g of gals) {
+    const imgs = g.images || [];
+    // re-upload ถ้ายังไม่มีภาพ หรือภาพเดิมยังไม่ถูก optimize (ไม่มี formats) → ได้ responsive/บีบอัด
+    const optimized = imgs.length && imgs[0] && imgs[0].formats;
+    if (optimized) continue;
+    const pool = gi % 2 === 0 ? poolA : poolB; gi++;
+    const ids = (await Promise.all(pool.map(up))).filter(Boolean) as number[];
+    if (!ids.length) continue;
+    await strapi.documents("api::gallery.gallery").update({ documentId: g.documentId, data: { coverImage: ids[0], images: ids } });
+    await strapi.documents("api::gallery.gallery").publish({ documentId: g.documentId });
+  }
+  if (gi) strapi.log.info(`[seed] (re)optimized images on ${gi} galleries`);
+
+  // videos: ใส่ thumbnail จริง + YouTube (วิดีโอโอเพนซอร์ส เป็นตัวอย่างที่ปลอดภัย) ถ้า url ยังเป็น '#'
+  const vids = await strapi.documents("api::video.video").findMany({ limit: 50 });
+  const yt = ["aqz-KE-bpKQ", "eRsGyueVLvQ", "R6MlUcmOul8"]; // Big Buck Bunny / Sintel / Tears of Steel (open content)
+  const vthumb = ["article-1.jpg", "article-2.jpg", "article-3.jpg", "article-4.jpg", "article-5.jpg", "banner-7.png"];
+  let vi = 0;
+  for (const v of vids) {
+    if (v.videoUrl && v.videoUrl !== "#") continue;
+    const tid = await up(vthumb[vi % vthumb.length]);
+    await strapi.documents("api::video.video").update({ documentId: v.documentId, data: { videoUrl: "https://www.youtube.com/watch?v=" + yt[vi % yt.length], thumbnail: tid || undefined } });
+    await strapi.documents("api::video.video").publish({ documentId: v.documentId });
+    vi++;
+  }
+  if (vi) strapi.log.info(`[seed] enriched ${vi} videos with thumbnail+url`);
+
+  // ค่าเริ่มต้น template/watermark ต่อ tenant (no-code theme + ลายน้ำ)
+  const tdefs: Record<string, any> = {
+    dga: { template: { preset: "a", background: "" }, watermark: { enabled: true, text: "สพร. • DGA" } },
+    pea: { template: { preset: "b", background: "" }, watermark: { enabled: true, text: "กฟภ. • PEA" } },
+  };
+  for (const [key, def] of Object.entries(tdefs)) {
+    const t = await strapi.db.query("api::tenant.tenant").findOne({ where: { key }, select: ["id", "template", "watermark"] });
+    if (t && !t.template) await strapi.db.query("api::tenant.tenant").update({ where: { id: t.id }, data: def });
+  }
+  strapi.log.info("[seed] tenant template/watermark defaults ensured");
 }
 
 /* ---------- เนื้อหาของ tenant ที่ 2 (pea) เพื่อพิสูจน์ data isolation ของ Search ---------- */

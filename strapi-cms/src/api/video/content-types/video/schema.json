@@ -56,6 +56,14 @@
       "type": "integer",
       "default": 0,
       "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "subtitles": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["files"],
+      "description": "ไฟล์คำบรรยาย .vtt (TOR ภาคผนวก ก ข้อ 7.8)",
+      "pluginOptions": { "i18n": { "localized": false } }
     }
   }
 }

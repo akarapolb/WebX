@@ -1,0 +1,15 @@
+{
+  "kind": "collectionType",
+  "collectionName": "locations",
+  "info": { "singularName": "location", "pluralName": "locations", "displayName": "Location (Map)", "description": "จุดที่ตั้งบนแผนที่ (TOR ภาคผนวก ก ข้อ 27)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "lat": { "type": "float", "required": true },
+    "lng": { "type": "float", "required": true },
+    "address": { "type": "text" },
+    "phone": { "type": "string" },
+    "category": { "type": "string" },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}

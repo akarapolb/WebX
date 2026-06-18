@@ -35,6 +35,11 @@
       "type": "integer",
       "default": 0,
       "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "views": {
+      "type": "integer",
+      "default": 0,
+      "pluginOptions": { "i18n": { "localized": false } }
     }
   }
 }

@@ -759,6 +759,76 @@ export interface ApiBannerBanner extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
+  collectionName: 'blogs';
+  info: {
+    description: '\u0E1A\u0E25\u0E47\u0E2D\u0E01 (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 15)';
+    displayName: 'Blog';
+    pluralName: 'blogs';
+    singularName: 'blog';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    author: Schema.Attribute.String;
+    body: Schema.Attribute.RichText;
+    category: Schema.Attribute.String;
+    coverImage: Schema.Attribute.Media<'images'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    excerpt: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::blog.blog'> &
+      Schema.Attribute.Private;
+    publishDate: Schema.Attribute.Date;
+    publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'title'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    views: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
+export interface ApiCatalogCatalog extends Struct.CollectionTypeSchema {
+  collectionName: 'catalogs';
+  info: {
+    description: '\u0E41\u0E04\u0E15\u0E15\u0E32\u0E25\u0E47\u0E2D\u0E01\u0E2D\u0E34\u0E40\u0E25\u0E47\u0E01\u0E17\u0E23\u0E2D\u0E19\u0E34\u0E01\u0E2A\u0E4C (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 19)';
+    displayName: 'Catalog (e-catalog)';
+    pluralName: 'catalogs';
+    singularName: 'catalog';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    category: Schema.Attribute.String;
+    coverImage: Schema.Attribute.Media<'images'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    file: Schema.Attribute.Media<'files' | 'images'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::catalog.catalog'
+    > &
+      Schema.Attribute.Private;
+    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiComplaintComplaint extends Struct.CollectionTypeSchema {
   collectionName: 'complaints';
   info: {
@@ -916,6 +986,43 @@ export interface ApiEbookEbook extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiEventEvent extends Struct.CollectionTypeSchema {
+  collectionName: 'events';
+  info: {
+    description: '\u0E1B\u0E0F\u0E34\u0E17\u0E34\u0E19\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21 (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 16)';
+    displayName: 'Event (\u0E1B\u0E0F\u0E34\u0E17\u0E34\u0E19\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21)';
+    pluralName: 'events';
+    singularName: 'event';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    allDay: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    category: Schema.Attribute.String;
+    color: Schema.Attribute.Enumeration<
+      ['blue', 'amber', 'green', 'purple', 'red']
+    > &
+      Schema.Attribute.DefaultTo<'blue'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    end: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::event.event'> &
+      Schema.Attribute.Private;
+    location: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    start: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiFaqFaq extends Struct.CollectionTypeSchema {
   collectionName: 'faqs';
   info: {
@@ -968,6 +1075,13 @@ export interface ApiFaqFaq extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    views: Schema.Attribute.Integer &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<0>;
   };
 }
 
@@ -1003,6 +1117,7 @@ export interface ApiGalleryGallery extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    views: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
   };
 }
 
@@ -1202,6 +1317,83 @@ export interface ApiJobJob extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
+  collectionName: 'landings';
+  info: {
+    description: '\u0E2B\u0E19\u0E49\u0E32 Landing/Splash \u0E2A\u0E23\u0E49\u0E32\u0E07\u0E41\u0E1A\u0E1A no-code \u0E14\u0E49\u0E27\u0E22\u0E01\u0E32\u0E23\u0E27\u0E32\u0E07\u0E1A\u0E25\u0E47\u0E2D\u0E01 (Dynamic Zone)';
+    displayName: 'Landing';
+    pluralName: 'landings';
+    singularName: 'landing';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    blocks: Schema.Attribute.DynamicZone<
+      [
+        'block.hero',
+        'block.richtext',
+        'block.image',
+        'block.cta-banner',
+        'block.feature-grid',
+      ]
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::landing.landing'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    seoDescription: Schema.Attribute.Text;
+    slug: Schema.Attribute.UID<'title'> & Schema.Attribute.Required;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiLocationLocation extends Struct.CollectionTypeSchema {
+  collectionName: 'locations';
+  info: {
+    description: '\u0E08\u0E38\u0E14\u0E17\u0E35\u0E48\u0E15\u0E31\u0E49\u0E07\u0E1A\u0E19\u0E41\u0E1C\u0E19\u0E17\u0E35\u0E48 (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 27)';
+    displayName: 'Location (Map)';
+    pluralName: 'locations';
+    singularName: 'location';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    address: Schema.Attribute.Text;
+    category: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    lat: Schema.Attribute.Float & Schema.Attribute.Required;
+    lng: Schema.Attribute.Float & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::location.location'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPollPoll extends Struct.CollectionTypeSchema {
   collectionName: 'polls';
   info: {
@@ -1395,6 +1587,39 @@ export interface ApiServiceService extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiSitemapNodeSitemapNode extends Struct.CollectionTypeSchema {
+  collectionName: 'sitemap_nodes';
+  info: {
+    description: '\u0E42\u0E04\u0E23\u0E07\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E41\u0E1C\u0E19\u0E1C\u0E31\u0E07\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 25)';
+    displayName: 'Sitemap Node';
+    pluralName: 'sitemap-nodes';
+    singularName: 'sitemap-node';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    group: Schema.Attribute.String & Schema.Attribute.Required;
+    label: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::sitemap-node.sitemap-node'
+    > &
+      Schema.Attribute.Private;
+    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    url: Schema.Attribute.String;
+  };
+}
+
 export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   collectionName: 'tenants';
   info: {
@@ -1428,6 +1653,45 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
     social: Schema.Attribute.JSON;
+    template: Schema.Attribute.JSON;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    watermark: Schema.Attribute.JSON;
+  };
+}
+
+export interface ApiTopGraphicTopGraphic extends Struct.CollectionTypeSchema {
+  collectionName: 'top_graphics';
+  info: {
+    description: '\u0E20\u0E32\u0E1E\u0E01\u0E23\u0E32\u0E1F\u0E34\u0E01\u0E14\u0E49\u0E32\u0E19\u0E1A\u0E19 (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 24)';
+    displayName: 'Top Graphic';
+    pluralName: 'top-graphics';
+    singularName: 'top-graphic';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    endDate: Schema.Attribute.Date;
+    image: Schema.Attribute.Media<'images'>;
+    linkUrl: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::top-graphic.top-graphic'
+    > &
+      Schema.Attribute.Private;
+    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    startDate: Schema.Attribute.Date;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String;
+    transition: Schema.Attribute.Enumeration<['fade', 'slide', 'none']> &
+      Schema.Attribute.DefaultTo<'fade'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1476,6 +1740,12 @@ export interface ApiVideoVideo extends Struct.CollectionTypeSchema {
     locale: Schema.Attribute.String;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::video.video'>;
     publishedAt: Schema.Attribute.DateTime;
+    subtitles: Schema.Attribute.Media<'files'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
       Schema.Attribute.SetPluginOptions<{
         i18n: {
@@ -1511,6 +1781,44 @@ export interface ApiVideoVideo extends Struct.CollectionTypeSchema {
         };
       }> &
       Schema.Attribute.DefaultTo<0>;
+  };
+}
+
+export interface ApiWeblinkWeblink extends Struct.CollectionTypeSchema {
+  collectionName: 'weblinks';
+  info: {
+    description: '\u0E08\u0E31\u0E14\u0E01\u0E32\u0E23\u0E40\u0E27\u0E47\u0E1A\u0E25\u0E34\u0E07\u0E01\u0E4C (TOR \u0E20\u0E32\u0E04\u0E1C\u0E19\u0E27\u0E01 \u0E01 \u0E02\u0E49\u0E2D 23)';
+    displayName: 'Web Link';
+    pluralName: 'weblinks';
+    singularName: 'weblink';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    category: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    displayType: Schema.Attribute.Enumeration<['image', 'text', 'button']> &
+      Schema.Attribute.DefaultTo<'button'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::weblink.weblink'
+    > &
+      Schema.Attribute.Private;
+    openNewTab: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    thumbnail: Schema.Attribute.Media<'images'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    url: Schema.Attribute.String & Schema.Attribute.Required;
   };
 }
 
@@ -2030,20 +2338,28 @@ declare module '@strapi/strapi' {
       'api::audit-log.audit-log': ApiAuditLogAuditLog;
       'api::award.award': ApiAwardAward;
       'api::banner.banner': ApiBannerBanner;
+      'api::blog.blog': ApiBlogBlog;
+      'api::catalog.catalog': ApiCatalogCatalog;
       'api::complaint.complaint': ApiComplaintComplaint;
       'api::consent-log.consent-log': ApiConsentLogConsentLog;
       'api::download.download': ApiDownloadDownload;
       'api::ebook.ebook': ApiEbookEbook;
+      'api::event.event': ApiEventEvent;
       'api::faq.faq': ApiFaqFaq;
       'api::gallery.gallery': ApiGalleryGallery;
       'api::home-page.home-page': ApiHomePageHomePage;
       'api::job.job': ApiJobJob;
+      'api::landing.landing': ApiLandingLanding;
+      'api::location.location': ApiLocationLocation;
       'api::poll.poll': ApiPollPoll;
       'api::popup.popup': ApiPopupPopup;
       'api::registration.registration': ApiRegistrationRegistration;
       'api::service.service': ApiServiceService;
+      'api::sitemap-node.sitemap-node': ApiSitemapNodeSitemapNode;
       'api::tenant.tenant': ApiTenantTenant;
+      'api::top-graphic.top-graphic': ApiTopGraphicTopGraphic;
       'api::video.video': ApiVideoVideo;
+      'api::weblink.weblink': ApiWeblinkWeblink;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;
       'plugin::i18n.locale': PluginI18NLocale;

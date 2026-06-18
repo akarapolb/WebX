@@ -10,6 +10,7 @@
     "coverImage": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
     "images": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
     "date": { "type": "date" },
-    "order": { "type": "integer", "default": 0 }
+    "order": { "type": "integer", "default": 0 },
+    "views": { "type": "integer", "default": 0 }
   }
 }
