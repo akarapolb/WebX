@@ -104,3 +104,6 @@
 .art__share { display: flex; align-items: center; gap: 8px; margin: 18px 0; flex-wrap: wrap; }
 .share-btn { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 999px; border: 1px solid var(--c-border-strong); color: var(--sc, var(--c-text-muted)); text-decoration: none; transition: background .15s, color .15s; }
 .share-btn:hover { background: var(--sc, var(--c-text-muted)); color: #fff; border-color: var(--sc, var(--c-text-muted)); }
+/* lightbox auto-slide button (6.6) */
+.gb-lb__play { position: absolute; top: 18px; right: 64px; background: rgba(255,255,255,.15); border: 0; color: #fff; width: 38px; height: 38px; border-radius: 999px; font-size: 1rem; cursor: pointer; }
+.gb-lb__play:hover { background: rgba(255,255,255,.3); }

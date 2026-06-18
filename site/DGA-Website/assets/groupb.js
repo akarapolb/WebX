@@ -44,19 +44,26 @@
         '<div class="gb-album__img' + wmAttr + '"' + (cover ? ' style="background-image:url(\'' + cover + "')\"" : "") + '><span class="gb-album__count">' + nf((g.images || []).length) + ' ภาพ</span></div>' +
         '<div class="gb-album__body"><h3>' + esc(g.title) + '</h3><span class="gb-stat">' + nf(g.views) + " เข้าชม</span></div></button>";
     }).join("") + "</div>" +
-      '<div class="gb-lb" id="gb-lb"><button class="gb-lb__close" aria-label="ปิด">×</button><button class="gb-lb__nav gb-lb__nav--prev" aria-label="ก่อนหน้า">‹</button><img alt=""><button class="gb-lb__nav gb-lb__nav--next" aria-label="ถัดไป">›</button>' +
+      '<div class="gb-lb" id="gb-lb"><button class="gb-lb__close" aria-label="ปิด">×</button><button class="gb-lb__play" id="gb-lb-play" aria-label="เล่นสไลด์อัตโนมัติ" title="เล่นอัตโนมัติ">▶</button><button class="gb-lb__nav gb-lb__nav--prev" aria-label="ก่อนหน้า">‹</button><img alt=""><button class="gb-lb__nav gb-lb__nav--next" aria-label="ถัดไป">›</button>' +
       (WM.enabled && WM.text ? '<div class="gb-lb__wm">' + esc(WM.text) + "</div>" : "") +
       '<div class="gb-lb__cap"></div></div>';
 
     var lb = document.getElementById("gb-lb"), imgs = [], idx = 0, cap = lb.querySelector(".gb-lb__cap"), im = lb.querySelector("img");
+    var autoTimer = null, playBtn = document.getElementById("gb-lb-play");
     function show() { im.src = imgs[idx]; cap.textContent = (idx + 1) + " / " + imgs.length; }
+    function stopAuto() { if (autoTimer) { clearInterval(autoTimer); autoTimer = null; if (playBtn) { playBtn.textContent = "▶"; playBtn.title = "เล่นอัตโนมัติ"; } } }
+    if (playBtn) playBtn.onclick = function () {
+      if (autoTimer) { stopAuto(); return; }
+      autoTimer = setInterval(function () { idx = (idx + 1) % imgs.length; show(); }, 3500);
+      playBtn.textContent = "⏸"; playBtn.title = "หยุดเล่นอัตโนมัติ";
+    };
     root.querySelectorAll(".gb-album").forEach(function (b) {
       b.onclick = function () { var g = items[+b.getAttribute("data-i")]; imgs = (g.images || []).map(media).filter(Boolean); if (!imgs.length && g.coverImage) imgs = [media(g.coverImage)]; if (!imgs.length) return; idx = 0; show(); lb.classList.add("is-open"); stat("gallery", g.documentId); };
     });
-    lb.querySelector(".gb-lb__close").onclick = function () { lb.classList.remove("is-open"); im.src = ""; };
+    lb.querySelector(".gb-lb__close").onclick = function () { stopAuto(); lb.classList.remove("is-open"); im.src = ""; };
     lb.querySelector(".gb-lb__nav--prev").onclick = function () { idx = (idx - 1 + imgs.length) % imgs.length; show(); };
     lb.querySelector(".gb-lb__nav--next").onclick = function () { idx = (idx + 1) % imgs.length; show(); };
-    lb.onclick = function (e) { if (e.target === lb) { lb.classList.remove("is-open"); im.src = ""; } };
+    lb.onclick = function (e) { if (e.target === lb) { stopAuto(); lb.classList.remove("is-open"); im.src = ""; } };
   }
 
   // ---------- Video Gallery ----------
@@ -68,9 +75,9 @@
         '<div class="gb-vid__thumb"' + (th ? ' style="background-image:url(\'' + th + "')\"" : "") + '><span class="gb-vid__play"></span>' + (v.duration ? '<span class="gb-vid__dur">' + esc(v.duration) + "</span>" : "") + "</div>" +
         '<div class="gb-vid__body"><h3>' + esc(v.title) + '</h3><span class="gb-stat">' + nf(v.views) + " ครั้ง</span></div></button>";
     }).join("") + "</div>" +
-      '<div class="gb-modal" id="gb-modal"><div class="gb-modal__box"><div class="gb-modal__bar"><span class="gb-modal__title"></span><button class="gb-modal__close" aria-label="ปิด">×</button></div><div class="gb-modal__video"></div></div></div>';
+      '<div class="gb-modal" id="gb-modal"><div class="gb-modal__box"><div class="gb-modal__bar"><span class="gb-modal__title"></span><a class="gb-modal__dl" id="gb-modal-dl" target="_blank" rel="noopener" style="color:#fff;font-size:var(--fs-small);margin-left:auto;text-decoration:underline">↗</a><button class="gb-modal__close" aria-label="ปิด">×</button></div><div class="gb-modal__video"></div></div></div>';
 
-    var mod = document.getElementById("gb-modal"), vbox = mod.querySelector(".gb-modal__video"), ttl = mod.querySelector(".gb-modal__title");
+    var mod = document.getElementById("gb-modal"), vbox = mod.querySelector(".gb-modal__video"), ttl = mod.querySelector(".gb-modal__title"), dl = document.getElementById("gb-modal-dl");
     function close() { mod.classList.remove("is-open"); vbox.innerHTML = ""; }
     root.querySelectorAll(".gb-vid").forEach(function (b) {
       b.onclick = function () {
@@ -83,6 +90,12 @@
           vbox.innerHTML = '<video controls autoplay style="width:100%;height:100%"><source src="' + esc(v.videoUrl) + '">' +
             (sub ? '<track kind="subtitles" srclang="th" label="ไทย" src="' + sub + '" default>' : "") + "</video>";
         } else { vbox.innerHTML = '<p style="color:#fff;padding:40px;text-align:center">ยังไม่มีลิงก์วิดีโอ</p>'; }
+        // ดาวน์โหลด/เปิดต้นทาง (TOR 7.5): ไฟล์ตรง = ดาวน์โหลด, YouTube/TikTok = เปิดต้นทาง
+        if (dl) {
+          if (id) { dl.href = v.videoUrl; dl.textContent = "เปิดบน YouTube ↗"; dl.removeAttribute("download"); dl.style.display = ""; }
+          else if (v.videoUrl && v.videoUrl !== "#") { dl.href = v.videoUrl; dl.textContent = "⬇ ดาวน์โหลดวิดีโอ"; dl.setAttribute("download", ""); dl.style.display = ""; }
+          else { dl.style.display = "none"; }
+        }
         mod.classList.add("is-open"); stat("video", v.documentId);
       };
     });
