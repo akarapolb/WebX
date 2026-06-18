@@ -1,0 +1,71 @@
+/* ============================================================
+   analytics.css — แดชบอร์ดสถิติเว็บไซต์ (หลังบ้าน) · TOR โมดูล Web Analytics+Heatmap
+   ใช้ Design Tokens จาก design-system.css · Responsive · โหมดมืด · WCAG 2.2 AA
+   ============================================================ */
+.a-shell { max-width: 1200px; margin: 0 auto; padding: 24px 20px 64px; }
+
+/* ---------- แถบหัว ---------- */
+.a-top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 24px; }
+.a-top h1 { font-size: var(--fs-h2); margin: 0; color: var(--c-text); flex: 1 1 auto; }
+.a-top__meta { color: var(--c-text-muted); font-size: var(--fs-small); }
+.a-top select, .a-top .btn { min-height: 40px; }
+.a-select { padding: 8px 12px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); background: var(--c-surface); color: var(--c-text); font: inherit; }
+
+/* ---------- การ์ด KPI ---------- */
+.a-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.a-kpi { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); padding: 20px; }
+.a-kpi__label { color: var(--c-text-muted); font-size: var(--fs-small); margin: 0 0 6px; }
+.a-kpi__val { font-size: 2rem; font-weight: 700; color: var(--c-text); line-height: 1.1; font-family: var(--font-en); }
+.a-kpi__sub { color: var(--c-text-muted); font-size: var(--fs-small); margin: 6px 0 0; }
+.a-kpi--accent { border-color: var(--c-primary); }
+.a-kpi--accent .a-kpi__val { color: var(--c-primary); }
+
+/* ---------- ตาราง grid ของ section ---------- */
+.a-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.a-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); padding: 22px; margin-bottom: 20px; }
+.a-card h2 { font-size: var(--fs-h3); margin: 0 0 16px; color: var(--c-text); }
+
+/* ---------- แท่งสัดส่วน (bar) ---------- */
+.a-bar { margin-bottom: 12px; }
+.a-bar__head { display: flex; justify-content: space-between; font-size: var(--fs-small); color: var(--c-text); margin-bottom: 5px; }
+.a-bar__track { height: 9px; background: var(--c-sunken); border-radius: 999px; overflow: hidden; }
+.a-bar__fill { height: 100%; border-radius: 999px; background: var(--c-primary); }
+.a-bar__fill--green { background: var(--c-success); }
+.a-bar__fill--red { background: var(--c-danger); }
+.a-bar__fill--amber { background: var(--c-warning); }
+
+/* ---------- ตารางเนื้อหาเป็นชิป ---------- */
+.a-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.a-chip { background: var(--c-sunken); border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 12px 14px; }
+.a-chip b { display: block; font-size: 1.4rem; color: var(--c-text); font-family: var(--font-en); }
+.a-chip span { color: var(--c-text-muted); font-size: var(--fs-small); }
+
+/* ---------- ตาราง audit ---------- */
+.a-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+.a-table th, .a-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--c-border); color: var(--c-text); }
+.a-table th { color: var(--c-text-muted); font-weight: 500; }
+.a-empty { color: var(--c-text-muted); font-size: var(--fs-small); padding: 8px 0; }
+
+/* ---------- ลิงก์ภายนอก ---------- */
+.a-ext { display: flex; flex-wrap: wrap; gap: 10px; }
+.a-ext a { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-sm); border: 1px solid var(--c-border-strong); color: var(--c-text); text-decoration: none; background: var(--c-surface); }
+.a-ext a:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.a-ext code { font-family: var(--font-en); color: var(--c-text-muted); font-size: var(--fs-small); }
+
+/* ---------- หน้าล็อกอิน ---------- */
+.a-login { max-width: 400px; margin: 64px auto; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); padding: 32px; }
+.a-login h1 { font-size: var(--fs-h3); margin: 0 0 6px; color: var(--c-text); }
+.a-login p { color: var(--c-text-muted); font-size: var(--fs-small); margin: 0 0 20px; }
+.a-login label { display: block; font-size: var(--fs-small); color: var(--c-text); margin: 0 0 6px; }
+.a-login input { width: 100%; padding: 11px 13px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); background: var(--c-bg); color: var(--c-text); font: inherit; margin-bottom: 16px; }
+.a-login .btn { width: 100%; }
+.a-err { color: var(--c-danger); font-size: var(--fs-small); margin: 0 0 14px; min-height: 1em; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .a-kpis { grid-template-columns: repeat(2, 1fr); }
+  .a-cols { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .a-kpis, .a-chips { grid-template-columns: 1fr 1fr; }
+}

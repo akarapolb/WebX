@@ -1,0 +1,89 @@
+/* ============================================================
+   landing.css — สไตล์หน้า Landing/Splash (no-code page builder)
+   ใช้ Design Tokens จาก design-system.css ทั้งหมด (สี/รัศมี/ฟอนต์)
+   บล็อก: hero · feature-grid · richtext · image · cta-banner
+   Responsive 3 อุปกรณ์ · รองรับโหมดมืด · WCAG 2.2 AA
+   ============================================================ */
+
+.l-wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+/* ---------- สถานะโหลด / ไม่พบ ---------- */
+.l-state { max-width: 640px; margin: 64px auto; text-align: center; color: var(--c-text-muted); }
+.l-state h1 { font-size: var(--fs-h2); color: var(--c-text); margin: 0 0 8px; }
+
+/* ---------- บล็อก: Hero ---------- */
+.l-hero {
+  position: relative; padding: 84px 20px; text-align: center; overflow: hidden;
+  background: var(--grad-hero); color: var(--c-text-invert);
+}
+.l-hero[data-align="left"] { text-align: left; }
+.l-hero__inner { max-width: 880px; margin: 0 auto; position: relative; z-index: 2; }
+.l-hero--img::before {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: var(--_bg) center/cover no-repeat; opacity: .28;
+}
+.l-hero__kicker {
+  display: inline-block; font-family: var(--font-en); font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; font-size: var(--fs-small); color: #FFD3B0; margin-bottom: 14px;
+}
+.l-hero h1 { font-size: var(--fs-display); line-height: var(--lh-tight); margin: 0 0 16px; }
+.l-hero__sub { font-size: var(--fs-body-lg); line-height: var(--lh-base); opacity: .92; max-width: 660px; margin: 0 auto 28px; }
+.l-hero[data-align="left"] .l-hero__sub { margin-left: 0; }
+
+/* ---------- บล็อก: Feature grid ---------- */
+.l-features { padding: 64px 0; background: var(--c-bg); }
+.l-features h2 { text-align: center; font-size: var(--fs-h2); margin: 0 0 40px; color: var(--c-text); }
+.l-grid { display: grid; gap: 22px; }
+.l-grid[data-cols="2"] { grid-template-columns: repeat(2, 1fr); }
+.l-grid[data-cols="3"] { grid-template-columns: repeat(3, 1fr); }
+.l-grid[data-cols="4"] { grid-template-columns: repeat(4, 1fr); }
+.l-card {
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg); padding: 28px 24px; text-align: center;
+}
+.l-card__ic {
+  width: 52px; height: 52px; margin: 0 auto 16px; display: grid; place-items: center;
+  border-radius: var(--radius-md); background: var(--badge-info-bg); color: var(--c-secondary);
+}
+.l-card__ic svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.l-card h3 { font-size: var(--fs-h3); margin: 0 0 8px; color: var(--c-text); }
+.l-card p { color: var(--c-text-muted); line-height: var(--lh-base); margin: 0; }
+
+/* ---------- บล็อก: Rich text ---------- */
+.l-rich { padding: 56px 0; background: var(--c-surface); }
+.l-rich .l-wrap { max-width: 760px; }
+.l-rich h2 { font-size: var(--fs-h2); margin: 0 0 16px; color: var(--c-text); }
+.l-rich h3 { font-size: var(--fs-h3); margin: 28px 0 10px; color: var(--c-text); }
+.l-rich p { color: var(--c-text); line-height: var(--lh-base); margin: 0 0 14px; }
+.l-rich ol, .l-rich ul { color: var(--c-text); line-height: var(--lh-base); padding-left: 24px; margin: 0 0 14px; }
+.l-rich li { margin-bottom: 6px; }
+.l-rich strong { font-weight: 600; }
+
+/* ---------- บล็อก: Image ---------- */
+.l-image { padding: 32px 0; background: var(--c-bg); text-align: center; }
+.l-image figure { margin: 0; }
+.l-image img { width: 100%; max-width: 760px; border-radius: var(--radius-lg); border: 1px solid var(--c-border); }
+.l-image--full img { max-width: 100%; }
+.l-image figcaption { color: var(--c-text-muted); font-size: var(--fs-small); margin-top: 10px; }
+
+/* ---------- บล็อก: CTA banner ---------- */
+.l-cta { padding: 56px 20px; text-align: center; }
+.l-cta__inner { max-width: 720px; margin: 0 auto; padding: 44px 32px; border-radius: var(--radius-xl); }
+.l-cta--primary .l-cta__inner { background: var(--grad-brand); color: #fff; }
+.l-cta--dark .l-cta__inner { background: #1c1d22; color: #fff; }
+.l-cta--light .l-cta__inner { background: var(--c-sunken); color: var(--c-text); border: 1px solid var(--c-border); }
+.l-cta h2 { font-size: var(--fs-h2); margin: 0 0 10px; }
+.l-cta p { font-size: var(--fs-body-lg); margin: 0 0 24px; opacity: .95; }
+.l-cta--primary .btn--primary, .l-cta--dark .btn--primary { background: #fff; color: var(--c-action); }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .l-grid[data-cols="3"], .l-grid[data-cols="4"] { grid-template-columns: repeat(2, 1fr); }
+  .l-hero h1 { font-size: var(--fs-h1); }
+}
+@media (max-width: 560px) {
+  .l-grid[data-cols="2"], .l-grid[data-cols="3"], .l-grid[data-cols="4"] { grid-template-columns: 1fr; }
+  .l-hero { padding: 56px 18px; }
+  .l-hero h1 { font-size: var(--fs-h2); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }

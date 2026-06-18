@@ -1,0 +1,78 @@
+/* ============================================================
+   console.css — WebX Console (หลังบ้านรวมศูนย์ต่อ tenant)
+   Shell: sidebar + topbar (แบรนด์ตาม tenant) + view area · SPA hash router
+   ใช้ Design Tokens จาก design-system.css · Responsive · โหมดมืด · WCAG 2.2 AA
+   --wx-accent = สีแบรนด์ของ tenant (ตั้งจาก JS)
+   ============================================================ */
+:root { --wx-accent: #1a4fa0; --wx-sidebar: 248px; }
+
+body.wx { background: var(--c-bg); margin: 0; }
+
+/* ---------- หน้าล็อกอิน ---------- */
+.wx-login { max-width: 410px; margin: 8vh auto; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-xl); padding: 36px; box-shadow: 0 4px 24px rgba(0,0,0,.06); }
+.wx-login__brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.wx-login__logo { width: 40px; height: 40px; border-radius: 10px; background: var(--wx-accent); display: grid; place-items: center; color: #fff; font-weight: 700; font-family: var(--font-en); }
+.wx-login h1 { font-size: var(--fs-h3); margin: 0; color: var(--c-text); }
+.wx-login p.sub { color: var(--c-text-muted); font-size: var(--fs-small); margin: 4px 0 22px; }
+.wx-login label { display: block; font-size: var(--fs-small); color: var(--c-text); margin: 0 0 6px; }
+.wx-login input { width: 100%; padding: 11px 13px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); background: var(--c-bg); color: var(--c-text); font: inherit; margin-bottom: 16px; }
+.wx-login .btn { width: 100%; }
+.wx-err { color: var(--c-danger); font-size: var(--fs-small); margin: 0 0 14px; min-height: 1em; }
+
+/* ---------- โครง shell ---------- */
+.wx-app { display: grid; grid-template-columns: var(--wx-sidebar) 1fr; min-height: 100vh; }
+
+/* Sidebar */
+.wx-side { background: var(--c-surface); border-right: 1px solid var(--c-border); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+.wx-side__brand { display: flex; align-items: center; gap: 11px; padding: 18px 18px; border-bottom: 1px solid var(--c-border); }
+.wx-side__logo { width: 38px; height: 38px; border-radius: 10px; background: var(--wx-accent); display: grid; place-items: center; color: #fff; font-weight: 700; font-family: var(--font-en); overflow: hidden; flex: 0 0 auto; }
+.wx-side__logo img { width: 100%; height: 100%; object-fit: contain; }
+.wx-side__name { font-weight: 600; color: var(--c-text); font-size: .95rem; line-height: 1.2; }
+.wx-side__name small { display: block; color: var(--c-text-muted); font-weight: 400; font-size: var(--fs-small); }
+.wx-nav { padding: 12px 10px; flex: 1 1 auto; overflow-y: auto; }
+.wx-nav__item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; border: 0; background: none; border-radius: var(--radius-md); color: var(--c-text); font: inherit; cursor: pointer; text-align: left; margin-bottom: 2px; text-decoration: none; }
+.wx-nav__item:hover { background: var(--c-sunken); }
+.wx-nav__item[aria-current="page"] { background: color-mix(in srgb, var(--wx-accent) 12%, transparent); color: var(--wx-accent); font-weight: 600; }
+.wx-nav__item svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.wx-nav__soon { margin-left: auto; font-size: 10px; background: var(--badge-warning-bg); color: var(--badge-warning-fg); padding: 2px 7px; border-radius: 999px; }
+.wx-side__foot { padding: 12px; border-top: 1px solid var(--c-border); }
+
+/* Topbar */
+.wx-main { display: flex; flex-direction: column; min-width: 0; }
+.wx-top { display: flex; align-items: center; gap: 14px; padding: 14px 26px; border-bottom: 1px solid var(--c-border); background: var(--c-surface); position: sticky; top: 0; z-index: 5; }
+.wx-top h1 { font-size: 1.25rem; margin: 0; color: var(--c-text); flex: 1 1 auto; }
+.wx-top__email { color: var(--c-text-muted); font-size: var(--fs-small); }
+.wx-select { padding: 8px 12px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); background: var(--c-bg); color: var(--c-text); font: inherit; }
+.wx-view { padding: 26px; }
+
+/* ---------- หน้าแรก: ไทล์โมดูล ---------- */
+.wx-hero { background: linear-gradient(135deg, var(--wx-accent), color-mix(in srgb, var(--wx-accent) 60%, #000)); color: #fff; border-radius: var(--radius-xl); padding: 28px 30px; margin-bottom: 26px; }
+.wx-hero h2 { margin: 0 0 6px; font-size: var(--fs-h2); }
+.wx-hero p { margin: 0; opacity: .9; }
+.wx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
+.wx-tile { display: flex; flex-direction: column; gap: 10px; padding: 22px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); cursor: pointer; text-align: left; font: inherit; color: var(--c-text); transition: border-color .15s, transform .15s; }
+.wx-tile:hover { border-color: var(--wx-accent); transform: translateY(-2px); }
+.wx-tile:disabled { cursor: default; opacity: .6; }
+.wx-tile:disabled:hover { border-color: var(--c-border); transform: none; }
+.wx-tile__ic { width: 46px; height: 46px; border-radius: var(--radius-md); display: grid; place-items: center; background: color-mix(in srgb, var(--wx-accent) 12%, transparent); color: var(--wx-accent); }
+.wx-tile__ic svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.wx-tile h3 { margin: 0; font-size: var(--fs-h3); }
+.wx-tile p { margin: 0; color: var(--c-text-muted); font-size: var(--fs-small); line-height: 1.5; flex: 1 1 auto; }
+.wx-tile__badge { align-self: flex-start; font-size: 11px; padding: 3px 9px; border-radius: 999px; }
+.wx-badge--live { background: var(--badge-success-bg); color: var(--badge-success-fg); }
+.wx-badge--soon { background: var(--badge-warning-bg); color: var(--badge-warning-fg); }
+
+/* ---------- ส่วนทั่วไปใน view ---------- */
+.wx-empty { color: var(--c-text-muted); text-align: center; padding: 60px 20px; }
+.wx-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); padding: 24px; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 860px) {
+  :root { --wx-sidebar: 0px; }
+  .wx-app { grid-template-columns: 1fr; }
+  .wx-side { position: fixed; left: 0; top: 0; width: 248px; z-index: 30; transform: translateX(-100%); transition: transform .2s; box-shadow: 0 0 40px rgba(0,0,0,.2); }
+  .wx-app.wx-open .wx-side { transform: none; }
+  .wx-burger { display: inline-grid !important; }
+}
+.wx-burger { display: none; place-items: center; width: 40px; height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); background: var(--c-surface); cursor: pointer; }
+.wx-burger svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; }
