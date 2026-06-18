@@ -322,7 +322,20 @@
       // ส่งใบสมัครเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่อ้างอิง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
       const base = window.DGA_CMS_URL || 'http://localhost:1337';
       const cap = window.DGACaptcha ? DGACaptcha.get(aForm) : {};
-      fetch(base + '/api/applications' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) })
+      const tq = window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : '';
+      const resumeFile = aFile && aFile.files && aFile.files[0];
+      let aReq;
+      if (resumeFile) {
+        // แนบเรซูเม่ (TOR 17.5) → multipart ไป /applications/submit
+        const fd = new FormData();
+        fd.append('data', JSON.stringify(payload));
+        fd.append('files.resume', resumeFile, resumeFile.name);
+        Object.keys(cap).forEach(k => fd.append(k, cap[k]));
+        aReq = fetch(base + '/api/applications/submit' + tq, { method: 'POST', body: fd });
+      } else {
+        aReq = fetch(base + '/api/applications' + tq, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) });
+      }
+      aReq
         .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(aForm); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
         .then(j => { const ref = j.data.ref; saveLocal(ref); showDone(ref); })
         .catch(err => { if (err && err.captcha) return; const ref = 'DGA-JOB-' + (new Date().getFullYear() + 543) + '-' + (100000 + Math.floor(Math.random() * 899999)); saveLocal(ref); showDone(ref); });

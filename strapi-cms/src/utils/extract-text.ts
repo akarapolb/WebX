@@ -23,7 +23,18 @@ export async function extractText(absPath: string, extOrMime: string): Promise<s
       wb.SheetNames.forEach((n: string) => { t += XLSX.utils.sheet_to_csv(wb.Sheets[n]) + '\n'; });
       return t;
     }
-    // .pptx และอื่น ๆ ยังไม่รองรับในเดโม
+    if (e.includes('ppt')) { // .pptx — แตก zip แล้วดึงข้อความจาก <a:t> ในแต่ละสไลด์
+      const JSZip = require('jszip');
+      const zip = await JSZip.loadAsync(buf);
+      const slides = Object.keys(zip.files).filter((f: string) => /ppt\/slides\/slide\d+\.xml$/.test(f)).sort();
+      let t = '';
+      for (const f of slides) {
+        const xml = await zip.files[f].async('string');
+        const runs = xml.match(/<a:t>([^<]*)<\/a:t>/g) || [];
+        t += runs.map((m: string) => m.replace(/<\/?a:t>/g, '')).join(' ') + '\n';
+      }
+      return t;
+    }
     return '';
   } catch (e) {
     return '';
