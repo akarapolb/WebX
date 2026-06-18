@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แผนการดำเนินงานโครงการ — ระบบเว็บไซต์ สพร. (DGA-69-0177)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0B1426;--ink-2:#1E293B;--ink-3:#475569;--ink-4:#94A3B8;
+  --bg:#FBFAF6;--paper:#FFFFFF;--paper-2:#F4F2EC;
+  --line:#E5E7EB;--line-2:#F1ECDF;
+  --accent:#C8941F;--accent-2:#8B6914;
+  --red:#DC2626;--amber:#D97706;--green:#047857;--blue:#1E40AF;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink-2);font-family:'IBM Plex Sans Thai',sans-serif;font-weight:300;line-height:1.7;font-size:15.5px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:880px;margin:0 auto;padding:0 28px}
+.en{font-family:'Fraunces',serif}
+.mono{font-family:'JetBrains Mono',monospace}
+h1,h2,h3{font-family:'IBM Plex Sans Thai',sans-serif;color:var(--ink);font-weight:600;line-height:1.3}
+a{color:var(--accent)}
+/* ─── cover ─── */
+.cover{min-height:96vh;display:flex;flex-direction:column;justify-content:center;padding:60px 28px;max-width:880px;margin:0 auto;border-bottom:1px solid var(--line)}
+.cover .kicker{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.cover h1{font-size:3.1rem;margin:18px 0 8px;letter-spacing:-.01em}
+.cover .sub{font-size:1.35rem;color:var(--ink-3);font-weight:300;margin-bottom:36px}
+.cover .org{font-size:1.05rem;color:var(--ink);font-weight:500}
+.cover-meta{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:40px;max-width:620px}
+.cover-meta div{background:var(--paper);padding:14px 18px}
+.cover-meta .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-4);font-family:'JetBrains Mono',monospace}
+.cover-meta .v{font-size:1.05rem;color:var(--ink);font-weight:500}
+.cover .foot{margin-top:auto;padding-top:40px;color:var(--ink-3);font-size:.9rem}
+/* ─── sections ─── */
+section{padding:48px 0 8px}
+.secnum{font-family:'JetBrains Mono',monospace;color:var(--accent);font-size:.95rem;font-weight:600}
+h2{font-size:1.85rem;margin:6px 0 18px;padding-bottom:12px;border-bottom:2px solid var(--accent);display:inline-block}
+h3{font-size:1.2rem;margin:26px 0 10px}
+p{margin:0 0 14px}
+ul{margin:0 0 14px;padding-left:22px}li{margin-bottom:6px}
+strong{font-weight:600;color:var(--ink)}
+/* ─── tables ─── */
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--paper-2);color:var(--ink);font-weight:600;font-size:12.5px;letter-spacing:.02em}
+tr:last-child td{border-bottom:0}
+td.mono,th.mono{font-family:'JetBrains Mono',monospace}
+.tot td{background:var(--paper-2);font-weight:600;color:var(--ink)}
+/* ─── badges/callout ─── */
+.badge{display:inline-block;padding:3px 10px;font-size:11px;font-weight:600;border-radius:100px;font-family:'JetBrains Mono',monospace}
+.b-amber{background:#FEF3C7;color:var(--amber)}.b-green{background:#D1FAE5;color:var(--green)}.b-blue{background:#DBEAFE;color:var(--blue)}.b-red{background:#FEE2E2;color:var(--red)}.b-ink{background:var(--ink);color:#fff}
+.callout{padding:16px 22px;margin:22px 0;background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:6px}
+.callout.green{border-left-color:var(--green)}.callout.blue{border-left-color:var(--blue)}.callout.red{border-left-color:var(--red)}
+.callout .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;display:block;margin-bottom:6px}
+.callout.green .tag{color:var(--green)}.callout.blue .tag{color:var(--blue)}.callout.red .tag{color:var(--red)}
+/* ─── gantt ─── */
+.gantt{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:18px 0;background:var(--paper);font-size:12.5px}
+.gantt .row{display:grid;grid-template-columns:170px repeat(12,1fr);align-items:center;border-bottom:1px solid var(--line)}
+.gantt .row:last-child{border-bottom:0}
+.gantt .head{background:var(--paper-2);font-family:'JetBrains Mono',monospace;color:var(--ink-3);font-size:11px}
+.gantt .head>div{padding:8px 4px;text-align:center;border-left:1px solid var(--line-2)}
+.gantt .head .lbl{text-align:left;padding-left:14px;border-left:0;color:var(--ink)}
+.gantt .lbl{padding:11px 14px;color:var(--ink);font-weight:500;border-right:1px solid var(--line)}
+.gantt .bar-cell{position:relative;height:42px;border-left:1px solid var(--line-2);grid-column:var(--c)}
+.bar{height:22px;border-radius:5px;margin:10px 2px;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600}
+.bar.g1{background:#1E40AF}.bar.g2{background:var(--accent)}.bar.g3{background:#047857}.bar.g4{background:#475569}
+.ms{font-size:10px;color:var(--ink-4);font-family:'JetBrains Mono',monospace}
+/* ─── footer / print ─── */
+footer{margin-top:48px;padding:28px 0 60px;border-top:1px solid var(--line);color:var(--ink-4);font-size:.85rem}
+.toc{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:20px 26px;margin:8px 0 0}
+.toc h3{margin:0 0 12px}.toc ol{margin:0;padding-left:20px;columns:2;font-size:14px}.toc a{color:var(--ink-2);text-decoration:none}.toc a:hover{color:var(--accent)}
+@media print{body{font-size:11pt}.cover{min-height:auto;page-break-after:always}section{page-break-inside:avoid}.no-print{display:none}}
+@media(max-width:680px){.cover-meta,.toc ol{grid-template-columns:1fr;columns:1}.gantt{overflow-x:auto}.gantt .row{min-width:640px}}
+</style>
+</head>
+<body>
+
+<!-- ══════════ COVER ══════════ -->
+<div class="cover">
+  <div class="kicker">เอกสารส่งมอบงวดที่ 1 · Project Plan</div>
+  <h1>แผนการดำเนินงานโครงการ</h1>
+  <div class="sub">งานจ้างออกแบบและพัฒนาระบบเว็บไซต์<br>สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)</div>
+  <div class="org">เสนอต่อ · สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน) — สพร. / DGA</div>
+  <div class="cover-meta">
+    <div><div class="k">เลขที่ TOR</div><div class="v mono">DGA-69-0177</div></div>
+    <div><div class="k">วงเงินงบประมาณ</div><div class="v">3,000,000 บาท</div></div>
+    <div><div class="k">ระยะเวลาดำเนินงาน</div><div class="v">365 วัน</div></div>
+    <div><div class="k">กำหนดส่งงวดที่ 1</div><div class="v">ภายใน 30 วัน</div></div>
+  </div>
+  <div class="foot">จัดทำโดย: บริษัท อวาแลนท์ จำกัด (Avalant Co., Ltd.) — ผู้รับจ้าง &nbsp;·&nbsp; รหัสเอกสาร: <span class="mono">DGA-WEB-PP-01</span> &nbsp;·&nbsp; สถานะ: ฉบับส่งมอบ</div>
+</div>
+
+<div class="wrap">
+
+<!-- TOC -->
+<div class="toc no-print">
+  <h3>สารบัญ</h3>
+  <ol>
+    <li><a href="#s1">บทสรุปผู้บริหาร</a></li>
+    <li><a href="#s2">วัตถุประสงค์และขอบเขตโครงการ</a></li>
+    <li><a href="#s3">โครงสร้างทีมงานและช่องทางติดต่อ</a></li>
+    <li><a href="#s4">แผนการดำเนินงานและงวดงาน</a></li>
+    <li><a href="#s5">วิธีการดำเนินงานและเทคโนโลยี</a></li>
+    <li><a href="#s6">ผลการพัฒนาต้นแบบ (Proof of Concept)</a></li>
+    <li><a href="#s7">การบริหารความเสี่ยง</a></li>
+    <li><a href="#s8">การรับประกันและระดับการให้บริการ (SLA)</a></li>
+    <li><a href="#s9">การส่งมอบและการชำระเงิน</a></li>
+    <li><a href="#s10">มาตรฐานและกฎหมายอ้างอิง</a></li>
+  </ol>
+</div>
+
+<!-- 1 -->
+<section id="s1">
+  <div class="secnum">01</div>
+  <h2>บทสรุปผู้บริหาร</h2>
+  <p>โครงการนี้มีเป้าหมายเพื่อ<strong>ออกแบบและพัฒนาระบบเว็บไซต์ของสำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)</strong> ในรูปแบบ Web Content Management System (CMS) ที่ทันสมัย เข้าถึงง่าย ปลอดภัย รองรับ 2 ภาษา (ไทย/อังกฤษ) และรองรับพฤติกรรมการสืบค้นข้อมูลยุคปัญญาประดิษฐ์ (AI) ผ่านการบูรณาการ Chat AI, Hybrid Search และการปรับโครงสร้างข้อมูลแบบ GEO/AEO</p>
+  <p>ผู้รับจ้างเสนอแนวทางดำเนินงานแบบ <strong>วนซ้ำเป็นรอบ (Iterative)</strong> ส่งมอบงานเป็น 4 งวดภายใน 365 วัน โดยให้ความสำคัญสูงสุดกับเกณฑ์การพิจารณาด้าน <strong>Design &amp; UX/UI (น้ำหนัก 50%)</strong> ควบคู่กับความครบถ้วนของ <strong>ระบบ 29 โมดูล</strong> ตามภาคผนวก ก และความมั่นคงปลอดภัยตามมาตรฐานสากลและ พ.ร.บ.ที่เกี่ยวข้อง</p>
+  <div class="callout green">
+    <span class="tag">จุดเด่นข้อเสนอ</span>
+    <p>ผู้รับจ้างได้พัฒนา <strong>ระบบต้นแบบที่ทำงานได้จริง (Working Prototype)</strong> ครบทั้ง 29 โมดูล พร้อมหลังบ้านรวมศูนย์ (WebX Console) แบบ Multi-tenant — ลดความเสี่ยงโครงการและพิสูจน์ขีดความสามารถได้ตั้งแต่ก่อนเริ่มพัฒนาจริง (ดูหัวข้อ 6)</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <div class="secnum">02</div>
+  <h2>วัตถุประสงค์และขอบเขตโครงการ</h2>
+  <h3>2.1 วัตถุประสงค์</h3>
+  <ul>
+    <li>พัฒนาการแสดงผลเว็บไซต์ให้ทันสมัย เข้าถึงง่าย จัดการข้อมูลที่จุดเดียว ลดความซ้ำซ้อน และปลอดภัย รองรับคอมพิวเตอร์และอุปกรณ์เคลื่อนที่</li>
+    <li>พัฒนาระบบบริหารจัดการเนื้อหา (CMS) ที่ผู้จัดการหลายฝ่ายใช้ร่วมกันได้ และแสดงผล 2 ภาษา (ไทยเป็นค่าเริ่มต้น/อังกฤษ)</li>
+    <li>ปรับปรุงรูปแบบการนำเสนอให้กระชับ ตรงประเด็น ยึดผู้ใช้งานเป็นหลัก และเป็นแบบอย่างมาตรฐานเว็บไซต์ภาครัฐ</li>
+  </ul>
+  <h3>2.2 ขอบเขตงานหลัก</h3>
+  <table>
+    <tr><th style="width:34%">กลุ่มงาน</th><th>รายละเอียด</th></tr>
+    <tr><td>Design System &amp; UX/UI</td><td>Design System (Typography/Color/Icon/Components), 3-Click Rule, WCAG 2.1/2.2 AA, Responsive 3 อุปกรณ์, Mockup/Prototype 3 layout</td></tr>
+    <tr><td>ระบบ CMS 29 โมดูล</td><td>Home/Template, Content, News, Photo/Video Gallery, Hybrid Search, AI Smart Search, Schema/GEO/AEO, Contact, Live chat, Form+Auto Email, Vote, Blog, e-book, Banner, e-catalog, FAQ, Download, Popup, Link, Top Graphic, Sitemap, Landing/Splash, Map, Web Analytics+Heatmap, Cookie Consent</td></tr>
+    <tr><td>ความมั่นคงปลอดภัย</td><td>Data Validation, CAPTCHA, SSL/TLS, Log File (พ.ร.บ.คอมพิวเตอร์), PDPA, Vulnerability Scan, MFA หลังบ้าน, Encryption, DR Site (RTO/RPO)</td></tr>
+    <tr><td>การถ่ายโอนข้อมูล</td><td>Migrate เนื้อหาตั้งแต่ปี 2559 รักษา URL/Redirect พร้อมตรวจสอบความครบถ้วน</td></tr>
+    <tr><td>ติดตั้ง/ทดสอบ/อบรม</td><td>ติดตั้งบน Cloud ของ สพร., UAT, อบรมผู้ดูแลระบบ, คู่มือ, Penetration Test</td></tr>
+  </table>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <div class="secnum">03</div>
+  <h2>โครงสร้างทีมงานและช่องทางติดต่อ</h2>
+  <p>ทีมงานหลักประกอบด้วยผู้เชี่ยวชาญครอบคลุมทุกด้านของโครงการ พร้อมช่องทางประสานงานตลอดระยะเวลาดำเนินงาน</p>
+  <table>
+    <tr><th>บทบาท</th><th>หน้าที่หลัก</th><th>จำนวน</th></tr>
+    <tr><td>ผู้จัดการโครงการ (PM)</td><td>บริหารแผน/งบ/ความเสี่ยง · ประสานงาน สพร. · รายงานความคืบหน้า</td><td class="mono">1</td></tr>
+    <tr><td>สถาปนิกระบบ (Solution Architect)</td><td>ออกแบบสถาปัตยกรรม · ฐานข้อมูล · ความปลอดภัย · DR</td><td class="mono">1</td></tr>
+    <tr><td>นักออกแบบ UX/UI</td><td>Design System · Mockup/Prototype · WCAG · 3-Click</td><td class="mono">2</td></tr>
+    <tr><td>นักพัฒนา Front-end</td><td>เว็บไซต์ส่วนหน้า · Responsive · Performance/Lighthouse</td><td class="mono">2</td></tr>
+    <tr><td>นักพัฒนา Back-end / CMS</td><td>ระบบ 29 โมดูล · API · Multi-tenant · Search/AI</td><td class="mono">2</td></tr>
+    <tr><td>วิศวกรความมั่นคงปลอดภัย</td><td>MFA · Log · Vulnerability/Pen Test · PDPA</td><td class="mono">1</td></tr>
+    <tr><td>DevOps / ผู้ดูแลระบบ</td><td>ติดตั้ง Cloud สพร. · CI/CD · Backup/DR · Monitoring</td><td class="mono">1</td></tr>
+    <tr><td>QA / ผู้เชี่ยวชาญภาษา · ทีม Migration</td><td>ทดสอบ/UAT · แปลเนื้อหา ไทย-อังกฤษ · ถ่ายโอนข้อมูล 2559+</td><td class="mono">2</td></tr>
+  </table>
+  <p><strong>ช่องทางติดต่อประสานงาน:</strong> โทรศัพท์เคลื่อนที่ (PM) · อีเมลโครงการ · กลุ่ม LINE Official · ระบบ Ticket/Service Desk — ตอบสนองตาม SLA ในหัวข้อ 8</p>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+  <div class="secnum">04</div>
+  <h2>แผนการดำเนินงานและงวดงาน</h2>
+  <p>แบ่งการส่งมอบเป็น 4 งวดภายใน 365 วัน สอดคล้องกับข้อ 8 ของ TOR ดังแผนภาพ Timeline (หน่วย: เดือน)</p>
+  <div class="gantt">
+    <div class="row head">
+      <div class="lbl">งวดงาน</div>
+      <div>M1</div><div>M2</div><div>M3</div><div>M4</div><div>M5</div><div>M6</div><div>M7</div><div>M8</div><div>M9</div><div>M10</div><div>M11</div><div>M12</div>
+    </div>
+    <div class="row"><div class="lbl">งวด 1 · วางแผน/วิเคราะห์</div><div class="bar-cell" style="--c:2/3"><div class="bar g1">10%</div></div></div>
+    <div class="row"><div class="lbl">งวด 2 · ออกแบบ/ต้นแบบ</div><div class="bar-cell" style="--c:3/4"><div class="bar g2">40%</div></div></div>
+    <div class="row"><div class="lbl">งวด 3 · พัฒนา/UAT</div><div class="bar-cell" style="--c:4/8"><div class="bar g3">30%</div></div></div>
+    <div class="row"><div class="lbl">งวด 4 · รับประกัน/ส่งมอบ</div><div class="bar-cell" style="--c:8/14"><div class="bar g4">20%</div></div></div>
+  </div>
+  <table>
+    <tr><th>งวด</th><th>กำหนด</th><th>ผลงานส่งมอบหลัก</th><th class="mono">จ่าย</th></tr>
+    <tr><td class="b-ink"><span class="badge b-ink">งวด 1</span></td><td>ภายใน 30 วัน</td><td>แผนการดำเนินงาน · รายชื่อ/โครงสร้างบุคลากร · รายงานวิเคราะห์ความต้องการ (Requirement Analysis) · เอกสารสถาปัตยกรรมระบบ + คุณลักษณะเครื่องแม่ข่าย</td><td class="mono">10%</td></tr>
+    <tr><td><span class="badge b-amber">งวด 2</span></td><td>ภายใน 60 วัน</td><td>Design Concept · Sitemap · Mockup &amp; Prototype + User Flow · UI Design 3 layout · แผนการย้ายข้อมูลจาก CMS เดิม · โครงสร้าง CMS</td><td class="mono">40%</td></tr>
+    <tr><td><span class="badge b-green">งวด 3</span></td><td>ภายใน 180 วัน</td><td>Source Code ครบขอบเขต · Test Script + UAT Checklist · รายงานผล UAT · อบรม + คู่มือผู้ใช้ · ไฟล์สำรอง (Backup)</td><td class="mono">30%</td></tr>
+    <tr><td><span class="badge b-blue">งวด 4</span></td><td>ภายใน 365 วัน</td><td>รายงานสรุปโครงการ · รายงานบำรุงรักษา/Monitor · คู่มือ Admin · รายงาน Penetration Test · ส่งมอบ Source Code + License + บัญชี Admin</td><td class="mono">20%</td></tr>
+    <tr class="tot"><td colspan="3">รวมมูลค่าโครงการ</td><td class="mono">100%</td></tr>
+  </table>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+  <div class="secnum">05</div>
+  <h2>วิธีการดำเนินงานและเทคโนโลยี</h2>
+  <h3>5.1 วิธีการดำเนินงาน</h3>
+  <p>ใช้แนวทางพัฒนาแบบ <strong>วนซ้ำเป็นรอบ (Iterative/Incremental)</strong> — ออกแบบ → พัฒนา → ทดสอบ → ตรวจรับย่อย ในแต่ละรอบ เพื่อให้ สพร. เห็นความคืบหน้าและให้ข้อเสนอแนะได้ต่อเนื่อง ลดความเสี่ยงการพัฒนาผิดทิศทาง พร้อมจัดประชุมติดตามและทดสอบร่วม (Sprint Review/UAT) เป็นระยะ</p>
+  <h3>5.2 เทคโนโลยีและมาตรฐาน</h3>
+  <table>
+    <tr><th>ด้าน</th><th>แนวทาง</th></tr>
+    <tr><td>CMS / Back-end</td><td>Headless CMS (Strapi 5) · REST API · Multi-tenant (รองรับหลายหน่วยงาน) · RBAC ต่อหน่วยงาน · Draft &amp; Publish · i18n</td></tr>
+    <tr><td>Front-end</td><td>HTML/CSS/JS แยกชั้นชัดเจน · Design Tokens · Responsive mobile-first · ปรับแต่ง Page Speed/Lighthouse</td></tr>
+    <tr><td>ค้นหา/AI</td><td>Hybrid Search (Simple/Advanced/Full-text .pdf/.docx/.xlsx/.pptx) · Government AI Smart Search · Schema.org (GEO/AEO)</td></tr>
+    <tr><td>ความปลอดภัย</td><td>MFA หลังบ้าน · Session/Idle timeout · CAPTCHA · Rate limit · Log File (พ.ร.บ.คอมพิวเตอร์) → Log Server · Encryption/HTTPS · PDPA Cookie Consent</td></tr>
+    <tr><td>มาตรฐาน</td><td>WCAG 2.1/2.2 AA · PDPA พ.ศ.2562 · พ.ร.บ.คอมพิวเตอร์ 2560 · พ.ร.บ.ไซเบอร์ 2562 · มาตรฐานเว็บไซต์ภาครัฐ</td></tr>
+    <tr><td>โครงสร้างพื้นฐาน/DR</td><td>ติดตั้งบน Cloud ของ สพร. · Backup รายชั่วโมง · DR Site (Active–Standby) RTO/RPO ≤ 1 ชั่วโมง</td></tr>
+  </table>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+  <div class="secnum">06</div>
+  <h2>ผลการพัฒนาต้นแบบ (Proof of Concept)</h2>
+  <p>ผู้รับจ้างได้พัฒนาระบบต้นแบบที่<strong>ทำงานได้จริง</strong>ไว้ล่วงหน้า เพื่อพิสูจน์ขีดความสามารถและลดความเสี่ยงโครงการ ครอบคลุม:</p>
+  <table>
+    <tr><th>ส่วนงาน</th><th>สถานะต้นแบบ</th></tr>
+    <tr><td>ระบบ 29 โมดูล (ภาคผนวก ก)</td><td><span class="badge b-green">ครบ 29/29</span> ทำงานได้จริง ทดสอบในเบราว์เซอร์</td></tr>
+    <tr><td>CMS core (ข้อ 4.1–4.13)</td><td><span class="badge b-green">ครบ</span> CRUD+เมนู, Tag, Related, WYSIWYG (CKEditor), แนบไฟล์, สถิติ, ค้นหา, แชร์โซเชียล</td></tr>
+    <tr><td>หลังบ้านรวมศูนย์ (WebX Console)</td><td><span class="badge b-green">พร้อม</span> ล็อกอินเดียว · Analytics · Content (SSO) · Branding (3 เทมเพลต no-code) · Users (RBAC) · Chat</td></tr>
+    <tr><td>Multi-tenant + Branding ต่อหน่วยงาน</td><td><span class="badge b-green">พร้อม</span> สาธิต 2 หน่วยงาน (DGA + PEA) รีแบรนด์สด</td></tr>
+    <tr><td>ความปลอดภัย (MFA/Log/DR)</td><td><span class="badge b-green">พร้อม</span> Traffic log + แผน DR (RTO/RPO) + Backup script</td></tr>
+  </table>
+  <div class="callout blue">
+    <span class="tag">ความหมายต่อโครงการ</span>
+    <p>การมีต้นแบบทำงานได้จริงทำให้ <strong>งวด 2–3 มีความเสี่ยงต่ำ</strong> — ทีมพัฒนามีฐานโค้ดและสถาปัตยกรรมที่พิสูจน์แล้ว เหลือเพียงปรับให้ตรงตาม CI/มาตรฐานของ สพร. ที่อนุมัติในงวด 2 และถ่ายโอนข้อมูลจริง</p>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+  <div class="secnum">07</div>
+  <h2>การบริหารความเสี่ยง</h2>
+  <table>
+    <tr><th style="width:30%">ความเสี่ยง</th><th>ผลกระทบ</th><th>แนวทางจัดการ</th></tr>
+    <tr><td>ข้อมูลเดิม (2559+) ไม่ครบ/โครงสร้างต่าง</td><td>การย้ายข้อมูลล่าช้า/ตกหล่น</td><td>วิเคราะห์โครงสร้างต้นทางในงวด 2 · ทำ script + ตรวจสอบจำนวนก่อน/หลัง · รักษา URL/Redirect</td></tr>
+    <tr><td>ความต้องการเปลี่ยนระหว่างทาง</td><td>ขอบเขตบานปลาย</td><td>ทำงานแบบ Iterative + ตรวจรับย่อย · Change Control ผ่าน CAB</td></tr>
+    <tr><td>ช่องโหว่ความปลอดภัย</td><td>ความเสี่ยงไซเบอร์/PDPA</td><td>Vulnerability Scan ก่อนขึ้นระบบ · Pen Test งวด 4 · MFA/Log/Encryption</td></tr>
+    <tr><td>เหตุระบบล่ม</td><td>บริการหยุดชะงัก</td><td>DR Site + Backup รายชั่วโมง · RTO/RPO ≤ 1 ชม. · Monitoring + SLA</td></tr>
+    <tr><td>ประสิทธิภาพ (ผู้ใช้พร้อมกันจำนวนมาก)</td><td>ช้า/LCP สูง</td><td>Image optimization · Caching · ปรับ Lighthouse · ทดสอบโหลด</td></tr>
+  </table>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+  <div class="secnum">08</div>
+  <h2>การรับประกันและระดับการให้บริการ (SLA)</h2>
+  <p>รับประกันระบบ <strong>อย่างน้อย 1 ปี</strong> นับจากวันตรวจรับสมบูรณ์ ดูแลให้บริการต่อเนื่อง 24 ชั่วโมง โดยมีระดับการให้บริการ 4 ระดับ</p>
+  <table>
+    <tr><th>ระดับ</th><th>สถานการณ์</th><th>ตอบสนอง</th><th>แก้ไขแล้วเสร็จ</th></tr>
+    <tr><td><span class="badge b-red">1 · Critical</span></td><td>ระบบทั้งหมดหยุด/กระทบวงกว้าง</td><td class="mono">15 นาที</td><td class="mono">1 ชั่วโมง</td></tr>
+    <tr><td><span class="badge b-amber">2 · สูง</span></td><td>บางระบบ/โมดูลขัดข้อง กระทบวงกว้าง</td><td class="mono">30 นาที</td><td class="mono">4 ชั่วโมง</td></tr>
+    <tr><td><span class="badge b-blue">3 · ปานกลาง</span></td><td>บางโมดูลขัดข้อง ไม่กระทบบริการ</td><td class="mono">2 ชั่วโมง</td><td class="mono">2 วันทำการ</td></tr>
+    <tr><td><span class="badge b-green">4 · ต่ำ</span></td><td>ปัญหาทั่วไป ไม่กระทบบริการ</td><td class="mono">4 ชั่วโมง</td><td class="mono">5 วันทำการ</td></tr>
+  </table>
+  <p style="font-size:13px;color:var(--ink-3)">ค่าปรับล่าช้า 0.10% ของค่าจ้าง/วัน · ค่าปรับคุณภาพบริการ (เกิน SLA) 0.035% ของมูลค่าสัญญา/ชั่วโมง · ช่องทางแจ้งเหตุ: โทรศัพท์ / อีเมล / LINE ตลอด 24 ชม. รวมวันหยุด</p>
+</section>
+
+<!-- 9 -->
+<section id="s9">
+  <div class="secnum">09</div>
+  <h2>การส่งมอบและการชำระเงิน</h2>
+  <p>ส่งมอบงานในรูปแบบไฟล์ดิจิทัลบน SSD จำนวน 1 ชุด พร้อมเอกสาร 4 ชุด (PDF + ไฟล์แก้ไขได้) ต่องวด การชำระเงินเป็นไปตามสัดส่วนในหัวข้อ 4</p>
+  <table>
+    <tr><th>งวด</th><th>เงื่อนไขตรวจรับ</th><th class="mono">มูลค่า</th></tr>
+    <tr><td><span class="badge b-ink">1</span></td><td>ส่งมอบเอกสารวางแผน/วิเคราะห์/สถาปัตยกรรม ครบและผ่านการตรวจรับ</td><td class="mono">300,000</td></tr>
+    <tr><td><span class="badge b-amber">2</span></td><td>ส่งมอบงานออกแบบ/ต้นแบบ/แผนย้ายข้อมูล ครบและผ่านการตรวจรับ</td><td class="mono">1,200,000</td></tr>
+    <tr><td><span class="badge b-green">3</span></td><td>ส่งมอบ Source Code + UAT + อบรม + Backup ครบและผ่านการตรวจรับ</td><td class="mono">900,000</td></tr>
+    <tr><td><span class="badge b-blue">4</span></td><td>ส่งมอบ Pen Test + Source/License/Accounts ครบและผ่านการตรวจรับ</td><td class="mono">600,000</td></tr>
+    <tr class="tot"><td colspan="2">รวม (รวมภาษีมูลค่าเพิ่มและค่าใช้จ่ายทั้งปวง)</td><td class="mono">3,000,000</td></tr>
+  </table>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+  <div class="secnum">10</div>
+  <h2>มาตรฐานและกฎหมายอ้างอิง</h2>
+  <ul>
+    <li>พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)</li>
+    <li>พระราชบัญญัติว่าด้วยการกระทำความผิดเกี่ยวกับคอมพิวเตอร์ พ.ศ. 2560</li>
+    <li>พระราชบัญญัติการรักษาความมั่นคงปลอดภัยไซเบอร์ พ.ศ. 2562</li>
+    <li>Web Content Accessibility Guidelines (WCAG) 2.1 / 2.2 ระดับ AA</li>
+    <li>Schema.org Structured Data (รองรับ GEO/AEO)</li>
+    <li>มาตรฐานเว็บไซต์ภาครัฐ และนโยบายความมั่นคงปลอดภัยสารสนเทศ (IS Policy) ของ สพร.</li>
+  </ul>
+</section>
+
+<footer>
+  เอกสารแผนการดำเนินงานโครงการ · งานจ้างออกแบบและพัฒนาระบบเว็บไซต์ สพร. (TOR DGA-69-0177) · จัดทำโดย บริษัท อวาแลนท์ จำกัด<br>
+  เอกสารนี้เป็นส่วนหนึ่งของการส่งมอบงวดที่ 1 — เปิดในเบราว์เซอร์เพื่ออ่าน หรือสั่งพิมพ์เป็น PDF (Ctrl/Cmd + P)
+</footer>
+
+</div>
+</body>
+</html>
