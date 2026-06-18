@@ -1,0 +1,15 @@
+{
+  "kind": "collectionType",
+  "collectionName": "menu_items",
+  "info": { "singularName": "menu-item", "pluralName": "menu-items", "displayName": "Menu Item", "description": "รายการเมนูหลัก (mega-menu) จัดการผ่าน CMS (TOR ข้อ 4.1)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "menu": { "type": "enumeration", "enum": ["service", "news", "eservice", "about"], "required": true, "description": "เมนูบนสุด: บริการ/ข่าวสาร/บริการออนไลน์/เกี่ยวกับ" },
+    "column": { "type": "string", "description": "หัวคอลัมน์ในเมนู เช่น สำหรับประชาชน" },
+    "label": { "type": "string", "required": true },
+    "url": { "type": "string", "default": "#" },
+    "order": { "type": "integer", "default": 0 },
+    "openNewTab": { "type": "boolean", "default": false },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}

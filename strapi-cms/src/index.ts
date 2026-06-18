@@ -3,7 +3,7 @@ import { errors } from '@strapi/utils';
 import {
   ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedDemos,
   seedTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
-  ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB,
+  ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB, seedCmsCore,
 } from './seed/seed';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) */
@@ -17,6 +17,7 @@ const SCOPED = new Set([
   'api::landing.landing',
   'api::blog.blog', 'api::catalog.catalog', 'api::weblink.weblink', 'api::top-graphic.top-graphic',
   'api::event.event', 'api::location.location', 'api::sitemap-node.sitemap-node',
+  'api::menu-item.menu-item',
 ]);
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
@@ -116,6 +117,7 @@ export default {
       await seedLanding(strapi);
       await seedGroupA(strapi);
       await enrichGroupB(strapi);
+      await seedCmsCore(strapi);
       await seedTenantBContent(strapi);
       await seedModules(strapi);
       await seedFulltextDemo(strapi);

@@ -74,3 +74,23 @@
 
 @media (max-width: 560px) { .gb-albums, .gb-vids, .gb-news { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .gb-acc__a { transition: none; } }
+
+/* ---------- Article detail (#5 + tags 4.2 + related 4.3) ---------- */
+.art { max-width: 760px; margin: 0 auto; }
+.art__cat { display: inline-block; font-size: var(--fs-small); background: var(--badge-info-bg); color: var(--badge-info-fg); padding: 3px 12px; border-radius: 999px; }
+.art h1 { font-size: var(--fs-h1); color: var(--c-text); line-height: var(--lh-tight); margin: 12px 0; }
+.art__meta { color: var(--c-text-muted); font-size: var(--fs-small); margin-bottom: 18px; display: flex; gap: 14px; flex-wrap: wrap; }
+.art__cover { width: 100%; border-radius: var(--radius-lg); border: 1px solid var(--c-border); margin-bottom: 22px; }
+.art__body { color: var(--c-text); line-height: var(--lh-base); font-size: var(--fs-body-lg); }
+.art__body h2 { font-size: var(--fs-h2); margin: 26px 0 12px; }
+.art__body h3 { font-size: var(--fs-h3); margin: 22px 0 10px; }
+.art__body p { margin: 0 0 14px; }
+.art__body ul, .art__body ol { margin: 0 0 14px; padding-left: 24px; }
+.art__tags { display: flex; gap: 8px; flex-wrap: wrap; margin: 24px 0; padding-top: 18px; border-top: 1px solid var(--c-border); }
+.art__tag { font-size: var(--fs-small); background: var(--c-sunken); color: var(--c-text); border: 1px solid var(--c-border); padding: 5px 12px; border-radius: 999px; text-decoration: none; }
+.art__tag:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.art__related { margin-top: 36px; }
+.art__related h2 { font-size: var(--fs-h3); color: var(--c-text); margin: 0 0 16px; }
+/* แท็กบนการ์ดข่าว */
+.gb-cardtags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.gb-cardtags span { font-size: 11px; background: var(--c-sunken); color: var(--c-text-muted); padding: 2px 8px; border-radius: 999px; }

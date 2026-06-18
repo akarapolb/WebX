@@ -71,6 +71,18 @@
       "type": "boolean",
       "default": false,
       "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "tags": {
+      "type": "json",
+      "description": "แท็กสำหรับการค้นหา เช่น [\"ThaID\",\"บริการดิจิทัล\"] (TOR ข้อ 4.2)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "related": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::article.article",
+      "description": "ข่าว/บทความที่เกี่ยวข้อง (TOR ข้อ 4.3 Relate Content)",
+      "pluginOptions": { "i18n": { "localized": false } }
     }
   }
 }

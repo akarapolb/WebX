@@ -13,6 +13,7 @@
     "author": { "type": "string" },
     "publishDate": { "type": "date" },
     "views": { "type": "integer", "default": 0 },
+    "tags": { "type": "json", "description": "แท็กสำหรับการค้นหา (TOR ข้อ 4.2)" },
     "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
   }
 }

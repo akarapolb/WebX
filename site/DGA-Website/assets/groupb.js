@@ -128,20 +128,30 @@
     var s = document.createElement("script"); s.type = "application/ld+json"; s.textContent = JSON.stringify(ld); document.head.appendChild(s);
   }
 
-  // ---------- News ----------
+  // ---------- News (+ แท็ก 4.2: แสดง/กรอง + ลิงก์ไปหน้ารายละเอียด) ----------
   function renderNews(items) {
     items = items.filter(function (a) { return (a.kind || "news") !== "blog"; });
     if (!items.length) { root.innerHTML = '<p class="gb-empty">ยังไม่มีข่าว</p>'; return; }
-    var cats = ["ทั้งหมด"]; items.forEach(function (a) { if (a.categoryLabel && cats.indexOf(a.categoryLabel) < 0) cats.push(a.categoryLabel); });
+    var tagFilter = new URLSearchParams(location.search).get("tag");
     function cards(list) {
       return '<div class="gb-news">' + list.map(function (a) {
         var img = media(a.coverImage, "medium");
-        return '<article class="ga-post">' + (img ? '<div class="ga-post__img" style="background-image:url(\'' + img + "')\"></div>" : '<div class="ga-post__img"></div>') +
+        var tags = (a.tags || []).slice(0, 3).map(function (t) { return "<span>#" + esc(t) + "</span>"; }).join("");
+        var href = a.slug ? 'article.html?slug=' + encodeURIComponent(a.slug) : "#";
+        return '<a class="ga-post" href="' + href + '" style="text-decoration:none;color:inherit">' +
+          (img ? '<div class="ga-post__img" style="background-image:url(\'' + img + "')\"></div>" : '<div class="ga-post__img"></div>') +
           '<div class="ga-post__body">' + (a.categoryLabel ? '<span class="ga-post__cat">' + esc(a.categoryLabel) + "</span>" : "") +
-          "<h3>" + esc(a.title) + "</h3><p>" + esc(a.excerpt || "") + '</p><div class="ga-post__meta"><span>' +
-          esc(a.publishDate || "") + "</span><span>" + nf(a.views) + " อ่าน</span></div></div></article>";
+          "<h3>" + esc(a.title) + "</h3><p>" + esc(a.excerpt || "") + "</p>" +
+          (tags ? '<div class="gb-cardtags">' + tags + "</div>" : "") +
+          '<div class="ga-post__meta"><span>' + esc(a.publishDate || "") + "</span><span>" + nf(a.views) + " อ่าน</span></div></div></a>";
       }).join("") + "</div>";
     }
+    if (tagFilter) {
+      var matched = items.filter(function (a) { return (a.tags || []).indexOf(tagFilter) >= 0; });
+      root.innerHTML = '<p class="gb-stat" style="text-align:center;margin-bottom:18px">กรองด้วยแท็ก <b style="color:var(--c-primary)">#' + esc(tagFilter) + '</b> · พบ ' + matched.length + ' รายการ · <a href="news.html">ดูทั้งหมด</a></p>' + cards(matched);
+      return;
+    }
+    var cats = ["ทั้งหมด"]; items.forEach(function (a) { if (a.categoryLabel && cats.indexOf(a.categoryLabel) < 0) cats.push(a.categoryLabel); });
     root.innerHTML = '<div class="gb-filter">' + cats.map(function (c, i) { return '<button data-c="' + esc(c) + '" aria-pressed="' + (i === 0) + '">' + esc(c) + "</button>"; }).join("") + '</div><div id="gb-newslist">' + cards(items) + "</div>";
     root.querySelectorAll(".gb-filter button").forEach(function (b) {
       b.onclick = function () { root.querySelectorAll(".gb-filter button").forEach(function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); var c = b.getAttribute("data-c"); document.getElementById("gb-newslist").innerHTML = cards(c === "ทั้งหมด" ? items : items.filter(function (a) { return a.categoryLabel === c; })); };

@@ -68,6 +68,7 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::event.event": ["find", "findOne"],
     "api::location.location": ["find", "findOne"],
     "api::sitemap-node.sitemap-node": ["find", "findOne"],
+    "api::menu-item.menu-item": ["find", "findOne"],
   };
 
   for (const [uid, actions] of Object.entries(map)) {
@@ -268,6 +269,7 @@ export async function backfillTenant(strapi: any) {
     "api::landing.landing",
     "api::blog.blog", "api::catalog.catalog", "api::weblink.weblink", "api::top-graphic.top-graphic",
     "api::event.event", "api::location.location", "api::sitemap-node.sitemap-node",
+    "api::menu-item.menu-item",
   ];
   for (const uid of uids) {
     const rows = await strapi.db.query(uid).findMany({ where: { tenant: null }, select: ["id"], limit: 10000 });
@@ -415,6 +417,69 @@ export async function seedGroupA(strapi: any) {
     ];
     for (const n of nodes) await strapi.documents("api::sitemap-node.sitemap-node").create({ ...P, data: { ...n, tenant: dgaId } });
     strapi.log.info("[seed] sitemap-nodes created (dga)");
+  }
+}
+
+/* ---------- TOR ข้อ 4: เมนูหลักจาก CMS + tags + related content ---------- */
+export async function seedCmsCore(strapi: any) {
+  const dgaId = await dgaTenantId(strapi);
+  if (!dgaId) return;
+  const P = { status: "published" as const };
+
+  // 4.1 เมนูหลัก (mega-menu) จาก CMS
+  if ((await strapi.db.query("api::menu-item.menu-item").count()) === 0) {
+    const items = [
+      { menu: "service", column: "สำหรับประชาชน", label: "บัตรประชาชนดิจิทัล (ThaID)", url: "landing.html?slug=thaid", order: 1 },
+      { menu: "service", column: "สำหรับประชาชน", label: "แอปทางรัฐ", url: "#", order: 2 },
+      { menu: "service", column: "สำหรับหน่วยงานรัฐ", label: "GDX ศูนย์แลกเปลี่ยนข้อมูล", url: "#", order: 1 },
+      { menu: "service", column: "นักพัฒนา/ธุรกิจ", label: "ข้อมูลเปิดภาครัฐ (Open Data)", url: "links.html", order: 1 },
+      { menu: "news", column: "ข่าว & ประกาศ", label: "ข่าวประชาสัมพันธ์", url: "news.html", order: 1 },
+      { menu: "news", column: "บทความ & ความรู้", label: "บทความ & บล็อก", url: "blog.html", order: 1 },
+      { menu: "news", column: "บทความ & ความรู้", label: "แคตตาล็อก (e-catalog)", url: "catalog.html", order: 2 },
+      { menu: "news", column: "สื่อ & กิจกรรม", label: "คลังวิดีโอ (DGA Channel)", url: "video.html", order: 1 },
+      { menu: "news", column: "สื่อ & กิจกรรม", label: "คลังภาพ", url: "gallery.html", order: 2 },
+      { menu: "news", column: "สื่อ & กิจกรรม", label: "ปฏิทินกิจกรรม", url: "calendar.html", order: 3 },
+      { menu: "eservice", column: "ลงทะเบียน & สมัครงาน", label: "ลงทะเบียนผู้ใช้งานระบบ", url: "register.html", order: 1 },
+      { menu: "eservice", column: "ลงทะเบียน & สมัครงาน", label: "ระบบรับสมัครงาน", url: "careers.html", order: 2 },
+      { menu: "eservice", column: "ร้องเรียน & ข้อเสนอแนะ", label: "ระบบรับเรื่องร้องเรียน", url: "complaint.html", order: 1 },
+      { menu: "eservice", column: "บริการช่วยเหลือ", label: "ดาวน์โหลดเอกสาร", url: "download.html", order: 1 },
+      { menu: "eservice", column: "บริการช่วยเหลือ", label: "คำถามที่พบบ่อย (FAQ)", url: "faq.html", order: 2 },
+      { menu: "about", column: "องค์กร", label: "วิสัยทัศน์ & บทบาท", url: "#", order: 1 },
+      { menu: "about", column: "เผยแพร่", label: "แผนที่ & ติดต่อ", url: "map.html", order: 1 },
+      { menu: "about", column: "ธรรมาภิบาล & ลิงก์", label: "ลิงก์ที่เกี่ยวข้อง", url: "links.html", order: 1 },
+      { menu: "about", column: "ธรรมาภิบาล & ลิงก์", label: "แผนผังเว็บไซต์", url: "sitemap.html", order: 2 },
+    ];
+    for (const it of items) await strapi.documents("api::menu-item.menu-item").create({ ...P, data: { ...it, tenant: dgaId } });
+    strapi.log.info(`[seed] menu-items created (${items.length})`);
+  }
+
+  // backfill slug (บทความเดิม seed มาไม่มี slug) + 4.2 Tags
+  const arts = await strapi.db.query("api::article.article")
+    .findMany({ where: { tenant: dgaId, publishedAt: { $notNull: true } }, select: ["id", "documentId", "title", "categoryLabel", "tags", "slug"], orderBy: { id: "asc" }, limit: 30 });
+  const slugify = (s: string, id: number) => {
+    const base = String(s || "").trim().toLowerCase().replace(/[^\w฀-๿]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70);
+    return base ? base + "-" + id : "article-" + id;
+  };
+  const pool = ["ThaID", "บริการดิจิทัล", "ทางรัฐ", "ข้อมูลเปิด", "รัฐบาลดิจิทัล", "นวัตกรรม", "ความปลอดภัย", "AI"];
+  let ti = 0, si = 0;
+  for (const a of arts) {
+    const patch: any = {};
+    if (!a.slug) { patch.slug = slugify(a.title, a.id); si++; }
+    if (!a.tags || !a.tags.length) { patch.tags = Array.from(new Set([a.categoryLabel, pool[ti % pool.length], pool[(ti + 1) % pool.length]].filter(Boolean))); ti++; }
+    if (Object.keys(patch).length) await strapi.db.query("api::article.article").update({ where: { id: a.id }, data: patch });
+  }
+  if (si) strapi.log.info(`[seed] slugs backfilled on ${si} articles`);
+  if (ti) strapi.log.info(`[seed] tags added to ${ti} articles`);
+
+  if (arts.length >= 3) {
+    const first = await strapi.db.query("api::article.article").findOne({ where: { id: arts[0].id }, populate: { related: true } });
+    if (!first?.related || !first.related.length) {
+      await strapi.documents("api::article.article").update({ documentId: arts[0].documentId, data: { related: [arts[1].documentId, arts[2].documentId] } });
+      await strapi.documents("api::article.article").publish({ documentId: arts[0].documentId });
+      await strapi.documents("api::article.article").update({ documentId: arts[1].documentId, data: { related: [arts[0].documentId, arts[2].documentId] } });
+      await strapi.documents("api::article.article").publish({ documentId: arts[1].documentId });
+      strapi.log.info("[seed] related articles linked");
+    }
   }
 }
 

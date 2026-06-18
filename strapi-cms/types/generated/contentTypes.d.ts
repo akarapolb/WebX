@@ -558,10 +558,22 @@ export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
         };
       }>;
     publishedAt: Schema.Attribute.DateTime;
+    related: Schema.Attribute.Relation<'manyToMany', 'api::article.article'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
     slug: Schema.Attribute.UID<'title'> &
       Schema.Attribute.SetPluginOptions<{
         i18n: {
           localized: true;
+        };
+      }>;
+    tags: Schema.Attribute.JSON &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
         };
       }>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
@@ -785,6 +797,7 @@ export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
     publishDate: Schema.Attribute.Date;
     publishedAt: Schema.Attribute.DateTime;
     slug: Schema.Attribute.UID<'title'>;
+    tags: Schema.Attribute.JSON;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     title: Schema.Attribute.String & Schema.Attribute.Required;
     updatedAt: Schema.Attribute.DateTime;
@@ -1391,6 +1404,44 @@ export interface ApiLocationLocation extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiMenuItemMenuItem extends Struct.CollectionTypeSchema {
+  collectionName: 'menu_items';
+  info: {
+    description: '\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E40\u0E21\u0E19\u0E39\u0E2B\u0E25\u0E31\u0E01 (mega-menu) \u0E08\u0E31\u0E14\u0E01\u0E32\u0E23\u0E1C\u0E48\u0E32\u0E19 CMS (TOR \u0E02\u0E49\u0E2D 4.1)';
+    displayName: 'Menu Item';
+    pluralName: 'menu-items';
+    singularName: 'menu-item';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    column: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    label: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::menu-item.menu-item'
+    > &
+      Schema.Attribute.Private;
+    menu: Schema.Attribute.Enumeration<
+      ['service', 'news', 'eservice', 'about']
+    > &
+      Schema.Attribute.Required;
+    openNewTab: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    url: Schema.Attribute.String & Schema.Attribute.DefaultTo<'#'>;
   };
 }
 
@@ -2351,6 +2402,7 @@ declare module '@strapi/strapi' {
       'api::job.job': ApiJobJob;
       'api::landing.landing': ApiLandingLanding;
       'api::location.location': ApiLocationLocation;
+      'api::menu-item.menu-item': ApiMenuItemMenuItem;
       'api::poll.poll': ApiPollPoll;
       'api::popup.popup': ApiPopupPopup;
       'api::registration.registration': ApiRegistrationRegistration;

@@ -12,7 +12,7 @@ function extOf(f: any, fallback?: string): string {
 async function gather(strapi: any, tenantKey: string, locale: string) {
   const tf = { tenant: { key: tenantKey } } as any;
   const [articles, services, faqs, jobs, downloads, ebooks] = await Promise.all([
-    strapi.documents('api::article.article').findMany({ locale, filters: tf, fields: ['title', 'excerpt', 'slug', 'kind', 'publishDate'], limit: 300 }),
+    strapi.documents('api::article.article').findMany({ locale, status: 'published', filters: tf, limit: 300 }),
     strapi.documents('api::service.service').findMany({ locale, filters: tf, fields: ['title', 'description', 'url'], limit: 300 }),
     strapi.documents('api::faq.faq').findMany({ locale, filters: tf, fields: ['question', 'answer'], limit: 300 }),
     strapi.documents('api::job.job').findMany({ locale, filters: tf, fields: ['title', 'summary', 'jobId'], limit: 300 }),
@@ -20,7 +20,7 @@ async function gather(strapi: any, tenantKey: string, locale: string) {
     strapi.documents('api::ebook.ebook').findMany({ filters: tf, fields: ['title', 'author', 'description', 'contentText', 'year', 'updatedAt'], populate: { file: true }, limit: 300 }),
   ]);
   const items: any[] = [];
-  articles.forEach((a: any) => items.push({ type: 'article', icon: 'i-doc', title: a.title, snippet: a.excerpt || '', url: '#', date: a.publishDate, fileType: '', kw: a.title + ' ' + (a.excerpt || '') }));
+  articles.forEach((a: any) => items.push({ type: 'article', icon: 'i-doc', title: a.title, snippet: a.excerpt || '', url: a.slug ? '/article.html?slug=' + encodeURIComponent(a.slug) : '#', date: a.publishDate, fileType: '', kw: a.title + ' ' + (a.excerpt || '') + ' ' + (Array.isArray(a.tags) ? a.tags.join(' ') : '') }));
   services.forEach((s: any) => items.push({ type: 'service', icon: 'i-grid', title: s.title, snippet: s.description || '', url: s.url || '#', date: null, fileType: '', kw: s.title + ' ' + (s.description || '') }));
   faqs.forEach((f: any) => items.push({ type: 'faq', icon: 'i-chat', title: f.question, snippet: f.answer || '', url: '#', date: null, fileType: '', answer: f.answer || '', kw: f.question + ' ' + (f.answer || '') }));
   jobs.forEach((j: any) => items.push({ type: 'job', icon: 'i-users', title: j.title, snippet: j.summary || '', url: '/careers.html?id=' + j.jobId, date: null, fileType: '', kw: j.title + ' ' + (j.summary || '') }));
