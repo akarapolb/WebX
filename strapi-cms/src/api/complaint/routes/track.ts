@@ -9,5 +9,11 @@ export default {
       handler: 'complaint.track',
       config: { auth: false },
     },
+    {
+      method: 'POST',
+      path: '/complaints/submit',
+      handler: 'complaint.submit',
+      config: { auth: false },
+    },
   ],
 };

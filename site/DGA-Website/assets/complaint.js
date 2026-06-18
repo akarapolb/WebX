@@ -333,7 +333,21 @@
       // ส่งเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่เรื่อง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
       const base = window.DGA_CMS_URL || 'http://localhost:1337';
       const cap = window.DGACaptcha ? DGACaptcha.get(form) : {};
-      fetch(base + '/api/complaints' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) })
+      const url = base + '/api/complaints' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : '');
+      // แนบไฟล์ (TOR 13.2): ถ้ามีไฟล์ → multipart (data + files.attachment); ถ้าไม่มี → JSON
+      const fEl = document.getElementById('cFile');
+      const file = fEl && fEl.files && fEl.files[0];
+      let req;
+      if (file) {
+        const fd = new FormData();
+        fd.append('data', JSON.stringify(payload));
+        fd.append('files.attachment', file, file.name);
+        Object.keys(cap).forEach(k => fd.append(k, cap[k]));
+        req = fetch(base + '/api/complaints/submit' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', body: fd });
+      } else {
+        req = fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) });
+      }
+      req
         .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(form); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
         .then(j => finishOk(j.data.ref))
         .catch(err => { if (err && err.captcha) return; finishOk(genRef()); });

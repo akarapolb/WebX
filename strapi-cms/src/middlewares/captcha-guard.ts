@@ -2,7 +2,7 @@
    ต้องวางหลัง strapi::body เพื่ออ่าน ctx.request.body */
 import { CAPTCHA_ENABLED, verifyCaptcha } from '../utils/captcha';
 
-const GUARDED = new Set(['/api/complaints', '/api/applications', '/api/registrations']);
+const GUARDED = new Set(['/api/complaints', '/api/complaints/submit', '/api/applications', '/api/applications/submit', '/api/registrations']);
 
 export default (_config: any, _ctx: any) => {
   return async (ctx: any, next: any) => {
