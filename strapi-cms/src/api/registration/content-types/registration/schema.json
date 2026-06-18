@@ -41,6 +41,10 @@
     "verified": {
       "type": "boolean",
       "default": false
+    },
+    "extra": {
+      "type": "json",
+      "description": "ฟิลด์เพิ่มเติมที่ผู้ดูแลกำหนดเอง (TOR ข้อ 17.3 custom fields)"
     }
   }
 }

@@ -457,6 +457,7 @@ export interface ApiApplicationApplication extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     date: Schema.Attribute.String;
     email: Schema.Attribute.String;
+    extra: Schema.Attribute.JSON;
     jobId: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1606,6 +1607,7 @@ export interface ApiRegistrationRegistration
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     email: Schema.Attribute.String;
+    extra: Schema.Attribute.JSON;
     firstname: Schema.Attribute.String;
     lastname: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;

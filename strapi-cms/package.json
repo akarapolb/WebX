@@ -18,6 +18,7 @@
     "@_sh/strapi-plugin-ckeditor": "^7.1.1",
     "@strapi/plugin-cloud": "5.48.0",
     "@strapi/plugin-users-permissions": "5.48.0",
+    "@strapi/provider-email-nodemailer": "^5.48.1",
     "@strapi/strapi": "5.48.0",
     "better-sqlite3": "12.8.0",
     "mammoth": "^1.12.0",

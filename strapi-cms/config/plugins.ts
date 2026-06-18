@@ -23,6 +23,24 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin =>
       },
     },
   },
+  // อีเมล: ใช้ SMTP จริงผ่าน nodemailer (TOR 13.5 Auto Email, 13.6 แจ้งเตือน admin)
+  // ตั้งค่า SMTP_HOST/PORT/USER/PASS/FROM ใน .env ตอน production; ถ้าไม่ตั้ง ระบบจะ log แทน (ไม่ล้ม)
+  email: {
+    config: {
+      provider: 'nodemailer',
+      providerOptions: {
+        host: env('SMTP_HOST', 'localhost'),
+        port: env.int('SMTP_PORT', 587),
+        secure: env.bool('SMTP_SECURE', false),
+        auth: env('SMTP_USER') ? { user: env('SMTP_USER'), pass: env('SMTP_PASS') } : undefined,
+        ignoreTLS: !env('SMTP_USER'),
+      },
+      settings: {
+        defaultFrom: env('SMTP_FROM', 'no-reply@dga.or.th'),
+        defaultReplyTo: env('SMTP_FROM', 'no-reply@dga.or.th'),
+      },
+    },
+  },
 });
 
 export default config;

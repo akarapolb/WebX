@@ -51,7 +51,14 @@
       "type": "media",
       "multiple": false,
       "required": false,
-      "allowedTypes": ["images", "files"]
+      "allowedTypes": [
+        "images",
+        "files"
+      ]
+    },
+    "extra": {
+      "type": "json",
+      "description": "ฟิลด์เพิ่มเติมที่ผู้ดูแลกำหนดเอง (TOR ข้อ 17.3)"
     }
   }
 }
