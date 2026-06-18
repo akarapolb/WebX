@@ -66,6 +66,14 @@
     if (copy) copy.textContent = "© " + (LANG === "en" ? "2026 " : "2569 ") + t.name;
 
     document.documentElement.setAttribute("data-tenant", t.key || "");
+
+    // เทมเพลตสำเร็จรูป (no-code) + สีพื้นหลัง — TOR ภาคผนวก ก ข้อ 3
+    var tmpl = t.template || {};
+    document.documentElement.setAttribute("data-template", tmpl.preset || "a");
+    if (tmpl.background) document.documentElement.style.setProperty("--c-bg", tmpl.background);
+
+    // เปิดให้สคริปต์อื่นอ่านตั้งค่า tenant (เช่น watermark บนคลังภาพ)
+    window.DGA_TENANT_CFG = t;
   }
 
   function uncloak() { document.documentElement.classList.remove("cms-cloak"); }

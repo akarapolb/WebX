@@ -1,0 +1,98 @@
+/* ============================================================
+   groupa.css — หน้าแสดงผลโมดูล Group A (Blog / e-catalog / Web Link / Top Graphic)
+   ปิด gap TOR ภาคผนวก ก ข้อ 15, 19, 23, 24 · ใช้ Design Tokens เดิม
+   Responsive · โหมดมืด · WCAG 2.2 AA
+   ============================================================ */
+.ga-wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+.ga-head { padding: 40px 20px 8px; text-align: center; }
+.ga-head h1 { font-size: var(--fs-h1); margin: 0 0 8px; color: var(--c-text); }
+.ga-head p { color: var(--c-text-muted); margin: 0; }
+.ga-sec { padding: 28px 0 56px; }
+.ga-empty { color: var(--c-text-muted); text-align: center; padding: 48px 20px; }
+
+/* ---------- Top Graphic (แถบภาพหมุนด้านบน) ---------- */
+.ga-top { position: relative; max-width: 1200px; margin: 18px auto 0; padding: 0 20px; }
+.ga-top__item { display: block; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--c-border); background: var(--grad-brand); color: #fff; text-decoration: none; }
+.ga-top__item img { width: 100%; display: block; }
+.ga-top__cap { padding: 16px 22px; font-weight: 600; font-size: var(--fs-body-lg); }
+
+/* ---------- Blog (รายการบทความ) ---------- */
+.ga-blog { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+.ga-post { display: flex; flex-direction: column; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); overflow: hidden; }
+.ga-post__img { aspect-ratio: 16/9; background: var(--c-sunken) center/cover no-repeat; }
+.ga-post__body { padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; }
+.ga-post__cat { align-self: flex-start; font-size: var(--fs-small); background: var(--badge-info-bg); color: var(--badge-info-fg); padding: 3px 10px; border-radius: 999px; }
+.ga-post h3 { margin: 0; font-size: var(--fs-h3); color: var(--c-text); }
+.ga-post p { margin: 0; color: var(--c-text-muted); line-height: var(--lh-base); flex: 1 1 auto; }
+.ga-post__meta { display: flex; justify-content: space-between; color: var(--c-text-muted); font-size: var(--fs-small); border-top: 1px solid var(--c-border); padding-top: 10px; }
+
+/* ---------- e-catalog (กริดแคตตาล็อก) ---------- */
+.ga-cat { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 22px; }
+.ga-catcard { display: flex; flex-direction: column; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); overflow: hidden; }
+.ga-catcard__img { aspect-ratio: 3/4; background: var(--c-sunken) center/cover no-repeat; display: grid; place-items: center; color: var(--c-text-muted); }
+.ga-catcard__img svg { width: 56px; height: 56px; stroke: currentColor; fill: none; stroke-width: 1.4; }
+.ga-catcard__body { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; }
+.ga-catcard h3 { margin: 0; font-size: var(--fs-h3); color: var(--c-text); }
+.ga-catcard p { margin: 0; color: var(--c-text-muted); font-size: var(--fs-small); line-height: var(--lh-base); flex: 1 1 auto; }
+
+/* ---------- Web Link (กลุ่มลิงก์) ---------- */
+.ga-linkgroup { margin-bottom: 28px; }
+.ga-linkgroup h2 { font-size: var(--fs-h3); color: var(--c-text); margin: 0 0 14px; }
+.ga-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.ga-link { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-md); text-decoration: none; color: var(--c-text); }
+.ga-link:hover { border-color: var(--c-primary); }
+.ga-link__thumb { width: 44px; height: 44px; border-radius: var(--radius-sm); background: var(--badge-info-bg) center/cover; display: grid; place-items: center; color: var(--c-secondary); flex: 0 0 auto; }
+.ga-link__thumb svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.ga-link b { display: block; font-size: var(--fs-body); }
+.ga-link span { color: var(--c-text-muted); font-size: var(--fs-small); }
+
+@media (max-width: 560px) { .ga-blog, .ga-cat, .ga-links { grid-template-columns: 1fr; } }
+
+/* ============================================================
+   ปฏิทินกิจกรรม (#16) / Map (#27) / Sitemap (#25)
+   ============================================================ */
+/* ---------- Calendar ---------- */
+.cal-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.cal-bar h2 { font-size: var(--fs-h3); margin: 0; color: var(--c-text); flex: 1 1 auto; min-width: 160px; }
+.cal-views { display: flex; gap: 4px; }
+.cal-views button { padding: 8px 14px; border: 1px solid var(--c-border-strong); background: var(--c-surface); color: var(--c-text); font: inherit; cursor: pointer; border-radius: var(--radius-sm); }
+.cal-views button[aria-pressed="true"] { background: var(--c-action); color: #fff; border-color: var(--c-action); }
+.cal-nav button { width: 40px; height: 40px; border: 1px solid var(--c-border-strong); background: var(--c-surface); color: var(--c-text); border-radius: var(--radius-sm); cursor: pointer; font-size: 1.1rem; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--c-border); border: 1px solid var(--c-border); border-radius: var(--radius-md); overflow: hidden; }
+.cal-dow { background: var(--c-sunken); color: var(--c-text-muted); font-size: var(--fs-small); text-align: center; padding: 8px 4px; font-weight: 500; }
+.cal-cell { background: var(--c-surface); min-height: 96px; padding: 6px; display: flex; flex-direction: column; gap: 3px; }
+.cal-cell--out { background: var(--c-bg); }
+.cal-daynum { font-size: var(--fs-small); color: var(--c-text-muted); }
+.cal-cell--today .cal-daynum { background: var(--c-action); color: #fff; border-radius: 999px; width: 24px; height: 24px; display: grid; place-items: center; }
+.cal-ev { font-size: 11px; padding: 3px 7px; border-radius: 6px; color: #fff; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ev--blue { background: #2563eb; } .cal-ev--amber { background: #b45309; } .cal-ev--green { background: #15803d; }
+.cal-ev--purple { background: #7c3aed; } .cal-ev--red { background: #b91c1c; }
+.cal-list { display: flex; flex-direction: column; gap: 10px; }
+.cal-listitem { display: flex; gap: 14px; padding: 14px 16px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-md); }
+.cal-listitem__date { text-align: center; min-width: 56px; }
+.cal-listitem__date b { display: block; font-size: 1.5rem; color: var(--c-text); font-family: var(--font-en); }
+.cal-listitem__date span { font-size: var(--fs-small); color: var(--c-text-muted); }
+.cal-listitem__body h3 { margin: 0 0 4px; font-size: var(--fs-body-lg); color: var(--c-text); }
+.cal-listitem__body p { margin: 0; color: var(--c-text-muted); font-size: var(--fs-small); }
+.cal-detail { margin-top: 18px; padding: 18px 20px; background: var(--c-surface); border: 1px solid var(--c-border); border-left: 4px solid var(--c-action); border-radius: var(--radius-md); }
+.cal-detail h3 { margin: 0 0 8px; color: var(--c-text); }
+.cal-detail p { margin: 0 0 4px; color: var(--c-text-muted); font-size: var(--fs-small); }
+
+/* ---------- Map ---------- */
+.map-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.map-bar .map-result { color: var(--c-primary); font-size: var(--fs-small); }
+#map { height: 62vh; min-height: 380px; border-radius: var(--radius-lg); border: 1px solid var(--c-border); z-index: 1; }
+.map-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 18px; }
+.map-loc { padding: 14px 16px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-md); cursor: pointer; }
+.map-loc.is-near { border-color: var(--c-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-primary) 25%, transparent); }
+.map-loc b { display: block; color: var(--c-text); }
+.map-loc span { color: var(--c-text-muted); font-size: var(--fs-small); }
+.map-loc .map-dist { color: var(--c-primary); font-weight: 600; }
+
+/* ---------- Sitemap ---------- */
+.sm-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 22px; }
+.sm-group { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); padding: 20px 22px; }
+.sm-group h2 { font-size: var(--fs-h3); color: var(--c-text); margin: 0 0 12px; padding-bottom: 10px; border-bottom: 2px solid var(--c-action); }
+.sm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sm-list a { display: block; padding: 7px 10px; border-radius: var(--radius-sm); color: var(--c-text); text-decoration: none; }
+.sm-list a:hover { background: var(--c-sunken); color: var(--c-primary); }
