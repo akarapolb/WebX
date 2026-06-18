@@ -299,7 +299,15 @@ self-host fonts, brotli/gzip, รูป webp/avif + responsive sizes, HTTP/2
 - **Video auto-resolution** (TOR #7.11): วิดีโอเล่นผ่าน **YouTube embed = adaptive streaming เนทีฟ** (player ปรับความละเอียดอัตโนมัติตามแบนด์วิดท์ — ไม่ fix vq); ไฟล์ตรงใช้ `<video>` ปรับคุณภาพเนทีฟ + รองรับหลาย `<source>` ได้
   → (adaptive แท้สำหรับไฟล์โฮสต์เองต้องมี HLS/DASH transcoding pipeline — นอกขอบเขต config CMS)
 
+## WebX Console — Users + Chat modules (เสร็จ + E2E) → Console ครบทุกโมดูล
+- **Users** (`viewUsers` + `GET/PUT /api/console/users`): จัดผู้ดูแลเนื้อหาต่อ tenant ผ่าน `Tenant.adminEmails` (= per-tenant RBAC จริง)
+  → ตารางบัญชี admin ทั้งหมด + ติ๊กเลือกผู้ดูแลของหน่วยงาน (Super Admin = "ทุกหน่วยงาน") → บันทึก
+  → E2E: ติ๊ก 2 editors → DB `["dga-editor","pea-editor"]` → revert; super=?tenant, editor=ของตน
+- **Chat** (`viewChat` + `PUT /api/console/branding {liveChat}`): จัดช่องทาง Live Chat (เพิ่ม/แก้/ลบ type+label+url)
+  → E2E: เพิ่มช่องทาง X → บันทึก → DB 5 ช่องทาง → **ปุ่ม "แชตสด" หน้าเว็บแสดง X ทันที** (loop ปิดครบ)
+- Console modules ครบ: Analytics · Content (SSO) · Branding · Users · Chat
+
 ## ยังไม่ได้ทำ (งวดถัดไป)
-- WebX Console modules: Users / Chat (Branding เสร็จแล้ว)
+- Production: Docker/PostgreSQL/DR, SMTP จริง, .pptx full-text, form file upload (multipart)
 - หน้าแสดง Download/E-book/Gallery, .pptx full-text, จำกัด relation picker ของ editor (UI), เมนู mega จาก CMS
 - เนื้อหา `/en/` ครบทุก collection, รูปจริง PEA, อัปโหลดไฟล์แนบฟอร์ม, SMTP จริง, proxy SEO files ที่โดเมนจริง

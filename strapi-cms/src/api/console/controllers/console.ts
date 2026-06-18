@@ -51,13 +51,13 @@ location.replace(redirect);
     const sup = await isSuperAdmin(strapi, admin.id);
 
     const all = await strapi.db.query('api::tenant.tenant')
-      .findMany({ select: ['key', 'name', 'adminEmails', 'brand', 'template', 'watermark'], limit: 200 }).catch(() => []);
+      .findMany({ select: ['key', 'name', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat'], limit: 200 }).catch(() => []);
     const mine = all.filter((t: any) => (t.adminEmails || []).map(lc).includes(email));
     const allowed = sup ? all : mine;
 
     ctx.body = {
       admin: { email: admin.email, firstname: admin.firstname || '', isSuper: sup },
-      tenants: allowed.map((t: any) => ({ key: t.key, name: t.name, brand: t.brand || {}, template: t.template || {}, watermark: t.watermark || {} })),
+      tenants: allowed.map((t: any) => ({ key: t.key, name: t.name, brand: t.brand || {}, template: t.template || {}, watermark: t.watermark || {}, liveChat: t.liveChat || {} })),
     };
   },
 
@@ -69,7 +69,7 @@ location.replace(redirect);
     const sup = await isSuperAdmin(strapi, admin.id);
     const body = ctx.request.body || {};
     const all = await strapi.db.query('api::tenant.tenant')
-      .findMany({ select: ['id', 'key', 'adminEmails', 'brand', 'template', 'watermark'], limit: 200 }).catch(() => []);
+      .findMany({ select: ['id', 'key', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat'], limit: 200 }).catch(() => []);
     let target: any;
     if (sup) { const k = lc(ctx.query.tenant); target = all.find((t: any) => t.key === k); }
     else { target = all.find((t: any) => (t.adminEmails || []).map(lc).includes(email)); }
@@ -78,8 +78,54 @@ location.replace(redirect);
     if (body.brand) data.brand = { ...(target.brand || {}), ...body.brand };
     if (body.template) data.template = { ...(target.template || {}), ...body.template };
     if (body.watermark) data.watermark = { ...(target.watermark || {}), ...body.watermark };
+    if (body.liveChat) data.liveChat = body.liveChat; // แทนที่ทั้งก้อน (รายการช่องทาง)
     if (!Object.keys(data).length) { ctx.status = 400; ctx.body = { error: 'ไม่มีข้อมูลให้อัปเดต' }; return; }
     await strapi.db.query('api::tenant.tenant').update({ where: { id: target.id }, data });
-    ctx.body = { ok: true, tenant: target.key, brand: data.brand, template: data.template, watermark: data.watermark };
+    ctx.body = { ok: true, tenant: target.key, brand: data.brand, template: data.template, watermark: data.watermark, liveChat: data.liveChat };
+  },
+
+  /** รายชื่อผู้ดูแล (admin users) + อีเมลที่เป็นผู้ดูแลของ tenant นั้น */
+  async users(ctx: any) {
+    const strapi = (global as any).strapi;
+    const admin = ctx.state.adminUser || {};
+    const email = lc(admin.email);
+    const sup = await isSuperAdmin(strapi, admin.id);
+    const all = await strapi.db.query('api::tenant.tenant').findMany({ select: ['key', 'name', 'adminEmails'], limit: 200 }).catch(() => []);
+    let target: any;
+    if (sup) { const k = lc(ctx.query.tenant); target = all.find((t: any) => t.key === k); }
+    else { target = all.find((t: any) => (t.adminEmails || []).map(lc).includes(email)); }
+    if (!target) { ctx.status = 403; ctx.body = { error: 'ไม่พบหน่วยงานที่มีสิทธิ์' }; return; }
+    const users = await strapi.db.query('admin::user').findMany({
+      select: ['id', 'firstname', 'lastname', 'email', 'isActive', 'blocked'],
+      populate: { roles: { select: ['name', 'code'] } }, limit: 500,
+    }).catch(() => []);
+    ctx.body = {
+      tenant: { key: target.key, name: target.name, adminEmails: target.adminEmails || [] },
+      isSuper: sup,
+      users: users.map((u: any) => ({
+        email: u.email, name: ((u.firstname || '') + ' ' + (u.lastname || '')).trim(),
+        active: u.isActive !== false && u.blocked !== true,
+        roles: (u.roles || []).map((r: any) => r.name).join(', '),
+        isSuper: (u.roles || []).some((r: any) => r.code === 'strapi-super-admin'),
+      })),
+    };
+  },
+
+  /** ตั้งรายชื่อผู้ดูแลเนื้อหาของ tenant (adminEmails = per-tenant RBAC) */
+  async updateUsers(ctx: any) {
+    const strapi = (global as any).strapi;
+    const admin = ctx.state.adminUser || {};
+    const email = lc(admin.email);
+    const sup = await isSuperAdmin(strapi, admin.id);
+    const body = ctx.request.body || {};
+    if (!Array.isArray(body.adminEmails)) { ctx.status = 400; ctx.body = { error: 'adminEmails ต้องเป็นรายการ' }; return; }
+    const all = await strapi.db.query('api::tenant.tenant').findMany({ select: ['id', 'key', 'adminEmails'], limit: 200 }).catch(() => []);
+    let target: any;
+    if (sup) { const k = lc(ctx.query.tenant); target = all.find((t: any) => t.key === k); }
+    else { target = all.find((t: any) => (t.adminEmails || []).map(lc).includes(email)); }
+    if (!target) { ctx.status = 403; ctx.body = { error: 'ไม่พบหน่วยงานที่มีสิทธิ์แก้ไข' }; return; }
+    const clean = Array.from(new Set(body.adminEmails.map((e: any) => String(e).trim()).filter(Boolean)));
+    await strapi.db.query('api::tenant.tenant').update({ where: { id: target.id }, data: { adminEmails: clean } });
+    ctx.body = { ok: true, tenant: target.key, adminEmails: clean };
   },
 };

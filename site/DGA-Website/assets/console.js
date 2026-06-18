@@ -35,8 +35,8 @@
   var MODULES = [
     { id: "analytics", icon: "i-chart", label: "สถิติ (Analytics)", desc: "ยอดเข้าชม เนื้อหา ฟอร์ม ความยินยอม และลิงก์ GA4/Clarity", status: "live" },
     { id: "content", icon: "i-doc", label: "จัดการเนื้อหา", desc: "ข่าว บริการ ตำแหน่งงาน Landing และสื่อต่าง ๆ ของหน่วยงาน", status: "live" },
-    { id: "users", icon: "i-users", label: "ผู้ใช้งาน", desc: "บัญชีผู้ดูแล/ผู้แก้ไขเนื้อหาของหน่วยงาน และสิทธิ์การเข้าถึง", status: "soon" },
-    { id: "chat", icon: "i-chat", label: "แชต/ติดต่อ", desc: "ช่องทาง Live Chat (LINE/Messenger/FB/โทร) และ AI Smart Search", status: "soon" },
+    { id: "users", icon: "i-users", label: "ผู้ใช้งาน", desc: "กำหนดผู้ดูแลเนื้อหาของหน่วยงาน (สิทธิ์ต่อ tenant)", status: "live" },
+    { id: "chat", icon: "i-chat", label: "แชต/ติดต่อ", desc: "จัดช่องทาง Live Chat (LINE/Messenger/FB/โทร) ของหน่วยงาน", status: "live" },
     { id: "branding", icon: "i-palette", label: "แบรนด์/เว็บไซต์", desc: "เทมเพลต 3 แบบ สีแบรนด์ พื้นหลัง และลายน้ำคลังภาพ — ปรับเองไม่ต้องเขียนโค้ด", status: "live" },
   ];
   function modById(id) { for (var i = 0; i < MODULES.length; i++) if (MODULES[i].id === id) return MODULES[i]; return null; }
@@ -129,6 +129,8 @@
     if (view === "analytics") return viewAnalytics(el);
     if (view === "content") return viewContent(el);
     if (view === "branding") return viewBranding(el);
+    if (view === "users") return viewUsers(el);
+    if (view === "chat") return viewChat(el);
     return viewSoon(el, modById(view));
   }
 
@@ -261,6 +263,73 @@
         } else { msg.textContent = "บันทึกไม่สำเร็จ"; msg.style.color = "var(--c-danger)"; }
       }).catch(function () { msg.textContent = "บันทึกไม่สำเร็จ"; msg.style.color = "var(--c-danger)"; });
     };
+  }
+
+  // ---------- view: users (ผู้ดูแลต่อ tenant = adminEmails) ----------
+  function viewUsers(el) {
+    el.innerHTML = '<p class="wx-empty">กำลังโหลด…</p>';
+    api("/api/console/users?tenant=" + encodeURIComponent(currentTenant)).then(function (d) {
+      if (!d || d.error) { el.innerHTML = '<p class="wx-empty">โหลดไม่สำเร็จ</p>'; return; }
+      var editors = (d.tenant.adminEmails || []).map(function (e) { return String(e).toLowerCase(); });
+      var rows = d.users.map(function (u) {
+        var isEd = editors.indexOf(String(u.email).toLowerCase()) >= 0;
+        var badge = u.active ? '<span class="wx-tile__badge wx-badge--live">ใช้งาน</span>' : '<span class="wx-tile__badge wx-badge--soon">ระงับ</span>';
+        var chk = u.isSuper ? '<span class="a-top__meta">ทุกหน่วยงาน</span>'
+          : '<input type="checkbox" class="wx-uchk" data-email="' + esc(u.email) + '"' + (isEd ? " checked" : "") + ' style="width:18px;height:18px">';
+        return "<tr><td>" + esc(u.name || "-") + "</td><td>" + esc(u.email) + "</td><td>" + esc(u.roles) + "</td><td>" + badge + '</td><td style="text-align:center">' + chk + "</td></tr>";
+      }).join("");
+      el.innerHTML =
+        '<div class="wx-card"><p style="margin:0 0 16px;color:var(--c-text-muted);font-size:var(--fs-small)">เลือกผู้ที่เป็น <b style="color:var(--c-text)">ผู้ดูแลเนื้อหาของ ' + esc(d.tenant.name) + '</b> — จะเห็น/แก้เฉพาะข้อมูลของหน่วยงานนี้ (per-tenant RBAC). ผู้ดูแลระบบ (Super Admin) เข้าถึงทุกหน่วยงานอยู่แล้ว.</p>' +
+        '<table class="a-table"><thead><tr><th>ชื่อ</th><th>อีเมล</th><th>บทบาท</th><th>สถานะ</th><th style="text-align:center">ผู้ดูแล ' + esc(d.tenant.key) + '</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
+        '<div style="margin-top:16px;display:flex;gap:10px;align-items:center"><button class="btn btn--primary" id="wx-usave">บันทึกสิทธิ์</button><span id="wx-umsg" style="font-size:var(--fs-small)"></span></div>';
+      document.getElementById("wx-usave").onclick = function () {
+        var emails = [].map.call(document.querySelectorAll(".wx-uchk:checked"), function (c) { return c.getAttribute("data-email"); });
+        var msg = document.getElementById("wx-umsg"); msg.textContent = "กำลังบันทึก…"; msg.style.color = "var(--c-text-muted)";
+        api("/api/console/users?tenant=" + encodeURIComponent(currentTenant), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adminEmails: emails }) })
+          .then(function (r) { if (r && r.ok) { msg.textContent = "บันทึกแล้ว ✓"; msg.style.color = "var(--c-success)"; } else { msg.textContent = "บันทึกไม่สำเร็จ"; msg.style.color = "var(--c-danger)"; } })
+          .catch(function () { msg.textContent = "บันทึกไม่สำเร็จ"; msg.style.color = "var(--c-danger)"; });
+      };
+    }).catch(function () {});
+  }
+
+  // ---------- view: chat (Live Chat channels) ----------
+  function viewChat(el) {
+    var t = tenantObj();
+    var channels = (((t.liveChat || {}).channels) || []).slice();
+    var TYPES = [["line", "LINE"], ["messenger", "Messenger"], ["facebook", "Facebook"], ["phone", "โทรศัพท์"], ["x", "X (Twitter)"], ["other", "อื่น ๆ"]];
+    var INP = 'style="padding:9px 11px;border:1px solid var(--c-border-strong);border-radius:8px;background:var(--c-bg);color:var(--c-text);font:inherit;width:100%"';
+    function row(c) {
+      return '<div class="wx-chatrow" style="display:grid;grid-template-columns:140px 1fr 1.4fr 42px;gap:8px;margin-bottom:8px;align-items:center">' +
+        '<select class="wx-csel wx-select">' + TYPES.map(function (tp) { return '<option value="' + tp[0] + '"' + ((c.type || "line") === tp[0] ? " selected" : "") + ">" + tp[1] + "</option>"; }).join("") + "</select>" +
+        '<input class="wx-clabel" ' + INP + ' value="' + esc(c.label || "") + '" placeholder="ป้ายชื่อ">' +
+        '<input class="wx-curl" ' + INP + ' value="' + esc(c.url || "") + '" placeholder="URL หรือ tel:0...">' +
+        '<button class="btn btn--ghost wx-cdel" aria-label="ลบ" style="min-height:38px">✕</button></div>';
+    }
+    function render() {
+      el.innerHTML =
+        '<div class="wx-card"><h2 style="margin:0 0 6px;color:var(--c-text)">ช่องทาง Live Chat / ติดต่อ</h2>' +
+        '<p style="margin:0 0 16px;color:var(--c-text-muted);font-size:var(--fs-small)">ช่องทางเหล่านี้แสดงในปุ่ม “แชตสด” บนหน้าเว็บของหน่วยงาน</p>' +
+        '<div id="wx-chans">' + channels.map(row).join("") + "</div>" +
+        '<button class="btn btn--ghost" id="wx-cadd" style="margin-top:6px">+ เพิ่มช่องทาง</button></div>' +
+        '<div style="margin-top:16px;display:flex;gap:10px;align-items:center"><button class="btn btn--primary" id="wx-csave">บันทึก</button><span id="wx-cmsg" style="font-size:var(--fs-small)"></span></div>';
+      el.querySelectorAll(".wx-cdel").forEach(function (b, i) { b.onclick = function () { collect(); channels.splice(i, 1); render(); }; });
+      document.getElementById("wx-cadd").onclick = function () { collect(); channels.push({ type: "line", label: "", url: "" }); render(); };
+      document.getElementById("wx-csave").onclick = function () {
+        collect();
+        var msg = document.getElementById("wx-cmsg"); msg.textContent = "กำลังบันทึก…"; msg.style.color = "var(--c-text-muted)";
+        api("/api/console/branding?tenant=" + encodeURIComponent(currentTenant), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ liveChat: { channels: channels.filter(function (c) { return c.url || c.label; }) } }) })
+          .then(function (r) { if (r && r.ok) { msg.textContent = "บันทึกแล้ว ✓"; msg.style.color = "var(--c-success)"; t.liveChat = r.liveChat; } else { msg.textContent = "บันทึกไม่สำเร็จ"; msg.style.color = "var(--c-danger)"; } })
+          .catch(function () { msg.textContent = "บันทึกไม่สำเร็จ"; msg.style.color = "var(--c-danger)"; });
+      };
+    }
+    function collect() {
+      var out = [];
+      el.querySelectorAll(".wx-chatrow").forEach(function (r) {
+        out.push({ type: r.querySelector(".wx-csel").value, label: r.querySelector(".wx-clabel").value, url: r.querySelector(".wx-curl").value });
+      });
+      channels = out;
+    }
+    render();
   }
 
   // ---------- view: soon ----------

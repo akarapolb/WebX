@@ -17,6 +17,18 @@ export default {
       config: { auth: false, policies: ['global::admin-only'] },
     },
     {
+      method: 'GET',
+      path: '/console/users',
+      handler: 'console.users',
+      config: { auth: false, policies: ['global::admin-only'] },
+    },
+    {
+      method: 'PUT',
+      path: '/console/users',
+      handler: 'console.updateUsers',
+      config: { auth: false, policies: ['global::admin-only'] },
+    },
+    {
       // SSO bridge — public (token อยู่ใน fragment, ไม่ผ่าน server); เขียน storage ฝั่ง client
       method: 'GET',
       path: '/sso/bridge',
