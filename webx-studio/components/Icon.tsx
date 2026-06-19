@@ -1,0 +1,27 @@
+const P: Record<string, string> = {
+  home: '<path d="M3 11l9-8 9 8M5 10v10h14V10"/>',
+  doc: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a1 1 0 01-1 1H3a1 1 0 01-1-1v-6z"/>',
+  spark: '<path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/>',
+  layout: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+  palette: '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.4"/><circle cx="12" cy="8" r="1.4"/><circle cx="16" cy="10" r="1.4"/>',
+  users: '<path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+  code: '<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/>',
+  bell: '<path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/>',
+  moon: '<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>',
+  chevron: '<path d="M8 9l4 4 4-4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  logout: '<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  close: '<path d="M18 6L6 18M6 6l12 12"/>',
+  img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+};
+
+export default function Icon({ name, className }: { name: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+      strokeLinecap="round" strokeLinejoin="round" className={className}
+      dangerouslySetInnerHTML={{ __html: P[name] || "" }} />
+  );
+}

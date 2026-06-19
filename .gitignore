@@ -18,6 +18,13 @@ strapi-cms/public/uploads/*
 *.log
 npm-debug.log*
 
+# Generated deck QA previews (PowerPoint COM PNG export)
+site/DGA-Website/bid/deck-assets/
+
+# Next.js / WebX Studio (env + build handled by webx-studio/.gitignore too)
+webx-studio/.next/
+webx-studio/.env.local
+
 # OS / editor
 .DS_Store
 Thumbs.db

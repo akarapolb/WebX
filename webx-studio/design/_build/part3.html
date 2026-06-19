@@ -1,0 +1,421 @@
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const nf = n => (n||0).toLocaleString('en-US');
+const root = document.documentElement;
+
+/* ============ STATE ============ */
+const S = { lang:'en', view:'dashboard', tenant:'aurora', theme:'dark', cmdkSel:0,
+            blocks:['hero','features','cta'], accent:null, tmpl:0, wm:false };
+
+/* ============ ICONS ============ */
+const ICONS = {
+  home:'<path d="M3 11l9-8 9 8M5 10v10h14V10"/>',
+  doc:'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/>',
+  inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a1 1 0 01-1 1H3a1 1 0 01-1-1v-6z"/>',
+  spark:'<path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/>',
+  layout:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+  palette:'<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.4"/><circle cx="12" cy="8" r="1.4"/><circle cx="16" cy="10" r="1.4"/>',
+  users:'<path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+  code:'<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  img:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+  chart:'<path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/>',
+  msg:'<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>',
+  cta:'<rect x="3" y="7" width="18" height="10" rx="2"/><path d="M8 12h6"/>',
+  star:'<path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>'
+};
+const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+(ICONS[n]||'')+'</svg>';
+const L = o => o[S.lang];   // localize {en,th}
+
+/* ============ NAV ============ */
+const GROUPS = { main:{en:'Workspace',th:'พื้นที่ทำงาน'}, build:{en:'Build',th:'สร้าง'}, admin:{en:'Administration',th:'ผู้ดูแล'} };
+const NAV = [
+  {g:'main'},
+  {id:'dashboard',k:1,icon:'home',label:{en:'Dashboard',th:'แดชบอร์ด'}},
+  {id:'content',k:2,icon:'doc',label:{en:'Content',th:'เนื้อหา'}},
+  {id:'forms',k:3,icon:'inbox',label:{en:'Forms',th:'ฟอร์ม'}},
+  {id:'search',k:4,icon:'spark',label:{en:'AI Search',th:'ค้นหา AI'}},
+  {g:'build'},
+  {id:'builder',k:5,icon:'layout',label:{en:'Visual Builder',th:'Visual Builder'}},
+  {id:'branding',k:6,icon:'palette',label:{en:'Branding',th:'แบรนด์'}},
+  {g:'admin'},
+  {id:'users',k:7,icon:'users',label:{en:'Users & Roles',th:'ผู้ใช้ & สิทธิ์'}},
+  {id:'api',k:8,icon:'code',label:{en:'API & Tokens',th:'API & Token'}}
+];
+const VIEW_ORDER = NAV.filter(n=>n.id).map(n=>n.id);
+
+/* ============ TENANTS ============ */
+const T = {
+  aurora:{ ab:'A', accent:'#3B82F6', accent2:'#6366F1', url:'aurora.go.th',
+    name:{en:'Aurora Gov',th:'ออโรรา (ภาครัฐ)'}, plan:{en:'Enterprise · 4 sites',th:'Enterprise · 4 เว็บไซต์'},
+    brand:{en:'Aurora Gov',th:'ออโรรา'}, heroH:{en:'Digital services for everyone',th:'บริการดิจิทัลเพื่อประชาชนทุกคน'},
+    heroP:{en:'Find services, documents and data in one place.',th:'ค้นหาบริการ เอกสาร และข้อมูลภาครัฐได้ในที่เดียว'},
+    kpis:{v:128400,vd:12.4,c:1204,cd:3.1,f:312,fd:18.0,up:99.98}, series:[42,55,48,63,58,71,66,80,76,88,82,95] },
+  nimbus:{ ab:'N', accent:'#8B5CF6', accent2:'#EC4899', url:'shop.nimbus.co',
+    name:{en:'Nimbus Retail',th:'นิมบัส รีเทล'}, plan:{en:'Growth · 2 sites',th:'Growth · 2 เว็บไซต์'},
+    brand:{en:'Nimbus',th:'นิมบัส'}, heroH:{en:'Shop the drop. Move fast.',th:'ช้อปคอลเลกชันใหม่ ไวกว่าใคร'},
+    heroP:{en:'New arrivals, members-only deals, instant checkout.',th:'สินค้าใหม่ ดีลสมาชิก จ่ายเงินไว'},
+    kpis:{v:402900,vd:31.2,c:5840,cd:9.4,f:1290,fd:24.0,up:99.95}, series:[55,60,52,70,68,77,85,79,92,88,99,96] },
+  vertex:{ ab:'V', accent:'#14B8A6', accent2:'#0EA5E9', url:'care.vertex.health',
+    name:{en:'Vertex Health',th:'เวอร์เทกซ์ เฮลท์'}, plan:{en:'Enterprise · 7 sites',th:'Enterprise · 7 เว็บไซต์'},
+    brand:{en:'Vertex Health',th:'เวอร์เทกซ์'}, heroH:{en:'Care that meets you anywhere',th:'การดูแลที่อยู่เคียงข้างคุณ'},
+    heroP:{en:'Book, consult and follow up — all online.',th:'นัดหมาย ปรึกษา ติดตามผล ครบออนไลน์'},
+    kpis:{v:96250,vd:7.8,c:2410,cd:5.2,f:540,fd:11.0,up:99.99}, series:[38,41,45,44,50,53,58,61,64,69,72,78] },
+};
+const CONTENT = {
+  aurora:[
+    {t:{en:'EA Standard 3.0 published',th:'ประกาศมาตรฐาน EA 3.0'},ty:'article',st:'pub',lg:'TH·EN',u:'2h'},
+    {t:{en:'How to request a digital certificate',th:'วิธีขอใบรับรองดิจิทัล'},ty:'service',st:'pub',lg:'TH·EN',u:'1d'},
+    {t:{en:'Open Data portal — Q2 datasets',th:'พอร์ทัล Open Data — ชุดข้อมูล Q2'},ty:'page',st:'review',lg:'TH',u:'3d'},
+    {t:{en:'Annual report 2025 (draft)',th:'รายงานประจำปี 2568 (ร่าง)'},ty:'article',st:'draft',lg:'TH',u:'5d'},
+    {t:{en:'Service uptime & SLA notice',th:'ประกาศ SLA และความพร้อมบริการ'},ty:'page',st:'pub',lg:'TH·EN',u:'1w'}],
+  nimbus:[
+    {t:{en:'Summer Drop — landing',th:'คอลเลกชันซัมเมอร์ — แลนดิ้ง'},ty:'landing',st:'pub',lg:'EN·TH',u:'40m'},
+    {t:{en:'Members-only pricing rules',th:'กติการาคาสมาชิก'},ty:'page',st:'pub',lg:'EN',u:'4h'},
+    {t:{en:'Sneaker care guide',th:'คู่มือดูแลรองเท้า'},ty:'article',st:'review',lg:'EN·TH',u:'2d'},
+    {t:{en:'Black Friday teaser',th:'ทีเซอร์ Black Friday'},ty:'landing',st:'draft',lg:'EN',u:'6d'},
+    {t:{en:'Store locator page',th:'หน้าค้นหาสาขา'},ty:'page',st:'pub',lg:'EN·TH',u:'1w'}],
+  vertex:[
+    {t:{en:'Book a tele-consult',th:'นัดหมายปรึกษาทางไกล'},ty:'service',st:'pub',lg:'TH·EN',u:'1h'},
+    {t:{en:'Patient privacy & PDPA',th:'ความเป็นส่วนตัวผู้ป่วย & PDPA'},ty:'page',st:'pub',lg:'TH·EN',u:'6h'},
+    {t:{en:'Vaccination schedule 2025',th:'ตารางวัคซีน 2568'},ty:'article',st:'review',lg:'TH',u:'2d'},
+    {t:{en:'New clinic — Phuket (draft)',th:'คลินิกใหม่ — ภูเก็ต (ร่าง)'},ty:'article',st:'draft',lg:'TH',u:'4d'},
+    {t:{en:'Insurance partners list',th:'รายชื่อบริษัทประกันพันธมิตร'},ty:'page',st:'pub',lg:'TH·EN',u:'1w'}]
+};
+const TYPE_L = { article:{en:'Article',th:'บทความ'}, service:{en:'Service',th:'บริการ'}, page:{en:'Page',th:'หน้า'}, landing:{en:'Landing',th:'แลนดิ้ง'} };
+const ST_L = { pub:{en:'Published',th:'เผยแพร่'}, review:{en:'In review',th:'รอตรวจ'}, draft:{en:'Draft',th:'ฉบับร่าง'} };
+const ST_C = { pub:'b-ok', review:'b-warn', draft:'b-mut' };
+
+const FORMS = [
+  {ref:'CMP-69-001842',ty:{en:'Complaint',th:'ร้องเรียน'},from:'somchai@email.com',d:'10:24',st:'review'},
+  {ref:'JOB-69-000311',ty:{en:'Application',th:'สมัครงาน'},from:'naree.p@email.com',d:'09:58',st:'pub'},
+  {ref:'CON-69-004520',ty:{en:'Contact',th:'ติดต่อ'},from:'info@partner.co',d:'09:12',st:'draft'},
+  {ref:'CMP-69-001841',ty:{en:'Complaint',th:'ร้องเรียน'},from:'anon (PDPA)',d:'Yesterday',st:'pub'},
+  {ref:'CON-69-004519',ty:{en:'Contact',th:'ติดต่อ'},from:'press@media.th',d:'Yesterday',st:'review'}
+];
+const USERS = [
+  {n:'Aran B.',e:'aran@webx.io',r:{en:'Owner',th:'เจ้าของ'},sc:'All tenants',mfa:1,last:'now'},
+  {n:'Pim S.',e:'pim@aurora.go.th',r:{en:'Editor',th:'บรรณาธิการ'},sc:'Aurora Gov',mfa:1,last:'12m'},
+  {n:'Kane W.',e:'kane@nimbus.co',r:{en:'Author',th:'ผู้เขียน'},sc:'Nimbus Retail',mfa:1,last:'1h'},
+  {n:'Dr. Lee',e:'lee@vertex.health',r:{en:'Admin',th:'ผู้ดูแล'},sc:'Vertex Health',mfa:1,last:'3h'},
+  {n:'Mod J.',e:'j@aurora.go.th',r:{en:'Moderator',th:'ผู้ตรวจ'},sc:'Aurora Gov',mfa:0,last:'1d'}
+];
+const TOKENS = [
+  {nm:'web-prod',sc:'read',rt:'sk_live_•••• 7f2a'},
+  {nm:'mobile-app',sc:'read',rt:'sk_live_•••• 1c9e'},
+  {nm:'analytics-etl',sc:'read+write',rt:'sk_live_•••• b401'}
+];
+const PALETTE = ['hero','features','cta','gallery','stats','faq','form','video'];
+const PAL_META = {
+  hero:{icon:'layout',label:{en:'Hero',th:'ฮีโร่'}}, features:{icon:'grid',label:{en:'Features',th:'จุดเด่น'}},
+  cta:{icon:'cta',label:{en:'Call to action',th:'ปุ่มเรียก'}}, gallery:{icon:'img',label:{en:'Gallery',th:'แกลเลอรี'}},
+  stats:{icon:'chart',label:{en:'Stats',th:'สถิติ'}}, faq:{icon:'msg',label:{en:'FAQ',th:'คำถามพบบ่อย'}},
+  form:{icon:'inbox',label:{en:'Form',th:'ฟอร์ม'}}, video:{icon:'star',label:{en:'Video',th:'วิดีโอ'}}
+};
+const SWATCHES = [['#3B82F6','#6366F1'],['#8B5CF6','#EC4899'],['#14B8A6','#0EA5E9'],['#EE5020','#D63B12'],['#F59E0B','#EF4444'],['#10B981','#22D3EE']];
+const TMPLS = [{en:'Classic',th:'คลาสสิก'},{en:'Split',th:'สปลิต'},{en:'Editorial',th:'เอดิทอเรียล'}];
+
+/* ============ I18N ============ */
+const I18N = {
+  spH1:{en:'Headless CMS, reimagined.',th:'Headless CMS ที่ถูกคิดใหม่ทั้งหมด'},
+  spThesis:{en:'WebX Studio runs every brand, in every language, on one multi-tenant core — AI-native, edge-fast, and beautiful to operate.',th:'WebX Studio รันได้ทุกแบรนด์ ทุกภาษา บนแกน multi-tenant เดียว — AI ในตัว เร็วระดับ edge และใช้งานสวยงาม'},
+  spS1:{en:'core, ∞ tenants',th:'แกนเดียว ∞ tenant'}, spS2:{en:'edge response',th:'ตอบสนอง edge'}, spS3:{en:'sites & locales',th:'เว็บ & ภาษา'}, spS4:{en:'native search',th:'ค้นหา AI ในตัว'},
+  spEnter:{en:'Enter Studio  →',th:'เข้าสู่ Studio  →'},
+  spFine:{en:'Simulated data · best on desktop',th:'ข้อมูลจำลอง · เหมาะกับเดสก์ท็อป'}, spFine2:{en:'opens the command bar',th:'เปิดแถบคำสั่ง'},
+  brandSub:{en:'Multi-tenant CMS',th:'CMS หลายผู้เช่า'},
+  upH:{en:'Edge Publishing',th:'เผยแพร่แบบ Edge'}, upP:{en:'Ship static to 300+ PoPs in seconds.',th:'ส่ง static ขึ้น 300+ PoP ในไม่กี่วินาที'}, upBtn:{en:'Upgrade plan',th:'อัปเกรดแพ็กเกจ'},
+  searchPh:{en:'Search or jump to…',th:'ค้นหา หรือกระโดดไป…'}, demo:{en:'DEMO · SIMULATED',th:'เดโม · ข้อมูลจำลอง'},
+  dashH:{en:'Dashboard',th:'แดชบอร์ด'}, dashP:{en:'Live overview across this workspace',th:'ภาพรวมเรียลไทม์ของพื้นที่ทำงานนี้'},
+  export:{en:'Export',th:'ส่งออก'}, newContent:{en:'New content',th:'สร้างเนื้อหา'},
+  trafficH:{en:'Traffic',th:'ทราฟฟิก'}, trafficSub:{en:'sessions / month',th:'เซสชัน / เดือน'},
+  askH:{en:'Ask your data',th:'ถามข้อมูลของคุณ'}, askPh:{en:'Ask anything about this tenant…',th:'ถามอะไรก็ได้เกี่ยวกับ tenant นี้…'}, askBtn:{en:'Ask',th:'ถาม'},
+  feedH:{en:'Live activity',th:'กิจกรรมเรียลไทม์'}, live:{en:'Live',th:'สด'}, healthH:{en:'System health',th:'สุขภาพระบบ'},
+  cH:{en:'Content',th:'เนื้อหา'}, cP:{en:'Every page, article and service — one model',th:'ทุกหน้า บทความ และบริการ — โมเดลเดียว'}, cNew:{en:'New content',th:'สร้างเนื้อหา'},
+  cColTitle:{en:'Title',th:'ชื่อเรื่อง'}, cColType:{en:'Type',th:'ประเภท'}, cColStatus:{en:'Status',th:'สถานะ'}, cColLang:{en:'Locales',th:'ภาษา'}, cColUpd:{en:'Updated',th:'อัปเดต'},
+  fH:{en:'Forms inbox',th:'กล่องฟอร์ม'}, fP:{en:'Submissions are write-only & PDPA-scoped',th:'ข้อมูลที่ส่งเข้ามาเขียนอย่างเดียว & คุ้มครองตาม PDPA'},
+  fColRef:{en:'Reference',th:'เลขอ้างอิง'}, fColType:{en:'Type',th:'ประเภท'}, fColFrom:{en:'From',th:'จาก'}, fColDate:{en:'Received',th:'รับเมื่อ'}, fColStatus:{en:'Status',th:'สถานะ'},
+  pdpaNote:{en:'Citizen submissions are create-only and never publicly readable (PDPA by design).',th:'ข้อมูลที่ประชาชนส่งเป็นแบบสร้างเท่านั้น อ่านสาธารณะไม่ได้ (PDPA by design)'},
+  sH:{en:'AI Smart Search',th:'ค้นหาอัจฉริยะ AI'}, sP:{en:'Answers from your own content — with sources',th:'คำตอบจากเนื้อหาของคุณเอง — พร้อมแหล่งอ้างอิง'}, sPh:{en:'Ask in natural language…',th:'ถามด้วยภาษาธรรมชาติ…'}, sBtn:{en:'Search',th:'ค้นหา'},
+  bH:{en:'Visual Builder',th:'Visual Builder'}, bP:{en:'Compose landing pages with no code',th:'ประกอบหน้าแลนดิ้งโดยไม่ต้องเขียนโค้ด'}, bPreview:{en:'Preview',th:'พรีวิว'}, bPublish:{en:'Publish',th:'เผยแพร่'}, bPalette:{en:'Drag a block →',th:'ลากบล็อก →'},
+  brH:{en:'Branding',th:'แบรนด์ & เว็บไซต์'}, brP:{en:'Theme is a token swap — see it live',th:'ธีมคือการสลับ token — เห็นผลสด ๆ'}, brAccent:{en:'Accent color',th:'สีหลักแบรนด์'}, brTmpl:{en:'Template',th:'เทมเพลต'}, brWm:{en:'Gallery watermark',th:'ลายน้ำคลังภาพ'}, brWmSub:{en:'PDPA-safe media',th:'สื่อปลอดภัยตาม PDPA'}, brWmTog:{en:'Apply watermark on gallery images',th:'ใส่ลายน้ำบนภาพในแกลเลอรี'}, brLive:{en:'Live preview — public site',th:'พรีวิวสด — เว็บไซต์สาธารณะ'}, brGetStarted:{en:'Get started',th:'เริ่มใช้งาน'}, brNote:{en:'One token set themes the whole public site instantly.',th:'ชุด token เดียวเปลี่ยนธีมทั้งเว็บสาธารณะทันที'},
+  uH:{en:'Users & Roles',th:'ผู้ใช้ & สิทธิ์'}, uP:{en:'Per-tenant RBAC with enforced MFA',th:'RBAC ต่อ tenant พร้อมบังคับ MFA'}, uInvite:{en:'Invite user',th:'เชิญผู้ใช้'},
+  uColUser:{en:'User',th:'ผู้ใช้'}, uColRole:{en:'Role',th:'บทบาท'}, uColScope:{en:'Scope',th:'ขอบเขต'}, uColMfa:{en:'MFA',th:'MFA'}, uColLast:{en:'Last active',th:'ใช้งานล่าสุด'},
+  uNote:{en:'Back-office sessions use httpOnly cookies + idle timeout — tokens never touch the browser.',th:'เซสชันหลังบ้านใช้ httpOnly cookie + idle timeout — token ไม่อยู่ในเบราว์เซอร์เลย'},
+  aH:{en:'API & Tokens',th:'API & Token'}, aP:{en:'Headless REST + GraphQL, scoped per tenant',th:'Headless REST + GraphQL กำหนดสิทธิ์ต่อ tenant'}, aNew:{en:'New token',th:'สร้าง Token'}, aReqH:{en:'Requests',th:'คำขอ'}, aTokH:{en:'Active tokens',th:'Token ที่ใช้งาน'},
+  edTitle:{en:'Edit content',th:'แก้ไขเนื้อหา'}, edNew:{en:'New content',th:'สร้างเนื้อหา'},
+  edTitleL:{en:'Title',th:'ชื่อเรื่อง'}, edBodyL:{en:'Body',th:'เนื้อหา'}, edAssist:{en:'AI assist',th:'ผู้ช่วย AI'}, edSeoL:{en:'SEO description',th:'คำอธิบาย SEO'}, edStatusL:{en:'Status',th:'สถานะ'},
+  stDraft:{en:'Draft',th:'ฉบับร่าง'}, stReview:{en:'In review',th:'รอตรวจ'}, stPub:{en:'Published',th:'เผยแพร่'},
+  cancel:{en:'Cancel',th:'ยกเลิก'}, save:{en:'Save',th:'บันทึก'}, cmdkPh:{en:'Type a command or search…',th:'พิมพ์คำสั่งหรือค้นหา…'},
+  cmdkNav:{en:'Navigate',th:'ไปยัง'}, cmdkAct:{en:'Actions',th:'การทำงาน'},
+  cmdGo:{en:'Go to',th:'ไปที่'}, cmdNew:{en:'Create new content',th:'สร้างเนื้อหาใหม่'}, cmdInvite:{en:'Invite a user',th:'เชิญผู้ใช้'}, cmdTheme:{en:'Toggle light / dark',th:'สลับโหมดสว่าง/มืด'}, cmdSwitch:{en:'Switch tenant',th:'สลับ tenant'}, cmdExport:{en:'Export analytics',th:'ส่งออกสถิติ'}
+};
+const MSG = {
+  upToast:{en:'Edge Publishing is enabled on Enterprise.',th:'Edge Publishing เปิดใช้ในแพ็กเกจ Enterprise'},
+  notif:{en:'3 items need review.',th:'มี 3 รายการรอตรวจ'}, exported:{en:'Analytics exported to CSV.',th:'ส่งออกสถิติเป็น CSV แล้ว'},
+  imported:{en:'Pasted from Word — formatting cleaned.',th:'วางจาก Word — จัดรูปแบบให้อัตโนมัติ'}, xlsx:{en:'Submissions exported to Excel.',th:'ส่งออกฟอร์มเป็น Excel แล้ว'},
+  previewed:{en:'Opening live preview…',th:'กำลังเปิดพรีวิวสด…'}, published:{en:'Published to edge — live in 3s.',th:'เผยแพร่ขึ้น edge — ออนไลน์ใน 3 วินาที'},
+  invited:{en:'Invite sent · MFA required on first login.',th:'ส่งคำเชิญแล้ว · ต้องตั้ง MFA ครั้งแรก'}, tokenNew:{en:'Token created — copy it now, shown once.',th:'สร้าง Token แล้ว — คัดลอกทันที แสดงครั้งเดียว'},
+  saved:{en:'Content saved.',th:'บันทึกเนื้อหาแล้ว'}, assistDone:{en:'AI drafted a section for you.',th:'AI ร่างเนื้อหาให้แล้ว'},
+  blockAdded:{en:'Block added to the page.',th:'เพิ่มบล็อกลงหน้าแล้ว'}, blockRemoved:{en:'Block removed.',th:'ลบบล็อกแล้ว'},
+  themeLight:{en:'Light mode',th:'โหมดสว่าง'}, themeDark:{en:'Dark mode',th:'โหมดมืด'},
+  tenant:{en:'Switched workspace — theme & data recomposed.',th:'สลับพื้นที่ทำงาน — ธีมและข้อมูลปรับใหม่แล้ว'}, accent:{en:'Accent applied across the platform.',th:'ใช้สีหลักทั่วทั้งแพลตฟอร์มแล้ว'}
+};
+const T_msg = k => MSG[k] ? MSG[k][S.lang] : k;
+
+/* ============ I18N APPLY ============ */
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ const k=el.dataset.i18n; if(I18N[k]) el.textContent=I18N[k][S.lang]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ const k=el.dataset.i18nPh; if(I18N[k]) el.placeholder=I18N[k][S.lang]; });
+}
+
+/* ============ RENDERERS ============ */
+function renderNav(){
+  let h='';
+  NAV.forEach(n=>{
+    if(n.g){ h+='<div class="nav-h">'+GROUPS[n.g][S.lang]+'</div>'; return; }
+    h+='<a href="javascript:void 0" data-view="'+n.id+'" onclick="switchView(\''+n.id+'\')" class="'+(S.view===n.id?'on':'')+'">'+ic(n.icon)+'<span>'+L(n.label)+'</span><span class="kn">'+n.k+'</span></a>';
+  });
+  $('nav').innerHTML=h;
+}
+function renderTenant(){
+  const t=T[S.tenant];
+  $('tenDot').textContent=t.ab; $('tenName').textContent=L(t.name); $('tenPlan').textContent=L(t.plan);
+  let h=''; Object.keys(T).forEach(k=>{ const tt=T[k];
+    h+='<button class="ten-item" onclick="switchTenant(\''+k+'\')"><span class="ten-dot" style="background:linear-gradient(135deg,'+tt.accent+','+tt.accent2+')">'+tt.ab+'</span><b>'+L(tt.name)+'</b><span>'+(k===S.tenant?'●':'')+'</span></button>';
+  });
+  $('tenPop').innerHTML=h;
+}
+function kpiCard(lab,icon,val,delta,suffix){
+  const up=delta>=0; const arrow=up?'▲':'▼';
+  return '<div class="kpi"><div class="lab">'+ic(icon)+lab+'</div><div class="val mono">'+val+(suffix||'')+'</div>'+
+    (delta===null?'':'<div class="dl '+(up?'up':'down')+'">'+arrow+' '+Math.abs(delta)+'%</div>')+'</div>';
+}
+function renderKpis(){
+  const k=T[S.tenant].kpis;
+  $('kpis').innerHTML =
+    kpiCard(L({en:'Visitors (30d)',th:'ผู้เข้าชม (30 วัน)'}),'users',nf(k.v),k.vd)+
+    kpiCard(L({en:'Content items',th:'รายการเนื้อหา'}),'doc',nf(k.c),k.cd)+
+    kpiCard(L({en:'Form submissions',th:'ฟอร์มที่ส่ง'}),'inbox',nf(k.f),k.fd)+
+    kpiCard(L({en:'Uptime',th:'ความพร้อมใช้งาน'}),'chart',k.up,null,'%');
+}
+function renderChart(){
+  const s=T[S.tenant].series, mx=Math.max.apply(null,s);
+  const M=['J','F','M','A','M','J','J','A','S','O','N','D'];
+  $('chart').innerHTML=s.map(v=>'<div class="bar" data-v="'+(v*1000)+'" style="height:0" data-h="'+Math.round(v/mx*100)+'"></div>').join('');
+  $('chartX').innerHTML=M.map(m=>'<span>'+m+'</span>').join('');
+  setTimeout(()=>document.querySelectorAll('#chart .bar').forEach(b=>b.style.height=b.dataset.h+'%'),60);
+}
+function renderHealth(){
+  const rows=[
+    {l:{en:'API latency (p95)',th:'API latency (p95)'},v:'84 ms',ok:1},
+    {l:{en:'Edge cache hit',th:'แคช Edge'},v:'98.7%',ok:1},
+    {l:{en:'SSL / TLS',th:'SSL / TLS'},v:{en:'Valid · A+',th:'ใช้ได้ · A+'},ok:1},
+    {l:{en:'DB connection pool',th:'คอนเนกชัน DB'},v:'32%',ok:1},
+    {l:{en:'Last backup',th:'สำรองล่าสุด'},v:{en:'3h ago',th:'3 ชม.ที่แล้ว'},ok:1},
+    {l:{en:'DR replication',th:'สำรอง DR'},v:{en:'In sync',th:'ซิงค์อยู่'},ok:1}
+  ];
+  $('health').innerHTML=rows.map(r=>'<div class="health" style="justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink2)">'+L(r.l)+'</span><span class="badge b-ok"><span class="dot"></span>'+(typeof r.v==='object'?L(r.v):r.v)+'</span></div>').join('');
+}
+function renderContent(){
+  $('cTable').innerHTML=CONTENT[S.tenant].map((c,i)=>
+    '<tr class="row" onclick="openEditor('+i+')"><td><b>'+L(c.t)+'</b></td><td>'+L(TYPE_L[c.ty])+'</td>'+
+    '<td><span class="badge '+ST_C[c.st]+'"><span class="dot"></span>'+L(ST_L[c.st])+'</span></td><td class="mono" style="font-size:12px">'+c.lg+'</td><td>'+c.u+'</td></tr>').join('');
+}
+function renderForms(){
+  const stats=[{l:{en:'New today',th:'ใหม่วันนี้'},v:24,c:'b-acc'},{l:{en:'In review',th:'รอตรวจ'},v:8,c:'b-warn'},{l:{en:'Resolved (7d)',th:'ปิดแล้ว (7 วัน)'},v:142,c:'b-ok'}];
+  $('fStats').innerHTML=stats.map(s=>'<div class="panel"><div class="lab" style="color:var(--mut);font-size:12px">'+L(s.l)+'</div><div style="font-size:28px;font-weight:800" class="mono">'+s.v+'</div></div>').join('');
+  $('fTable').innerHTML=FORMS.map(f=>'<tr class="row" onclick="toast(T_msg(\'notif\'))"><td><b class="mono" style="font-size:12px">'+f.ref+'</b></td><td>'+L(f.ty)+'</td><td class="mono" style="font-size:12px">'+f.from+'</td><td>'+f.d+'</td><td><span class="badge '+ST_C[f.st]+'"><span class="dot"></span>'+L(ST_L[f.st])+'</span></td></tr>').join('');
+}
+function renderSearchChrome(){
+  const chips=[{en:'How do I request a digital certificate?',th:'ขอใบรับรองดิจิทัลอย่างไร?'},{en:'What changed in EA Standard 3.0?',th:'มาตรฐาน EA 3.0 เปลี่ยนอะไร?'},{en:'Where is the Open Data portal?',th:'พอร์ทัล Open Data อยู่ที่ไหน?'}];
+  $('ssChips').innerHTML=chips.map(c=>'<button class="ss-chip" onclick="askSearch(this)">'+L(c)+'</button>').join('');
+  if(!S._searched) $('ssResult').innerHTML='<div class="muted" style="padding:30px;text-align:center">'+L({en:'Ask a question above — answers cite your own published content.',th:'พิมพ์คำถามด้านบน — คำตอบอ้างอิงเนื้อหาที่คุณเผยแพร่จริง'})+'</div>';
+}
+function renderBuilder(){
+  $('palette').innerHTML=PALETTE.map(p=>'<div class="pal-item" onclick="addBlock(\''+p+'\')">'+ic(PAL_META[p].icon)+L(PAL_META[p].label)+'</div>').join('');
+  renderStage();
+}
+function blockHTML(type,i){
+  const t=T[S.tenant];
+  const head='<div class="bk-t">'+ic(PAL_META[type].icon)+L(PAL_META[type].label)+'<span class="bk-rm" onclick="removeBlock('+i+')">✕</span></div>';
+  let body='';
+  if(type==='hero') body='<div class="blk-hero"><h2>'+L(t.heroH)+'</h2><p>'+L(t.heroP)+'</p></div>';
+  else if(type==='features') body='<div class="blk-feat"><div class="f">⚡ '+L({en:'Edge-fast',th:'เร็วระดับ Edge'})+'</div><div class="f">🔒 '+L({en:'Secure by default',th:'ปลอดภัยโดยพื้นฐาน'})+'</div><div class="f">🌐 '+L({en:'2 languages',th:'2 ภาษา'})+'</div></div>';
+  else if(type==='cta') body='<div class="blk-cta"><div><b>'+L({en:'Ready to launch?',th:'พร้อมเปิดตัวไหม?'})+'</b><div class="muted">'+L({en:'Publish to the edge in one click.',th:'เผยแพร่ขึ้น edge ด้วยคลิกเดียว'})+'</div></div><span class="pbtn" style="background:var(--accent);color:#fff;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700">'+L(I18N.brGetStarted)+'</span></div>';
+  else body='<div class="muted">'+L(PAL_META[type].label)+' — '+L({en:'configurable block',th:'บล็อกที่ปรับแต่งได้'})+'</div>';
+  return '<div class="blk">'+head+body+'</div>';
+}
+function renderStage(){
+  $('stage').innerHTML=S.blocks.length? S.blocks.map((b,i)=>blockHTML(b,i)).join('') : '<div class="muted" style="text-align:center;padding:60px">'+L({en:'Drag blocks here',th:'ลากบล็อกมาที่นี่'})+'</div>';
+}
+function renderBranding(){
+  $('swatches').innerHTML=SWATCHES.map((s,i)=>'<div class="sw'+((S.accent?S.accent[0]:T[S.tenant].accent)===s[0]?' on':'')+'" style="background:linear-gradient(135deg,'+s[0]+','+s[1]+')" onclick="setAccent('+i+')"></div>').join('');
+  $('tmpls').innerHTML=TMPLS.map((t,i)=>'<div class="tmpl'+(S.tmpl===i?' on':'')+'" onclick="setTmpl('+i+')"><div class="tmpl-pv"><i style="height:10px;width:50%"></i><i style="height:6px;width:80%"></i><i style="height:6px;width:65%"></i><i style="height:14px;width:40%;margin-top:auto;background:var(--accent)"></i></div><b>'+L(t)+'</b></div>').join('');
+  const t=T[S.tenant];
+  $('pvUrl').textContent=t.url; $('pvBrand').textContent=L(t.brand); $('pvHeroH').textContent=L(t.heroH); $('pvHeroP').textContent=L(t.heroP);
+}
+function renderUsers(){
+  $('uTable').innerHTML=USERS.map(u=>'<tr class="row" onclick="toast(T_msg(\'invited\'))"><td><b>'+u.n+'</b><div class="muted mono" style="font-size:11px;margin-top:3px">'+u.e+'</div></td><td><span class="role-pill">'+L(u.r)+'</span></td><td>'+u.sc+'</td><td>'+(u.mfa?'<span class="badge b-ok"><span class="dot"></span>ON</span>':'<span class="badge b-warn"><span class="dot"></span>OFF</span>')+'</td><td>'+u.last+'</td></tr>').join('');
+}
+function renderApi(){
+  $('apiKpis').innerHTML=kpiCard(L({en:'Requests (24h)',th:'คำขอ (24 ชม.)'}),'code',nf(1840000),4.2)+kpiCard(L({en:'Avg latency',th:'latency เฉลี่ย'}),'chart','84','',' ms')+kpiCard(L({en:'Error rate',th:'อัตราข้อผิดพลาด'}),'spark','0.02','','%')+kpiCard(L({en:'Active tokens',th:'Token ใช้งาน'}),'users','3',null);
+  const s=[64,72,58,80,75,92,88], mx=92;
+  $('apiChart').innerHTML=s.map(v=>'<div class="bar" data-v="'+(v*9000)+'" style="height:0" data-h="'+Math.round(v/mx*100)+'"></div>').join('');
+  setTimeout(()=>document.querySelectorAll('#apiChart .bar').forEach(b=>b.style.height=b.dataset.h+'%'),60);
+  $('apiTokens').innerHTML=TOKENS.map(t=>'<tr><td><b>'+t.nm+'</b><div class="tok" style="margin-top:5px;display:inline-block">'+t.rt+'</div></td><td style="text-align:right"><span class="badge '+(t.sc==='read'?'b-mut':'b-acc')+'">'+t.sc+'</span></td></tr>').join('');
+}
+function renderAll(){ renderNav(); renderTenant(); renderKpis(); renderChart(); renderHealth(); renderContent(); renderForms(); renderSearchChrome(); renderBuilder(); renderBranding(); renderUsers(); renderApi(); }
+
+/* ============ NAV / VIEW ============ */
+function switchView(v){
+  S.view=v;
+  document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id==='view-'+v));
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.view===v));
+  closeCmdk();
+}
+/* ============ LANG / THEME ============ */
+function setLang(l){
+  S.lang=l; root.setAttribute('lang',l);
+  document.querySelectorAll('.lang-tg [data-setlang]').forEach(b=>b.classList.toggle('on',b.dataset.setlang===l));
+  applyI18n(); renderAll(); S._searched=false; if($('askAns')) $('askAns').textContent=''; if($('askBars')) $('askBars').innerHTML='';
+}
+function toggleTheme(){
+  S.theme=S.theme==='dark'?'light':'dark'; root.setAttribute('data-theme',S.theme);
+  toast(S.theme==='dark'?T_msg('themeDark'):T_msg('themeLight'));
+}
+/* ============ TENANT ============ */
+function applyAccent(a,a2){ root.style.setProperty('--accent',a); root.style.setProperty('--accent2',a2); root.style.setProperty('--accent-soft',a+'29'); }
+function toggleTen(e){ e.stopPropagation(); $('tenPop').classList.toggle('on'); }
+function switchTenant(k){
+  S.tenant=k; S.accent=null; const t=T[k]; applyAccent(t.accent,t.accent2);
+  $('tenPop').classList.remove('on');
+  renderAll(); S._searched=false; renderSearchChrome();
+  toast(T_msg('tenant'));
+}
+/* ============ ASK YOUR DATA ============ */
+function type(el,text,speed,cb){ let i=0; const fld=(el.tagName==='TEXTAREA'||el.tagName==='INPUT');
+  if(fld)el.value=''; else el.textContent='';
+  const tm=setInterval(()=>{ const s=text.slice(0,++i); if(fld)el.value=s; else el.innerHTML=s; if(i>=text.length){clearInterval(tm); if(cb)cb();} }, speed||16); }
+function runAsk(){
+  const ans={en:'Organic search is your fastest-growing channel at <b>+24%</b> this month. <b>AI Smart Search</b> referrals hit <b>3,210 sessions</b> — now <b>18%</b> of total traffic. Direct stayed flat.',
+             th:'การค้นหาแบบ Organic โตเร็วที่สุด <b>+24%</b> เดือนนี้ การอ้างอิงจาก <b>AI Smart Search</b> แตะ <b>3,210 เซสชัน</b> — คิดเป็น <b>18%</b> ของทราฟฟิกรวม ส่วน Direct ทรงตัว'};
+  const bars=[{l:{en:'Organic search',th:'ค้นหา Organic'},p:88},{l:{en:'AI Smart Search',th:'AI Smart Search'},p:64},{l:{en:'Social',th:'โซเชียล'},p:42},{l:{en:'Direct',th:'ตรง'},p:31}];
+  $('askBars').innerHTML='';
+  type($('askAns'),ans[S.lang],14,()=>{
+    $('askBars').innerHTML=bars.map(b=>'<div class="qbar"><span class="nm">'+L(b.l)+'</span><div class="track"><div class="fill" data-p="'+b.p+'"></div></div><span class="pc">'+b.p+'%</span></div>').join('');
+    setTimeout(()=>document.querySelectorAll('#askBars .fill').forEach(f=>f.style.width=f.dataset.p+'%'),50);
+  });
+}
+/* ============ AI SEARCH ============ */
+function askSearch(btn){ $('ssIn').value=btn.textContent; runSearch(); }
+function runSearch(){
+  S._searched=true;
+  const ans={en:'To request a digital certificate, citizens verify identity with <b>ThaID</b>, complete the online form, and attach required documents. The system emails a <b>reference number</b> automatically and tracks status end-to-end.',
+             th:'การขอใบรับรองดิจิทัล ประชาชนยืนยันตัวตนด้วย <b>ThaID</b> กรอกแบบฟอร์มออนไลน์ และแนบเอกสารที่กำหนด ระบบจะส่ง <b>เลขอ้างอิง</b> ทางอีเมลอัตโนมัติ พร้อมติดตามสถานะครบวงจร'};
+  const srcLabel={en:'Sources',th:'แหล่งอ้างอิง'};
+  const sources=[{en:'Service: Digital certificate',th:'บริการ: ใบรับรองดิจิทัล'},{en:'Guide.pdf (full-text)',th:'คู่มือ.pdf (ค้นในไฟล์)'},{en:'Form.docx (full-text)',th:'แบบฟอร์ม.docx (ค้นในไฟล์)'}];
+  let h='<div class="ss-ans"><div class="ai-h">'+ic('spark')+L({en:'AI answer · grounded in your content',th:'คำตอบ AI · อ้างอิงเนื้อหาของคุณ'})+'</div><div class="txt" id="ssTxt"></div>';
+  h+='<div class="ss-src"><span class="muted" style="align-self:center">'+L(srcLabel)+':</span>'+sources.map(s=>'<span class="src">'+ic('doc')+L(s)+'</span>').join('')+'</div></div>';
+  h+='<div class="muted" style="display:flex;align-items:center;gap:8px">'+ic('code')+L({en:'Schema.org + llms.txt emitted for GEO / AEO — answerable by external AI engines too.',th:'ฝัง Schema.org + llms.txt เพื่อ GEO / AEO — ให้ AI ภายนอกอ้างอิงได้ด้วย'})+'</div>';
+  $('ssResult').innerHTML=h;
+  type($('ssTxt'),ans[S.lang],13);
+}
+/* ============ CONTENT EDITOR ============ */
+let edIdx=-1;
+function openEditor(i){
+  edIdx=i; const isNew=i<0;
+  $('edTitle').textContent=isNew?L(I18N.edNew):L(I18N.edTitle);
+  const c=isNew?null:CONTENT[S.tenant][i];
+  $('edTitleIn').value=c?L(c.t):''; $('edBody').value=''; $('edSeo').value='';
+  $('scrim').classList.add('on'); $('drawer').classList.add('on');
+  setTimeout(()=>$('edTitleIn').focus(),120);
+}
+function runAssist(){
+  const draft={en:'WebX Studio publishes this page as static HTML to 300+ edge locations, so it loads in under 120 ms anywhere. Content is authored once and served in Thai and English, with Schema.org markup added automatically for search and AI engines.',
+               th:'WebX Studio เผยแพร่หน้านี้เป็น static HTML ไปยัง edge กว่า 300 จุด จึงโหลดได้ในเวลาต่ำกว่า 120 มิลลิวินาทีทุกที่ เนื้อหาเขียนครั้งเดียวแล้วให้บริการทั้งไทยและอังกฤษ พร้อมฝัง Schema.org อัตโนมัติเพื่อการค้นหาและ AI'};
+  type($('edBody'),draft[S.lang],10,()=>toast(T_msg('assistDone')));
+}
+function saveEditor(){ closeOverlays(); toast(T_msg('saved')); }
+/* ============ BUILDER ============ */
+function addBlock(t){ S.blocks.push(t); renderStage(); toast(T_msg('blockAdded')); }
+function removeBlock(i){ S.blocks.splice(i,1); renderStage(); toast(T_msg('blockRemoved')); }
+/* ============ BRANDING ============ */
+function setAccent(i){ const s=SWATCHES[i]; S.accent=s; applyAccent(s[0],s[1]); renderBranding(); renderChart(); renderApi(); toast(T_msg('accent')); }
+function setTmpl(i){ S.tmpl=i; renderBranding(); }
+function toggleWm(){ S.wm=$('wmTog').checked; $('previewSite').classList.toggle('on',S.wm); }
+/* ============ COMMAND PALETTE ============ */
+function cmdkItems(){
+  const list=[];
+  VIEW_ORDER.forEach(v=>{ const n=NAV.find(x=>x.id===v); list.push({g:'nav',label:L(I18N.cmdGo)+' '+L(n.label),hint:'#'+n.k,icon:n.icon,act:()=>switchView(v)}); });
+  list.push({g:'act',label:L(I18N.cmdNew),hint:'C',icon:'doc',act:()=>{switchView('content');openEditor(-1);}});
+  list.push({g:'act',label:L(I18N.cmdInvite),hint:'',icon:'users',act:()=>{switchView('users');toast(T_msg('invited'));}});
+  list.push({g:'act',label:L(I18N.cmdExport),hint:'',icon:'chart',act:()=>{toast(T_msg('exported'));}});
+  list.push({g:'act',label:L(I18N.cmdTheme),hint:'',icon:'palette',act:()=>toggleTheme()});
+  Object.keys(T).forEach(k=>list.push({g:'act',label:L(I18N.cmdSwitch)+' · '+L(T[k].name),hint:'',icon:'grid',act:()=>switchTenant(k)}));
+  return list;
+}
+let cmdkFiltered=[];
+function openCmdk(){ $('cmdkIn').value=''; S.cmdkSel=0; $('scrim').classList.add('on'); $('cmdk').classList.add('on'); renderCmdk(); setTimeout(()=>$('cmdkIn').focus(),60); }
+function closeCmdk(){ $('cmdk').classList.remove('on'); if(!$('drawer').classList.contains('on'))$('scrim').classList.remove('on'); }
+function renderCmdk(){
+  const q=($('cmdkIn').value||'').toLowerCase();
+  cmdkFiltered=cmdkItems().filter(it=>it.label.toLowerCase().includes(q));
+  if(S.cmdkSel>=cmdkFiltered.length) S.cmdkSel=0;
+  const nav=cmdkFiltered.filter(i=>i.g==='nav'), act=cmdkFiltered.filter(i=>i.g==='act');
+  let h=''; let idx=0;
+  function sect(title,arr){ if(!arr.length)return; h+='<div class="cmdk-g">'+title+'</div>'; arr.forEach(it=>{ const gi=cmdkFiltered.indexOf(it);
+    h+='<div class="cmdk-it'+(gi===S.cmdkSel?' sel':'')+'" onclick="cmdkRun('+gi+')">'+ic(it.icon)+'<span class="ci-l">'+it.label+'</span>'+(it.hint?'<span class="ci-h">'+it.hint+'</span>':'')+'</div>'; }); }
+  sect(L(I18N.cmdkNav),nav); sect(L(I18N.cmdkAct),act);
+  $('cmdkList').innerHTML=h||'<div class="cmdk-g">—</div>';
+}
+function cmdkRun(i){ const it=cmdkFiltered[i]; if(it){ it.act(); closeCmdk(); } }
+function cmdkKey(e){
+  if(e.key==='ArrowDown'){e.preventDefault();S.cmdkSel=Math.min(S.cmdkSel+1,cmdkFiltered.length-1);renderCmdk();}
+  else if(e.key==='ArrowUp'){e.preventDefault();S.cmdkSel=Math.max(S.cmdkSel-1,0);renderCmdk();}
+  else if(e.key==='Enter'){e.preventDefault();cmdkRun(S.cmdkSel);}
+}
+/* ============ OVERLAYS / TOAST ============ */
+function closeOverlays(){ $('drawer').classList.remove('on'); $('cmdk').classList.remove('on'); $('scrim').classList.remove('on'); }
+function toast(tx){ $('toastTx').textContent=tx; const t=$('toast'); t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),3000); }
+/* ============ ENTER ============ */
+function enterDemo(){ $('splash').classList.add('gone'); document.body.classList.add('ready'); }
+
+/* ============ LIVE FEED ============ */
+let feedSec=9*3600+41*60;
+const FEED_POOL=[
+  {ai:0,x:{en:'<b>Pim S.</b> published “EA Standard 3.0”',th:'<b>Pim S.</b> เผยแพร่ “มาตรฐาน EA 3.0”'}},
+  {ai:1,x:{en:'<b>AI</b> auto-tagged 12 articles for Schema.org',th:'<b>AI</b> ติดแท็ก Schema.org ให้ 12 บทความ'}},
+  {ai:0,x:{en:'New complaint <b>CMP-69-001842</b> received',th:'รับเรื่องร้องเรียน <b>CMP-69-001842</b>'}},
+  {ai:0,x:{en:'Edge deploy completed · 312 pages',th:'ดีพลอย Edge สำเร็จ · 312 หน้า'}},
+  {ai:1,x:{en:'<b>AI</b> answered 47 search queries',th:'<b>AI</b> ตอบคำค้น 47 รายการ'}},
+  {ai:0,x:{en:'<b>Kane W.</b> edited “Summer Drop”',th:'<b>Kane W.</b> แก้ไข “Summer Drop”'}},
+  {ai:0,x:{en:'Backup snapshot stored (DR)',th:'บันทึกสำรอง (DR) แล้ว'}}
+];
+function fmtT(s){ s=s%86400; const h=Math.floor(s/3600),m=Math.floor(s%3600/60); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
+function pushFeed(item){
+  const f=$('feed'); if(!f)return;
+  const div=document.createElement('div'); div.className='fitem'+(item.ai?' ai':'');
+  div.innerHTML='<span class="ft mono">'+fmtT(feedSec)+'</span><span class="fx">'+L(item.x)+'</span>';
+  f.insertBefore(div,f.firstChild); while(f.children.length>7) f.removeChild(f.lastChild);
+}
+function seedFeed(){ $('feed').innerHTML=''; for(let i=4;i>=0;i--){ feedSec+= (5+i)*60; pushFeed(FEED_POOL[i]); } }
+let feedI=0;
+setInterval(()=>{ if(S.view!=='dashboard'||$('splash')&&!$('splash').classList.contains('gone'))return;
+  feedSec+=Math.floor(Math.random()*180)+60; feedI=(feedI+1)%FEED_POOL.length; pushFeed(FEED_POOL[feedI]); }, 4200);
+
+/* ============ GLOBAL KEYS ============ */
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); openCmdk(); return; }
+  if(e.key==='Escape'){ closeOverlays(); return; }
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
+  const i=+e.key-1; if(VIEW_ORDER[i]) switchView(VIEW_ORDER[i]);
+});
+document.addEventListener('click',e=>{ if(!e.target.closest('.ten')) $('tenPop').classList.remove('on'); });
+
+/* ============ INIT ============ */
+applyAccent(T.aurora.accent,T.aurora.accent2);
+applyI18n(); renderAll(); seedFeed();
+</script>
+</body>
+</html>

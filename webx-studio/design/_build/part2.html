@@ -1,0 +1,253 @@
+<!-- ===== SPLASH ===== -->
+<div id="splash">
+  <div class="sp">
+    <div class="sp-logo"><div class="sp-mark">W</div><div class="sp-name">WebX <span class="gw">Studio</span></div></div>
+    <h1 data-i18n="spH1"></h1>
+    <p class="thesis" data-i18n="spThesis"></p>
+    <div class="sp-stats">
+      <div class="sp-stat"><b class="mono">1</b><span data-i18n="spS1"></span></div>
+      <div class="sp-stat"><b class="mono">120<span style="font-size:15px">ms</span></b><span data-i18n="spS2"></span></div>
+      <div class="sp-stat"><b class="mono">∞</b><span data-i18n="spS3"></span></div>
+      <div class="sp-stat"><b class="mono">AI</b><span data-i18n="spS4"></span></div>
+    </div>
+    <button class="sp-enter" onclick="enterDemo()" data-i18n="spEnter"></button>
+    <div class="sp-fine"><span data-i18n="spFine"></span> · <span class="sp-kbd">⌘K</span> <span data-i18n="spFine2"></span></div>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div class="app">
+  <!-- sidebar -->
+  <aside class="sb">
+    <div class="sb-top">
+      <div class="brand"><div class="brand-mark">W</div><div class="brand-name">WebX Studio<small data-i18n="brandSub"></small></div></div>
+      <div class="ten">
+        <button class="ten-btn" onclick="toggleTen(event)">
+          <span class="ten-dot" id="tenDot">A</span>
+          <span class="ten-meta"><b id="tenName">Aurora Gov</b><span id="tenPlan">Enterprise · 4 sites</span></span>
+          <svg class="ten-cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 9l4 4 4-4"/></svg>
+        </button>
+        <div class="ten-pop" id="tenPop"></div>
+      </div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sb-foot">
+      <div class="upsell">
+        <b data-i18n="upH"></b><p data-i18n="upP"></p>
+        <button onclick="toast(T_msg('upToast'))" data-i18n="upBtn"></button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- main -->
+  <div class="main">
+    <header class="tb">
+      <button class="search" onclick="openCmdk()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <span class="ph" data-i18n="searchPh"></span><span class="kbd">⌘K</span>
+      </button>
+      <div class="tb-sp"></div>
+      <button class="ic-btn" onclick="toast(T_msg('notif'))" title="Notifications">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+      </button>
+      <button class="ic-btn" onclick="toggleTheme()" title="Theme" id="themeBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
+      </button>
+      <div class="lang-tg">
+        <button data-setlang="en" class="on" onclick="setLang('en')">EN</button>
+        <button data-setlang="th" onclick="setLang('th')">ไทย</button>
+      </div>
+      <div class="demo-pill"><i></i><span data-i18n="demo"></span></div>
+      <div class="avatar">AB</div>
+    </header>
+
+    <div class="canvas">
+      <!-- 1 DASHBOARD -->
+      <section class="view on" id="view-dashboard">
+        <div class="vh"><div><h1 data-i18n="dashH"></h1><p data-i18n="dashP"></p></div>
+          <div class="vh-act"><button class="btn btn--g" onclick="toast(T_msg('exported'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg><span data-i18n="export"></span></button>
+          <button class="btn btn--p" onclick="switchView('content')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="newContent"></span></button></div>
+        </div>
+        <div class="kpis" id="kpis"></div>
+        <div class="two">
+          <div class="panel">
+            <div class="panel-h"><h3 data-i18n="trafficH"></h3><span class="sub" data-i18n="trafficSub"></span></div>
+            <div class="bars" id="chart"></div>
+            <div class="bar-x" id="chartX"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-h"><h3 data-i18n="askH"></h3><span class="badge b-acc"><span class="dot"></span>AI</span></div>
+            <div class="ask"><input id="askIn" data-i18n-ph="askPh"><button class="btn btn--p" onclick="runAsk()" data-i18n="askBtn"></button></div>
+            <div class="ans" id="askAns"></div>
+            <div id="askBars" style="margin-top:14px"></div>
+          </div>
+        </div>
+        <div class="two" style="margin-top:16px">
+          <div class="panel">
+            <div class="panel-h"><h3 data-i18n="feedH"></h3><span class="badge b-ok"><span class="dot"></span><span data-i18n="live"></span></span></div>
+            <div class="feed" id="feed"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-h"><h3 data-i18n="healthH"></h3></div>
+            <div id="health"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 CONTENT -->
+      <section class="view" id="view-content">
+        <div class="vh"><div><h1 data-i18n="cH"></h1><p data-i18n="cP"></p></div>
+          <div class="vh-act"><button class="btn btn--g" onclick="toast(T_msg('imported'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9m0 0l-4 4m4-4l4 4M5 3h14"/></svg>Word / Markdown</button>
+          <button class="btn btn--p" onclick="openEditor(-1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="cNew"></span></button></div>
+        </div>
+        <div class="panel" style="padding:8px 0">
+          <table class="tbl"><thead><tr>
+            <th data-i18n="cColTitle"></th><th data-i18n="cColType"></th><th data-i18n="cColStatus"></th><th data-i18n="cColLang"></th><th data-i18n="cColUpd"></th>
+          </tr></thead><tbody id="cTable"></tbody></table>
+        </div>
+      </section>
+
+      <!-- 3 FORMS -->
+      <section class="view" id="view-forms">
+        <div class="vh"><div><h1 data-i18n="fH"></h1><p data-i18n="fP"></p></div>
+          <div class="vh-act"><button class="btn btn--g" onclick="toast(T_msg('xlsx'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Excel</button></div>
+        </div>
+        <div class="three" id="fStats" style="margin-bottom:16px"></div>
+        <div class="panel" style="padding:8px 0">
+          <table class="tbl"><thead><tr>
+            <th data-i18n="fColRef"></th><th data-i18n="fColType"></th><th data-i18n="fColFrom"></th><th data-i18n="fColDate"></th><th data-i18n="fColStatus"></th>
+          </tr></thead><tbody id="fTable"></tbody></table>
+        </div>
+        <div class="notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span data-i18n="pdpaNote"></span></div>
+      </section>
+
+      <!-- 4 AI SEARCH -->
+      <section class="view" id="view-search">
+        <div class="vh"><div><h1 data-i18n="sH"></h1><p data-i18n="sP"></p></div></div>
+        <div class="ss-box"><input id="ssIn" data-i18n-ph="sPh"><button class="btn btn--p" onclick="runSearch()" data-i18n="sBtn"></button></div>
+        <div class="ss-chips" id="ssChips"></div>
+        <div id="ssResult"></div>
+      </section>
+
+      <!-- 5 BUILDER -->
+      <section class="view" id="view-builder">
+        <div class="vh"><div><h1 data-i18n="bH"></h1><p data-i18n="bP"></p></div>
+          <div class="vh-act"><button class="btn btn--g" onclick="toast(T_msg('previewed'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span data-i18n="bPreview"></span></button>
+          <button class="btn btn--p" onclick="toast(T_msg('published'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg><span data-i18n="bPublish"></span></button></div>
+        </div>
+        <div class="bld">
+          <div>
+            <div class="muted" style="margin-bottom:9px" data-i18n="bPalette"></div>
+            <div class="palette" id="palette"></div>
+          </div>
+          <div class="stage" id="stage"></div>
+        </div>
+      </section>
+
+      <!-- 6 BRANDING -->
+      <section class="view" id="view-branding">
+        <div class="vh"><div><h1 data-i18n="brH"></h1><p data-i18n="brP"></p></div></div>
+        <div class="brand-grid">
+          <div>
+            <div class="panel" style="margin-bottom:16px">
+              <div class="panel-h"><h3 data-i18n="brAccent"></h3></div>
+              <div class="swatches" id="swatches"></div>
+            </div>
+            <div class="panel" style="margin-bottom:16px">
+              <div class="panel-h"><h3 data-i18n="brTmpl"></h3></div>
+              <div class="tmpls" id="tmpls"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-h"><h3 data-i18n="brWm"></h3><span class="sub" data-i18n="brWmSub"></span></div>
+              <label class="ai-row" style="cursor:pointer"><input type="checkbox" id="wmTog" onchange="toggleWm()" style="width:auto"> <span data-i18n="brWmTog"></span></label>
+            </div>
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom:9px" data-i18n="brLive"></div>
+            <div class="preview-site wm" id="previewSite">
+              <div class="psite-bar"><i></i><i></i><i></i><span class="psite-url" id="pvUrl">aurora.go.th</span></div>
+              <div class="psite-body">
+                <div class="psite-nav"><b id="pvBrand">Aurora Gov</b><span>Home</span><span>Services</span><span>News</span><span>About</span></div>
+                <div class="psite-hero">
+                  <h4 id="pvHeroH">Digital services for everyone</h4>
+                  <p id="pvHeroP">Find services, documents, and data in one place.</p>
+                  <span class="pbtn" data-i18n="brGetStarted"></span>
+                </div>
+              </div>
+            </div>
+            <div class="notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7v8l10-12h-7z"/></svg><span data-i18n="brNote"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 USERS -->
+      <section class="view" id="view-users">
+        <div class="vh"><div><h1 data-i18n="uH"></h1><p data-i18n="uP"></p></div>
+          <div class="vh-act"><button class="btn btn--p" onclick="toast(T_msg('invited'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg><span data-i18n="uInvite"></span></button></div>
+        </div>
+        <div class="panel" style="padding:8px 0">
+          <table class="tbl"><thead><tr>
+            <th data-i18n="uColUser"></th><th data-i18n="uColRole"></th><th data-i18n="uColScope"></th><th data-i18n="uColMfa"></th><th data-i18n="uColLast"></th>
+          </tr></thead><tbody id="uTable"></tbody></table>
+        </div>
+        <div class="notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg><span data-i18n="uNote"></span></div>
+      </section>
+
+      <!-- 8 API -->
+      <section class="view" id="view-api">
+        <div class="vh"><div><h1 data-i18n="aH"></h1><p data-i18n="aP"></p></div>
+          <div class="vh-act"><button class="btn btn--p" onclick="toast(T_msg('tokenNew'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="aNew"></span></button></div>
+        </div>
+        <div class="kpis" id="apiKpis"></div>
+        <div class="two">
+          <div class="panel">
+            <div class="panel-h"><h3 data-i18n="aReqH"></h3><span class="sub">7d</span></div>
+            <div class="bars" id="apiChart"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-h"><h3 data-i18n="aTokH"></h3></div>
+            <table class="tbl"><tbody id="apiTokens"></tbody></table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ===== OVERLAYS ===== -->
+<div class="scrim" id="scrim" onclick="closeOverlays()"></div>
+
+<div class="drawer" id="drawer">
+  <div class="ovhead">
+    <h3 id="edTitle">Edit content</h3>
+    <button class="ic-btn" onclick="closeOverlays()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+  </div>
+  <div class="ovbody">
+    <div class="fld"><label data-i18n="edTitleL"></label><input id="edTitleIn"></div>
+    <div class="fld">
+      <div class="ai-row"><label style="margin:0;flex:1" data-i18n="edBodyL"></label>
+        <button class="ai-chip" onclick="runAssist()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg><span data-i18n="edAssist"></span></button>
+      </div>
+      <textarea id="edBody"></textarea>
+    </div>
+    <div class="fld"><label data-i18n="edSeoL"></label><input id="edSeo" placeholder="—"></div>
+    <div class="fld"><label data-i18n="edStatusL"></label>
+      <select id="edStatus"><option data-i18n="stDraft">Draft</option><option data-i18n="stReview">In review</option><option data-i18n="stPub">Published</option></select>
+    </div>
+  </div>
+  <div class="ovfoot">
+    <button class="btn btn--g" onclick="closeOverlays()" data-i18n="cancel"></button>
+    <button class="btn btn--p" onclick="saveEditor()" data-i18n="save"></button>
+  </div>
+</div>
+
+<div class="cmdk" id="cmdk">
+  <div class="cmdk-in">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+    <input id="cmdkIn" data-i18n-ph="cmdkPh" oninput="renderCmdk()" onkeydown="cmdkKey(event)">
+    <span class="esc">ESC</span>
+  </div>
+  <div class="cmdk-list" id="cmdkList"></div>
+</div>
+
+<div class="toast" id="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span id="toastTx"></span></div>
