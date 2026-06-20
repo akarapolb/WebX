@@ -33,6 +33,8 @@ export default function EntryEditor({
   const [media, setMedia] = useState<{ key: string; url: string; newId?: number } | null>(null);
   const [rels, setRels] = useState<{ key: string; items: string[] }[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [review, setReview] = useState<any>(null);
+  const [revBusy, setRevBusy] = useState(false);
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
   const base = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + (locale ? "?locale=" + locale : "");
 
@@ -65,6 +67,10 @@ export default function EntryEditor({
           }
         }
         setMedia(m); setRels(rs);
+        try {
+          const rr = await fetch("/api/strapi/content-manager/collection-types/api::review.review?pageSize=1&sort=updatedAt:DESC&filters[documentRef][$eq]=" + encodeURIComponent(docId));
+          if (rr.ok) { const rj = await rr.json(); setReview((rj.results ?? rj.data ?? [])[0] || null); }
+        } catch {}
       } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
       finally { setLoading(false); }
     })();
@@ -138,6 +144,25 @@ export default function EntryEditor({
     finally { setBusy(""); }
   }
 
+  async function submitReview() {
+    setRevBusy(true);
+    let actor = "admin";
+    try { const m = await fetch("/api/strapi/admin/users/me"); if (m.ok) { const j = await m.json(); const u = j.data ?? j; actor = u.email || actor; } } catch {}
+    const title = fields.find((f) => f.key === "title")?.value || (typeName + " " + docId.slice(0, 6));
+    const hist = Array.isArray(review?.history) ? review.history : [];
+    const entry = { from: review?.stage || "draft", to: "in_review", by: actor, at: new Date().toISOString() };
+    try {
+      if (review) {
+        await fetch("/api/strapi/content-manager/collection-types/api::review.review/" + (review.documentId ?? review.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: "in_review", title, history: [...hist, entry] }) });
+      } else {
+        await fetch("/api/strapi/content-manager/collection-types/api::review.review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentRef: docId, contentType: uid, title, stage: "in_review", requestedBy: actor, history: [entry] }) });
+      }
+      setReview({ ...(review || {}), stage: "in_review", title });
+      setMsg({ t: t("rv.submitted"), ok: true });
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    finally { setRevBusy(false); }
+  }
+
   const mainAssistKey = (fields.find((f) => f.kind === "rich") ?? fields.find((f) => f.kind === "textarea") ?? fields[0])?.key;
 
   return (
@@ -153,6 +178,15 @@ export default function EntryEditor({
         </div>
 
         <div className="ovbody">
+          {!loading && (
+            <div className="ed-review">
+              <Icon name="check" />
+              {review ? <span>{t("rv.inwf")} <b>{t("rv.s_" + review.stage)}</b></span> : <span className="muted">{t("rv.sub")}</span>}
+              <button className="btn btn--g" style={{ marginLeft: "auto" }} onClick={submitReview} disabled={revBusy || review?.stage === "in_review"}>
+                <Icon name="check" />{revBusy ? t("rv.submitting") : t("rv.submit")}
+              </button>
+            </div>
+          )}
           {loading && <div className="muted">{t("e.loading")}</div>}
           {!loading && fields.length === 0 && <div className="muted">{t("e.noFields")}</div>}
           {fields.map((f) => (

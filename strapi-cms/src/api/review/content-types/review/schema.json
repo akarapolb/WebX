@@ -1,0 +1,22 @@
+{
+  "kind": "collectionType",
+  "collectionName": "reviews",
+  "info": {
+    "singularName": "review",
+    "pluralName": "reviews",
+    "displayName": "Review",
+    "description": "Content review/approval workflow state per entry"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "documentRef": { "type": "string", "required": true },
+    "contentType": { "type": "string" },
+    "title": { "type": "string" },
+    "stage": { "type": "string", "default": "in_review" },
+    "assignee": { "type": "string" },
+    "requestedBy": { "type": "string" },
+    "note": { "type": "text" },
+    "history": { "type": "json" },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}
