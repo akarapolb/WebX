@@ -21,9 +21,9 @@ const isImageFile = (mime?: string, url?: string) => (mime ? mime.startsWith("im
 const mediaSrc = (url: string) => (url.startsWith("http") ? url : "/api/strapi" + url);
 
 export default function EntryEditor({
-  uid, docId, locale, typeName, onClose, onSaved,
+  uid, docId, locale, typeName, mediaKeys, onClose, onSaved,
 }: {
-  uid: string; docId: string; locale?: string; typeName: string;
+  uid: string; docId: string; locale?: string; typeName: string; mediaKeys?: string[];
   onClose: () => void; onSaved: () => void;
 }) {
   const { t } = useLang();
@@ -59,13 +59,19 @@ export default function EntryEditor({
           });
         fs.sort((a, b) => ["input", "textarea", "rich"].indexOf(a.kind) - ["input", "textarea", "rich"].indexOf(b.kind));
         setFields(fs);
-        // media (single file w/ url) + relations (arrays of records)
+        // media + relations (arrays of records)
         let m: { key: string; url: string; mime?: string; name?: string } | null = null;
+        const mk = mediaKeys || [];
+        if (mk.length) {
+          // schema-declared media field — show the uploader even when empty (new entries)
+          const k = mk[0]; const v = e[k];
+          m = (v && typeof v === "object" && typeof v.url === "string") ? { key: k, url: v.url, mime: v.mime, name: v.name } : { key: k, url: "" };
+        }
         const rs: { key: string; items: string[] }[] = [];
         for (const k of Object.keys(e)) {
           if (SYS.has(k) || k === "localizations") continue;
           const v = e[k];
-          if (v && typeof v === "object" && !Array.isArray(v) && typeof v.url === "string") { if (!m) m = { key: k, url: v.url, mime: v.mime, name: v.name }; }
+          if (!m && v && typeof v === "object" && !Array.isArray(v) && typeof v.url === "string") { m = { key: k, url: v.url, mime: v.mime, name: v.name }; }
           else if (Array.isArray(v) && v.length && typeof v[0] === "object") {
             rs.push({ key: k, items: v.slice(0, 12).map((o: any) => o.title || o.name || o.label || ("#" + (o.documentId ?? o.id))) });
           }

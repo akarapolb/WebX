@@ -207,6 +207,7 @@ export default function ContentBrowser() {
       {editing && current && (
         <EntryEditor
           uid={current.uid} docId={editing.docId} locale={editing.locale} typeName={current.name}
+          mediaKeys={Object.entries(schemas[current.uid] || {}).filter(([, a]: any) => a?.type === "media" && a?.multiple !== true).map(([k]) => k)}
           onClose={() => setEditing(null)} onSaved={() => loadEntries(current.uid, opts)}
         />
       )}
