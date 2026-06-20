@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { sessionToken, strapiMe, strapiGet } from "@/lib/strapi";
 import Shell from "@/components/Shell";
+import SessionKeeper from "@/components/SessionKeeper";
 import { TenantProvider } from "@/components/TenantProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <TenantProvider tenants={tenants}>
+      <SessionKeeper />
       <Shell user={user} connected={Boolean(ctx)}>{children}</Shell>
     </TenantProvider>
   );
