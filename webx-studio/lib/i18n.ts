@@ -127,6 +127,8 @@ export const DICT: Record<string, Entry> = {
   "vb.preview": { en: "Preview", th: "พรีวิว" },
   "vb.exitpreview": { en: "Exit preview", th: "ออกจากพรีวิว" },
   "vb.previewhint": { en: "Preview — how the page looks before publishing. Press Esc to exit.", th: "พรีวิว — หน้าตาก่อนเผยแพร่ กด Esc เพื่อออก" },
+  "vb.newpage": { en: "New page", th: "หน้าใหม่" },
+  "vb.pagecreated": { en: "New page created — edit and Publish to go live.", th: "สร้างหน้าใหม่แล้ว — แก้ไขแล้วกด Publish เพื่อขึ้นเว็บ" },
   "vb.history": { en: "History", th: "ประวัติเวอร์ชัน" },
   "vb.restore": { en: "Restore", th: "กู้คืน" },
   "vb.restored": { en: "Version restored — Save or Publish to keep it.", th: "กู้คืนเวอร์ชันแล้ว — กด Save/Publish เพื่อยืนยัน" },

@@ -127,6 +127,21 @@ export default function VisualBuilder() {
   }, [tenantKey]);
   useEffect(() => { loadPages(); }, [loadPages]);
 
+  async function createPage() {
+    setSaving(true); setMsg(null);
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Untitled page", active: true }) });
+      if (!r.ok) { setMsg({ t: "Could not create page (HTTP " + r.status + ")", ok: false }); setSaving(false); return; }
+      const j = await r.json(); const e = j.data ?? j;
+      const np = { docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "Untitled page" };
+      await loadPages();
+      setPages((ps) => (ps.some((p) => p.docId === np.docId) ? ps : [np, ...ps])); // ensure selector shows it
+      open(np); // open the new (empty) page directly
+      setMsg({ t: t("vb.pagecreated"), ok: true });
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    finally { setSaving(false); }
+  }
+
   const loadTypes = useCallback(async () => {
     try {
       let qs = "?pageSize=100";
@@ -392,11 +407,12 @@ export default function VisualBuilder() {
       <div className="vh">
         <div><h1>{t("nav.builder")}</h1><p>{t("vb.sub")}</p></div>
         <div className="vh-act">
-          {pages.length > 1 && (
-            <select className="vb-sel" value={sel?.docId || ""} onChange={(e) => { const p = pages.find((x) => x.docId === e.target.value); if (p) open(p); }}>
+          {pages.length > 0 && (
+            <select className="vb-sel" value={sel?.docId || ""} onChange={(e) => { const p = pages.find((x) => x.docId === e.target.value); if (p) open(p); }} title={t("vb.pages")}>
               {pages.map((p) => <option key={p.docId} value={p.docId}>{p.title}</option>)}
             </select>
           )}
+          <button className="btn btn--g" onClick={createPage} disabled={saving} title={t("vb.newpage")}><Icon name="plus" />{t("vb.newpage")}</button>
           <div className="seg">
             {(["desktop", "tablet", "mobile"] as Device[]).map((d) => (
               <button key={d} className={device === d ? "on" : ""} onClick={() => setDevice(d)} title={d}><Icon name={d} /></button>
