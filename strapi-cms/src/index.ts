@@ -51,6 +51,23 @@ async function effectiveTenant(strapi: any) {
   return null;
 }
 
+/** เผยแพร่ release ที่ถึงกำหนดเวลา (scheduled → publish รายการ → done) */
+async function processDueReleases(strapi: any) {
+  const now = new Date();
+  const due = await strapi.documents('api::release.release').findMany({
+    filters: { state: 'scheduled', scheduledAt: { $lte: now.toISOString() } },
+    limit: 50,
+  });
+  for (const rel of due || []) {
+    const items = Array.isArray(rel.items) ? rel.items : [];
+    for (const it of items) {
+      if (!it?.contentType || !it?.documentRef) continue;
+      try { await strapi.documents(it.contentType).publish({ documentId: it.documentRef }); } catch (e) { /* ข้ามรายการที่ publish ไม่ได้ */ }
+    }
+    try { await strapi.documents('api::release.release').update({ documentId: rel.documentId, data: { state: 'done', publishedAt: now.toISOString() } }); } catch (e) { /* noop */ }
+  }
+}
+
 export default {
   /**
    * Document Service middleware — บังคับ scope ตาม tenant ใต้ชั้น validate ของ REST
@@ -129,5 +146,7 @@ export default {
     } catch (err) {
       strapi.log.error('[bootstrap] seed/setup failed: ' + (err as Error).stack);
     }
+    // scheduled releases: ตรวจทุก 60 วินาที แล้วเผยแพร่รายการที่ถึงกำหนด
+    setInterval(() => { processDueReleases(strapi).catch(() => {}); }, 60_000);
   },
 };

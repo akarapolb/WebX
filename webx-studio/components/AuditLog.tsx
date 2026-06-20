@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 
-type Log = { id: number; actor?: string; action?: string; contentType?: string; targetRef?: string; method?: string; createdAt?: string };
+type Log = { id: number; action?: string; contentType?: string; entryId?: string; adminEmail?: string; tenantKey?: string; at?: string; actor?: string; targetRef?: string; createdAt?: string };
 const AL_UID = "api::audit-log.audit-log";
 const shortType = (c?: string) => (c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
 const badgeOf = (a?: string) => (a === "delete" ? "b-warn" : a === "publish" ? "b-ok" : a === "create" ? "b-acc" : "b-mut");
@@ -55,14 +55,17 @@ export default function AuditLog() {
             <table className="tbl">
               <thead><tr><th>{t("al.time")}</th><th>{t("al.actor")}</th><th>{t("al.action")}</th><th>{t("al.target")}</th></tr></thead>
               <tbody>
-                {shown.map((l) => (
-                  <tr key={l.id}>
-                    <td className="muted mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{fmt(l.createdAt)}</td>
-                    <td><b>{l.actor || "—"}</b></td>
-                    <td><span className={"badge " + badgeOf(l.action)}><span className="dot" />{t("al.a_" + l.action)}</span></td>
-                    <td><span className="mono" style={{ fontSize: 12 }}>{shortType(l.contentType)}{l.targetRef ? <span className="muted"> {"·"} {String(l.targetRef).slice(0, 10)}</span> : null}</span></td>
-                  </tr>
-                ))}
+                {shown.map((l) => {
+                  const tgt = l.entryId || l.targetRef || "";
+                  return (
+                    <tr key={l.id}>
+                      <td className="muted mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{fmt(l.at || l.createdAt)}</td>
+                      <td><b>{l.adminEmail || l.actor || "—"}</b></td>
+                      <td><span className={"badge " + badgeOf(l.action)}><span className="dot" />{t("al.a_" + l.action)}</span></td>
+                      <td><span className="mono" style={{ fontSize: 12 }}>{shortType(l.contentType)}{tgt ? <span className="muted"> {"·"} {String(tgt).slice(0, 10)}</span> : null}</span></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -35,6 +35,7 @@ export default function EntryEditor({
   const [uploading, setUploading] = useState(false);
   const [review, setReview] = useState<any>(null);
   const [revBusy, setRevBusy] = useState(false);
+  const [releases, setReleases] = useState<any[]>([]);
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
   const base = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + (locale ? "?locale=" + locale : "");
 
@@ -70,6 +71,10 @@ export default function EntryEditor({
         try {
           const rr = await fetch("/api/strapi/content-manager/collection-types/api::review.review?pageSize=1&sort=updatedAt:DESC&filters[documentRef][$eq]=" + encodeURIComponent(docId));
           if (rr.ok) { const rj = await rr.json(); setReview((rj.results ?? rj.data ?? [])[0] || null); }
+        } catch {}
+        try {
+          const rl = await fetch("/api/strapi/content-manager/collection-types/api::release.release?filters[state][$ne]=done&pageSize=50&sort=updatedAt:DESC");
+          if (rl.ok) { const lj = await rl.json(); setReleases(lj.results ?? lj.data ?? []); }
         } catch {}
       } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
       finally { setLoading(false); }
@@ -163,6 +168,18 @@ export default function EntryEditor({
     finally { setRevBusy(false); }
   }
 
+  async function addToRelease(relId: string) {
+    const rel = releases.find((r) => String(r.documentId ?? r.id) === String(relId));
+    if (!rel) return;
+    const items = Array.isArray(rel.items) ? rel.items : [];
+    if (items.some((it: any) => it.documentRef === docId)) { setMsg({ t: t("rl.added"), ok: true }); return; }
+    const title = fields.find((f) => f.key === "title")?.value || (typeName + " " + docId.slice(0, 6));
+    try {
+      await fetch("/api/strapi/content-manager/collection-types/api::release.release/" + (rel.documentId ?? rel.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [...items, { contentType: uid, documentRef: docId, title }] }) });
+      setMsg({ t: t("rl.added"), ok: true });
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+  }
+
   const mainAssistKey = (fields.find((f) => f.kind === "rich") ?? fields.find((f) => f.kind === "textarea") ?? fields[0])?.key;
 
   return (
@@ -182,7 +199,13 @@ export default function EntryEditor({
             <div className="ed-review">
               <Icon name="check" />
               {review ? <span>{t("rv.inwf")} <b>{t("rv.s_" + review.stage)}</b></span> : <span className="muted">{t("rv.sub")}</span>}
-              <button className="btn btn--g" style={{ marginLeft: "auto" }} onClick={submitReview} disabled={revBusy || review?.stage === "in_review"}>
+              {releases.length > 0 && (
+                <select className="vb-sel" style={{ marginLeft: "auto", minWidth: 150 }} value="" aria-label={t("rl.addto")} onChange={(e) => { if (e.target.value) addToRelease(e.target.value); e.currentTarget.selectedIndex = 0; }}>
+                  <option value="">{t("rl.addto")}</option>
+                  {releases.map((r) => <option key={r.id} value={r.documentId ?? r.id}>{r.name}</option>)}
+                </select>
+              )}
+              <button className="btn btn--g" style={releases.length > 0 ? {} : { marginLeft: "auto" }} onClick={submitReview} disabled={revBusy || review?.stage === "in_review"}>
                 <Icon name="check" />{revBusy ? t("rv.submitting") : t("rv.submit")}
               </button>
             </div>

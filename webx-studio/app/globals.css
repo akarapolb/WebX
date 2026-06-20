@@ -439,6 +439,21 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .ed-review{display:flex;align-items:center;gap:9px;font-size:12.5px;padding:9px 11px;border:1px solid var(--line2);border-radius:10px;background:var(--sunk);margin-bottom:14px}
 .ed-review>svg{width:15px;height:15px;color:var(--accent);flex:none}
 .ed-review .btn{flex:none}
+/* releases */
+.rl-list{display:flex;flex-direction:column;gap:12px}
+.rl-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.rl-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.rl-head>b{font-size:14.5px}
+.rl-count{margin-left:auto;font-size:11px;font-weight:700;color:var(--mut);background:var(--sunk);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+.rl-items{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
+.rl-item{display:flex;align-items:center;gap:9px;font-size:12.5px;padding:6px 9px;background:var(--sunk);border-radius:8px}
+.rl-itype{font-size:10.5px;color:var(--accent);background:var(--accent-soft);padding:2px 7px;border-radius:5px;flex:none}
+.rl-ititle{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rl-x{flex:none;width:20px;height:20px;border-radius:5px;border:none;background:none;color:var(--mut);font-size:16px;line-height:1;cursor:pointer}
+.rl-x:hover{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.rl-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rl-dt{font:inherit;font-size:12px;padding:7px 9px;border:1px solid var(--line2);border-radius:8px;background:var(--sunk);color:var(--ink)}
+.rl-dt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .vb-sched{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(440px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.32);z-index:61;padding:0 20px 20px;animation:drwin .2s ease;overflow:hidden}
 .vb-sched .ovhead{margin:0 -20px 14px;padding:15px 20px}
 .vb-fld{display:block;margin-bottom:12px}

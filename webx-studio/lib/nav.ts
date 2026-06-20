@@ -13,8 +13,9 @@ export const NAV: NavItem[] = [
   { id: "search", label: "AI Search", icon: "spark", k: 4, group: "main" },
   { id: "builder", label: "Visual Builder", icon: "layout", k: 5, group: "build" },
   { id: "reviews", label: "Reviews", icon: "check", k: 6, group: "build" },
-  { id: "branding", label: "Branding", icon: "palette", k: 7, group: "build" },
-  { id: "users", label: "Users & Roles", icon: "users", k: 8, group: "admin" },
-  { id: "audit", label: "Audit Log", icon: "shield", k: 9, group: "admin" },
-  { id: "tokens", label: "API & Tokens", icon: "code", k: 10, group: "admin" },
+  { id: "releases", label: "Releases", icon: "package", k: 7, group: "build" },
+  { id: "branding", label: "Branding", icon: "palette", k: 8, group: "build" },
+  { id: "users", label: "Users & Roles", icon: "users", k: 9, group: "admin" },
+  { id: "audit", label: "Audit Log", icon: "shield", k: 10, group: "admin" },
+  { id: "tokens", label: "API & Tokens", icon: "code", k: 11, group: "admin" },
 ];

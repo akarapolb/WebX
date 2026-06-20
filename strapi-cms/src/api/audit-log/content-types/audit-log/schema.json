@@ -5,13 +5,17 @@
     "singularName": "audit-log",
     "pluralName": "audit-logs",
     "displayName": "Audit Log",
-    "description": "Admin action audit trail — actor, action, target, time (admin-only)"
+    "description": "Admin action audit trail (admin-only)"
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "actor": { "type": "string" },
     "action": { "type": "string" },
     "contentType": { "type": "string" },
+    "entryId": { "type": "string" },
+    "adminEmail": { "type": "string" },
+    "tenantKey": { "type": "string" },
+    "at": { "type": "datetime" },
+    "actor": { "type": "string" },
     "targetRef": { "type": "string" },
     "method": { "type": "string" },
     "path": { "type": "text" }
