@@ -17,8 +17,21 @@ WebX Studio is a productized control plane for content teams: a fast Next.js adm
 - **Content & rich editor** — browse/filter/publish entries; rich-text body editing.
 - **AI Search** — natural-language search over tenant content.
 - **Branding** — per-tenant primary color and site preview.
+- **A/B testing** — split a landing into variant A/B, set the traffic split, and the public site serves a sticky variant per visitor while logging views/conversions; a live results panel shows the conversion rate and the leading variant.
 - **Forms inbox, Users & Roles, Dashboard** — real data from the Strapi backend.
-- **i18n EN / ไทย**, light/dark theme, `Cmd/Ctrl+K` command palette.
+- **i18n EN / ไทย**, light/dark theme, `Cmd/Ctrl+K` command palette, accessible (visible focus, reduced-motion, ARIA).
+
+## Enterprise-grade features — on Strapi Community Edition
+
+WebX Studio re-implements most of what Strapi reserves for its Enterprise plan, as its own layer over CE:
+
+- **Version history + diff** — every Publish snapshots the page; the History drawer lists versions and a per-version "Compare with current" shows exactly which blocks/fields changed. One-click **Restore**.
+- **Review / approval workflow** — submit an entry for review, then a Kanban board (In review → Changes → Approved → Published) moves it through stages with assignee + history; approving & publishing also publishes the live entry.
+- **Releases** — group entries and **Publish now** or **Schedule**; a backend job auto-publishes scheduled releases when their time arrives.
+- **Audit log** — every admin content change (who / what / when) is captured server-side by a document-service middleware and shown as a filterable feed.
+- **Field-level RBAC** — per-role **Field Access** policies hide or lock individual fields for a content type; enforced **server-side** (forbidden fields are stripped from writes), not just hidden in the UI. Super admins bypass.
+
+> Not included: **admin SSO (SAML/OIDC)** — that is genuinely Enterprise-only for the Strapi admin panel and can't be minted from the BFF on CE.
 
 ## Architecture
 
@@ -122,12 +135,14 @@ webx-studio/
 
 ## Roadmap
 
-- Block / page **versioning & revision history** (via Strapi History)
-- Deploy target (Vercel + hosted Strapi)
+- **Deploy target** (Vercel + hosted Strapi) for a public demo URL
 - Drag-reorder across nested sections, block grouping
-- Scheduled publishing, A/B variants
+- DAM-style media library (folders, crop, alt-text management)
+- Webhooks / integrations, shareable draft-preview links
 
 ## Notes
 
 - The backend lives in the sibling `strapi-cms/` project; this repo also contains a static public site (`site/DGA-Website`) that consumes the Strapi public REST API and renders custom blocks.
 - Submission data (form entries, applications, consent logs) is intentionally **not** publicly readable (PDPA) — the public role has read access only to presentational content (landings, block types, etc.).
+- Production hardening already in place: the anonymous A/B endpoint is rate-limited and field-sanitized; audit-log / ab-event / page-version rows older than 90 days are pruned by a housekeeping job; the BFF proxy streams binary (images/files) intact via `arrayBuffer`.
+- Strapi admin session lifespans are configured in `strapi-cms/config/admin.ts` (`auth.sessions.*`, in seconds); the BFF cookie TTL (`WEBX_SESSION_TTL`) should match.
