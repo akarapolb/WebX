@@ -12,6 +12,17 @@ type Page = { docId: string; locale?: string; title: string };
 type Device = "desktop" | "tablet" | "mobile";
 
 const LANDING_UID = "api::landing.landing";
+const PV_UID = "api::page-version.page-version";
+function toLocalInput(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso); if (isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function fmtTime(iso: string, lang: string) {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; }
+}
 const TYPES = [
   { comp: "block.hero", key: "vb.hero", icon: "layout", fields: [{ k: "kicker" }, { k: "heading" }, { k: "subheading", ta: true }, { k: "ctaLabel" }, { k: "ctaUrl" }], def: { heading: "New hero", subheading: "Describe your offer here", ctaLabel: "Get started" } },
   { comp: "block.richtext", key: "vb.richtext", icon: "doc", fields: [{ k: "body", rich: true }], def: { body: "<p>Write something compelling…</p>" } },
@@ -68,6 +79,10 @@ export default function VisualBuilder() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+  const [versions, setVersions] = useState<any[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [schedOpen, setSchedOpen] = useState(false);
+  const [sched, setSched] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const tenantKey = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   const loadPages = useCallback(async () => {
@@ -180,14 +195,65 @@ export default function VisualBuilder() {
       if (!sv.ok) { setMsg({ t: "Save failed (HTTP " + sv.status + ")", ok: false }); setSaving(false); return; }
       const pr = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + "/actions/publish" + (sel.locale ? "?locale=" + sel.locale : ""), { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       setMsg(pr.ok ? { t: t("vb.published"), ok: true } : { t: "Publish failed (HTTP " + pr.status + ")", ok: false });
+      if (pr.ok) await saveVersion("Published");
     } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
     finally { setSaving(false); }
   }
+
+  // ---- version history (snapshots) ----
+  async function saveVersion(label: string) {
+    if (!sel) return;
+    try {
+      await fetch("/api/strapi/content-manager/collection-types/" + PV_UID, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentRef: sel.docId, contentType: LANDING_UID, label, data: { title: sel.title, blocks } }),
+      });
+    } catch {}
+  }
+  async function loadHistory() {
+    if (!sel) return;
+    setHistoryOpen(true); setVersions([]);
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + PV_UID + "?sort=createdAt:DESC&pageSize=50&filters[documentRef][$eq]=" + encodeURIComponent(sel.docId));
+      if (!r.ok) return;
+      const j = await r.json();
+      setVersions((j.results ?? j.data ?? []).map((e: any) => ({ id: e.documentId ?? e.id, label: e.label, createdAt: e.createdAt, data: e.data })));
+    } catch {}
+  }
+  function restore(v: any) {
+    const b = v?.data?.blocks;
+    if (Array.isArray(b)) { setBlocks(b as Block[]); setActive(b.length ? 0 : -1); setHistoryOpen(false); setMsg({ t: t("vb.restored"), ok: true }); }
+  }
+
+  // ---- scheduled publishing (publishStart / publishEnd) ----
+  async function openSchedule() {
+    if (!sel) return;
+    setSchedOpen(true); setSched({ start: "", end: "" });
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : ""));
+      if (!r.ok) return;
+      const j = await r.json(); const d = j?.data ?? j;
+      setSched({ start: toLocalInput(d.publishStart), end: toLocalInput(d.publishEnd) });
+    } catch {}
+  }
+  async function saveSchedule() {
+    if (!sel) return;
+    setSaving(true); setMsg(null);
+    try {
+      const body: any = { publishStart: sched.start ? new Date(sched.start).toISOString() : null, publishEnd: sched.end ? new Date(sched.end).toISOString() : null };
+      if (sel.locale) body.locale = sel.locale;
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : ""), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      setMsg(r.ok ? { t: t("vb.schedsaved"), ok: true } : { t: "Save failed (HTTP " + r.status + ")", ok: false });
+      if (r.ok) setSchedOpen(false);
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    finally { setSaving(false); }
+  }
+
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape" && previewMode) setPreviewMode(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") { if (previewMode) setPreviewMode(false); if (historyOpen) setHistoryOpen(false); if (schedOpen) setSchedOpen(false); } }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [previewMode]);
+  }, [previewMode, historyOpen, schedOpen]);
 
   // ---- canvas preview (inline-editable) ----
   function preview(b: Block, i: number) {
@@ -275,6 +341,10 @@ export default function VisualBuilder() {
               <button key={d} className={device === d ? "on" : ""} onClick={() => setDevice(d)} title={d}><Icon name={d} /></button>
             ))}
           </div>
+          {sel && !previewMode && <>
+            <button className="btn btn--g" onClick={openSchedule} title={t("vb.schedule")}><Icon name="calendar" />{t("vb.schedule")}</button>
+            <button className="btn btn--g" onClick={loadHistory} title={t("vb.history")}><Icon name="clock" />{t("vb.history")}</button>
+          </>}
           {sel && <>
             <button className="btn btn--g" onClick={() => setPreviewMode((p) => !p)}><Icon name="eye" />{previewMode ? t("vb.exitpreview") : t("vb.preview")}</button>
             <button className="btn btn--g" onClick={save} disabled={saving}>{t("vb.save")}</button>
@@ -424,6 +494,47 @@ export default function VisualBuilder() {
       </div>
 
       {showTypeEditor && <BlockTypeEditor tenantKey={tenantKey} onClose={() => setShowTypeEditor(false)} onSaved={loadTypes} />}
+
+      {historyOpen && (
+        <>
+          <div className="scrim" onClick={() => setHistoryOpen(false)} />
+          <div className="vb-drawer">
+            <div className="ovhead">
+              <h3 style={{ flex: 1 }}>{t("vb.history")}</h3>
+              <button className="btn btn--g" onClick={() => saveVersion(t("vb.manualver")).then(loadHistory)}><Icon name="plus" />{t("vb.savever")}</button>
+              <button className="ic-btn" onClick={() => setHistoryOpen(false)} aria-label={t("close") || "Close"}><Icon name="close" /></button>
+            </div>
+            <div className="vb-vers">
+              {versions.length === 0 && <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>{t("vb.nohistory")}</div>}
+              {versions.map((v) => (
+                <div className="vb-ver" key={v.id}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <b>{v.label || "—"}</b>
+                    <div className="muted" style={{ fontSize: 11 }}>{fmtTime(v.createdAt, lang)} · {(v.data?.blocks?.length ?? 0)} {t("vb.blocks_n")}</div>
+                  </div>
+                  <button className="btn btn--g" onClick={() => restore(v)}><Icon name="undo" />{t("vb.restore")}</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {schedOpen && (
+        <>
+          <div className="scrim" onClick={() => setSchedOpen(false)} />
+          <div className="vb-sched">
+            <div className="ovhead"><h3 style={{ flex: 1 }}>{t("vb.schedule")}</h3><button className="ic-btn" onClick={() => setSchedOpen(false)} aria-label="Close"><Icon name="close" /></button></div>
+            <p className="muted" style={{ fontSize: 12.5, margin: "0 0 14px" }}>{t("vb.schedhint")}</p>
+            <label className="vb-fld"><span>{t("vb.schedstart")}</span><input type="datetime-local" value={sched.start} onChange={(e) => setSched((s) => ({ ...s, start: e.target.value }))} /></label>
+            <label className="vb-fld"><span>{t("vb.schedend")}</span><input type="datetime-local" value={sched.end} onChange={(e) => setSched((s) => ({ ...s, end: e.target.value }))} /></label>
+            <div style={{ display: "flex", gap: 10, marginTop: 16, alignItems: "center" }}>
+              <button className="btn btn--p" onClick={saveSchedule} disabled={saving}>{t("vb.save")}</button>
+              <button className="btn btn--g" onClick={() => setSched({ start: "", end: "" })}>{t("vb.clear")}</button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

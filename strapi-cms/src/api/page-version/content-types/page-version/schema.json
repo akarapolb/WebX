@@ -1,0 +1,20 @@
+{
+  "kind": "collectionType",
+  "collectionName": "page_versions",
+  "info": {
+    "singularName": "page-version",
+    "pluralName": "page-versions",
+    "displayName": "Page Version",
+    "description": "Immutable snapshots of a page's blocks for version history / restore"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "documentRef": { "type": "string", "required": true },
+    "contentType": { "type": "string" },
+    "label": { "type": "string" },
+    "author": { "type": "string" },
+    "data": { "type": "json" }
+  }
+}
