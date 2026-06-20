@@ -137,6 +137,7 @@ export const DICT: Record<string, Entry> = {
   "vb.schedend": { en: "Hide after", th: "หยุดแสดง" },
   "vb.schedsaved": { en: "Schedule saved.", th: "บันทึกตารางเวลาแล้ว" },
   "vb.clear": { en: "Clear", th: "ล้าง" },
+  "vb.savesched": { en: "Save schedule", th: "บันทึกตารางเวลา" },
   "a11y.moveup": { en: "Move up", th: "เลื่อนขึ้น" },
   "a11y.movedown": { en: "Move down", th: "เลื่อนลง" },
   "a11y.duplicate": { en: "Duplicate", th: "ทำซ้ำ" },

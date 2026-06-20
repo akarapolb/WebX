@@ -529,7 +529,7 @@ export default function VisualBuilder() {
             <label className="vb-fld"><span>{t("vb.schedstart")}</span><input type="datetime-local" value={sched.start} onChange={(e) => setSched((s) => ({ ...s, start: e.target.value }))} /></label>
             <label className="vb-fld"><span>{t("vb.schedend")}</span><input type="datetime-local" value={sched.end} onChange={(e) => setSched((s) => ({ ...s, end: e.target.value }))} /></label>
             <div style={{ display: "flex", gap: 10, marginTop: 16, alignItems: "center" }}>
-              <button className="btn btn--p" onClick={saveSchedule} disabled={saving}>{t("vb.save")}</button>
+              <button className="btn btn--p" onClick={saveSchedule} disabled={saving}>{t("vb.savesched")}</button>
               <button className="btn btn--g" onClick={() => setSched({ start: "", end: "" })}>{t("vb.clear")}</button>
             </div>
           </div>
