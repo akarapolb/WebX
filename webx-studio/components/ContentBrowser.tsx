@@ -37,6 +37,8 @@ export default function ContentBrowser() {
   const [loadingTypes, setLoadingTypes] = useState(true);
   const [loadingRows, setLoadingRows] = useState(false);
   const [editing, setEditing] = useState<{ docId: string; locale?: string } | null>(null);
+  const [schemas, setSchemas] = useState<Record<string, any>>({});
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -50,6 +52,9 @@ export default function ContentBrowser() {
           .map((x: any) => ({ uid: x.uid, name: x.info?.displayName ?? x.apiID ?? x.uid, api: x.apiID ?? "" }))
           .sort((a: CType, b: CType) => a.name.localeCompare(b.name));
         setTypes(list);
+        const sch: Record<string, any> = {};
+        raw.forEach((x: any) => { sch[x.uid] = x.attributes || {}; });
+        setSchemas(sch);
         setTenantUids(new Set(raw.filter((x: any) => x.attributes?.tenant).map((x: any) => x.uid)));
         const first = list.find((x) => x.api === "article") ?? list[0];
         if (first) setUid(first.uid); else setErr("No content types are exposed by this backend.");
@@ -90,6 +95,35 @@ export default function ContentBrowser() {
   }, [uid, status, page, currentKey, tenantUids]);
 
   const current = types.find((x) => x.uid === uid);
+
+  // create a blank entry (fill required scalar fields) then open it in the editor
+  async function createNew() {
+    if (!uid || !current) return;
+    setCreating(true); setErr("");
+    const attrs = schemas[uid] || {};
+    const body: Record<string, any> = {};
+    for (const [k, a] of Object.entries(attrs)) {
+      const at: any = a;
+      if (!at?.required) continue;
+      if (at.type === "string" || at.type === "text" || at.type === "uid" || at.type === "richtext") body[k] = "Untitled";
+      else if (at.type === "email") body[k] = "noreply@example.com";
+      else if (at.type === "integer" || at.type === "biginteger" || at.type === "float" || at.type === "decimal") body[k] = 0;
+      else if (at.type === "boolean") body[k] = false;
+    }
+    for (const tk of ["title", "name", "subject", "question", "label"]) {
+      const a: any = attrs[tk];
+      if (a && (a.type === "string" || a.type === "text")) { body[tk] = "Untitled " + current.name; break; }
+    }
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + uid, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { setErr(t("c.createFail") + " (HTTP " + r.status + ")"); setCreating(false); return; }
+      const j = await r.json(); const e = j.data ?? j;
+      const docId = e.documentId ?? e.id;
+      if (docId) { setEditing({ docId: String(docId), locale: e.locale }); loadEntries(uid, opts); }
+    } catch { setErr("Cannot reach the backend."); }
+    finally { setCreating(false); }
+  }
+
   const SEG: { v: Status; k: string }[] = [{ v: "", k: "c.all" }, { v: "draft", k: "c.draft" }, { v: "published", k: "c.published" }];
 
   return (
@@ -100,7 +134,8 @@ export default function ContentBrowser() {
           <p>{current ? current.name + (total != null ? " · " + total + " " + t("c.entries") : "") : t("c.browse")}</p>
         </div>
         <div className="vh-act">
-          <button className="btn btn--p" onClick={() => uid && loadEntries(uid, opts)}><Icon name="spark" />{t("c.refresh")}</button>
+          <button className="btn btn--g" onClick={() => uid && loadEntries(uid, opts)}>{t("c.refresh")}</button>
+          <button className="btn btn--p" onClick={createNew} disabled={!uid || creating}><Icon name="plus" />{creating ? t("c.creating") : t("c.new")}</button>
         </div>
       </div>
 
