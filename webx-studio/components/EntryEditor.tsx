@@ -36,6 +36,7 @@ export default function EntryEditor({
   const [review, setReview] = useState<any>(null);
   const [revBusy, setRevBusy] = useState(false);
   const [releases, setReleases] = useState<any[]>([]);
+  const [fp, setFp] = useState<{ hidden: Set<string>; readonly: Set<string> }>({ hidden: new Set(), readonly: new Set() });
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
   const base = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + (locale ? "?locale=" + locale : "");
 
@@ -75,6 +76,19 @@ export default function EntryEditor({
         try {
           const rl = await fetch("/api/strapi/content-manager/collection-types/api::release.release?filters[state][$ne]=done&pageSize=50&sort=updatedAt:DESC");
           if (rl.ok) { const lj = await rl.json(); setReleases(lj.results ?? lj.data ?? []); }
+        } catch {}
+        try {
+          const meR = await fetch("/api/strapi/admin/users/me");
+          const mj = meR.ok ? await meR.json() : null;
+          const myRoles = ((mj?.data ?? mj)?.roles || []).map((x: any) => x.name).filter(Boolean);
+          if (myRoles.length) {
+            const pr = await fetch("/api/strapi/content-manager/collection-types/api::field-policy.field-policy?pageSize=100&filters[contentType][$eq]=" + encodeURIComponent(uid));
+            if (pr.ok) {
+              const pj = await pr.json(); const hid = new Set<string>(), ro = new Set<string>();
+              (pj.results ?? pj.data ?? []).forEach((p: any) => { if (myRoles.includes(p.role)) { (Array.isArray(p.hidden) ? p.hidden : []).forEach((f: string) => hid.add(f)); (Array.isArray(p.readonly) ? p.readonly : []).forEach((f: string) => ro.add(f)); } });
+              setFp({ hidden: hid, readonly: ro });
+            }
+          }
         } catch {}
       } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
       finally { setLoading(false); }
@@ -212,30 +226,34 @@ export default function EntryEditor({
           )}
           {loading && <div className="muted">{t("e.loading")}</div>}
           {!loading && fields.length === 0 && <div className="muted">{t("e.noFields")}</div>}
-          {fields.map((f) => (
-            <div className="fld" key={f.key}>
-              {f.kind === "input" ? (
-                <>
-                  <label>{labelize(f.key)}</label>
-                  <input value={f.value} onChange={(e) => setVal(f.key, e.target.value)} />
-                </>
-              ) : (
-                <>
-                  <div className="ai-row">
-                    <label style={{ margin: 0, flex: 1 }}>{labelize(f.key)}</label>
-                    {f.key === mainAssistKey && (
-                      <button className="ai-chip" onClick={aiAssist} disabled={assisting}>
-                        <Icon name="spark" />{assisting ? t("e.drafting") : t("e.aiAssist")}
-                      </button>
-                    )}
-                  </div>
-                  {f.kind === "rich"
-                    ? <RichText value={f.value} onChange={(html) => setVal(f.key, html)} placeholder={labelize(f.key)} />
-                    : <textarea value={f.value} onChange={(e) => setVal(f.key, e.target.value)} />}
-                </>
-              )}
-            </div>
-          ))}
+          {fields.filter((f) => !fp.hidden.has(f.key)).map((f) => {
+            const ro = fp.readonly.has(f.key);
+            const lock = ro ? <span className="muted" style={{ fontWeight: 500 }}> · {t("e.locked")}</span> : null;
+            return (
+              <div className={"fld" + (ro ? " fld--ro" : "")} key={f.key}>
+                {f.kind === "input" ? (
+                  <>
+                    <label>{labelize(f.key)}{lock}</label>
+                    <input value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro} />
+                  </>
+                ) : (
+                  <>
+                    <div className="ai-row">
+                      <label style={{ margin: 0, flex: 1 }}>{labelize(f.key)}{lock}</label>
+                      {f.key === mainAssistKey && !ro && (
+                        <button className="ai-chip" onClick={aiAssist} disabled={assisting}>
+                          <Icon name="spark" />{assisting ? t("e.drafting") : t("e.aiAssist")}
+                        </button>
+                      )}
+                    </div>
+                    {f.kind === "rich"
+                      ? <RichText value={f.value} onChange={(html) => setVal(f.key, html)} placeholder={labelize(f.key)} />
+                      : <textarea value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro} />}
+                  </>
+                )}
+              </div>
+            );
+          })}
 
           {media && (
             <div className="fld">

@@ -36,6 +36,44 @@ async function adminTenantFor(strapi: any, email: string) {
   return adminCache.map.get(String(email).toLowerCase()) || null;
 }
 
+/** Field-level RBAC — policy cache + strip ฟิลด์ที่ role ปัจจุบันไม่มีสิทธิ์เขียน (hidden/readonly) */
+let policyCache: { at: number; list: any[] } = { at: 0, list: [] };
+async function getFieldPolicies(strapi: any) {
+  const now = Date.now();
+  if (now - policyCache.at > 15000) {
+    try { policyCache = { at: now, list: await strapi.db.query('api::field-policy.field-policy').findMany({ limit: 500 }) }; }
+    catch { policyCache = { at: now, list: [] }; }
+  }
+  return policyCache.list;
+}
+async function roleNamesOf(strapi: any, user: any): Promise<string[]> {
+  const roles = user?.roles || [];
+  const names = roles.map((r: any) => r?.name).filter(Boolean);
+  if (names.length) return names;
+  const ids = roles.map((r: any) => r?.id).filter(Boolean);
+  if (!ids.length) return [];
+  try { const rs = await strapi.db.query('admin::role').findMany({ where: { id: { $in: ids } }, select: ['name'] }); return rs.map((r: any) => r.name); }
+  catch { return []; }
+}
+async function stripPolicyFields(strapi: any, user: any, uid: string, data: any) {
+  if (!data || typeof data !== 'object') return data;
+  const policies = await getFieldPolicies(strapi);
+  if (!policies.length) return data;
+  const names = await roleNamesOf(strapi, user);
+  if (!names.length) return data;
+  const forbidden = new Set<string>();
+  for (const p of policies) {
+    if (p.contentType === uid && names.includes(p.role)) {
+      (Array.isArray(p.hidden) ? p.hidden : []).forEach((f: string) => forbidden.add(f));
+      (Array.isArray(p.readonly) ? p.readonly : []).forEach((f: string) => forbidden.add(f));
+    }
+  }
+  if (!forbidden.size) return data;
+  const out: any = {};
+  for (const k of Object.keys(data)) if (!forbidden.has(k)) out[k] = data[k];
+  return out;
+}
+
 /**
  * tenant ที่มีผลต่อ request ปัจจุบัน:
  * - public API: มาจาก HTTP middleware (Host/X-Tenant/?tenant) → ctx.state.tenantKey
@@ -100,6 +138,11 @@ export default {
           }
           if (action === 'update') context.params.data = { ...(context.params.data || {}), tenant: eff.id };
         }
+      }
+
+      // Field-level RBAC — strip ฟิลด์ที่ role นี้ห้ามเขียน ก่อนบันทึกจริง
+      if ((action === 'create' || action === 'update') && adminEmail && context.params?.data) {
+        try { context.params.data = await stripPolicyFields(strapi, reqCtx?.state?.user, context.uid, context.params.data); } catch (e) { /* fail-open */ }
       }
 
       const result = await next();

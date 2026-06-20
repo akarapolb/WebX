@@ -454,6 +454,11 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .rl-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .rl-dt{font:inherit;font-size:12px;padding:7px 9px;border:1px solid var(--line2);border-radius:8px;background:var(--sunk);color:var(--ink)}
 .rl-dt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* field access */
+.fp-pick{display:flex;gap:14px;margin-bottom:6px}
+.fp-tbl td,.fp-tbl th{vertical-align:middle}
+.fp-tbl input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.fld--ro input,.fld--ro textarea{opacity:.6;cursor:not-allowed}
 .vb-sched{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(440px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.32);z-index:61;padding:0 20px 20px;animation:drwin .2s ease;overflow:hidden}
 .vb-sched .ovhead{margin:0 -20px 14px;padding:15px 20px}
 .vb-fld{display:block;margin-bottom:12px}
