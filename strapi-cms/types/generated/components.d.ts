@@ -17,6 +17,19 @@ export interface BlockCtaBanner extends Struct.ComponentSchema {
   };
 }
 
+export interface BlockCustom extends Struct.ComponentSchema {
+  collectionName: 'components_block_customs';
+  info: {
+    description: '\u0E1A\u0E25\u0E47\u0E2D\u0E01\u0E17\u0E35\u0E48\u0E2D\u0E49\u0E32\u0E07\u0E2D\u0E34\u0E07\u0E19\u0E34\u0E22\u0E32\u0E21\u0E08\u0E32\u0E01 Block Type (no-code)';
+    displayName: 'Custom';
+    icon: 'puzzle';
+  };
+  attributes: {
+    props: Schema.Attribute.JSON;
+    typeKey: Schema.Attribute.String;
+  };
+}
+
 export interface BlockFeatureGrid extends Struct.ComponentSchema {
   collectionName: 'components_block_feature_grids';
   info: {
@@ -178,6 +191,7 @@ declare module '@strapi/strapi' {
   export module Public {
     export interface ComponentSchemas {
       'block.cta-banner': BlockCtaBanner;
+      'block.custom': BlockCustom;
       'block.feature-grid': BlockFeatureGrid;
       'block.feature-item': BlockFeatureItem;
       'block.hero': BlockHero;

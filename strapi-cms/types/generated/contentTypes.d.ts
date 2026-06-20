@@ -804,6 +804,42 @@ export interface ApiBannerBanner extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiBlockTypeBlockType extends Struct.CollectionTypeSchema {
+  collectionName: 'block_types';
+  info: {
+    description: '\u0E19\u0E34\u0E22\u0E32\u0E21\u0E1A\u0E25\u0E47\u0E2D\u0E01\u0E17\u0E35\u0E48\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E2D\u0E07 (no-code custom blocks) \u0E43\u0E0A\u0E49\u0E01\u0E31\u0E1A Visual Builder';
+    displayName: 'Block Type';
+    pluralName: 'block-types';
+    singularName: 'block-type';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    fieldsSchema: Schema.Attribute.JSON;
+    icon: Schema.Attribute.String;
+    key: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::block-type.block-type'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    template: Schema.Attribute.Text;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
   collectionName: 'blogs';
   info: {
@@ -1427,6 +1463,7 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
         'block.image',
         'block.cta-banner',
         'block.feature-grid',
+        'block.custom',
       ]
     >;
     createdAt: Schema.Attribute.DateTime;
@@ -2472,6 +2509,7 @@ declare module '@strapi/strapi' {
       'api::audit-log.audit-log': ApiAuditLogAuditLog;
       'api::award.award': ApiAwardAward;
       'api::banner.banner': ApiBannerBanner;
+      'api::block-type.block-type': ApiBlockTypeBlockType;
       'api::blog.blog': ApiBlogBlog;
       'api::catalog.catalog': ApiCatalogCatalog;
       'api::complaint.complaint': ApiComplaintComplaint;

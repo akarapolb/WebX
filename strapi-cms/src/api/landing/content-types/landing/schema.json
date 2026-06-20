@@ -51,7 +51,8 @@
         "block.richtext",
         "block.image",
         "block.cta-banner",
-        "block.feature-grid"
+        "block.feature-grid",
+        "block.custom"
       ]
     },
     "tenant": {

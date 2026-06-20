@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import RichText from "./RichText";
 import InlineText from "./InlineText";
+import BlockTypeEditor, { BlockType } from "./BlockTypeEditor";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 
@@ -27,14 +28,26 @@ function serialize(b: Block) {
   for (const [k, v] of Object.entries(b)) {
     if (k === "__component" || k === "id") continue;
     if (Array.isArray(v)) out[k] = v.map((it) => (it && typeof it === "object" ? Object.fromEntries(Object.entries(it).filter(([kk]) => kk !== "id" || typeof (it as any).id === "number").map(([kk, vv]) => [kk, vv])) : it));
-    else if (v && typeof v === "object") { if (v.id != null && (v.url != null || v.mime != null || v.ext != null)) out[k] = v.id; }
+    else if (v && typeof v === "object") { if (v.id != null && (v.url != null || v.mime != null || v.ext != null)) out[k] = v.id; else out[k] = v; }
     else out[k] = v;
   }
   return out;
 }
 
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as any)[c]));
+function interpolate(bt: BlockType, props: Record<string, any>) {
+  const rich = new Set((bt.fieldsSchema || []).filter((f: any) => f.type === "richtext").map((f: any) => f.key));
+  const imgs = new Set((bt.fieldsSchema || []).filter((f: any) => f.type === "image").map((f: any) => f.key));
+  return (bt.template || "").replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_m, k) => {
+    const v = props?.[k];
+    if (v == null) return "";
+    if (imgs.has(k)) { const u = (v as any).url || v; return typeof u === "string" ? (u.startsWith("http") ? u : "/api/strapi" + u) : ""; }
+    return rich.has(k) ? String(v) : esc(String(v));
+  });
+}
+
 export default function VisualBuilder() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { currentKey, current } = useTenant();
   const [pages, setPages] = useState<Page[]>([]);
   const [sel, setSel] = useState<Page | null>(null);
@@ -42,6 +55,12 @@ export default function VisualBuilder() {
   const [active, setActive] = useState<number>(-1);
   const [device, setDevice] = useState<Device>("desktop");
   const [dragI, setDragI] = useState<number>(-1);
+  const [insAt, setInsAt] = useState<number>(-1);
+  const [uploadingI, setUploadingI] = useState<number>(-1);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [customTypes, setCustomTypes] = useState<BlockType[]>([]);
+  const [showTypeEditor, setShowTypeEditor] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
@@ -62,6 +81,16 @@ export default function VisualBuilder() {
   }, [tenantKey]);
   useEffect(() => { loadPages(); }, [loadPages]);
 
+  const loadTypes = useCallback(async () => {
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/api::block-type.block-type?pageSize=100");
+      if (!r.ok) return;
+      const j = await r.json();
+      setCustomTypes((j.results ?? j.data ?? []).map((e: any) => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "" })));
+    } catch {}
+  }, []);
+  useEffect(() => { loadTypes(); }, [loadTypes]);
+
   async function open(p: Page) {
     setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null);
     try {
@@ -78,6 +107,38 @@ export default function VisualBuilder() {
   const remove = (i: number) => { setBlocks((b) => b.filter((_, j) => j !== i)); setActive(-1); };
   const dup = (i: number) => setBlocks((b) => { const c = JSON.parse(JSON.stringify(b[i])); delete c.id; const n = [...b]; n.splice(i + 1, 0, c); setActive(i + 1); return n; });
   const add = (comp: string) => { const m = metaOf(comp); setBlocks((b) => { setActive(b.length); return [...b, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))]; }); };
+  const addAt = (idx: number, comp: string) => { const m = metaOf(comp); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))); setActive(idx); return n; }); setInsAt(-1); };
+  async function uploadImg(i: number, file: File) {
+    setUploadingI(i);
+    const fd = new FormData(); fd.append("files", file);
+    try {
+      const r = await fetch("/api/strapi/upload", { method: "POST", body: fd });
+      if (r.ok) { const j = await r.json(); const f = Array.isArray(j) ? j[0] : j; if (f?.id) setField(i, "image", { id: f.id, url: f.url }); }
+    } finally { setUploadingI(-1); }
+  }
+  // custom blocks
+  const addCustom = (ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); setBlocks((b) => { setActive(b.length); return [...b, { __component: "block.custom", typeKey: ct.key, props }]; }); };
+  const setProp = (i: number, key: string, val: any) => setBlocks((b) => b.map((x, j) => (j === i ? { ...x, props: { ...(x.props || {}), [key]: val } } : x)));
+  async function uploadProp(i: number, key: string, file: File) {
+    setUploadingI(i);
+    const fd = new FormData(); fd.append("files", file);
+    try { const r = await fetch("/api/strapi/upload", { method: "POST", body: fd }); if (r.ok) { const j = await r.json(); const f = Array.isArray(j) ? j[0] : j; if (f?.id) setProp(i, key, { id: f.id, url: f.url }); } } finally { setUploadingI(-1); }
+  }
+  const iconOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.icon || "grid") : (metaOf(b.__component)?.icon || "doc");
+  const labelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
+  // AI: ground a new section in real tenant content via /api/ai/answer
+  async function aiGenerate() {
+    const p = aiPrompt.trim(); if (!p) return;
+    setAiBusy(true);
+    try {
+      const tn = tenantKey || "dga";
+      const j = await fetch("/api/strapi/api/ai/answer?q=" + encodeURIComponent(p) + "&tenant=" + encodeURIComponent(tn) + "&locale=" + lang).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const ans = j?.data?.answer || "";
+      const block = { __component: "block.hero", kicker: "AI", heading: p, subheading: ans || (lang === "th" ? "เพิ่มรายละเอียดที่นี่" : "Add details here"), ctaLabel: lang === "th" ? "เริ่มใช้งาน" : "Get started", ctaUrl: "#" };
+      setBlocks((b) => { setActive(b.length); return [...b, block]; });
+      setAiPrompt("");
+    } finally { setAiBusy(false); }
+  }
   // feature items
   const setItem = (i: number, k: number, field: string, v: string) => setBlocks((b) => b.map((x, j) => j === i ? { ...x, items: (x.items || []).map((it: any, kk: number) => kk === k ? { ...it, [field]: v } : it) } : x));
   const addItem = (i: number) => setBlocks((b) => b.map((x, j) => j === i ? { ...x, items: [...(x.items || []), { title: "Feature", text: "" }] } : x));
@@ -141,7 +202,25 @@ export default function VisualBuilder() {
         </div>
       );
     }
+    if (c === "block.custom") {
+      const bt = customTypes.find((x) => x.key === b.typeKey);
+      if (!bt) return <div className="vbk-rich"><span className="muted">Unknown block: {b.typeKey}</span></div>;
+      return <div className="vbk-custom" dangerouslySetInnerHTML={{ __html: interpolate(bt, b.props || {}) }} />;
+    }
     return <div className="vbk-rich"><span className="muted">{c}</span></div>;
+  }
+
+  function ins(index: number) {
+    return (
+      <div className="vbk-ins" onClick={(e) => e.stopPropagation()}>
+        <button className="vbk-ins-btn" onClick={() => setInsAt(insAt === index ? -1 : index)}><Icon name="plus" /></button>
+        {insAt === index && (
+          <div className="vbk-ins-pop">
+            {TYPES.map((ty) => <button key={ty.comp} onClick={() => addAt(index, ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
+          </div>
+        )}
+      </div>
+    );
   }
 
   const aMeta = active >= 0 ? metaOf(blocks[active]?.__component) : null;
@@ -179,8 +258,8 @@ export default function VisualBuilder() {
                 onDragOver={(e) => e.preventDefault()} onDrop={() => { reorder(dragI, i); setDragI(-1); }}>
                 <div className="vb-block-h" onClick={() => setActive(isA ? -1 : i)}>
                   <span className="vb-grip"><Icon name="drag" /></span>
-                  <Icon name={bm?.icon || "doc"} />
-                  <b>{bm ? t(bm.key) : b.__component}</b>
+                  <Icon name={iconOf(b)} />
+                  <b>{labelOf(b)}</b>
                   <div className="vb-block-a" onClick={(e) => e.stopPropagation()}>
                     <button title="↑" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
                     <button title="↓" onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
@@ -200,6 +279,20 @@ export default function VisualBuilder() {
                             : <input value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} />}
                       </div>
                     ))}
+                    {(b.__component === "block.image" || b.__component === "block.hero") && (
+                      <div className="fld" style={{ marginBottom: 9 }}>
+                        <label style={{ fontSize: 11 }}>image</label>
+                        <div className="ed-media">
+                          {b.image?.url
+                            ? <img className="ed-img" src={(b.image.url as string).startsWith("http") ? b.image.url : "/api/strapi" + b.image.url} alt="" />
+                            : <div className="ed-img ed-img--none">{t("m.none")}</div>}
+                          <label className="btn btn--g" style={{ cursor: "pointer" }}>
+                            <Icon name="img" />{uploadingI === i ? t("m.uploading") : t("m.change")}
+                            <input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && uploadImg(i, e.target.files[0])} />
+                          </label>
+                        </div>
+                      </div>
+                    )}
                     {b.__component === "block.feature-grid" && (
                       <div className="vb-items">
                         <label style={{ fontSize: 11 }}>items</label>
@@ -213,16 +306,49 @@ export default function VisualBuilder() {
                         <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addItem(i)}><Icon name="plus" />item</button>
                       </div>
                     )}
+                    {b.__component === "block.custom" && (() => {
+                      const bt = customTypes.find((x) => x.key === b.typeKey);
+                      if (!bt) return <div className="muted" style={{ fontSize: 12 }}>Unknown block type: {b.typeKey}</div>;
+                      return (bt.fieldsSchema || []).map((f) => (
+                        <div className="fld" key={f.key} style={{ marginBottom: 9 }}>
+                          <label style={{ fontSize: 11 }}>{f.label || f.key}</label>
+                          {f.type === "richtext"
+                            ? <RichText value={b.props?.[f.key] || ""} onChange={(h) => setProp(i, f.key, h)} />
+                            : f.type === "image"
+                              ? <div className="ed-media">
+                                  {b.props?.[f.key]?.url ? <img className="ed-img" src={(b.props[f.key].url as string).startsWith("http") ? b.props[f.key].url : "/api/strapi" + b.props[f.key].url} alt="" /> : <div className="ed-img ed-img--none">{t("m.none")}</div>}
+                                  <label className="btn btn--g" style={{ cursor: "pointer" }}><Icon name="img" />{uploadingI === i ? t("m.uploading") : t("m.change")}<input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && uploadProp(i, f.key, e.target.files[0])} /></label>
+                                </div>
+                              : f.type === "textarea"
+                                ? <textarea value={b.props?.[f.key] || ""} onChange={(e) => setProp(i, f.key, e.target.value)} style={{ minHeight: 54 }} />
+                                : <input value={b.props?.[f.key] || ""} onChange={(e) => setProp(i, f.key, e.target.value)} />}
+                        </div>
+                      ));
+                    })()}
                   </div>
                 )}
               </div>
             );
           })}
           <div className="vb-add">
-            <div className="muted" style={{ fontSize: 11, marginBottom: 7 }}>{t("vb.addblock")}</div>
+            <div className="vb-ai">
+              <Icon name="spark" />
+              <input value={aiPrompt} placeholder={t("vb.aiph")} onChange={(e) => setAiPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && aiGenerate()} />
+              <button className="vb-ai-btn" onClick={aiGenerate} disabled={aiBusy || !aiPrompt.trim()}>{aiBusy ? t("vb.aigen") : t("vb.aibtn")}</button>
+            </div>
+            <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.addblock")}</div>
             <div className="vb-add-grid">
               {TYPES.map((ty) => <button key={ty.comp} className="vb-add-btn" onClick={() => add(ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
             </div>
+            {customTypes.length > 0 && (
+              <>
+                <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.custom")}</div>
+                <div className="vb-add-grid">
+                  {customTypes.map((ct) => <button key={ct.key} className="vb-add-btn" onClick={() => addCustom(ct)}><Icon name={ct.icon || "grid"} />{ct.name}</button>)}
+                </div>
+              </>
+            )}
+            <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={() => setShowTypeEditor(true)}><Icon name="code" />{t("vb.manage")}</button>
           </div>
         </aside>
 
@@ -234,23 +360,29 @@ export default function VisualBuilder() {
                 <div className="vbk-nav"><b>{current?.name || "WebX"}</b><span>Home</span><span>Services</span><span>News</span></div>
                 {blocks.length === 0 && <div className="muted" style={{ padding: 50, textAlign: "center" }}>{t("vb.noblocks")}</div>}
                 {blocks.map((b, i) => (
-                  <div className={"vbk-wrap" + (i === active ? " sel" : "")} key={i} onClick={() => setActive(i)}>
-                    {i === active && (
-                      <div className="vbk-tools" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
-                        <button onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
-                        <button onClick={() => dup(i)}>⧉</button>
-                        <button className="rm" onClick={() => remove(i)}><Icon name="trash" /></button>
-                      </div>
-                    )}
-                    {preview(b, i)}
+                  <div key={i}>
+                    {ins(i)}
+                    <div className={"vbk-wrap" + (i === active ? " sel" : "")} onClick={() => setActive(i)}>
+                      {i === active && (
+                        <div className="vbk-tools" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
+                          <button onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
+                          <button onClick={() => dup(i)}>⧉</button>
+                          <button className="rm" onClick={() => remove(i)}><Icon name="trash" /></button>
+                        </div>
+                      )}
+                      {preview(b, i)}
+                    </div>
                   </div>
                 ))}
+                {blocks.length > 0 && ins(blocks.length)}
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {showTypeEditor && <BlockTypeEditor onClose={() => setShowTypeEditor(false)} onSaved={loadTypes} />}
     </>
   );
 }
