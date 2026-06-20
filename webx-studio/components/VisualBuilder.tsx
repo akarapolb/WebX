@@ -23,6 +23,25 @@ function fmtTime(iso: string, lang: string) {
   if (!iso) return "";
   try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; }
 }
+type DiffRow = { i: number; comp: string; status: "added" | "removed" | "changed" | "replaced" | "same"; fields?: string[] };
+// block-level diff of a snapshot (prev) vs the current canvas (curr) — no Strapi EE needed
+function diffBlocks(prev: any[], curr: any[]): { added: number; removed: number; changed: number; rows: DiffRow[] } {
+  prev = prev || []; curr = curr || [];
+  const rows: DiffRow[] = []; let added = 0, removed = 0, changed = 0;
+  const n = Math.max(prev.length, curr.length);
+  for (let i = 0; i < n; i++) {
+    const a = prev[i], b = curr[i];
+    if (a && !b) { rows.push({ i, comp: a.__component, status: "removed" }); removed++; continue; }
+    if (!a && b) { rows.push({ i, comp: b.__component, status: "added" }); added++; continue; }
+    if (a.__component !== b.__component) { rows.push({ i, comp: b.__component, status: "replaced" }); changed++; continue; }
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => k !== "__component" && k !== "id"));
+    const fields: string[] = [];
+    keys.forEach((k) => { if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) fields.push(k); });
+    if (fields.length) { rows.push({ i, comp: b.__component, status: "changed", fields }); changed++; }
+    else rows.push({ i, comp: b.__component, status: "same" });
+  }
+  return { added, removed, changed, rows };
+}
 const TYPES = [
   { comp: "block.hero", key: "vb.hero", icon: "layout", fields: [{ k: "kicker" }, { k: "heading" }, { k: "subheading", ta: true }, { k: "ctaLabel" }, { k: "ctaUrl" }], def: { heading: "New hero", subheading: "Describe your offer here", ctaLabel: "Get started" } },
   { comp: "block.richtext", key: "vb.richtext", icon: "doc", fields: [{ k: "body", rich: true }], def: { body: "<p>Write something compelling…</p>" } },
@@ -83,6 +102,7 @@ export default function VisualBuilder() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [schedOpen, setSchedOpen] = useState(false);
   const [sched, setSched] = useState<{ start: string; end: string }>({ start: "", end: "" });
+  const [cmpId, setCmpId] = useState<any>(null);
   const tenantKey = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   const loadPages = useCallback(async () => {
@@ -324,6 +344,7 @@ export default function VisualBuilder() {
     );
   }
 
+  const compName = (comp: string) => { const m = metaOf(comp); return m ? t(m.key) : comp.replace("block.", ""); };
   const aMeta = active >= 0 ? metaOf(blocks[active]?.__component) : null;
 
   return (
@@ -506,15 +527,35 @@ export default function VisualBuilder() {
             </div>
             <div className="vb-vers">
               {versions.length === 0 && <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>{t("vb.nohistory")}</div>}
-              {versions.map((v) => (
-                <div className="vb-ver" key={v.id}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <b>{v.label || "—"}</b>
-                    <div className="muted" style={{ fontSize: 11 }}>{fmtTime(v.createdAt, lang)} · {(v.data?.blocks?.length ?? 0)} {t("vb.blocks_n")}</div>
+              {versions.map((v) => {
+                const open = cmpId === v.id;
+                const d = open ? diffBlocks(v.data?.blocks, blocks) : null;
+                const changed = d ? d.rows.filter((r) => r.status !== "same") : [];
+                return (
+                  <div className="vb-vergrp" key={v.id}>
+                    <div className="vb-ver">
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <b>{v.label || "—"}</b>
+                        <div className="muted" style={{ fontSize: 11 }}>{fmtTime(v.createdAt, lang)} · {(v.data?.blocks?.length ?? 0)} {t("vb.blocks_n")}</div>
+                      </div>
+                      <button className="vb-cmp" onClick={() => setCmpId(open ? null : v.id)}>{open ? t("vb.hidediff") : t("vb.compare")}</button>
+                      <button className="btn btn--g" onClick={() => restore(v)}><Icon name="undo" />{t("vb.restore")}</button>
+                    </div>
+                    {open && d && (
+                      <div className="vb-diff">
+                        {changed.length === 0 ? <div className="muted" style={{ fontSize: 12, padding: "2px 2px 4px" }}>{t("vb.nochanges")}</div> :
+                          changed.map((r, ix) => (
+                            <div className={"vb-diff-row " + r.status} key={ix}>
+                              <span className="vb-diff-tag">{t("vb.diff" + r.status)}</span>
+                              <span className="vb-diff-name">{compName(r.comp)} #{r.i + 1}</span>
+                              {r.fields && r.fields.length > 0 && <span className="muted" style={{ fontSize: 11 }}>· {r.fields.join(", ")}</span>}
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
-                  <button className="btn btn--g" onClick={() => restore(v)}><Icon name="undo" />{t("vb.restore")}</button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>

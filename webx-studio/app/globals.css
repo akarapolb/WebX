@@ -385,6 +385,17 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vb-ver{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:8px;background:var(--sunk)}
 .vb-ver b{font-size:13px;display:block}
 .vb-ver .btn{flex:none}
+.vb-vergrp{margin-bottom:8px}
+.vb-vergrp .vb-ver{margin-bottom:0}
+.vb-cmp{flex:none;font-size:11px;font-weight:600;color:var(--mut);background:none;border:none;text-decoration:underline;text-underline-offset:2px;padding:4px 2px}
+.vb-cmp:hover{color:var(--accent)}
+.vb-diff{border:1px solid var(--line);border-top:none;border-radius:0 0 11px 11px;margin:-4px 0 0;padding:8px 11px 9px;background:var(--bg)}
+.vb-diff-row{display:flex;align-items:center;gap:7px;font-size:12px;padding:2.5px 0}
+.vb-diff-name{font-weight:600;color:var(--ink)}
+.vb-diff-tag{flex:none;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:5px}
+.vb-diff-row.added .vb-diff-tag{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.vb-diff-row.removed .vb-diff-tag{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
+.vb-diff-row.changed .vb-diff-tag,.vb-diff-row.replaced .vb-diff-tag{color:var(--accent);background:var(--accent-soft)}
 .vb-sched{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(440px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.32);z-index:61;padding:0 20px 20px;animation:drwin .2s ease;overflow:hidden}
 .vb-sched .ovhead{margin:0 -20px 14px;padding:15px 20px}
 .vb-fld{display:block;margin-bottom:12px}
