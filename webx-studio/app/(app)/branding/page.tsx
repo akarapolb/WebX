@@ -1,2 +1,2 @@
-import Stub from "@/components/Stub";
-export default function Page() { return <Stub id="branding" icon="palette" />; }
+import Branding from "@/components/Branding";
+export default function Page() { return <Branding />; }

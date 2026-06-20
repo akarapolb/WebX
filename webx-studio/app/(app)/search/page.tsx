@@ -1,2 +1,2 @@
-import Stub from "@/components/Stub";
-export default function Page() { return <Stub id="search" icon="spark" />; }
+import AISearch from "@/components/AISearch";
+export default function Page() { return <AISearch />; }
