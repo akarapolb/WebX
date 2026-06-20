@@ -21,7 +21,9 @@ async function handle(req: NextRequest, path: string[]) {
 
   try {
     const r = await fetch(target, init);
-    const body = await r.text();
+    // arrayBuffer (not text) so binary responses — uploaded images, files — pass
+    // through intact; text() would UTF-8-decode and corrupt them. JSON is unaffected.
+    const body = await r.arrayBuffer();
     // Audit logging is handled server-side by the Strapi document-service middleware
     // (src/index.ts), which captures every admin write incl. content-manager + super admin.
     return new NextResponse(body, {
