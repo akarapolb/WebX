@@ -17,6 +17,8 @@ const LONG = new Set(["excerpt", "description", "answer", "summary", "detail"]);
 function labelize(k: string) {
   return k.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^\w/, (c) => c.toUpperCase());
 }
+const isImageFile = (mime?: string, url?: string) => (mime ? mime.startsWith("image/") : /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(url || ""));
+const mediaSrc = (url: string) => (url.startsWith("http") ? url : "/api/strapi" + url);
 
 export default function EntryEditor({
   uid, docId, locale, typeName, onClose, onSaved,
@@ -30,7 +32,7 @@ export default function EntryEditor({
   const [busy, setBusy] = useState<"" | "save" | "publish">("");
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const [assisting, setAssisting] = useState(false);
-  const [media, setMedia] = useState<{ key: string; url: string; newId?: number } | null>(null);
+  const [media, setMedia] = useState<{ key: string; url: string; mime?: string; name?: string; newId?: number } | null>(null);
   const [rels, setRels] = useState<{ key: string; items: string[] }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [review, setReview] = useState<any>(null);
@@ -58,12 +60,12 @@ export default function EntryEditor({
         fs.sort((a, b) => ["input", "textarea", "rich"].indexOf(a.kind) - ["input", "textarea", "rich"].indexOf(b.kind));
         setFields(fs);
         // media (single file w/ url) + relations (arrays of records)
-        let m: { key: string; url: string } | null = null;
+        let m: { key: string; url: string; mime?: string; name?: string } | null = null;
         const rs: { key: string; items: string[] }[] = [];
         for (const k of Object.keys(e)) {
           if (SYS.has(k) || k === "localizations") continue;
           const v = e[k];
-          if (v && typeof v === "object" && !Array.isArray(v) && typeof v.url === "string") { if (!m) m = { key: k, url: v.url }; }
+          if (v && typeof v === "object" && !Array.isArray(v) && typeof v.url === "string") { if (!m) m = { key: k, url: v.url, mime: v.mime, name: v.name }; }
           else if (Array.isArray(v) && v.length && typeof v[0] === "object") {
             rs.push({ key: k, items: v.slice(0, 12).map((o: any) => o.title || o.name || o.label || ("#" + (o.documentId ?? o.id))) });
           }
@@ -128,7 +130,7 @@ export default function EntryEditor({
     const fd = new FormData(); fd.append("files", file);
     try {
       const r = await fetch("/api/strapi/upload", { method: "POST", body: fd });
-      if (r.ok) { const j = await r.json(); const f = Array.isArray(j) ? j[0] : j; if (f?.id) setMedia((m) => ({ key: m?.key || "coverImage", url: f.url, newId: f.id })); }
+      if (r.ok) { const j = await r.json(); const f = Array.isArray(j) ? j[0] : j; if (f?.id) setMedia((m) => ({ key: m?.key || "coverImage", url: f.url, mime: f.mime, name: f.name, newId: f.id })); }
       else setMsg({ t: "Upload failed (HTTP " + r.status + ")", ok: false });
     } catch { setMsg({ t: "Upload failed", ok: false }); }
     finally { setUploading(false); }
@@ -260,11 +262,13 @@ export default function EntryEditor({
               <label>{labelize(media.key)}</label>
               <div className="ed-media">
                 {media.url
-                  ? <img className="ed-img" src={media.url.startsWith("http") ? media.url : "/api/strapi" + media.url} alt="" />
+                  ? (isImageFile(media.mime, media.url)
+                    ? <img className="ed-img" src={mediaSrc(media.url)} alt="" />
+                    : <a className="ed-img ed-file" href={mediaSrc(media.url)} target="_blank" rel="noreferrer"><Icon name="doc" /><span>{media.name || media.url.split("/").pop()}</span></a>)
                   : <div className="ed-img ed-img--none">{t("m.none")}</div>}
                 <label className="btn btn--g" style={{ cursor: "pointer" }}>
                   <Icon name="img" />{uploading ? t("m.uploading") : t("m.change")}
-                  <input type="file" accept="image/*" hidden disabled={uploading}
+                  <input type="file" hidden disabled={uploading}
                     onChange={(ev) => ev.target.files?.[0] && upload(ev.target.files[0])} />
                 </label>
               </div>
