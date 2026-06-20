@@ -3,9 +3,15 @@ import type { Core } from '@strapi/strapi';
 const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Admin => ({
   auth: {
     secret: env('ADMIN_JWT_SECRET'),
-    // session/idle timeout หลังบ้าน — token หมดอายุแล้วต้องล็อกอินใหม่ (TOR Security)
+    // Strapi 5.48 session model (options.expiresIn is deprecated). Values in ms.
+    // BFF holds the opaque token without auto-refresh, so the idle window must be long.
+    sessions: {
+      idleSessionLifespan: env.int('ADMIN_IDLE_TTL', 1000 * 60 * 60 * 8), // 8h idle
+      maxSessionLifespan: env.int('ADMIN_SESSION_LIFESPAN', 1000 * 60 * 60 * 8), // 8h absolute
+      maxRefreshTokenLifespan: env.int('ADMIN_REFRESH_TTL', 1000 * 60 * 60 * 24),
+    },
     options: {
-      expiresIn: env('ADMIN_SESSION_TTL', '30m'),
+      expiresIn: env('ADMIN_SESSION_TTL', '8h'),
     },
   },
   apiToken: {

@@ -13,6 +13,7 @@ type Device = "desktop" | "tablet" | "mobile";
 
 const LANDING_UID = "api::landing.landing";
 const PV_UID = "api::page-version.page-version";
+const AB_UID = "api::ab-event.ab-event";
 function toLocalInput(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso); if (isNaN(d.getTime())) return "";
@@ -103,6 +104,12 @@ export default function VisualBuilder() {
   const [schedOpen, setSchedOpen] = useState(false);
   const [sched, setSched] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const [cmpId, setCmpId] = useState<any>(null);
+  const [editing, setEditing] = useState<"A" | "B">("A");
+  const [otherBlocks, setOtherBlocks] = useState<Block[]>([]);
+  const [abEnabled, setAbEnabled] = useState(false);
+  const [abSplit, setAbSplit] = useState(50);
+  const [abOpen, setAbOpen] = useState(false);
+  const [abStats, setAbStats] = useState<{ A: { view: number; conversion: number }; B: { view: number; conversion: number } }>({ A: { view: 0, conversion: 0 }, B: { view: 0, conversion: 0 } });
   const tenantKey = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   const loadPages = useCallback(async () => {
@@ -138,8 +145,13 @@ export default function VisualBuilder() {
     try {
       const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + p.docId + (p.locale ? "?locale=" + p.locale : ""));
       const j = await r.json();
-      const bl = ((j.data ?? j).blocks ?? []) as Block[];
+      const data = j.data ?? j;
+      const bl = (data.blocks ?? []) as Block[];
       setBlocks(bl); setActive(bl.length ? 0 : -1);
+      setOtherBlocks((data.variantBlocks ?? []) as Block[]);
+      setEditing("A");
+      setAbEnabled(!!data.abEnabled);
+      setAbSplit(typeof data.abSplit === "number" ? data.abSplit : 50);
     } catch {} finally { setLoading(false); }
   }
 
@@ -193,13 +205,19 @@ export default function VisualBuilder() {
   const addItem = (i: number) => setBlocks((b) => b.map((x, j) => j === i ? { ...x, items: [...(x.items || []), { title: "Feature", text: "" }] } : x));
   const rmItem = (i: number, k: number) => setBlocks((b) => b.map((x, j) => j === i ? { ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) } : x));
 
+  // build the landing body, writing BOTH variants (A = dynamic zone, B = json) + A/B config
+  function pageBody() {
+    const aBlocks = editing === "A" ? blocks : otherBlocks;
+    const bBlocks = editing === "B" ? blocks : otherBlocks;
+    return { blocks: aBlocks.map(serialize), variantBlocks: bBlocks, abEnabled, abSplit, ...(sel?.locale ? { locale: sel.locale } : {}) };
+  }
   async function save() {
     if (!sel) return;
     setSaving(true); setMsg(null);
     try {
       const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : ""), {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blocks: blocks.map(serialize), ...(sel.locale ? { locale: sel.locale } : {}) }),
+        body: JSON.stringify(pageBody()),
       });
       setMsg(r.ok ? { t: t("vb.saved"), ok: true } : { t: "Save failed (HTTP " + r.status + ")", ok: false });
     } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
@@ -211,7 +229,7 @@ export default function VisualBuilder() {
     setSaving(true); setMsg(null);
     const base = "/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : "");
     try {
-      const sv = await fetch(base, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ blocks: blocks.map(serialize), ...(sel.locale ? { locale: sel.locale } : {}) }) });
+      const sv = await fetch(base, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pageBody()) });
       if (!sv.ok) { setMsg({ t: "Save failed (HTTP " + sv.status + ")", ok: false }); setSaving(false); return; }
       const pr = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + "/actions/publish" + (sel.locale ? "?locale=" + sel.locale : ""), { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       setMsg(pr.ok ? { t: t("vb.published"), ok: true } : { t: "Publish failed (HTTP " + pr.status + ")", ok: false });
@@ -269,11 +287,33 @@ export default function VisualBuilder() {
     finally { setSaving(false); }
   }
 
+  // ---- A/B testing ----
+  function setEditingVariant(v: "A" | "B") {
+    if (v === editing) return;
+    setOtherBlocks(blocks);            // stash the array we're leaving
+    setBlocks(otherBlocks);            // load the other variant onto the canvas
+    setActive(otherBlocks.length ? 0 : -1);
+    setEditing(v);
+  }
+  async function loadAbStats() {
+    if (!sel) return;
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + AB_UID + "?pageSize=2000&filters[documentRef][$eq]=" + encodeURIComponent(sel.docId));
+      if (!r.ok) return;
+      const j = await r.json();
+      const ev = (j.results ?? j.data ?? []) as any[];
+      const agg = { A: { view: 0, conversion: 0 }, B: { view: 0, conversion: 0 } };
+      ev.forEach((e) => { const v = e.variant === "B" ? "B" : "A"; const k = e.kind === "conversion" ? "conversion" : "view"; (agg as any)[v][k]++; });
+      setAbStats(agg);
+    } catch {}
+  }
+  function openAb() { if (!sel) return; setAbOpen(true); loadAbStats(); }
+
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") { if (previewMode) setPreviewMode(false); if (historyOpen) setHistoryOpen(false); if (schedOpen) setSchedOpen(false); } }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") { if (previewMode) setPreviewMode(false); if (historyOpen) setHistoryOpen(false); if (schedOpen) setSchedOpen(false); if (abOpen) setAbOpen(false); } }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [previewMode, historyOpen, schedOpen]);
+  }, [previewMode, historyOpen, schedOpen, abOpen]);
 
   // ---- canvas preview (inline-editable) ----
   function preview(b: Block, i: number) {
@@ -363,6 +403,7 @@ export default function VisualBuilder() {
             ))}
           </div>
           {sel && !previewMode && <>
+            <button className={"btn btn--g" + (abEnabled ? " ab-on" : "")} onClick={openAb} title={t("vb.ab")}><Icon name="split" />{t("vb.ab")}{abEnabled ? " ·" + (editing) : ""}</button>
             <button className="btn btn--g" onClick={openSchedule} title={t("vb.schedule")}><Icon name="calendar" />{t("vb.schedule")}</button>
             <button className="btn btn--g" onClick={loadHistory} title={t("vb.history")}><Icon name="clock" />{t("vb.history")}</button>
           </>}
@@ -377,6 +418,7 @@ export default function VisualBuilder() {
       {msg && <div className="panel" style={{ marginBottom: 14 }}><span className={"badge " + (msg.ok ? "b-ok" : "b-warn")}><span className="dot" />{msg.ok ? "OK" : "!"}</span><span style={{ marginLeft: 10, color: msg.ok ? "var(--ok)" : "var(--bad)", fontWeight: 600 }}>{msg.t}</span></div>}
 
       {previewMode && <div className="vb-pvbar"><Icon name="eye" />{t("vb.previewhint")}</div>}
+      {editing === "B" && !previewMode && <div className="vb-pvbar vb-bbar"><Icon name="split" />{t("vb.editingb")}</div>}
       <div className={"vb2" + (previewMode ? " preview" : "")}>
         <aside className="vb-insp">
           <div className="vb-insp-h">{t("vb.blocks")} {blocks.length > 0 && <span className="mono" style={{ color: "var(--mut)" }}>{blocks.length}</span>}</div>
@@ -572,6 +614,47 @@ export default function VisualBuilder() {
             <div style={{ display: "flex", gap: 10, marginTop: 16, alignItems: "center" }}>
               <button className="btn btn--p" onClick={saveSchedule} disabled={saving}>{t("vb.savesched")}</button>
               <button className="btn btn--g" onClick={() => setSched({ start: "", end: "" })}>{t("vb.clear")}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {abOpen && (
+        <>
+          <div className="scrim" onClick={() => setAbOpen(false)} />
+          <div className="vb-sched vb-ab" role="dialog" aria-modal="true" aria-label={t("vb.ab")}>
+            <div className="ovhead"><h3 style={{ flex: 1 }}>{t("vb.ab")}</h3><button className="ic-btn" onClick={() => setAbOpen(false)} aria-label={t("a11y.close")}><Icon name="close" /></button></div>
+            <label className="vb-abrow"><input type="checkbox" checked={abEnabled} onChange={(e) => setAbEnabled(e.target.checked)} /><span>{t("vb.abenable")}</span></label>
+            {abEnabled && (
+              <>
+                <div className="vb-fld"><span>{t("vb.absplit")} — B {abSplit}% · A {100 - abSplit}%</span>
+                  <input type="range" min={0} max={100} step={5} value={abSplit} onChange={(e) => setAbSplit(Number(e.target.value))} /></div>
+                <div className="vb-fld"><span>{t("vb.abediting")}</span>
+                  <div className="seg vb-abseg">
+                    <button className={editing === "A" ? "on" : ""} onClick={() => setEditingVariant("A")}>A</button>
+                    <button className={editing === "B" ? "on" : ""} onClick={() => setEditingVariant("B")}>B</button>
+                    <button className="vb-copya" onClick={() => { setOtherBlocks(blocks.map((b) => JSON.parse(JSON.stringify(b)))); }} title={t("vb.abcopya")}><Icon name="copy" />{t("vb.abcopya")}</button>
+                  </div></div>
+                <div className="vb-abres">
+                  {(["A", "B"] as const).map((vk) => {
+                    const s = abStats[vk]; const rate = s.view ? Math.round((s.conversion / s.view) * 1000) / 10 : 0;
+                    const other = abStats[vk === "A" ? "B" : "A"]; const orate = other.view ? other.conversion / other.view : 0;
+                    const lead = s.view > 0 && (s.conversion / s.view) >= orate && rate > 0;
+                    return (
+                      <div className={"vb-abcard" + (editing === vk ? " on" : "")} key={vk}>
+                        <b>Variant {vk}{lead ? <span className="vb-lead">{t("vb.abwinner")}</span> : null}</b>
+                        <div className="vb-abnums"><div className="vb-abnum">{s.view}<span>{t("vb.abviews")}</span></div><div className="vb-abnum">{s.conversion}<span>{t("vb.abconv")}</span></div></div>
+                        <div className="vb-abrate">{rate}% <span>{t("vb.abrate")}</span></div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="vb-cmp" onClick={loadAbStats}>↻ {t("vb.abrefresh")}</button>
+              </>
+            )}
+            <p className="muted" style={{ fontSize: 11.5, margin: "12px 0 0" }}>{t("vb.abhint")}</p>
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              <button className="btn btn--p" onClick={() => save()} disabled={saving}>{t("vb.save")}</button>
             </div>
           </div>
         </>

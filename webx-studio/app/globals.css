@@ -396,6 +396,25 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vb-diff-row.added .vb-diff-tag{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .vb-diff-row.removed .vb-diff-tag{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
 .vb-diff-row.changed .vb-diff-tag,.vb-diff-row.replaced .vb-diff-tag{color:var(--accent);background:var(--accent-soft)}
+/* A/B testing */
+.vb-bbar{background:color-mix(in srgb,var(--accent) 16%,var(--sunk));color:var(--accent)}
+.btn.ab-on{border-color:color-mix(in srgb,var(--accent) 45%,var(--line2));color:var(--accent)}
+.vb-abrow{display:flex;align-items:flex-start;gap:9px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;line-height:1.4}
+.vb-abrow input{margin-top:2px;width:16px;height:16px;flex:none;accent-color:var(--accent)}
+.vb-abseg{flex-wrap:wrap}
+.vb-abseg .vb-copya{font-size:11px;font-weight:600;color:var(--mut);background:none;border:none;display:inline-flex;align-items:center;gap:5px;padding:6px 8px;margin-left:auto}
+.vb-abseg .vb-copya:hover{color:var(--accent)}.vb-abseg .vb-copya svg{width:13px;height:13px}
+.vb-fld input[type=range]{width:100%;accent-color:var(--accent);padding:0}
+.vb-abres{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 4px}
+.vb-abcard{border:1px solid var(--line2);border-radius:12px;padding:11px 12px;background:var(--sunk)}
+.vb-abcard.on{border-color:color-mix(in srgb,var(--accent) 45%,var(--line2))}
+.vb-abcard>b{font-size:13px;display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.vb-lead{font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,transparent);padding:2px 6px;border-radius:5px}
+.vb-abnums{display:flex;gap:14px;margin-bottom:7px}
+.vb-abnum{font-size:20px;font-weight:800;color:var(--ink);line-height:1.1}
+.vb-abnum span{display:block;font-size:10px;font-weight:600;color:var(--mut);letter-spacing:.02em;margin-top:1px}
+.vb-abrate{font-size:14px;font-weight:800;color:var(--accent)}
+.vb-abrate span{font-size:10px;font-weight:600;color:var(--mut)}
 .vb-sched{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(440px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.32);z-index:61;padding:0 20px 20px;animation:drwin .2s ease;overflow:hidden}
 .vb-sched .ovhead{margin:0 -20px 14px;padding:15px 20px}
 .vb-fld{display:block;margin-bottom:12px}

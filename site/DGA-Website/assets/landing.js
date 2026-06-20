@@ -76,6 +76,24 @@
       .catch(function () {});
   }
 
+  // ---------- A/B testing (สุ่ม variant ต่อผู้เข้าชม + บันทึก view/conversion) ----------
+  function getCookie(n) { var m = document.cookie.match(new RegExp("(?:^|; )" + n + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : null; }
+  function setCookie(n, v, days) { var d = new Date(); d.setTime(d.getTime() + days * 864e5); document.cookie = n + "=" + encodeURIComponent(v) + ";expires=" + d.toUTCString() + ";path=/;SameSite=Lax"; }
+  function pickVariant(ref, split) {
+    var ck = "abx_" + ref, ex = getCookie(ck);
+    if (ex === "A" || ex === "B") return ex;
+    var s = typeof split === "number" ? split : 50;
+    var v = Math.random() * 100 < s ? "B" : "A";
+    setCookie(ck, v, 30);
+    return v;
+  }
+  function logAb(ref, variant, kind) {
+    try {
+      fetch(STRAPI + "/api/ab-events", { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+        body: JSON.stringify({ data: { documentRef: ref, variant: variant, kind: kind } }) }).catch(function () {});
+    } catch (e) {}
+  }
+
   // ---------- ตัวเรนเดอร์รายบล็อก ----------
   var renderers = {
     "block.hero": function (b) {
@@ -159,7 +177,19 @@
       var now = Date.now();
       if (item.publishStart && new Date(item.publishStart).getTime() > now) { state("ยังไม่เปิดให้บริการ", "หน้านี้จะเปิดในวันที่ " + new Date(item.publishStart).toLocaleString("th-TH")); return; }
       if (item.publishEnd && new Date(item.publishEnd).getTime() < now) { state("สิ้นสุดการแสดงผล", "หน้านี้สิ้นสุดการแสดงผลแล้ว"); return; }
+      // ---- A/B: เลือก variant ต่อผู้เข้าชม (sticky cookie) → render + บันทึก view/conversion ----
+      var ref = item.documentId || slug, variant = "A";
+      if (item.abEnabled && Array.isArray(item.variantBlocks) && item.variantBlocks.length) {
+        variant = pickVariant(ref, item.abSplit);
+        if (variant === "B") item.blocks = item.variantBlocks;
+      }
+      logAb(ref, variant, "view");
       render(item);
+      // conversion = คลิกปุ่มหลัก (CTA / เข้าสู่เว็บไซต์หลัก / ลงทะเบียน)
+      root.addEventListener("click", function (e) {
+        var n = e.target;
+        while (n && n !== root) { if (n.tagName === "A" && /btn--primary|btn--lg/.test(n.className || "")) { logAb(ref, variant, "conversion"); break; } n = n.parentNode; }
+      });
     })
     .catch(function () {
       state("เชื่อมต่อระบบไม่ได้", "ไม่สามารถโหลดข้อมูลหน้า Landing ได้ในขณะนี้");

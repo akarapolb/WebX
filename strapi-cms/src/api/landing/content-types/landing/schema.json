@@ -55,6 +55,22 @@
         "block.custom"
       ]
     },
+    "abEnabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "เปิดการทดสอบ A/B (เสิร์ฟ variant A หรือ B แบบสุ่มต่อผู้เข้าชม)"
+    },
+    "abSplit": {
+      "type": "integer",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "description": "เปอร์เซ็นต์ทราฟฟิกที่เสิร์ฟ variant B (ที่เหลือเป็น A)"
+    },
+    "variantBlocks": {
+      "type": "json",
+      "description": "บล็อกของ variant B (เก็บเป็น JSON เพื่อ render บนเว็บจริงเหมือน blocks หลัก)"
+    },
     "tenant": {
       "type": "relation",
       "relation": "manyToOne",
