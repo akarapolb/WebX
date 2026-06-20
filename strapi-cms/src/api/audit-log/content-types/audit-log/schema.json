@@ -5,17 +5,15 @@
     "singularName": "audit-log",
     "pluralName": "audit-logs",
     "displayName": "Audit Log",
-    "description": "บันทึกการเปลี่ยนแปลงเนื้อหาในหลังบ้าน (ใคร/ทำอะไร/เมื่อไร)"
+    "description": "Admin action audit trail — actor, action, target, time (admin-only)"
   },
-  "options": {
-    "draftAndPublish": false
-  },
+  "options": { "draftAndPublish": false },
   "attributes": {
+    "actor": { "type": "string" },
     "action": { "type": "string" },
     "contentType": { "type": "string" },
-    "entryId": { "type": "string" },
-    "adminEmail": { "type": "string" },
-    "tenantKey": { "type": "string" },
-    "at": { "type": "datetime" }
+    "targetRef": { "type": "string" },
+    "method": { "type": "string" },
+    "path": { "type": "text" }
   }
 }

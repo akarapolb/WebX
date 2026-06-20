@@ -14,5 +14,6 @@ export const NAV: NavItem[] = [
   { id: "builder", label: "Visual Builder", icon: "layout", k: 5, group: "build" },
   { id: "branding", label: "Branding", icon: "palette", k: 6, group: "build" },
   { id: "users", label: "Users & Roles", icon: "users", k: 7, group: "admin" },
-  { id: "tokens", label: "API & Tokens", icon: "code", k: 8, group: "admin" },
+  { id: "audit", label: "Audit Log", icon: "shield", k: 8, group: "admin" },
+  { id: "tokens", label: "API & Tokens", icon: "code", k: 9, group: "admin" },
 ];

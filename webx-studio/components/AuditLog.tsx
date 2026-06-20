@@ -1,0 +1,75 @@
+"use client";
+import { useEffect, useState, useCallback } from "react";
+import Icon from "./Icon";
+import { useLang } from "./LangProvider";
+
+type Log = { id: number; actor?: string; action?: string; contentType?: string; targetRef?: string; method?: string; createdAt?: string };
+const AL_UID = "api::audit-log.audit-log";
+const shortType = (c?: string) => (c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
+const badgeOf = (a?: string) => (a === "delete" ? "b-warn" : a === "publish" ? "b-ok" : a === "create" ? "b-acc" : "b-mut");
+
+export default function AuditLog() {
+  const { t, lang } = useLang();
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [filter, setFilter] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + AL_UID + "?sort=createdAt:DESC&pageSize=100");
+      if (r.status === 403) { setErr(t("c.noPerm")); setLoading(false); return; }
+      if (!r.ok) { setErr("Could not load logs (HTTP " + r.status + ")."); setLoading(false); return; }
+      const j = await r.json();
+      setLogs(j.results ?? j.data ?? []);
+    } catch { setErr("Cannot reach the backend."); }
+    finally { setLoading(false); }
+  }, [t]);
+  useEffect(() => { load(); }, [load]);
+
+  const fmt = (iso?: string) => { if (!iso) return ""; try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; } };
+  const actions = ["create", "update", "publish", "delete"];
+  const shown = filter ? logs.filter((l) => l.action === filter) : logs;
+
+  return (
+    <>
+      <div className="vh">
+        <div><h1>{t("nav.audit")}</h1><p>{t("al.sub")}</p></div>
+        <div className="vh-act">
+          <select className="vb-sel" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label={t("al.action")}>
+            <option value="">{t("al.all")}</option>
+            {actions.map((a) => <option key={a} value={a}>{t("al.a_" + a)}</option>)}
+          </select>
+          <button className="btn btn--g" onClick={load}><Icon name="undo" />{t("al.refresh")}</button>
+        </div>
+      </div>
+
+      {err && <div className="panel"><span className="badge b-warn"><span className="dot" />!</span><span className="muted" style={{ marginLeft: 10 }}>{err}</span></div>}
+
+      {!err && (
+        <div className="panel" style={{ padding: "8px 0", minHeight: 200 }}>
+          {loading && <div className="muted" style={{ padding: 20 }}>{t("al.loading")}</div>}
+          {!loading && shown.length === 0 && <div className="muted" style={{ padding: 20 }}>{t("al.empty")}</div>}
+          {!loading && shown.length > 0 && (
+            <table className="tbl">
+              <thead><tr><th>{t("al.time")}</th><th>{t("al.actor")}</th><th>{t("al.action")}</th><th>{t("al.target")}</th></tr></thead>
+              <tbody>
+                {shown.map((l) => (
+                  <tr key={l.id}>
+                    <td className="muted mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{fmt(l.createdAt)}</td>
+                    <td><b>{l.actor || "—"}</b></td>
+                    <td><span className={"badge " + badgeOf(l.action)}><span className="dot" />{t("al.a_" + l.action)}</span></td>
+                    <td><span className="mono" style={{ fontSize: 12 }}>{shortType(l.contentType)}{l.targetRef ? <span className="muted"> {"·"} {String(l.targetRef).slice(0, 10)}</span> : null}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      <div className="notice"><Icon name="shield" /> {t("al.note")}</div>
+    </>
+  );
+}
