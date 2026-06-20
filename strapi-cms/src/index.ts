@@ -55,8 +55,17 @@ async function roleNamesOf(strapi: any, user: any): Promise<string[]> {
   try { const rs = await strapi.db.query('admin::role').findMany({ where: { id: { $in: ids } }, select: ['name'] }); return rs.map((r: any) => r.name); }
   catch { return []; }
 }
+async function isSuperAdmin(strapi: any, user: any): Promise<boolean> {
+  const roles = user?.roles || [];
+  if (roles.some((r: any) => r?.code === 'strapi-super-admin' || r?.name === 'Super Admin')) return true;
+  const ids = roles.map((r: any) => r?.id).filter(Boolean);
+  if (!ids.length) return false;
+  try { const rs = await strapi.db.query('admin::role').findMany({ where: { id: { $in: ids } }, select: ['code'] }); return rs.some((r: any) => r.code === 'strapi-super-admin'); }
+  catch { return false; }
+}
 async function stripPolicyFields(strapi: any, user: any, uid: string, data: any) {
   if (!data || typeof data !== 'object') return data;
+  if (await isSuperAdmin(strapi, user)) return data; // super admins bypass field policies
   const policies = await getFieldPolicies(strapi);
   if (!policies.length) return data;
   const names = await roleNamesOf(strapi, user);
@@ -87,6 +96,14 @@ async function effectiveTenant(strapi: any) {
   const email = reqCtx.state?.user?.email;
   if (email) return await adminTenantFor(strapi, email);
   return null;
+}
+
+/** ล้างข้อมูล log/version/event ที่เก่ากว่า 90 วัน (กันตารางบวม) */
+async function cleanupOldRecords(strapi: any) {
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  for (const uid of ['api::audit-log.audit-log', 'api::ab-event.ab-event', 'api::page-version.page-version']) {
+    try { await strapi.db.query(uid).deleteMany({ where: { createdAt: { $lt: cutoff } } }); } catch (e) { /* noop */ }
+  }
 }
 
 /** เผยแพร่ release ที่ถึงกำหนดเวลา (scheduled → publish รายการ → done) */
@@ -191,5 +208,8 @@ export default {
     }
     // scheduled releases: ตรวจทุก 60 วินาที แล้วเผยแพร่รายการที่ถึงกำหนด
     setInterval(() => { processDueReleases(strapi).catch(() => {}); }, 60_000);
+    // housekeeping: ล้าง log/version เก่า ตอนบูตและทุก 6 ชั่วโมง
+    cleanupOldRecords(strapi).catch(() => {});
+    setInterval(() => { cleanupOldRecords(strapi).catch(() => {}); }, 6 * 60 * 60 * 1000);
   },
 };
