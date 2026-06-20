@@ -314,7 +314,7 @@ export default function VisualBuilder() {
         onDragOver={(e) => { if (dragNew || dragBlock >= 0) { e.preventDefault(); setDropAt(index); } }}
         onDragLeave={() => setDropAt((d) => (d === index ? -1 : d))}
         onDrop={(e) => { e.preventDefault(); handleDrop(index); }}>
-        <button className="vbk-ins-btn" onClick={() => setInsAt(insAt === index ? -1 : index)}><Icon name="plus" /></button>
+        <button className="vbk-ins-btn" aria-label={t("a11y.insert")} title={t("a11y.insert")} onClick={() => setInsAt(insAt === index ? -1 : index)}><Icon name="plus" /></button>
         {insAt === index && (
           <div className="vbk-ins-pop">
             {TYPES.map((ty) => <button key={ty.comp} onClick={() => addAt(index, ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
@@ -371,10 +371,10 @@ export default function VisualBuilder() {
                   <Icon name={iconOf(b)} />
                   <b>{labelOf(b)}</b>
                   <div className="vb-block-a" onClick={(e) => e.stopPropagation()}>
-                    <button title="↑" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
-                    <button title="↓" onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
-                    <button title="�copy" onClick={() => dup(i)}>⧉</button>
-                    <button title="✕" className="rm" onClick={() => remove(i)}><Icon name="trash" /></button>
+                    <button aria-label={t("a11y.moveup")} title={t("a11y.moveup")} onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
+                    <button aria-label={t("a11y.movedown")} title={t("a11y.movedown")} onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
+                    <button aria-label={t("a11y.duplicate")} title={t("a11y.duplicate")} onClick={() => dup(i)}>⧉</button>
+                    <button aria-label={t("a11y.delete")} title={t("a11y.delete")} className="rm" onClick={() => remove(i)}><Icon name="trash" /></button>
                   </div>
                 </div>
                 {isA && (
@@ -410,7 +410,7 @@ export default function VisualBuilder() {
                           <div className="vb-item" key={k}>
                             <input value={it.title || ""} placeholder="title" onChange={(e) => setItem(i, k, "title", e.target.value)} />
                             <input value={it.text || ""} placeholder="text" onChange={(e) => setItem(i, k, "text", e.target.value)} />
-                            <button className="rm" onClick={() => rmItem(i, k)}><Icon name="trash" /></button>
+                            <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmItem(i, k)}><Icon name="trash" /></button>
                           </div>
                         ))}
                         <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addItem(i)}><Icon name="plus" />item</button>
@@ -476,10 +476,10 @@ export default function VisualBuilder() {
                       <div className="vbk-grip-c" draggable onDragStart={(e) => { e.stopPropagation(); setDragBlock(i); }} onDragEnd={() => { setDragBlock(-1); setDropAt(-1); }} title="drag to reorder"><Icon name="drag" /></div>
                       {i === active && (
                         <div className="vbk-tools" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
-                          <button onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
-                          <button onClick={() => dup(i)}>⧉</button>
-                          <button className="rm" onClick={() => remove(i)}><Icon name="trash" /></button>
+                          <button aria-label={t("a11y.moveup")} title={t("a11y.moveup")} onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
+                          <button aria-label={t("a11y.movedown")} title={t("a11y.movedown")} onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
+                          <button aria-label={t("a11y.duplicate")} title={t("a11y.duplicate")} onClick={() => dup(i)}>⧉</button>
+                          <button className="rm" aria-label={t("a11y.delete")} title={t("a11y.delete")} onClick={() => remove(i)}><Icon name="trash" /></button>
                         </div>
                       )}
                       {preview(b, i)}
@@ -498,11 +498,11 @@ export default function VisualBuilder() {
       {historyOpen && (
         <>
           <div className="scrim" onClick={() => setHistoryOpen(false)} />
-          <div className="vb-drawer">
+          <div className="vb-drawer" role="dialog" aria-modal="true" aria-label={t("vb.history")}>
             <div className="ovhead">
               <h3 style={{ flex: 1 }}>{t("vb.history")}</h3>
               <button className="btn btn--g" onClick={() => saveVersion(t("vb.manualver")).then(loadHistory)}><Icon name="plus" />{t("vb.savever")}</button>
-              <button className="ic-btn" onClick={() => setHistoryOpen(false)} aria-label={t("close") || "Close"}><Icon name="close" /></button>
+              <button className="ic-btn" onClick={() => setHistoryOpen(false)} aria-label={t("a11y.close")}><Icon name="close" /></button>
             </div>
             <div className="vb-vers">
               {versions.length === 0 && <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>{t("vb.nohistory")}</div>}
@@ -523,8 +523,8 @@ export default function VisualBuilder() {
       {schedOpen && (
         <>
           <div className="scrim" onClick={() => setSchedOpen(false)} />
-          <div className="vb-sched">
-            <div className="ovhead"><h3 style={{ flex: 1 }}>{t("vb.schedule")}</h3><button className="ic-btn" onClick={() => setSchedOpen(false)} aria-label="Close"><Icon name="close" /></button></div>
+          <div className="vb-sched" role="dialog" aria-modal="true" aria-label={t("vb.schedule")}>
+            <div className="ovhead"><h3 style={{ flex: 1 }}>{t("vb.schedule")}</h3><button className="ic-btn" onClick={() => setSchedOpen(false)} aria-label={t("a11y.close")}><Icon name="close" /></button></div>
             <p className="muted" style={{ fontSize: 12.5, margin: "0 0 14px" }}>{t("vb.schedhint")}</p>
             <label className="vb-fld"><span>{t("vb.schedstart")}</span><input type="datetime-local" value={sched.start} onChange={(e) => setSched((s) => ({ ...s, start: e.target.value }))} /></label>
             <label className="vb-fld"><span>{t("vb.schedend")}</span><input type="datetime-local" value={sched.end} onChange={(e) => setSched((s) => ({ ...s, end: e.target.value }))} /></label>
