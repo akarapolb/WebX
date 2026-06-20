@@ -59,6 +59,7 @@ export default function VisualBuilder() {
   const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType } | null>(null);
   const [dropAt, setDropAt] = useState<number>(-1);
   const [dragBlock, setDragBlock] = useState<number>(-1);
+  const [previewMode, setPreviewMode] = useState(false);
   const [uploadingI, setUploadingI] = useState<number>(-1);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -170,6 +171,24 @@ export default function VisualBuilder() {
     finally { setSaving(false); }
   }
 
+  async function publish() {
+    if (!sel) return;
+    setSaving(true); setMsg(null);
+    const base = "/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : "");
+    try {
+      const sv = await fetch(base, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ blocks: blocks.map(serialize), ...(sel.locale ? { locale: sel.locale } : {}) }) });
+      if (!sv.ok) { setMsg({ t: "Save failed (HTTP " + sv.status + ")", ok: false }); setSaving(false); return; }
+      const pr = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + "/actions/publish" + (sel.locale ? "?locale=" + sel.locale : ""), { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      setMsg(pr.ok ? { t: t("vb.published"), ok: true } : { t: "Publish failed (HTTP " + pr.status + ")", ok: false });
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    finally { setSaving(false); }
+  }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape" && previewMode) setPreviewMode(false); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewMode]);
+
   // ---- canvas preview (inline-editable) ----
   function preview(b: Block, i: number) {
     const c = b.__component;
@@ -256,13 +275,18 @@ export default function VisualBuilder() {
               <button key={d} className={device === d ? "on" : ""} onClick={() => setDevice(d)} title={d}><Icon name={d} /></button>
             ))}
           </div>
-          {sel && <button className="btn btn--p" onClick={save} disabled={saving}><Icon name="spark" />{saving ? t("vb.saving") : t("vb.save")}</button>}
+          {sel && <>
+            <button className="btn btn--g" onClick={() => setPreviewMode((p) => !p)}><Icon name="eye" />{previewMode ? t("vb.exitpreview") : t("vb.preview")}</button>
+            <button className="btn btn--g" onClick={save} disabled={saving}>{t("vb.save")}</button>
+            <button className="btn btn--p" onClick={publish} disabled={saving}><Icon name="spark" />{saving ? t("vb.publishing") : t("vb.publish")}</button>
+          </>}
         </div>
       </div>
 
       {msg && <div className="panel" style={{ marginBottom: 14 }}><span className={"badge " + (msg.ok ? "b-ok" : "b-warn")}><span className="dot" />{msg.ok ? "OK" : "!"}</span><span style={{ marginLeft: 10, color: msg.ok ? "var(--ok)" : "var(--bad)", fontWeight: 600 }}>{msg.t}</span></div>}
 
-      <div className="vb2">
+      {previewMode && <div className="vb-pvbar"><Icon name="eye" />{t("vb.previewhint")}</div>}
+      <div className={"vb2" + (previewMode ? " preview" : "")}>
         <aside className="vb-insp">
           <div className="vb-insp-h">{t("vb.blocks")} {blocks.length > 0 && <span className="mono" style={{ color: "var(--mut)" }}>{blocks.length}</span>}</div>
           {blocks.map((b, i) => {

@@ -366,6 +366,14 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vbk-wrap:hover .vbk-grip-c,.vbk-wrap.sel .vbk-grip-c{opacity:.85}
 .vbk-grip-c:active{cursor:grabbing}.vbk-grip-c svg{width:13px;height:13px}
 .vbk-wrap.ghost{opacity:.4}
+.vb-pvbar{display:flex;align-items:center;gap:8px;justify-content:center;padding:8px 14px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;border-radius:10px;margin-bottom:10px}
+.vb-pvbar svg{width:15px;height:15px}
+.vb2.preview{grid-template-columns:1fr}
+.vb2.preview .vb-insp{display:none}
+.vb2.preview .vb-stage{background:var(--bg)}
+.vb2.preview .vbk-wrap{pointer-events:none;border-color:transparent!important}
+.vb2.preview .vbk-grip-c,.vb2.preview .vbk-tools,.vb2.preview .vbk-ins{display:none}
+.vb2.preview .vbk-wrap.sel{outline:none;box-shadow:none}
 /* AI generate */
 .vb-ai{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--sunk)),var(--sunk));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line2));border-radius:11px;padding:8px 10px}
 .vb-ai > svg{width:16px;height:16px;color:var(--accent);flex:none}
