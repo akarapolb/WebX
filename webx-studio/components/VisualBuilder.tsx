@@ -58,6 +58,7 @@ export default function VisualBuilder() {
   const [insAt, setInsAt] = useState<number>(-1);
   const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType } | null>(null);
   const [dropAt, setDropAt] = useState<number>(-1);
+  const [dragBlock, setDragBlock] = useState<number>(-1);
   const [uploadingI, setUploadingI] = useState<number>(-1);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -114,7 +115,12 @@ export default function VisualBuilder() {
   const add = (comp: string) => { const m = metaOf(comp); setBlocks((b) => { setActive(b.length); return [...b, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))]; }); };
   const addAt = (idx: number, comp: string) => { const m = metaOf(comp); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))); setActive(idx); return n; }); setInsAt(-1); };
   const addCustomAt = (idx: number, ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, { __component: "block.custom", typeKey: ct.key, props }); setActive(idx); return n; }); };
-  function handleDrop(idx: number) { if (dragNew?.comp) addAt(idx, dragNew.comp); else if (dragNew?.custom) addCustomAt(idx, dragNew.custom); setDragNew(null); setDropAt(-1); }
+  function handleDrop(idx: number) {
+    if (dragBlock >= 0) { const to = idx > dragBlock ? idx - 1 : idx; reorder(dragBlock, to); setActive(to); }
+    else if (dragNew?.comp) addAt(idx, dragNew.comp);
+    else if (dragNew?.custom) addCustomAt(idx, dragNew.custom);
+    setDragNew(null); setDragBlock(-1); setDropAt(-1);
+  }
   async function uploadImg(i: number, file: File) {
     setUploadingI(i);
     const fd = new FormData(); fd.append("files", file);
@@ -220,7 +226,7 @@ export default function VisualBuilder() {
   function ins(index: number) {
     return (
       <div className={"vbk-ins" + (dropAt === index ? " over" : "")} onClick={(e) => e.stopPropagation()}
-        onDragOver={(e) => { if (dragNew) { e.preventDefault(); setDropAt(index); } }}
+        onDragOver={(e) => { if (dragNew || dragBlock >= 0) { e.preventDefault(); setDropAt(index); } }}
         onDragLeave={() => setDropAt((d) => (d === index ? -1 : d))}
         onDrop={(e) => { e.preventDefault(); handleDrop(index); }}>
         <button className="vbk-ins-btn" onClick={() => setInsAt(insAt === index ? -1 : index)}><Icon name="plus" /></button>
@@ -366,13 +372,14 @@ export default function VisualBuilder() {
           {!sel || loading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{loading ? t("vb.loading") : t("vb.empty")}</div> : (
             <div className="vb-frame">
               <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th/" + (sel.title || "").slice(0, 14)}</span><span className="vb-dev-tag">{device}</span></div>
-              <div className={"vb-canvas" + (dragNew ? " dragging" : "")} style={{ maxWidth: DEVW[device] }}>
+              <div className={"vb-canvas" + (dragNew || dragBlock >= 0 ? " dragging" : "")} style={{ maxWidth: DEVW[device] }}>
                 <div className="vbk-nav"><b>{current?.name || "WebX"}</b><span>Home</span><span>Services</span><span>News</span></div>
                 {blocks.length === 0 && <div className="muted" style={{ padding: 50, textAlign: "center" }}>{t("vb.noblocks")}</div>}
                 {blocks.map((b, i) => (
                   <div key={i}>
                     {ins(i)}
-                    <div className={"vbk-wrap" + (i === active ? " sel" : "")} onClick={() => setActive(i)}>
+                    <div className={"vbk-wrap" + (i === active ? " sel" : "") + (i === dragBlock ? " ghost" : "")} onClick={() => setActive(i)}>
+                      <div className="vbk-grip-c" draggable onDragStart={(e) => { e.stopPropagation(); setDragBlock(i); }} onDragEnd={() => { setDragBlock(-1); setDropAt(-1); }} title="drag to reorder"><Icon name="drag" /></div>
                       {i === active && (
                         <div className="vbk-tools" onClick={(e) => e.stopPropagation()}>
                           <button onClick={() => move(i, -1)} disabled={i === 0}>↑</button>

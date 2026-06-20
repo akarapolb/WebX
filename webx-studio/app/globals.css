@@ -337,6 +337,12 @@ html[data-theme="dark"] .vbk-imgph{background:#1b1d25}
 .bt-frow .rm{width:30px;height:30px;flex:none;border:1px solid var(--line2);background:var(--sunk);border-radius:8px;color:var(--mut);display:grid;place-items:center}
 .bt-frow .rm:hover{border-color:var(--bad);color:var(--bad)}
 .bt-frow .rm svg{width:13px;height:13px}
+.bt-list .seg{width:100%}.bt-list .seg button{flex:1}
+.bt-market-row{display:flex;align-items:center;gap:9px;padding:8px 9px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px}
+.bt-market-row > svg{width:16px;height:16px;color:var(--accent);flex:none}
+.bt-market-row b{font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-install{flex:none;font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent)}
+.bt-install:disabled{opacity:.6;border-color:var(--line2);background:var(--sunk);color:var(--mut);cursor:default}
 .vbk-custom{color:#1a1c22}
 html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 
@@ -356,6 +362,10 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vbk-ins.over{height:20px}
 .vbk-ins.over::before{content:"";position:absolute;top:9px;left:0;right:0;height:3px;background:var(--accent);border-radius:3px;box-shadow:0 0 8px var(--accent)}
 .vbk-ins.over .vbk-ins-btn{opacity:1;transform:scale(1.15)}
+.vbk-grip-c{position:absolute;top:6px;left:6px;z-index:5;width:24px;height:24px;border-radius:6px;background:var(--ink);color:var(--bg);display:grid;place-items:center;opacity:0;cursor:grab;transition:opacity var(--t)}
+.vbk-wrap:hover .vbk-grip-c,.vbk-wrap.sel .vbk-grip-c{opacity:.85}
+.vbk-grip-c:active{cursor:grabbing}.vbk-grip-c svg{width:13px;height:13px}
+.vbk-wrap.ghost{opacity:.4}
 /* AI generate */
 .vb-ai{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--sunk)),var(--sunk));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line2));border-radius:11px;padding:8px 10px}
 .vb-ai > svg{width:16px;height:16px;color:var(--accent);flex:none}

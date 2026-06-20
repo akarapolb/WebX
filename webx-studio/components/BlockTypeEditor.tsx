@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 
-export type BlockType = { docId?: string; key: string; name: string; icon?: string; fieldsSchema?: Field[]; template?: string };
+export type BlockType = { docId?: string; key: string; name: string; icon?: string; fieldsSchema?: Field[]; template?: string; tenantKey?: string };
 type Field = { key: string; label?: string; type: "text" | "textarea" | "richtext" | "image" };
 
 const BT_UID = "api::block-type.block-type";
@@ -16,8 +16,31 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
   const [list, setList] = useState<BlockType[]>([]);
   const [cur, setCur] = useState<BlockType | null>(null);
   const [tenantDoc, setTenantDoc] = useState<string | null>(null);
+  const [market, setMarket] = useState<BlockType[]>([]);
+  const [showMarket, setShowMarket] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+
+  const mapBt = (e: any): BlockType => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "", tenantKey: e.tenant?.key });
+  // marketplace: every block type across tenants (+ global), to install into this workspace
+  const loadMarket = async () => {
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID + "?pageSize=100&sort=updatedAt:DESC&populate=tenant");
+      if (!r.ok) return;
+      const j = await r.json();
+      setMarket((j.results ?? j.data ?? []).map(mapBt));
+    } catch {}
+  };
+  async function install(bt: BlockType) {
+    const key = (bt.key || "block").replace(/-[a-z0-9]{3,6}$/, "") + "-" + Math.random().toString(36).slice(2, 5);
+    const body: any = { name: bt.name, key, icon: bt.icon || "grid", fieldsSchema: bt.fieldsSchema || [], template: bt.template || "" };
+    if (tenantDoc) body.tenant = tenantDoc;
+    try { const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (r.ok) { setMsg({ t: t("bt.saved"), ok: true }); await load(); onSaved(); } } catch {}
+  }
+  async function shareGlobal() {
+    if (!cur?.docId) return;
+    try { const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID + "/" + cur.docId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenant: null }) }); if (r.ok) { setMsg({ t: t("bt.shared"), ok: true }); await load(); onSaved(); } } catch {}
+  }
 
   const load = async () => {
     try {
@@ -26,7 +49,7 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
       const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID + qs);
       if (!r.ok) return;
       const j = await r.json();
-      setList((j.results ?? j.data ?? []).map((e: any) => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "" })));
+      setList((j.results ?? j.data ?? []).map(mapBt));
     } catch {}
   };
   useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,13 +91,38 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
         <div className="ovhead"><h3 style={{ flex: 1 }}>{t("vb.manage")}</h3><button className="ic-btn" onClick={onClose}><Icon name="close" /></button></div>
         <div className="bt-body">
           <aside className="bt-list">
-            <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginBottom: 8 }} onClick={() => setCur(blank())}><Icon name="plus" />{t("vb.newtype")}</button>
-            {list.length === 0 && <div className="muted" style={{ fontSize: 11.5, padding: 8 }}>{t("bt.empty")}</div>}
-            {list.map((b) => (
-              <button key={b.docId} className={"ctype" + (cur?.docId === b.docId ? " on" : "")} onClick={() => setCur(b)}>
-                <Icon name={b.icon || "grid"} /><span>{b.name}</span>
-              </button>
-            ))}
+            <div className="seg" style={{ marginBottom: 10 }}>
+              <button className={!showMarket ? "on" : ""} onClick={() => setShowMarket(false)}>{t("bt.mine")}</button>
+              <button className={showMarket ? "on" : ""} onClick={() => { setShowMarket(true); loadMarket(); }}>{t("bt.market")}</button>
+            </div>
+            {!showMarket ? (
+              <>
+                <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginBottom: 8 }} onClick={() => setCur(blank())}><Icon name="plus" />{t("vb.newtype")}</button>
+                {list.length === 0 && <div className="muted" style={{ fontSize: 11.5, padding: 8 }}>{t("bt.empty")}</div>}
+                {list.map((b) => (
+                  <button key={b.docId} className={"ctype" + (cur?.docId === b.docId ? " on" : "")} onClick={() => setCur(b)}>
+                    <Icon name={b.icon || "grid"} /><span>{b.name}</span>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
+                {market.length === 0 && <div className="muted" style={{ fontSize: 11.5, padding: 8 }}>{t("bt.marketempty")}</div>}
+                {market.map((b) => {
+                  const have = list.some((x) => x.key === b.key);
+                  return (
+                    <div className="bt-market-row" key={b.docId}>
+                      <Icon name={b.icon || "grid"} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <b>{b.name}</b>
+                        <div className="muted" style={{ fontSize: 10 }}>{b.tenantKey ? t("bt.from") + " " + b.tenantKey : t("bt.global")}</div>
+                      </div>
+                      <button className="bt-install" disabled={have} onClick={() => install(b)}>{have ? t("bt.installed") : t("bt.install")}</button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </aside>
 
           <div className="bt-form">
@@ -104,8 +152,9 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
                   <textarea value={cur.template} onChange={(e) => setF({ template: e.target.value })} style={{ minHeight: 130, fontFamily: "var(--mono)", fontSize: 12 }} />
                   <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>{t("bt.thint")} <span className="mono" style={{ color: "var(--accent)" }}>{placeholders}</span></div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                   <button className="btn btn--p" onClick={save} disabled={saving || !cur.name.trim()}>{saving ? t("bt.saving") : t("bt.save")}</button>
+                  {cur.docId && <button className="btn btn--g" onClick={shareGlobal}><Icon name="users" />{t("bt.shareglobal")}</button>}
                   {msg && <span className={"toast-in " + (msg.ok ? "ok" : "bad")}>{msg.t}</span>}
                 </div>
               </>
