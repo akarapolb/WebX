@@ -56,6 +56,8 @@ export default function VisualBuilder() {
   const [device, setDevice] = useState<Device>("desktop");
   const [dragI, setDragI] = useState<number>(-1);
   const [insAt, setInsAt] = useState<number>(-1);
+  const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType } | null>(null);
+  const [dropAt, setDropAt] = useState<number>(-1);
   const [uploadingI, setUploadingI] = useState<number>(-1);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -83,12 +85,15 @@ export default function VisualBuilder() {
 
   const loadTypes = useCallback(async () => {
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/api::block-type.block-type?pageSize=100");
+      let qs = "?pageSize=100";
+      if (tenantKey) qs += "&filters[$or][0][tenant][key][$eq]=" + encodeURIComponent(tenantKey) + "&filters[$or][1][tenant][id][$null]=true";
+      const r = await fetch("/api/strapi/content-manager/collection-types/api::block-type.block-type" + qs);
       if (!r.ok) return;
       const j = await r.json();
       setCustomTypes((j.results ?? j.data ?? []).map((e: any) => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "" })));
     } catch {}
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantKey]);
   useEffect(() => { loadTypes(); }, [loadTypes]);
 
   async function open(p: Page) {
@@ -108,6 +113,8 @@ export default function VisualBuilder() {
   const dup = (i: number) => setBlocks((b) => { const c = JSON.parse(JSON.stringify(b[i])); delete c.id; const n = [...b]; n.splice(i + 1, 0, c); setActive(i + 1); return n; });
   const add = (comp: string) => { const m = metaOf(comp); setBlocks((b) => { setActive(b.length); return [...b, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))]; }); };
   const addAt = (idx: number, comp: string) => { const m = metaOf(comp); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))); setActive(idx); return n; }); setInsAt(-1); };
+  const addCustomAt = (idx: number, ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, { __component: "block.custom", typeKey: ct.key, props }); setActive(idx); return n; }); };
+  function handleDrop(idx: number) { if (dragNew?.comp) addAt(idx, dragNew.comp); else if (dragNew?.custom) addCustomAt(idx, dragNew.custom); setDragNew(null); setDropAt(-1); }
   async function uploadImg(i: number, file: File) {
     setUploadingI(i);
     const fd = new FormData(); fd.append("files", file);
@@ -212,7 +219,10 @@ export default function VisualBuilder() {
 
   function ins(index: number) {
     return (
-      <div className="vbk-ins" onClick={(e) => e.stopPropagation()}>
+      <div className={"vbk-ins" + (dropAt === index ? " over" : "")} onClick={(e) => e.stopPropagation()}
+        onDragOver={(e) => { if (dragNew) { e.preventDefault(); setDropAt(index); } }}
+        onDragLeave={() => setDropAt((d) => (d === index ? -1 : d))}
+        onDrop={(e) => { e.preventDefault(); handleDrop(index); }}>
         <button className="vbk-ins-btn" onClick={() => setInsAt(insAt === index ? -1 : index)}><Icon name="plus" /></button>
         {insAt === index && (
           <div className="vbk-ins-pop">
@@ -338,13 +348,13 @@ export default function VisualBuilder() {
             </div>
             <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.addblock")}</div>
             <div className="vb-add-grid">
-              {TYPES.map((ty) => <button key={ty.comp} className="vb-add-btn" onClick={() => add(ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
+              {TYPES.map((ty) => <button key={ty.comp} className="vb-add-btn" draggable onDragStart={() => setDragNew({ comp: ty.comp })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} onClick={() => add(ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
             </div>
             {customTypes.length > 0 && (
               <>
                 <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.custom")}</div>
                 <div className="vb-add-grid">
-                  {customTypes.map((ct) => <button key={ct.key} className="vb-add-btn" onClick={() => addCustom(ct)}><Icon name={ct.icon || "grid"} />{ct.name}</button>)}
+                  {customTypes.map((ct) => <button key={ct.key} className="vb-add-btn" draggable onDragStart={() => setDragNew({ custom: ct })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} onClick={() => addCustom(ct)}><Icon name={ct.icon || "grid"} />{ct.name}</button>)}
                 </div>
               </>
             )}
@@ -356,7 +366,7 @@ export default function VisualBuilder() {
           {!sel || loading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{loading ? t("vb.loading") : t("vb.empty")}</div> : (
             <div className="vb-frame">
               <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th/" + (sel.title || "").slice(0, 14)}</span><span className="vb-dev-tag">{device}</span></div>
-              <div className="vb-canvas" style={{ maxWidth: DEVW[device] }}>
+              <div className={"vb-canvas" + (dragNew ? " dragging" : "")} style={{ maxWidth: DEVW[device] }}>
                 <div className="vbk-nav"><b>{current?.name || "WebX"}</b><span>Home</span><span>Services</span><span>News</span></div>
                 {blocks.length === 0 && <div className="muted" style={{ padding: 50, textAlign: "center" }}>{t("vb.noblocks")}</div>}
                 {blocks.map((b, i) => (
@@ -382,7 +392,7 @@ export default function VisualBuilder() {
         </div>
       </div>
 
-      {showTypeEditor && <BlockTypeEditor onClose={() => setShowTypeEditor(false)} onSaved={loadTypes} />}
+      {showTypeEditor && <BlockTypeEditor tenantKey={tenantKey} onClose={() => setShowTypeEditor(false)} onSaved={loadTypes} />}
     </>
   );
 }

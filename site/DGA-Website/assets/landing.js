@@ -57,6 +57,25 @@
     return out.join("");
   }
 
+  // ---------- custom block types (no-code) — เรนเดอร์จากเทมเพลตที่ผู้ใช้สร้างเอง ----------
+  var BT_MAP = {};
+  function interpolate(tpl, props, schema) {
+    var rich = {}, imgs = {};
+    (schema || []).forEach(function (f) { if (f.type === "richtext") rich[f.key] = 1; if (f.type === "image") imgs[f.key] = 1; });
+    return String(tpl || "").replace(/\{\{\s*([\w-]+)\s*\}\}/g, function (_m, k) {
+      var v = props ? props[k] : null;
+      if (v == null) return "";
+      if (imgs[k]) { var u = (v && v.url) || v; return typeof u === "string" ? (u.indexOf("http") === 0 ? u : STRAPI + u) : ""; }
+      return rich[k] ? String(v) : esc(String(v));
+    });
+  }
+  function loadBlockTypes() {
+    return fetch(STRAPI + "/api/block-types?pagination[pageSize]=100" + TQS, { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { ((j && j.data) || []).forEach(function (e) { var a = e.attributes || e; if (a.key) BT_MAP[a.key] = { template: a.template, fieldsSchema: a.fieldsSchema }; }); })
+      .catch(function () {});
+  }
+
   // ---------- ตัวเรนเดอร์รายบล็อก ----------
   var renderers = {
     "block.hero": function (b) {
@@ -97,6 +116,10 @@
         (b.text ? "<p>" + esc(b.text) + "</p>" : "") +
         (b.buttonLabel ? '<a class="btn btn--primary btn--lg" href="' + esc(b.buttonUrl || "#") + '">' + esc(b.buttonLabel) + "</a>" : "") +
         "</div></section>";
+    },
+    "block.custom": function (b) {
+      var bt = BT_MAP[b.typeKey];
+      return bt ? interpolate(bt.template, b.props, bt.fieldsSchema) : "";
     }
   };
 
@@ -126,6 +149,7 @@
   var url = STRAPI + "/api/landings?filters[slug][$eq]=" + encodeURIComponent(slug) +
     "&filters[active][$eq]=true&populate[blocks][populate]=*" + TQS;
 
+  loadBlockTypes().then(function () {
   fetch(url, { headers: { Accept: "application/json" } })
     .then(function (r) { return r.json(); })
     .then(function (j) {
@@ -140,4 +164,5 @@
     .catch(function () {
       state("เชื่อมต่อระบบไม่ได้", "ไม่สามารถโหลดข้อมูลหน้า Landing ได้ในขณะนี้");
     });
+  });
 })();

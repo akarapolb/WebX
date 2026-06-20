@@ -349,6 +349,13 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vbk-ins-pop button{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;border:none;background:none;color:var(--ink2);font-size:12.5px;text-align:left;font-family:inherit}
 .vbk-ins-pop button:hover{background:var(--panel2);color:var(--accent)}
 .vbk-ins-pop svg{width:14px;height:14px;color:var(--accent)}
+.vb-add-btn[draggable]{cursor:grab}
+.vb-add-btn[draggable]:active{cursor:grabbing}
+.vb-canvas.dragging .vbk-ins{height:10px}
+.vb-canvas.dragging .vbk-ins-btn{opacity:.45}
+.vbk-ins.over{height:20px}
+.vbk-ins.over::before{content:"";position:absolute;top:9px;left:0;right:0;height:3px;background:var(--accent);border-radius:3px;box-shadow:0 0 8px var(--accent)}
+.vbk-ins.over .vbk-ins-btn{opacity:1;transform:scale(1.15)}
 /* AI generate */
 .vb-ai{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--sunk)),var(--sunk));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line2));border-radius:11px;padding:8px 10px}
 .vb-ai > svg{width:16px;height:16px;color:var(--accent);flex:none}

@@ -62,6 +62,7 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::popup.popup": ["find", "findOne"],
     "api::poll.poll": ["find", "findOne"],
     "api::landing.landing": ["find", "findOne"],
+    "api::block-type.block-type": ["find", "findOne"],
     "api::blog.blog": ["find", "findOne"],
     "api::catalog.catalog": ["find", "findOne"],
     "api::weblink.weblink": ["find", "findOne"],

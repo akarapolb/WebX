@@ -11,22 +11,32 @@ const ICONS = ["layout", "doc", "cta", "img", "grid", "star", "msg", "spark", "c
 const FTYPES: Field["type"][] = ["text", "textarea", "richtext", "image"];
 const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-export default function BlockTypeEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenantKey?: string; onClose: () => void; onSaved: () => void }) {
   const { t, lang } = useLang();
   const [list, setList] = useState<BlockType[]>([]);
   const [cur, setCur] = useState<BlockType | null>(null);
+  const [tenantDoc, setTenantDoc] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
 
   const load = async () => {
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID + "?pageSize=100&sort=updatedAt:DESC");
+      let qs = "?pageSize=100&sort=updatedAt:DESC";
+      if (tenantKey) qs += "&filters[$or][0][tenant][key][$eq]=" + encodeURIComponent(tenantKey) + "&filters[$or][1][tenant][id][$null]=true";
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID + qs);
       if (!r.ok) return;
       const j = await r.json();
       setList((j.results ?? j.data ?? []).map((e: any) => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "" })));
     } catch {}
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantKey]);
+  // resolve the current tenant's documentId so new block types are scoped to it
+  useEffect(() => {
+    if (!tenantKey) return;
+    fetch("/api/strapi/content-manager/collection-types/api::tenant.tenant?pageSize=1&filters[key][$eq]=" + encodeURIComponent(tenantKey))
+      .then((r) => (r.ok ? r.json() : null)).then((j) => { const tn = (j?.results ?? j?.data ?? [])[0]; if (tn) setTenantDoc(String(tn.documentId ?? tn.id)); }).catch(() => {});
+  }, [tenantKey]);
 
   const blank = (): BlockType => ({ key: "", name: "", icon: "grid", fieldsSchema: [{ key: "heading", label: "Heading", type: "text" }], template: "<section style=\"padding:40px;text-align:center\">\n  <h2>{{heading}}</h2>\n</section>" });
   const setF = (patch: Partial<BlockType>) => setCur((c) => ({ ...(c as BlockType), ...patch }));
@@ -38,7 +48,8 @@ export default function BlockTypeEditor({ onClose, onSaved }: { onClose: () => v
     if (!cur) return;
     setSaving(true); setMsg(null);
     const key = cur.key || slug(cur.name) || "blocktype-" + Math.random().toString(36).slice(2, 8);
-    const body = { name: cur.name || key, key, icon: cur.icon || "grid", fieldsSchema: cur.fieldsSchema || [], template: cur.template || "" };
+    const body: any = { name: cur.name || key, key, icon: cur.icon || "grid", fieldsSchema: cur.fieldsSchema || [], template: cur.template || "" };
+    if (tenantDoc && !cur.docId) body.tenant = tenantDoc;
     try {
       const url = "/api/strapi/content-manager/collection-types/" + BT_UID + (cur.docId ? "/" + cur.docId : "");
       const r = await fetch(url, { method: cur.docId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
