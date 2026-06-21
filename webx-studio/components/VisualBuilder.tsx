@@ -202,15 +202,30 @@ export default function VisualBuilder() {
   }
   const iconOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.icon || "grid") : (metaOf(b.__component)?.icon || "doc");
   const labelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
-  // AI: ground a new section in real tenant content via /api/ai/answer
+  // AI: generate a section. Prefers the LLM-agnostic /api/ai layer (schema-aware
+  // hero via LiteLLM); falls back to grounding in tenant content if AI isn't configured.
   async function aiGenerate() {
     const p = aiPrompt.trim(); if (!p) return;
     setAiBusy(true);
     try {
-      const tn = tenantKey || "dga";
-      const j = await fetch("/api/strapi/api/ai/answer?q=" + encodeURIComponent(p) + "&tenant=" + encodeURIComponent(tn) + "&locale=" + lang).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      const ans = j?.data?.answer || "";
-      const block = { __component: "block.hero", kicker: "AI", heading: p, subheading: ans || (lang === "th" ? "เพิ่มรายละเอียดที่นี่" : "Add details here"), ctaLabel: lang === "th" ? "เริ่มใช้งาน" : "Get started", ctaUrl: "#" };
+      let block: any = null;
+      try {
+        const r = await fetch("/api/ai/generate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system: lang === "th" ? "คุณเป็นนักเขียนคอนเทนต์เว็บภาครัฐไทย เขียนกระชับ ชัดเจน เป็นทางการแต่เข้าถึงง่าย" : "You write concise, clear web copy.",
+            prompt: (lang === "th" ? "สร้างเนื้อหาส่วน Hero สำหรับหัวข้อ: " : "Write a hero section for: ") + p,
+            schema: { type: "object", additionalProperties: false, required: ["heading", "subheading", "ctaLabel"], properties: { kicker: { type: "string" }, heading: { type: "string" }, subheading: { type: "string" }, ctaLabel: { type: "string" } } },
+          }),
+        });
+        if (r.ok) { const d = (await r.json()).data; if (d?.heading) block = { __component: "block.hero", kicker: d.kicker || "AI", heading: d.heading, subheading: d.subheading || "", ctaLabel: d.ctaLabel || (lang === "th" ? "เริ่มใช้งาน" : "Get started"), ctaUrl: "#" }; }
+      } catch {}
+      if (!block) {
+        const tn = tenantKey || "dga";
+        const j = await fetch("/api/strapi/api/ai/answer?q=" + encodeURIComponent(p) + "&tenant=" + encodeURIComponent(tn) + "&locale=" + lang).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        const ans = j?.data?.answer || "";
+        block = { __component: "block.hero", kicker: "AI", heading: p, subheading: ans || (lang === "th" ? "เพิ่มรายละเอียดที่นี่" : "Add details here"), ctaLabel: lang === "th" ? "เริ่มใช้งาน" : "Get started", ctaUrl: "#" };
+      }
       setBlocks((b) => { setActive(b.length); return [...b, block]; });
       setAiPrompt("");
     } finally { setAiBusy(false); }
