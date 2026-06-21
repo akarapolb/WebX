@@ -5,7 +5,9 @@ import { useLang } from "./LangProvider";
 
 type Log = { id: number; documentId?: string; consentId?: string; action?: string; categories?: any; language?: string; path?: string; userAgent?: string; createdAt?: string };
 const CL_UID = "api::consent-log.consent-log";
-const actBadge = (a?: string) => (a === "accept" ? "b-ok" : a === "reject" ? "b-warn" : "b-acc");
+// action values vary (accept_all / reject / reject_all / custom…) — normalize
+const norm = (a?: string) => { const s = String(a || "").toLowerCase(); return s.startsWith("accept") ? "accept" : s.startsWith("reject") ? "reject" : s ? "custom" : ""; };
+const actBadge = (a?: string) => { const n = norm(a); return n === "accept" ? "b-ok" : n === "reject" ? "b-warn" : "b-acc"; };
 
 // Standard PDPA cookie categories (reference shown in the manager).
 const CATS = [
@@ -35,8 +37,8 @@ export default function ConsentLog() {
   }, [t]);
   useEffect(() => { load(); }, [load]);
 
-  const count = (a: string) => logs.filter((l) => l.action === a).length;
-  const shown = filter ? logs.filter((l) => l.action === filter) : logs;
+  const count = (a: string) => logs.filter((l) => norm(l.action) === a).length;
+  const shown = filter ? logs.filter((l) => norm(l.action) === filter) : logs;
   const catList = (c: any) => {
     if (!c || typeof c !== "object") return [];
     return Object.entries(c).filter(([, v]) => v === true || v === "true").map(([k]) => k);
