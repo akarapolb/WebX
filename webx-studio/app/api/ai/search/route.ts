@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const ctx = top.map((s, i) => "[" + (i + 1) + "] " + s.title + "\n" + s.text).join("\n\n");
     const answer = await generate({
       system: "Answer using ONLY the numbered sources. Cite inline as [1], [2]. If the answer isn't in the sources, say you don't have that information. Reply in the user's language.",
-      prompt: "Sources:\n" + ctx + "\n\nQuestion: " + query, maxTokens: 600,
+      prompt: "Sources:\n" + ctx + "\n\nQuestion: " + query, maxTokens: 600, cache: true,
     });
     return NextResponse.json({ ok: true, answer, citations: top.map((s) => ({ title: s.title, url: s.url || "", contentType: s.contentType, score: s.score })), backend: vectorBackend() });
   } catch (e: any) {

@@ -172,6 +172,11 @@ palette, and accessibility (visible keyboard focus, reduced-motion, ARIA).
   `webx-default`, `webx-thai`, `webx-local` (Ollama for PDPA-sensitive tenants),
   `webx-embed` — plus provider fallbacks, a response cache, and **per-tenant
   virtual-key budgets**. Swap a provider by editing config only.
+- **Prompt caching:** `lib/llm` can mark a reused system prompt as a cacheable
+  prefix (`cache: true` → Anthropic `cache_control`, forwarded by LiteLLM;
+  providers without prefix caching ignore it). It's enabled on the high-reuse
+  system prompts — RAG answer, content audit, per-field edits, translation — to
+  cut repeat-prefix cost and latency.
 
 ### 5.2 Schema-aware AI actions (per field)
 

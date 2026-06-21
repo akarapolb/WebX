@@ -11,7 +11,8 @@ const EMBED_MODEL = process.env.LITELLM_EMBED_MODEL || "webx-embed";
 export const llmConfigured = () => Boolean(URL);
 
 type Role = "system" | "user" | "assistant";
-type Msg = { role: Role; content: string };
+type Block = { type: "text"; text: string; cache_control?: { type: "ephemeral" } };
+type Msg = { role: Role; content: string | Block[] };
 
 async function call(path: string, body: unknown): Promise<any> {
   if (!URL) throw new Error("LLM_NOT_CONFIGURED");
@@ -25,26 +26,29 @@ async function call(path: string, body: unknown): Promise<any> {
   return r.json();
 }
 
-function msgs(prompt: string, system?: string): Msg[] {
+// cache=true marks the system prompt as a cacheable prefix (Anthropic prompt
+// caching via cache_control; LiteLLM forwards it, providers that don't support
+// it simply ignore the marker). Opt-in for large, reused system prompts.
+function msgs(prompt: string, system?: string, cache?: boolean): Msg[] {
   const m: Msg[] = [];
-  if (system) m.push({ role: "system", content: system });
+  if (system) m.push({ role: "system", content: cache ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : system });
   m.push({ role: "user", content: prompt });
   return m;
 }
 
 /** Free-text generation. */
-export async function generate(o: { prompt: string; system?: string; model?: string; maxTokens?: number; temperature?: number }): Promise<string> {
+export async function generate(o: { prompt: string; system?: string; model?: string; maxTokens?: number; temperature?: number; cache?: boolean }): Promise<string> {
   const j = await call("/chat/completions", {
-    model: o.model || MODEL, messages: msgs(o.prompt, o.system),
+    model: o.model || MODEL, messages: msgs(o.prompt, o.system, o.cache),
     max_tokens: o.maxTokens ?? 900, temperature: o.temperature ?? 0.7,
   });
   return j?.choices?.[0]?.message?.content ?? "";
 }
 
 /** JSON-schema-constrained output — schema-aware actions never break structured content. */
-export async function structured<T = any>(o: { prompt: string; system?: string; schema: any; model?: string }): Promise<T> {
+export async function structured<T = any>(o: { prompt: string; system?: string; schema: any; model?: string; cache?: boolean }): Promise<T> {
   const j = await call("/chat/completions", {
-    model: o.model || MODEL, messages: msgs(o.prompt, o.system), temperature: 0.4,
+    model: o.model || MODEL, messages: msgs(o.prompt, o.system, o.cache), temperature: 0.4,
     response_format: { type: "json_schema", json_schema: { name: "webx_out", schema: o.schema, strict: true } },
   });
   const raw = j?.choices?.[0]?.message?.content ?? "{}";

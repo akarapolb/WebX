@@ -132,6 +132,7 @@ export default function EntryEditor({
         body: JSON.stringify({
           system: "You are an expert bilingual (Thai/English) editor for Thai government web content. Output ONLY the resulting text — no preamble, no quotes, no explanation." + (isRich ? " Preserve simple HTML tags (<p>, <strong>, <ul>, <li>, <h2>, <h3>)." : ""),
           prompt: instr + "\n\n----\n" + (f.value || ""),
+          cache: true,
         }),
       });
       if (r.ok) { const txt = (await r.json()).text; if (typeof txt === "string" && txt.trim()) { setVal(f.key, txt.trim()); setMsg({ t: t("ai.done"), ok: true }); } }

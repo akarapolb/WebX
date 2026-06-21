@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       system: "You are a professional translator for Thai government (DGA / สพร.) web content. Translate each field value into " + langName(targetLocale) + ", preserving meaning, a formal public-sector tone, and any HTML tags exactly. Do NOT translate proper nouns or acronyms (DGA, สพร., PDPA, ThaID). Return the same JSON keys with translated values only.",
       prompt: "Translate these fields to " + langName(targetLocale) + ":\n" + JSON.stringify(source),
       schema: { type: "object", additionalProperties: false, required: ["fields"], properties: { fields: { type: "object", additionalProperties: { type: "string" } } } },
+      cache: true,
     });
     translated = out?.fields || {};
   } catch {

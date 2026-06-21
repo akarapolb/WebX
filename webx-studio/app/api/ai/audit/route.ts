@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
         system: "You audit Thai government website content. For each item flag real issues only, in: Clarity, Tone, Accessibility, GEO/AEO, PDPA. Be specific and concise. Reply with findings referencing the item index.",
         prompt: "Audit these content items and return findings:\n" + sample.join("\n"),
         schema: { type: "object", additionalProperties: false, required: ["findings"], properties: { findings: { type: "array", items: { type: "object", additionalProperties: false, required: ["i", "dimension", "severity", "message"], properties: { i: { type: "integer" }, dimension: { type: "string" }, severity: { type: "string", enum: ["high", "med", "low"] }, message: { type: "string" } } } } } },
+        cache: true,
       });
       for (const f of (out?.findings || [])) { const e = entries[f.i]; if (e) findings.push({ docId: e.docId, contentType: e.uid, title: e.title || "(untitled)", dimension: "AI · " + f.dimension, severity: (["high", "med", "low"].includes(f.severity) ? f.severity : "low") as any, message: f.message }); }
       aiUsed = true;
