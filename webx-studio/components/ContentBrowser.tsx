@@ -114,6 +114,17 @@ export default function ContentBrowser() {
       const a: any = attrs[tk];
       if (a && (a.type === "string" || a.type === "text")) { body[tk] = "Untitled " + current.name; break; }
     }
+    // tenant-scoped types: attach the selected tenant so the entry isn't orphaned.
+    // A super-admin creator isn't auto-resolved to a tenant by the backend, so a
+    // new entry would otherwise have no tenant and vanish from the filtered list.
+    if (tenantUids.has(uid) && currentKey && currentKey !== "workspace") {
+      try {
+        const tr = await fetch("/api/strapi/content-manager/collection-types/api::tenant.tenant?pageSize=1&filters[key][$eq]=" + encodeURIComponent(currentKey));
+        const tj = tr.ok ? await tr.json() : null;
+        const tid = (tj?.results ?? tj?.data ?? [])[0]?.id;
+        if (tid) body.tenant = tid;
+      } catch { /* fall back to backend tenant injection */ }
+    }
     try {
       const r = await fetch("/api/strapi/content-manager/collection-types/" + uid, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!r.ok) { setErr(t("c.createFail") + " (HTTP " + r.status + ")"); setCreating(false); return; }
