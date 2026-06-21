@@ -18,5 +18,6 @@ export const NAV: NavItem[] = [
   { id: "users", label: "Users & Roles", icon: "users", k: 9, group: "admin" },
   { id: "field-access", label: "Field Access", icon: "lock", k: 10, group: "admin" },
   { id: "audit", label: "Audit Log", icon: "shield", k: 11, group: "admin" },
-  { id: "tokens", label: "API & Tokens", icon: "code", k: 12, group: "admin" },
+  { id: "content-audit", label: "Content Audit", icon: "activity", k: 12, group: "admin" },
+  { id: "tokens", label: "API & Tokens", icon: "code", k: 13, group: "admin" },
 ];
