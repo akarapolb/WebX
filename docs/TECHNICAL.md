@@ -249,11 +249,13 @@ MCP client (Claude Code, Claude Desktop, Cursor) — or an agent — can work wi
 the CMS.
 
 - **Tools:** `list_content_types`, `search_content`, `get_entry`,
-  `create_entry` (draft), `update_entry`.
+  `create_entry` (draft), `update_entry`, `submit_for_review`, `list_reviews`.
 - Talks to Strapi REST with a Strapi API token; the token's permissions bound
   what the agent can do.
-- **Safe surface:** read + create/update **drafts** only — **no publish or
-  delete tool**, so going live stays a human action.
+- **Gated agentic write:** read + create/update **drafts** + **submit to
+  review** — **no publish or delete tool**. An agent's change reaches the public
+  site only after a human approves and publishes it from the Reviews board:
+  the agent proposes, a person disposes.
 
 ```jsonc
 // .mcp.json (Claude Code / Desktop / Cursor)
