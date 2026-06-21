@@ -51,6 +51,9 @@ export default function EntryEditor({
   const [review, setReview] = useState<any>(null);
   const [revBusy, setRevBusy] = useState(false);
   const [trBusy, setTrBusy] = useState(false);
+  const [delBusy, setDelBusy] = useState<"" | "unpub" | "del">("");
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [delAck, setDelAck] = useState(false);
   const [releases, setReleases] = useState<any[]>([]);
   const [fp, setFp] = useState<{ hidden: Set<string>; readonly: Set<string> }>({ hidden: new Set(), readonly: new Set() });
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -236,6 +239,27 @@ export default function EntryEditor({
     finally { setTrBusy(false); }
   }
 
+  async function unpublishEntry() {
+    setDelBusy("unpub"); setMsg(null);
+    const url = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + "/actions/unpublish" + (locale ? "?locale=" + locale : "");
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (r.ok) { setMsg({ t: t("e.unpublished"), ok: true }); onSaved(); }
+      else setMsg({ t: t("e.unpubFail") + " (HTTP " + r.status + ")", ok: false });
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    finally { setDelBusy(""); }
+  }
+  async function deleteEntry() {
+    setDelBusy("del"); setMsg(null);
+    const url = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + (locale ? "?locale=" + locale : "");
+    try {
+      const r = await fetch(url, { method: "DELETE" });
+      if (r.ok) { setConfirmDel(false); onSaved(); onClose(); }
+      else setMsg({ t: t("e.delFail") + " (HTTP " + r.status + ")", ok: false });
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    finally { setDelBusy(""); }
+  }
+
   async function addToRelease(relId: string) {
     const rel = releases.find((r) => String(r.documentId ?? r.id) === String(relId));
     if (!rel) return;
@@ -340,6 +364,15 @@ export default function EntryEditor({
             </div>
           ))}
           {rels.length > 0 && <div className="muted" style={{ fontSize: 11 }}>{t("m.relnote")}</div>}
+
+          <div className="fld" style={{ borderTop: "1px solid var(--line)", marginTop: 10, paddingTop: 12 }}>
+            <label style={{ color: "var(--bad)" }}>{t("e.danger")}</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="btn btn--g" onClick={unpublishEntry} disabled={delBusy !== ""}><Icon name="eye" />{delBusy === "unpub" ? "…" : t("e.unpublish")}</button>
+              <button className="btn btn--g" style={{ color: "var(--bad)", borderColor: "var(--bad)" }} onClick={() => { setDelAck(false); setConfirmDel(true); }} disabled={delBusy !== ""}><Icon name="trash" />{t("e.delete")}</button>
+            </div>
+            <div className="muted" style={{ fontSize: 11 }}>{t("e.dangerNote")}</div>
+          </div>
         </div>
 
         <div className="ovfoot">
@@ -355,6 +388,25 @@ export default function EntryEditor({
           </button>
         </div>
       </div>
+
+      {confirmDel && (
+        <div className="scrim" style={{ zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setConfirmDel(false)}>
+          <div className="panel" style={{ maxWidth: 440, width: "90%" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, color: "var(--bad)" }}><Icon name="trash" /> {t("e.delTitle")}</h3>
+            <p className="muted" style={{ marginTop: 0 }}>{t("e.delWarn")} <b style={{ color: "var(--ink, inherit)" }}>{fields.find((f) => f.key === "title")?.value || typeName + " " + docId.slice(0, 8)}</b></p>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, margin: "12px 0" }}>
+              <input type="checkbox" checked={delAck} onChange={(e) => setDelAck(e.target.checked)} />
+              {t("e.delAck")}
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn--g" onClick={() => setConfirmDel(false)} disabled={delBusy === "del"}>{t("e.cancel")}</button>
+              <button className="btn btn--p" style={{ background: "var(--bad)", borderColor: "var(--bad)" }} disabled={!delAck || delBusy === "del"} onClick={deleteEntry}>
+                <Icon name="trash" />{delBusy === "del" ? t("e.deleting") : t("e.delConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
