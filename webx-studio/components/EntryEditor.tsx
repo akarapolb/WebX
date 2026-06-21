@@ -50,6 +50,7 @@ export default function EntryEditor({
   const [uploading, setUploading] = useState(false);
   const [review, setReview] = useState<any>(null);
   const [revBusy, setRevBusy] = useState(false);
+  const [trBusy, setTrBusy] = useState(false);
   const [releases, setReleases] = useState<any[]>([]);
   const [fp, setFp] = useState<{ hidden: Set<string>; readonly: Set<string> }>({ hidden: new Set(), readonly: new Set() });
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -222,6 +223,18 @@ export default function EntryEditor({
     finally { setRevBusy(false); }
   }
 
+  const trTarget = (locale || "th").toLowerCase().startsWith("en") ? "th" : "en";
+  async function translate() {
+    setTrBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/ai/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid, docId, locale: locale || "", targetLocale: trTarget }) });
+      if (r.status === 503) setMsg({ t: t("ai.off"), ok: false });
+      else if (r.ok) setMsg({ t: t("tr.queued"), ok: true });
+      else { const j = await r.json().catch(() => ({} as any)); setMsg({ t: j.error || ("Translate failed (HTTP " + r.status + ")"), ok: false }); }
+    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    finally { setTrBusy(false); }
+  }
+
   async function addToRelease(relId: string) {
     const rel = releases.find((r) => String(r.documentId ?? r.id) === String(relId));
     if (!rel) return;
@@ -259,7 +272,10 @@ export default function EntryEditor({
                   {releases.map((r) => <option key={r.id} value={r.documentId ?? r.id}>{r.name}</option>)}
                 </select>
               )}
-              <button className="btn btn--g" style={releases.length > 0 ? {} : { marginLeft: "auto" }} onClick={submitReview} disabled={revBusy || review?.stage === "in_review"}>
+              <button className="btn btn--g" style={releases.length > 0 ? {} : { marginLeft: "auto" }} onClick={translate} disabled={trBusy} title={t("tr.hint")}>
+                <Icon name="spark" />{trBusy ? t("tr.translating") : t("tr.to") + " " + (trTarget === "th" ? "ไทย" : "EN")}
+              </button>
+              <button className="btn btn--g" onClick={submitReview} disabled={revBusy || review?.stage === "in_review"}>
                 <Icon name="check" />{revBusy ? t("rv.submitting") : t("rv.submit")}
               </button>
             </div>
