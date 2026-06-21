@@ -81,7 +81,7 @@
   // per-tenant front-end features — loaded on every page (default on; each
   // widget self-disables if the resolved tenant sets features.<key> === false).
   function loadFeatures() {
-    ["a11y"].forEach(function (f) {
+    ["a11y", "assist"].forEach(function (f) {
       if (document.querySelector('script[data-wxf="' + f + '"]')) return;
       var s = document.createElement("script");
       s.src = "/assets/" + f + ".js"; s.defer = true; s.setAttribute("data-wxf", f);
