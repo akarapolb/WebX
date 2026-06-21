@@ -440,6 +440,37 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiAbEventAbEvent extends Struct.CollectionTypeSchema {
+  collectionName: 'ab_events';
+  info: {
+    description: 'Anonymous A/B test impression & conversion counters (no personal data)';
+    displayName: 'AB Event';
+    pluralName: 'ab-events';
+    singularName: 'ab-event';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    documentRef: Schema.Attribute.String & Schema.Attribute.Required;
+    kind: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::ab-event.ab-event'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    variant: Schema.Attribute.String;
+  };
+}
+
 export interface ApiApplicationApplication extends Struct.CollectionTypeSchema {
   collectionName: 'applications';
   info: {
@@ -624,7 +655,7 @@ export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
 export interface ApiAuditLogAuditLog extends Struct.CollectionTypeSchema {
   collectionName: 'audit_logs';
   info: {
-    description: '\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E01\u0E32\u0E23\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E41\u0E1B\u0E25\u0E07\u0E40\u0E19\u0E37\u0E49\u0E2D\u0E2B\u0E32\u0E43\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E1A\u0E49\u0E32\u0E19 (\u0E43\u0E04\u0E23/\u0E17\u0E33\u0E2D\u0E30\u0E44\u0E23/\u0E40\u0E21\u0E37\u0E48\u0E2D\u0E44\u0E23)';
+    description: 'Admin action audit trail (admin-only)';
     displayName: 'Audit Log';
     pluralName: 'audit-logs';
     singularName: 'audit-log';
@@ -634,6 +665,7 @@ export interface ApiAuditLogAuditLog extends Struct.CollectionTypeSchema {
   };
   attributes: {
     action: Schema.Attribute.String;
+    actor: Schema.Attribute.String;
     adminEmail: Schema.Attribute.String;
     at: Schema.Attribute.DateTime;
     contentType: Schema.Attribute.String;
@@ -647,7 +679,10 @@ export interface ApiAuditLogAuditLog extends Struct.CollectionTypeSchema {
       'api::audit-log.audit-log'
     > &
       Schema.Attribute.Private;
+    method: Schema.Attribute.String;
+    path: Schema.Attribute.Text;
     publishedAt: Schema.Attribute.DateTime;
+    targetRef: Schema.Attribute.String;
     tenantKey: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1038,6 +1073,42 @@ export interface ApiContactMessageContactMessage
   };
 }
 
+export interface ApiDocEmbeddingDocEmbedding
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'doc_embeddings';
+  info: {
+    description: 'Vector index of tenant content for RAG/semantic search (admin-only)';
+    displayName: 'Doc Embedding';
+    pluralName: 'doc-embeddings';
+    singularName: 'doc-embedding';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    contentType: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    documentRef: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::doc-embedding.doc-embedding'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    tenantKey: Schema.Attribute.String;
+    text: Schema.Attribute.Text;
+    title: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    url: Schema.Attribute.String;
+    vector: Schema.Attribute.JSON;
+  };
+}
+
 export interface ApiDownloadDownload extends Struct.CollectionTypeSchema {
   collectionName: 'downloads';
   info: {
@@ -1208,6 +1279,38 @@ export interface ApiFaqFaq extends Struct.CollectionTypeSchema {
         };
       }> &
       Schema.Attribute.DefaultTo<0>;
+  };
+}
+
+export interface ApiFieldPolicyFieldPolicy extends Struct.CollectionTypeSchema {
+  collectionName: 'field_policies';
+  info: {
+    description: 'Per-role field access (hidden / read-only) for content types';
+    displayName: 'Field Policy';
+    pluralName: 'field-policies';
+    singularName: 'field-policy';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    contentType: Schema.Attribute.String & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    hidden: Schema.Attribute.JSON;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::field-policy.field-policy'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    readonly: Schema.Attribute.JSON;
+    role: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1455,6 +1558,16 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    abEnabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    abSplit: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 100;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<50>;
     active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     blocks: Schema.Attribute.DynamicZone<
       [
@@ -1488,6 +1601,7 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    variantBlocks: Schema.Attribute.JSON;
   };
 }
 
@@ -1561,6 +1675,39 @@ export interface ApiMenuItemMenuItem extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     url: Schema.Attribute.String & Schema.Attribute.DefaultTo<'#'>;
+  };
+}
+
+export interface ApiPageVersionPageVersion extends Struct.CollectionTypeSchema {
+  collectionName: 'page_versions';
+  info: {
+    description: "Immutable snapshots of a page's blocks for version history / restore";
+    displayName: 'Page Version';
+    pluralName: 'page-versions';
+    singularName: 'page-version';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    author: Schema.Attribute.String;
+    contentType: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    data: Schema.Attribute.JSON;
+    documentRef: Schema.Attribute.String & Schema.Attribute.Required;
+    label: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::page-version.page-version'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1663,6 +1810,79 @@ export interface ApiRegistrationRegistration
     username: Schema.Attribute.String & Schema.Attribute.Unique;
     utype: Schema.Attribute.String;
     verified: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+  };
+}
+
+export interface ApiReleaseRelease extends Struct.CollectionTypeSchema {
+  collectionName: 'releases';
+  info: {
+    description: 'Group entries and publish them together, now or scheduled';
+    displayName: 'Release';
+    pluralName: 'releases';
+    singularName: 'release';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    items: Schema.Attribute.JSON;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::release.release'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    note: Schema.Attribute.Text;
+    publishedAt: Schema.Attribute.DateTime;
+    scheduledAt: Schema.Attribute.DateTime;
+    state: Schema.Attribute.String & Schema.Attribute.DefaultTo<'draft'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiReviewReview extends Struct.CollectionTypeSchema {
+  collectionName: 'reviews';
+  info: {
+    description: 'Content review/approval workflow state per entry';
+    displayName: 'Review';
+    pluralName: 'reviews';
+    singularName: 'review';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    assignee: Schema.Attribute.String;
+    contentType: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    documentRef: Schema.Attribute.String & Schema.Attribute.Required;
+    history: Schema.Attribute.JSON;
+    kind: Schema.Attribute.String & Schema.Attribute.DefaultTo<'review'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::review.review'
+    > &
+      Schema.Attribute.Private;
+    note: Schema.Attribute.Text;
+    payload: Schema.Attribute.JSON;
+    publishedAt: Schema.Attribute.DateTime;
+    requestedBy: Schema.Attribute.String;
+    stage: Schema.Attribute.String & Schema.Attribute.DefaultTo<'in_review'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -2504,6 +2724,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::ab-event.ab-event': ApiAbEventAbEvent;
       'api::application.application': ApiApplicationApplication;
       'api::article.article': ApiArticleArticle;
       'api::audit-log.audit-log': ApiAuditLogAuditLog;
@@ -2515,19 +2736,24 @@ declare module '@strapi/strapi' {
       'api::complaint.complaint': ApiComplaintComplaint;
       'api::consent-log.consent-log': ApiConsentLogConsentLog;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
+      'api::doc-embedding.doc-embedding': ApiDocEmbeddingDocEmbedding;
       'api::download.download': ApiDownloadDownload;
       'api::ebook.ebook': ApiEbookEbook;
       'api::event.event': ApiEventEvent;
       'api::faq.faq': ApiFaqFaq;
+      'api::field-policy.field-policy': ApiFieldPolicyFieldPolicy;
       'api::gallery.gallery': ApiGalleryGallery;
       'api::home-page.home-page': ApiHomePageHomePage;
       'api::job.job': ApiJobJob;
       'api::landing.landing': ApiLandingLanding;
       'api::location.location': ApiLocationLocation;
       'api::menu-item.menu-item': ApiMenuItemMenuItem;
+      'api::page-version.page-version': ApiPageVersionPageVersion;
       'api::poll.poll': ApiPollPoll;
       'api::popup.popup': ApiPopupPopup;
       'api::registration.registration': ApiRegistrationRegistration;
+      'api::release.release': ApiReleaseRelease;
+      'api::review.review': ApiReviewReview;
       'api::service.service': ApiServiceService;
       'api::sitemap-node.sitemap-node': ApiSitemapNodeSitemapNode;
       'api::tenant.tenant': ApiTenantTenant;
