@@ -172,6 +172,7 @@ export const DICT: Record<string, Entry> = {
   "c.new": { en: "New entry", th: "สร้างใหม่" },
   "c.creating": { en: "Creating…", th: "กำลังสร้าง…" },
   "c.createFail": { en: "Could not create entry", th: "สร้างเนื้อหาไม่สำเร็จ" },
+  "c.overLimit": { en: "Plan limit reached — {n} items on the {plan} plan. Upgrade in Plans & Billing to add more.", th: "ถึงขีดจำกัดแพ็กเกจแล้ว — {n} รายการในแพ็กเกจ {plan} · อัปเกรดที่ Plans & Billing เพื่อเพิ่ม" },
   "c.searchPh": { en: "Search entries…", th: "ค้นหาเนื้อหา…" },
   "c.all": { en: "All", th: "ทั้งหมด" },
   "c.draft": { en: "Draft", th: "ฉบับร่าง" },

@@ -4,6 +4,7 @@ import Icon from "./Icon";
 import EntryEditor from "./EntryEditor";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
+import { planLimit } from "@/lib/plans";
 
 type CType = { uid: string; name: string; api: string };
 type Entry = Record<string, any>;
@@ -119,10 +120,16 @@ export default function ContentBrowser() {
     // new entry would otherwise have no tenant and vanish from the filtered list.
     if (tenantUids.has(uid) && currentKey && currentKey !== "workspace") {
       try {
-        const tr = await fetch("/api/strapi/content-manager/collection-types/api::tenant.tenant?pageSize=1&filters[key][$eq]=" + encodeURIComponent(currentKey));
-        const tj = tr.ok ? await tr.json() : null;
-        const tid = (tj?.results ?? tj?.data ?? [])[0]?.id;
-        if (tid) body.tenant = tid;
+        const [tj, sum] = await Promise.all([
+          fetch("/api/strapi/content-manager/collection-types/api::tenant.tenant?pageSize=1&filters[key][$eq]=" + encodeURIComponent(currentKey)).then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/strapi/api/analytics/summary?tenant=" + encodeURIComponent(currentKey)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        ]);
+        const tn = (tj?.results ?? tj?.data ?? [])[0];
+        // usage metering: block creation once the plan's content limit is reached
+        const limit = planLimit(tn?.plan).items;
+        const used = sum?.contentTotal ?? 0;
+        if (used >= limit) { setErr(t("c.overLimit").replace("{n}", String(limit)).replace("{plan}", String(tn?.plan || "free"))); setCreating(false); return; }
+        if (tn?.id) body.tenant = tn.id;
       } catch { /* fall back to backend tenant injection */ }
     }
     try {
