@@ -186,9 +186,11 @@ Upgrades AI Search from keyword to retrieval-augmented, citation-grounded
 answers:
 
 - `/api/ai/index` chunks a tenant's published content, embeds it via `lib/llm`
-  (any provider), and stores the vectors in `doc-embedding` (in-app cosine ranks
-  results — SQLite-friendly; **pgvector** is the production upgrade). Triggered
-  by a "Reindex" button.
+  (any provider), and stores the vectors through a **pluggable store**
+  (`lib/vectorstore`). Default backend = in-app cosine over the `doc-embedding`
+  collection (zero infra, fine on SQLite); set `WEBX_VECTOR=pgvector` +
+  `PGVECTOR_URL` to swap in **Postgres + pgvector** for ANN at scale — same
+  interface, no feature-code change. Triggered by a "Reindex" button.
 - `/api/ai/search` embeds the query, ranks by cosine, then answers using **only**
   the top sources with inline `[n]` citations.
 - AI Search tries RAG first (a "RAG" badge + citation chips) and **falls back to
@@ -333,6 +335,7 @@ pip install "litellm[proxy]" && litellm --config litellm/config.yaml --port 4000
 | `WEBX_REFRESH_COOKIE` / `WEBX_REFRESH_TTL` | Refresh-token cookie + lifetime |
 | `LITELLM_URL` / `LITELLM_KEY` | AI gateway (leave URL empty to disable AI) |
 | `LITELLM_MODEL` / `LITELLM_EMBED_MODEL` | Default chat / embedding aliases |
+| `WEBX_VECTOR` / `PGVECTOR_URL` | RAG store: unset = in-app cosine; `pgvector` + URL for scale |
 
 Strapi admin session lifespans are set in `strapi-cms/config/admin.ts`
 (`auth.sessions.*`, in seconds); the BFF cookie TTL should match.
@@ -350,8 +353,9 @@ Strapi admin session lifespans are set in `strapi-cms/config/admin.ts`
 ## 9. Roadmap
 
 - **Deploy** target (Vercel + hosted Strapi) for a public demo URL.
-- **pgvector** for RAG at scale (a Thai retrieval **eval harness** ships in
-  `eval/` — keyword + semantic, recall@k / MRR, with a CI gate).
+- RAG hardening: hybrid BM25 + reranking on top of the pluggable store; a Thai
+  retrieval **eval harness** already ships in `eval/` (keyword + semantic,
+  recall@k / MRR, CI gate), and **pgvector** is a config swap (`WEBX_VECTOR`).
 - **Agentic write-ops** gated by review + RBAC; MCP write-tools behind approval
   (the AI Translate → Review flow in §5.5 is the first of these).
 - DAM-style media library, webhooks, shareable draft-preview links.

@@ -1,11 +1,12 @@
-// RAG indexer: chunk published tenant content → embed (LLM-agnostic) → store vectors.
+// RAG indexer: chunk published tenant content → embed (LLM-agnostic) → store
+// vectors via the pluggable vector store (in-app cosine or pgvector).
 import { NextRequest, NextResponse } from "next/server";
 import { sessionToken } from "@/lib/strapi";
 import { embed, llmConfigured } from "@/lib/llm";
 import { STRAPI_URL } from "@/lib/config";
+import { vectorUpsert, vectorBackend, type VecUpsert } from "@/lib/vectorstore";
 
 const INDEXABLE = ["api::article.article", "api::service.service", "api::faq.faq", "api::landing.landing", "api::blog.blog"];
-const EM = "api::doc-embedding.doc-embedding";
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 export async function POST(req: NextRequest) {
@@ -31,24 +32,16 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
   }
-  if (!docs.length) return NextResponse.json({ ok: true, indexed: 0 });
+  if (!docs.length) return NextResponse.json({ ok: true, indexed: 0, backend: vectorBackend() });
 
-  let indexed = 0;
+  // embed in batches, then hand the whole set to the store (one pgvector tx)
+  const toUpsert: VecUpsert[] = [];
   for (let i = 0; i < docs.length; i += 32) {
     const batch = docs.slice(i, i + 32);
     let vectors: number[][] = [];
     try { vectors = await embed(batch.map((d) => d.text)); } catch { break; }
-    for (let k = 0; k < batch.length; k++) {
-      const d = batch[k], v = vectors[k]; if (!v) continue;
-      try {
-        const old = await fetch(STRAPI_URL + "/content-manager/collection-types/" + EM + "?pageSize=50&filters[documentRef][$eq]=" + encodeURIComponent(d.documentRef), { headers: auth, cache: "no-store" }).then((r) => (r.ok ? r.json() : null));
-        for (const o of (old?.results ?? old?.data ?? [])) await fetch(STRAPI_URL + "/content-manager/collection-types/" + EM + "/" + (o.documentId ?? o.id), { method: "DELETE", headers: auth }).catch(() => {});
-      } catch {}
-      try {
-        await fetch(STRAPI_URL + "/content-manager/collection-types/" + EM, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ documentRef: d.documentRef, contentType: d.contentType, title: d.title, text: d.text, vector: v, tenantKey: tenant || "" }) });
-        indexed++;
-      } catch {}
-    }
+    for (let k = 0; k < batch.length; k++) { const v = vectors[k]; if (v) toUpsert.push({ ...batch[k], vector: v }); }
   }
-  return NextResponse.json({ ok: true, indexed });
+  const indexed = await vectorUpsert(toUpsert, { token, tenant });
+  return NextResponse.json({ ok: true, indexed, backend: vectorBackend() });
 }
