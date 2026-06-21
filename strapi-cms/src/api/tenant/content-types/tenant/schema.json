@@ -62,6 +62,22 @@
     "watermark": {
       "type": "json",
       "description": "{ enabled:bool, text:string } — ลายน้ำบนรูปคลังภาพ (TOR ภาคผนวก ก ข้อ 6.11)"
+    },
+    "plan": {
+      "type": "enumeration",
+      "enum": ["free", "pro", "enterprise"],
+      "default": "free",
+      "description": "SaaS subscription tier"
+    },
+    "seats": {
+      "type": "integer",
+      "default": 3,
+      "description": "Editor seats included in the plan"
+    },
+    "subscriptionStatus": {
+      "type": "string",
+      "default": "active",
+      "description": "active | trialing | past_due | canceled (from billing provider)"
     }
   }
 }

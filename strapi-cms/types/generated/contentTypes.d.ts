@@ -2042,8 +2042,13 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    plan: Schema.Attribute.Enumeration<['free', 'pro', 'enterprise']> &
+      Schema.Attribute.DefaultTo<'free'>;
     publishedAt: Schema.Attribute.DateTime;
+    seats: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
     social: Schema.Attribute.JSON;
+    subscriptionStatus: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'active'>;
     template: Schema.Attribute.JSON;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
