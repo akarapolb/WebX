@@ -21,5 +21,6 @@ export const NAV: NavItem[] = [
   { id: "audit", label: "Audit Log", icon: "shield", k: 11, group: "admin" },
   { id: "content-audit", label: "Content Audit", icon: "activity", k: 12, group: "admin" },
   { id: "consent", label: "Cookie Consent", icon: "cookie", k: 15, group: "admin" },
+  { id: "schema", label: "Schema / SEO", icon: "code", k: 16, group: "admin" },
   { id: "tokens", label: "API & Tokens", icon: "code", k: 13, group: "admin" },
 ];
