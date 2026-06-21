@@ -23,5 +23,6 @@ export const NAV: NavItem[] = [
   { id: "consent", label: "Cookie Consent", icon: "cookie", k: 15, group: "admin" },
   { id: "schema", label: "Schema / SEO", icon: "code", k: 16, group: "admin" },
   { id: "billing", label: "Plans & Billing", icon: "card", k: 17, group: "admin" },
+  { id: "compliance", label: "Compliance & Trust", icon: "shield", k: 18, group: "admin" },
   { id: "tokens", label: "API & Tokens", icon: "code", k: 13, group: "admin" },
 ];
