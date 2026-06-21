@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Icon from "./Icon";
 import CommandPalette from "./CommandPalette";
+import NewWorkspace from "./NewWorkspace";
 import { NAV } from "@/lib/nav";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
@@ -20,6 +21,7 @@ export default function Shell({
   const { t, lang, setLang } = useLang();
   const { tenants, currentKey, setCurrentKey, current } = useTenant();
   const [tenOpen, setTenOpen] = useState(false);
+  const [nwOpen, setNwOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [cmdk, setCmdk] = useState(false);
 
@@ -65,6 +67,9 @@ export default function Shell({
                     <b>{tn.name}</b><span>{tn.key === currentKey ? "●" : ""}</span>
                   </button>
                 ))}
+                <button className="ten-item" style={{ borderTop: "1px solid var(--line)", color: "var(--acc, #EE5020)" }} onClick={() => { setNwOpen(true); setTenOpen(false); }}>
+                  <span className="ten-dot"><Icon name="plus" /></span><b>{t("nw.title")}</b>
+                </button>
               </div>
             )}
           </div>
@@ -115,6 +120,7 @@ export default function Shell({
       </div>
 
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} onToggleTheme={toggleTheme} onLogout={logout} />
+      {nwOpen && <NewWorkspace userEmail={user.email} onClose={() => setNwOpen(false)} />}
     </div>
   );
 }
