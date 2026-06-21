@@ -350,8 +350,8 @@ Strapi admin session lifespans are set in `strapi-cms/config/admin.ts`
 ## 9. Roadmap
 
 - **Deploy** target (Vercel + hosted Strapi) for a public demo URL.
-- **pgvector** for RAG at scale; a **Thai evaluation set** to validate retrieval
-  on Thai/government content before locking the RAG stack.
+- **pgvector** for RAG at scale (a Thai retrieval **eval harness** ships in
+  `eval/` — keyword + semantic, recall@k / MRR, with a CI gate).
 - **Agentic write-ops** gated by review + RBAC; MCP write-tools behind approval
   (the AI Translate → Review flow in §5.5 is the first of these).
 - DAM-style media library, webhooks, shareable draft-preview links.
