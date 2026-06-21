@@ -20,14 +20,27 @@ function labelize(k: string) {
 const isImageFile = (mime?: string, url?: string) => (mime ? mime.startsWith("image/") : /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(url || ""));
 const mediaSrc = (url: string) => (url.startsWith("http") ? url : "/api/strapi" + url);
 
+// Per-field schema-aware AI actions (run through the LLM-agnostic /api/ai layer)
+const AI_ACTIONS: { id: string; instr: string }[] = [
+  { id: "improve", instr: "Improve the clarity and flow of this text, keeping its meaning and language." },
+  { id: "expand", instr: "Expand this into a fuller, more detailed version, same language and tone." },
+  { id: "shorten", instr: "Make this more concise while keeping the key points, same language." },
+  { id: "formal", instr: "Rewrite this in a formal, official tone suitable for a government website, same language." },
+  { id: "fix", instr: "Fix grammar, spelling and punctuation. Return the corrected text only, same language." },
+  { id: "th", instr: "Translate this into Thai (ภาษาไทย). Return only the translation." },
+  { id: "en", instr: "Translate this into English. Return only the translation." },
+];
+
 export default function EntryEditor({
   uid, docId, locale, typeName, mediaKeys, onClose, onSaved,
 }: {
   uid: string; docId: string; locale?: string; typeName: string; mediaKeys?: string[];
   onClose: () => void; onSaved: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [fields, setFields] = useState<Field[]>([]);
+  const [aiMenu, setAiMenu] = useState("");
+  const [aiBusyKey, setAiBusyKey] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"" | "save" | "publish">("");
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
@@ -106,6 +119,25 @@ export default function EntryEditor({
 
   function setVal(key: string, value: string) {
     setFields((f) => f.map((x) => (x.key === key ? { ...x, value } : x)));
+  }
+
+  // schema-aware AI action on a single field, via the LLM-agnostic /api/ai layer
+  async function aiAction(f: Field, instr: string) {
+    setAiMenu(""); setAiBusyKey(f.key); setMsg(null);
+    const isRich = f.kind === "rich";
+    try {
+      const r = await fetch("/api/ai/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system: "You are an expert bilingual (Thai/English) editor for Thai government web content. Output ONLY the resulting text — no preamble, no quotes, no explanation." + (isRich ? " Preserve simple HTML tags (<p>, <strong>, <ul>, <li>, <h2>, <h3>)." : ""),
+          prompt: instr + "\n\n----\n" + (f.value || ""),
+        }),
+      });
+      if (r.ok) { const txt = (await r.json()).text; if (typeof txt === "string" && txt.trim()) { setVal(f.key, txt.trim()); setMsg({ t: t("ai.done"), ok: true }); } }
+      else if (r.status === 503) setMsg({ t: t("ai.off"), ok: false });
+      else setMsg({ t: t("ai.err"), ok: false });
+    } catch { setMsg({ t: t("ai.err"), ok: false }); }
+    finally { setAiBusyKey(""); }
   }
 
   function aiAssist() {
@@ -237,28 +269,31 @@ export default function EntryEditor({
           {fields.filter((f) => !fp.hidden.has(f.key)).map((f) => {
             const ro = fp.readonly.has(f.key);
             const lock = ro ? <span className="muted" style={{ fontWeight: 500 }}> · {t("e.locked")}</span> : null;
+            const busy = aiBusyKey === f.key;
             return (
               <div className={"fld" + (ro ? " fld--ro" : "")} key={f.key}>
-                {f.kind === "input" ? (
-                  <>
-                    <label>{labelize(f.key)}{lock}</label>
-                    <input value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro} />
-                  </>
-                ) : (
-                  <>
-                    <div className="ai-row">
-                      <label style={{ margin: 0, flex: 1 }}>{labelize(f.key)}{lock}</label>
-                      {f.key === mainAssistKey && !ro && (
-                        <button className="ai-chip" onClick={aiAssist} disabled={assisting}>
-                          <Icon name="spark" />{assisting ? t("e.drafting") : t("e.aiAssist")}
-                        </button>
+                <div className="ai-row">
+                  <label style={{ margin: 0, flex: 1 }}>{labelize(f.key)}{lock}</label>
+                  {!ro && (
+                    <div className="ai-menu-wrap">
+                      <button className="ai-chip" onClick={() => setAiMenu((m) => (m === f.key ? "" : f.key))} disabled={busy}>
+                        <Icon name="spark" />{busy ? t("ai.working") : t("ai.btn")}
+                      </button>
+                      {aiMenu === f.key && (
+                        <div className="ai-menu" onMouseLeave={() => setAiMenu("")}>
+                          {AI_ACTIONS.map((a) => (
+                            <button key={a.id} onClick={() => aiAction(f, a.instr)}>{t("ai." + a.id)}</button>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {f.kind === "rich"
-                      ? <RichText value={f.value} onChange={(html) => setVal(f.key, html)} placeholder={labelize(f.key)} />
-                      : <textarea value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro} />}
-                  </>
-                )}
+                  )}
+                </div>
+                {f.kind === "input"
+                  ? <input value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro || busy} />
+                  : f.kind === "rich"
+                    ? <RichText value={f.value} onChange={(html) => setVal(f.key, html)} placeholder={labelize(f.key)} />
+                    : <textarea value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro || busy} />}
               </div>
             );
           })}

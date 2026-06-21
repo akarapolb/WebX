@@ -6,10 +6,12 @@ import { useEffect } from "react";
 export default function SessionKeeper() {
   useEffect(() => {
     let alive = true;
-    const ping = () => { if (alive && document.visibilityState !== "hidden") fetch("/api/auth/refresh", { method: "POST" }).catch(() => {}); };
-    ping(); // refresh on load so the token is fresh for this session
-    const id = setInterval(ping, 10 * 60 * 1000); // and every 10 min (well under the access-token TTL)
-    return () => { alive = false; clearInterval(id); };
+    const ping = () => { if (alive) fetch("/api/auth/refresh", { method: "POST" }).catch(() => {}); };
+    ping(); // refresh on load
+    const id = setInterval(() => { if (document.visibilityState === "visible") ping(); }, 10 * 60 * 1000); // every 10 min
+    const onVis = () => { if (document.visibilityState === "visible") ping(); }; // and when the tab is re-focused
+    document.addEventListener("visibilitychange", onVis);
+    return () => { alive = false; clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, []);
   return null;
 }
