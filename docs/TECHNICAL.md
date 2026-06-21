@@ -213,7 +213,21 @@ The safest agentic surface — it analyses and reports, **never writes**.
   no mainstream CMS ships — and it surfaces exactly the SEO/GEO/PDPA gaps the
   DGA TOR cares about. Read-only + tenant/permission-scoped by design.
 
-### 5.5 Guardrails
+### 5.5 AI Translate → Review (safe agentic write)
+
+The first agentic *write* op — done the safe way. From any entry, "Translate →
+EN / ไทย" sends its localized text fields to the provider, then files the result
+as a **translation review** on the Reviews board. It **never writes the entry
+directly**: a human reviews the draft and clicks **Apply**, which writes the
+target locale's draft (still unpublished — a human publishes it).
+
+- The translator preserves HTML, a formal public-sector tone, and proper
+  nouns/acronyms (DGA, สพร., PDPA, ThaID).
+- Directly serves the bilingual (Thai default + English) requirement of the DGA
+  TOR — at scale, through the existing approval workflow.
+- Degrades gracefully: returns `503` when no LLM is configured.
+
+### 5.6 Guardrails
 
 Aligned to OWASP Top-10 for LLM Apps (2025): **no autonomous publish**
 (human-in-the-loop via the review workflow), **least-privilege** tool access
@@ -336,8 +350,8 @@ Strapi admin session lifespans are set in `strapi-cms/config/admin.ts`
 - **Deploy** target (Vercel + hosted Strapi) for a public demo URL.
 - **pgvector** for RAG at scale; a **Thai evaluation set** to validate retrieval
   on Thai/government content before locking the RAG stack.
-- **AI translation** at scale (EN ↔ ไทย) routed through the review workflow.
-- **Agentic write-ops** gated by review + RBAC; MCP write-tools behind approval.
+- **Agentic write-ops** gated by review + RBAC; MCP write-tools behind approval
+  (the AI Translate → Review flow in §5.5 is the first of these).
 - DAM-style media library, webhooks, shareable draft-preview links.
 
 ---
