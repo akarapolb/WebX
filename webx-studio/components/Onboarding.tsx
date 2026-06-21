@@ -1,0 +1,73 @@
+"use client";
+import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import Icon from "./Icon";
+import { useLang } from "./LangProvider";
+import { useTenant } from "./TenantProvider";
+
+// First-run checklist for a new workspace. Steps auto-complete from real signals;
+// hides itself once everything's done or the user dismisses it (per workspace).
+const TEN = "api::tenant.tenant";
+
+export default function Onboarding() {
+  const { t } = useLang();
+  const { currentKey } = useTenant();
+  const key = currentKey && currentKey !== "workspace" ? currentKey : "";
+  const [steps, setSteps] = useState<{ id: string; done: boolean; href: string }[]>([]);
+  const [dismissed, setDismissed] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+
+  const tf = key ? "&filters[tenant][key][$eq]=" + encodeURIComponent(key) : "";
+  const count = useCallback(async (uid: string) => {
+    try { const r = await fetch("/api/strapi/content-manager/collection-types/" + uid + "?page=1&pageSize=1" + tf); const j = r.ok ? await r.json() : null; return j?.pagination?.total ?? 0; } catch { return 0; }
+  }, [tf]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let dis = false;
+      try { dis = localStorage.getItem("webx_onboard_" + (key || "default")) === "1"; } catch {}
+      const tn = await fetch("/api/strapi/content-manager/collection-types/" + TEN + "?pageSize=1&filters[key][$eq]=" + encodeURIComponent(key || "dga")).then((r) => (r.ok ? r.json() : null)).then((j) => (j?.results ?? j?.data ?? [])[0]).catch(() => null);
+      const [content, landings] = await Promise.all([count("api::article.article"), count("api::landing.landing")]);
+      if (!alive) return;
+      setSteps([
+        { id: "create", done: true, href: "/dashboard" },
+        { id: "brand", done: Boolean(tn?.brand?.primaryColor), href: "/branding" },
+        { id: "content", done: content > 0, href: "/content" },
+        { id: "page", done: landings > 0, href: "/builder" },
+        { id: "invite", done: Array.isArray(tn?.adminEmails) && tn.adminEmails.length > 1, href: "/users" },
+      ]);
+      setDismissed(dis);
+      setLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, [key, count]);
+
+  const done = steps.filter((s) => s.done).length;
+  const all = steps.length || 5;
+  if (!loaded || dismissed || done >= all) return null;
+
+  function dismiss() { try { localStorage.setItem("webx_onboard_" + (key || "default"), "1"); } catch {} setDismissed(true); }
+
+  return (
+    <div className="panel" style={{ marginBottom: 16, border: "1px solid var(--acc, #EE5020)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Icon name="spark" /><h3 style={{ margin: 0 }}>{t("ob.title")}</h3>
+        <span className="badge b-acc">{done}/{all}</span>
+        <button className="btn btn--g" style={{ marginLeft: "auto", padding: "2px 10px" }} onClick={dismiss}>{t("ob.dismiss")}</button>
+      </div>
+      <div style={{ height: 8, background: "var(--line)", borderRadius: 6, overflow: "hidden", margin: "10px 0 14px" }}>
+        <div style={{ height: "100%", width: (done / all) * 100 + "%", background: "var(--acc, #EE5020)" }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {steps.map((s) => (
+          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: s.done ? "var(--ok)" : "var(--muted)", display: "inline-flex" }}><Icon name={s.done ? "check" : "chevron"} /></span>
+            <span style={{ textDecoration: s.done ? "line-through" : "none", opacity: s.done ? 0.55 : 1 }}>{t("ob." + s.id)}</span>
+            {!s.done && <Link href={s.href} className="btn btn--g" style={{ marginLeft: "auto", padding: "2px 10px" }}>{t("ob.go")}</Link>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
