@@ -78,7 +78,19 @@
 
   function uncloak() { document.documentElement.classList.remove("cms-cloak"); }
 
+  // per-tenant front-end features — loaded on every page (default on; each
+  // widget self-disables if the resolved tenant sets features.<key> === false).
+  function loadFeatures() {
+    ["a11y"].forEach(function (f) {
+      if (document.querySelector('script[data-wxf="' + f + '"]')) return;
+      var s = document.createElement("script");
+      s.src = "/assets/" + f + ".js"; s.defer = true; s.setAttribute("data-wxf", f);
+      document.body.appendChild(s);
+    });
+  }
+
   function run() {
+    loadFeatures();
     fetch(STRAPI + "/api/tenants/resolve?_=1" + T, { headers: { Accept: "application/json" } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) { if (j && j.data) apply(j.data); })

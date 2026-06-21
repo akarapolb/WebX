@@ -78,6 +78,10 @@
       "type": "string",
       "default": "active",
       "description": "active | trialing | past_due | canceled (from billing provider)"
+    },
+    "features": {
+      "type": "json",
+      "description": "Per-tenant front-end feature toggles, e.g. { a11y:true, simplify:true, serviceFinder:true, pwa:true } — unset = all on"
     }
   }
 }
