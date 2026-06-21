@@ -168,6 +168,7 @@ export const DICT: Record<string, Entry> = {
   "s.btn": { en: "Search", th: "ค้นหา" },
   "s.thinking": { en: "Searching your content…", th: "กำลังค้นเนื้อหา…" },
   "s.aianswer": { en: "AI answer · grounded in your content", th: "คำตอบ AI · อ้างอิงเนื้อหาของคุณ" },
+  "s.kwanswer": { en: "Top match · keyword search", th: "ผลใกล้เคียง · ค้นด้วยคำสำคัญ" },
   "s.grounded": { en: "RAG", th: "RAG" },
   "s.reindex": { en: "Reindex", th: "สร้างดัชนี" },
   "s.reindexhint": { en: "Embed this tenant's published content for semantic search", th: "ฝังเนื้อหาที่เผยแพร่ของหน่วยงานนี้เพื่อค้นแบบ semantic" },

@@ -95,7 +95,7 @@ export default function AISearch() {
         <>
           {answer ? (
             <div className="ss-ans">
-              <div className="ai-h"><Icon name="spark" />{t("s.aianswer")}{ragOn && <span className="badge b-ok" style={{ marginLeft: 8 }}><span className="dot" />{t("s.grounded")}</span>}</div>
+              <div className="ai-h"><Icon name="spark" />{ragOn ? t("s.aianswer") : t("s.kwanswer")}{ragOn && <span className="badge b-ok" style={{ marginLeft: 8 }}><span className="dot" />{t("s.grounded")}</span>}</div>
               <div className="txt">{answer}</div>
               {sources.length > 0 && (
                 <div className="ss-src">
