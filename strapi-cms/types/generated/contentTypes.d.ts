@@ -2032,6 +2032,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     domains: Schema.Attribute.JSON;
+    features: Schema.Attribute.JSON;
     footerColumns: Schema.Attribute.JSON;
     key: Schema.Attribute.UID & Schema.Attribute.Required;
     liveChat: Schema.Attribute.JSON;
