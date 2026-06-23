@@ -1,0 +1,91 @@
+"use client";
+import { useEffect, useState, useCallback } from "react";
+import Icon from "./Icon";
+import { useLang } from "./LangProvider";
+import { useTenant } from "./TenantProvider";
+
+// Status & Observability — live service checks, SLA per plan, tenant-isolation
+// posture, and a recent-activity feed (from the audit log). Read-only.
+const SLA = [
+  { plan: "Free", target: "Best-effort", dr: "—" },
+  { plan: "Pro", target: "99.9%", dr: "Daily backup" },
+  { plan: "Enterprise", target: "99.95%", dr: "DR site · RTO/RPO" },
+];
+const shortType = (c?: string) => String(c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
+
+export default function Status() {
+  const { t } = useLang();
+  const { currentKey } = useTenant();
+  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "dga";
+  const [svc, setSvc] = useState<{ k: string; up: boolean }[]>([]);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const checks = await Promise.all([
+      fetch("/api/strapi/content-manager/content-types").then((r) => r.ok).catch(() => false),
+      fetch("/api/strapi/sitemap.xml").then((r) => r.ok).catch(() => false),
+    ]);
+    setSvc([{ k: "bff", up: true }, { k: "strapi", up: checks[0] }, { k: "delivery", up: checks[1] }]);
+    const a = await fetch("/api/strapi/content-manager/collection-types/api::audit-log.audit-log?sort=at:DESC&pageSize=8").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    setActivity(a?.results ?? a?.data ?? []);
+    setLoading(false);
+  }, [tenant]);
+  useEffect(() => { load(); }, [load]);
+
+  const allUp = svc.length > 0 && svc.every((s) => s.up);
+
+  return (
+    <>
+      <div className="vh">
+        <div><h1>{t("nav.status")}</h1><p>{t("st.sub")}</p></div>
+        <div className="vh-act"><button className="btn btn--g" onClick={load} disabled={loading}><Icon name="undo" />{t("al.refresh")}</button></div>
+      </div>
+
+      <div className="panel" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, border: "1px solid " + (allUp ? "var(--ok)" : "var(--warn)") }}>
+        <span className={"badge " + (allUp ? "b-ok" : "b-warn")} style={{ fontSize: 14 }}><span className="dot" /></span>
+        <b style={{ fontSize: 18 }}>{allUp ? t("st.operational") : t("st.degraded")}</b>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <div className="panel" style={{ flex: "1 1 280px" }}>
+          <h3 style={{ margin: "0 0 10px" }}>{t("st.services")}</h3>
+          {svc.map((s) => (
+            <div key={s.k} style={{ display: "flex", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
+              <span>{t("st." + s.k)}</span>
+              <span className={"badge " + (s.up ? "b-ok" : "b-warn")} style={{ marginLeft: "auto" }}><span className="dot" />{s.up ? t("st.up") : t("st.down")}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="panel" style={{ flex: "1 1 280px" }}>
+          <h3 style={{ margin: "0 0 10px" }}>{t("st.sla")}</h3>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={{ padding: "4px 0" }}>Plan</th><th>{t("st.slaTarget")}</th><th>{t("st.slaDr")}</th></tr></thead>
+            <tbody>{SLA.map((r) => <tr key={r.plan} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: "6px 0" }}><b>{r.plan}</b></td><td className="mono">{r.target}</td><td className="muted">{r.dr}</td></tr>)}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <h3 style={{ margin: "0 0 6px" }}>{t("st.isolation")} <span className="badge b-acc" style={{ fontSize: 11 }}>{tenant}</span></h3>
+        <div className="muted" style={{ fontSize: 13 }}>{t("st.isolationE")}</div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <h3 style={{ margin: "0 0 10px" }}>{t("st.activity")}</h3>
+        {!loading && activity.length === 0 && <span className="muted">{t("st.none")}</span>}
+        {activity.map((a, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--line)", fontSize: 13 }}>
+            <span className="badge b-mut">{a.action}</span>
+            <span className="mono">{shortType(a.contentType)}</span>
+            <span className="muted" style={{ marginLeft: "auto" }}>{a.adminEmail} · {a.at ? new Date(a.at).toLocaleString() : ""}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="notice" style={{ marginTop: 16 }}><Icon name="activity" /> {t("st.foot")}</div>
+    </>
+  );
+}

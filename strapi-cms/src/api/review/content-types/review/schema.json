@@ -13,6 +13,8 @@
     "contentType": { "type": "string" },
     "title": { "type": "string" },
     "stage": { "type": "string", "default": "in_review" },
+    "kind": { "type": "string", "default": "review" },
+    "payload": { "type": "json" },
     "assignee": { "type": "string" },
     "requestedBy": { "type": "string" },
     "note": { "type": "text" },

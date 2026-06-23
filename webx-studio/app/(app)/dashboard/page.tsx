@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import { useLang } from "@/components/LangProvider";
 import { useTenant } from "@/components/TenantProvider";
+import Onboarding from "@/components/Onboarding";
 
 const SERIES = [42, 55, 48, 63, 58, 71, 66, 80, 76, 88, 82, 95];
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
@@ -166,6 +167,8 @@ export default function Dashboard() {
         </div>
         <div className="vh-act"><button className="btn btn--g"><Icon name="doc" />{t("dash.export")}</button></div>
       </div>
+
+      <Onboarding />
 
       <div className="kpis">
         {KPIS.map((k, i) => (

@@ -25,7 +25,35 @@ export async function strapiLogin(email: string, password: string) {
   }
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j?.data?.token) return { ok: false as const, status: r.status };
-  return { ok: true as const, token: j.data.token as string, user: j.data.user };
+  return { ok: true as const, token: j.data.token as string, refresh: refreshFromHeaders(r.headers), user: j.data.user };
+}
+
+/** Pull Strapi's rotating admin refresh token out of the Set-Cookie header. */
+function refreshFromHeaders(headers: Headers): string | null {
+  const list = (headers as any).getSetCookie?.() ?? [];
+  for (const c of list) {
+    const m = /^strapi_admin_refresh=([^;]+)/.exec(c);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return null;
+}
+
+/** Exchange the (single-use, rotating) refresh token for a fresh access token. */
+export async function strapiRefresh(refreshToken: string): Promise<{ token: string; refresh: string | null } | null> {
+  try {
+    const r = await fetch(`${STRAPI_URL}/admin/access-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: `strapi_admin_refresh=${encodeURIComponent(refreshToken)}` },
+      cache: "no-store",
+    });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    const token = j?.data?.token ?? j?.token;
+    if (!token) return null;
+    return { token, refresh: refreshFromHeaders(r.headers) };
+  } catch {
+    return null;
+  }
 }
 
 /** Validate a token by self-calling /admin/users/me (the token is opaque, not a JWT). */

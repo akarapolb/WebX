@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 
-type Review = { id: number; documentId?: string; documentRef: string; contentType?: string; title?: string; stage: string; assignee?: string; requestedBy?: string; note?: string; history?: any[]; updatedAt?: string };
+type Review = { id: number; documentId?: string; documentRef: string; contentType?: string; title?: string; stage: string; kind?: string; payload?: any; assignee?: string; requestedBy?: string; note?: string; history?: any[]; updatedAt?: string };
 const RV_UID = "api::review.review";
 const STAGES = ["in_review", "changes", "approved", "published"];
 const shortType = (c?: string) => (c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
@@ -15,6 +15,7 @@ export default function ReviewBoard() {
   const [err, setErr] = useState("");
   const [me, setMe] = useState("admin");
   const [busy, setBusy] = useState<number | null>(null);
+  const [flash, setFlash] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");
@@ -45,6 +46,25 @@ export default function ReviewBoard() {
       await load();
     } catch {} finally { setBusy(null); }
   }
+  // Translation reviews: write the proposed fields into the target-locale entry
+  // (creates/updates that locale's draft). Stays unpublished — a human publishes.
+  async function applyTranslation(rv: Review) {
+    const f = rv.payload?.fields, loc = rv.payload?.targetLocale;
+    if (!f || !loc || !rv.contentType || !rv.documentRef) return;
+    setBusy(rv.id); setFlash("");
+    try {
+      const r = await fetch("/api/strapi/content-manager/collection-types/" + rv.contentType + "/" + rv.documentRef + "?locale=" + encodeURIComponent(loc), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, locale: loc }) });
+      if (r.ok) {
+        const hist = Array.isArray(rv.history) ? rv.history : [];
+        const id = rv.documentId ?? rv.id;
+        await fetch("/api/strapi/content-manager/collection-types/" + RV_UID + "/" + id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: "approved", history: [...hist, { from: rv.stage, to: "applied:" + loc, by: me, at: new Date().toISOString() }] }) }).catch(() => {});
+        setFlash(t("tr.applied").replace("{loc}", loc.toUpperCase()));
+        await load();
+      } else setFlash("Apply failed (HTTP " + r.status + ").");
+    } catch { setFlash("Cannot reach the backend."); }
+    finally { setBusy(null); }
+  }
+
   async function setAssignee(rv: Review, val: string) {
     if (val === (rv.assignee || "")) return;
     const id = rv.documentId ?? rv.id;
@@ -69,6 +89,7 @@ export default function ReviewBoard() {
       </div>
 
       {err && <div className="panel"><span className="badge b-warn"><span className="dot" />!</span><span className="muted" style={{ marginLeft: 10 }}>{err}</span></div>}
+      {flash && <div className="panel"><span className="badge b-ok"><Icon name="check" /></span><span style={{ marginLeft: 10 }}>{flash}</span></div>}
 
       {!err && (
         <div className="rv-board">
@@ -82,10 +103,13 @@ export default function ReviewBoard() {
                   {items.map((rv) => (
                     <div className="rv-card" key={rv.id}>
                       <b>{rv.title || rv.documentRef}</b>
-                      <div className="rv-cmeta"><span className="mono">{shortType(rv.contentType)}</span>{rv.requestedBy ? <span className="muted"> · {rv.requestedBy}</span> : null}</div>
+                      <div className="rv-cmeta"><span className="mono">{shortType(rv.contentType)}</span>{rv.kind === "translation" ? <span className="badge b-acc" style={{ marginLeft: 6 }}><Icon name="spark" />{t("tr.badge").replace("{loc}", String(rv.payload?.targetLocale || "").toUpperCase())}</span> : null}{rv.requestedBy ? <span className="muted"> · {rv.requestedBy}</span> : null}</div>
                       {rv.note ? <div className="rv-note">{rv.note}</div> : null}
                       <input className="rv-assignee" placeholder={t("rv.assignee")} defaultValue={rv.assignee || ""} onBlur={(e) => setAssignee(rv, e.target.value)} />
                       <div className="rv-actions">
+                        {rv.kind === "translation" && rv.payload?.fields ? (
+                          <button className="rv-btn ok" disabled={busy === rv.id} onClick={() => applyTranslation(rv)}>{t("tr.apply").replace("{loc}", String(rv.payload?.targetLocale || "").toUpperCase())}</button>
+                        ) : null}
                         {actionsFor(rv.stage).map((a) => (
                           <button key={a.to} className={"rv-btn " + a.cls} disabled={busy === rv.id} onClick={() => move(rv, a.to)}>{a.label}</button>
                         ))}

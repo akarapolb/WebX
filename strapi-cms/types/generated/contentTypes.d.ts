@@ -1073,6 +1073,42 @@ export interface ApiContactMessageContactMessage
   };
 }
 
+export interface ApiDocEmbeddingDocEmbedding
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'doc_embeddings';
+  info: {
+    description: 'Vector index of tenant content for RAG/semantic search (admin-only)';
+    displayName: 'Doc Embedding';
+    pluralName: 'doc-embeddings';
+    singularName: 'doc-embedding';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    contentType: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    documentRef: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::doc-embedding.doc-embedding'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    tenantKey: Schema.Attribute.String;
+    text: Schema.Attribute.Text;
+    title: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    url: Schema.Attribute.String;
+    vector: Schema.Attribute.JSON;
+  };
+}
+
 export interface ApiDownloadDownload extends Struct.CollectionTypeSchema {
   collectionName: 'downloads';
   info: {
@@ -1830,6 +1866,7 @@ export interface ApiReviewReview extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     documentRef: Schema.Attribute.String & Schema.Attribute.Required;
     history: Schema.Attribute.JSON;
+    kind: Schema.Attribute.String & Schema.Attribute.DefaultTo<'review'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1837,6 +1874,7 @@ export interface ApiReviewReview extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     note: Schema.Attribute.Text;
+    payload: Schema.Attribute.JSON;
     publishedAt: Schema.Attribute.DateTime;
     requestedBy: Schema.Attribute.String;
     stage: Schema.Attribute.String & Schema.Attribute.DefaultTo<'in_review'>;
@@ -2004,8 +2042,13 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    plan: Schema.Attribute.Enumeration<['free', 'pro', 'enterprise']> &
+      Schema.Attribute.DefaultTo<'free'>;
     publishedAt: Schema.Attribute.DateTime;
+    seats: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
     social: Schema.Attribute.JSON;
+    subscriptionStatus: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'active'>;
     template: Schema.Attribute.JSON;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -2698,6 +2741,7 @@ declare module '@strapi/strapi' {
       'api::complaint.complaint': ApiComplaintComplaint;
       'api::consent-log.consent-log': ApiConsentLogConsentLog;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
+      'api::doc-embedding.doc-embedding': ApiDocEmbeddingDocEmbedding;
       'api::download.download': ApiDownloadDownload;
       'api::ebook.ebook': ApiEbookEbook;
       'api::event.event': ApiEventEvent;

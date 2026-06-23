@@ -32,3 +32,6 @@ _seed/
 .DS_Store
 Thumbs.db
 *.swp
+
+# production compose env (never commit)
+/.env

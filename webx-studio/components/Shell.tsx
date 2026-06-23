@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Icon from "./Icon";
 import CommandPalette from "./CommandPalette";
+import NewWorkspace from "./NewWorkspace";
 import { NAV, CONTENT_MENUS } from "@/lib/nav";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
@@ -38,6 +39,7 @@ export default function Shell({
   const { tenants, currentKey, setCurrentKey, current } = useTenant();
   const [tenOpen, setTenOpen] = useState(false);
   const [tenQuery, setTenQuery] = useState("");
+  const [nwOpen, setNwOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [cmdk, setCmdk] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -147,6 +149,10 @@ export default function Shell({
                     <div className="ten-empty">{lang === "th" ? "ไม่พบพื้นที่ทำงาน" : "No workspaces found"}</div>
                   )}
                 </div>
+                <button className="ten-item" onClick={() => { setNwOpen(true); setTenOpen(false); }}>
+                  <span className="ten-dot" style={{ background: "var(--accent)", fontSize: 17 }}>+</span>
+                  <b className="ten-name">{t("nw.title")}</b>
+                </button>
                 <div className="ten-div" />
                 <button className="ten-logout" onClick={() => { setTenOpen(false); logout(); }}>
                   <span className="ten-lic"><svg viewBox="0 0 24 24" fill="none"><path d="M15 12H4m0 0 3.5-3.5M4 12l3.5 3.5M14 4h3a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
@@ -235,6 +241,7 @@ export default function Shell({
       </div>
 
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} onToggleTheme={toggleTheme} onLogout={logout} />
+      {nwOpen && <NewWorkspace userEmail={user.email} onClose={() => setNwOpen(false)} />}
     </div>
   );
 }

@@ -418,6 +418,11 @@ html[data-theme="light"] .sb-collapse:hover{background:var(--panel2);color:var(-
 .ai-chip{font-size:11.5px;font-weight:600;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:6px;transition:all var(--t)}
 .ai-chip svg{width:13px;height:13px}
 .ai-chip:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.ai-chip:disabled{opacity:.55}
+.ai-menu-wrap{position:relative;flex:none}
+.ai-menu{position:absolute;right:0;top:calc(100% + 5px);z-index:30;min-width:170px;background:var(--panel);border:1px solid var(--line2);border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.3);padding:5px;display:flex;flex-direction:column;animation:drwin .14s ease}
+.ai-menu button{text-align:left;font-size:12.5px;color:var(--ink);background:none;border:none;border-radius:7px;padding:8px 10px;cursor:pointer}
+.ai-menu button:hover{background:var(--accent-soft);color:var(--accent)}
 .ai-chip:disabled{opacity:.5}
 .ovfoot{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:9px;align-items:center}
 .ovfoot .sp{flex:1;font-size:11.5px;color:var(--mut)}

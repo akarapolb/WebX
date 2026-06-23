@@ -1,0 +1,33 @@
+# WebX Studio — LiteLLM proxy config (LLM-agnostic gateway).
+# Run:  pip install "litellm[proxy]"  &&  litellm --config litellm/config.yaml --port 4000
+# Friendly aliases (webx-*) decouple WebX from any single provider — swap a model
+# by editing here only; feature code never changes. Point the BFF at it with
+# LITELLM_URL=http://localhost:4000 and LITELLM_KEY=<your master/virtual key>.
+model_list:
+  - model_name: webx-default            # general authoring / agentic ops
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: webx-thai               # Thai-strong option (swap freely)
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: webx-local              # on-prem / PDPA-sensitive tenants (no data leaves)
+    litellm_params:
+      model: ollama/llama3.1
+      api_base: http://localhost:11434
+  - model_name: webx-embed              # RAG embeddings (keep one model per index)
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+
+router_settings:
+  fallbacks: [{ "webx-default": ["webx-thai"] }]   # auto-failover if a provider is down
+
+litellm_settings:
+  cache: true                # response cache (cost/latency); use redis in prod
+  cache_params:
+    type: local
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY   # mint per-tenant virtual keys w/ budgets from this

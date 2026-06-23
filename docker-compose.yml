@@ -1,0 +1,80 @@
+# WebX Studio — full stack for self-hosting / DGA on-prem.
+#   docker compose up -d --build              # db + strapi + webx
+#   docker compose --profile ai up -d --build # also the LiteLLM gateway
+# Copy .env.production.example -> .env and fill the secrets first.
+services:
+  db:
+    image: pgvector/pgvector:pg16          # Postgres 16 + pgvector (also serves RAG vectors)
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME:-strapi}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME:-strapi}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-strapi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  strapi:
+    build: ./strapi-cms
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_CLIENT: postgres
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-strapi}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-strapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD}
+      DATABASE_SSL: "false"
+      APP_KEYS: ${APP_KEYS:?set APP_KEYS}
+      API_TOKEN_SALT: ${API_TOKEN_SALT:?set API_TOKEN_SALT}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?set ADMIN_JWT_SECRET}
+      TRANSFER_TOKEN_SALT: ${TRANSFER_TOKEN_SALT:?set TRANSFER_TOKEN_SALT}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+    volumes:
+      - strapi-uploads:/app/public/uploads
+    ports:
+      - "${STRAPI_PORT:-1337}:1337"
+
+  webx:
+    build: ./webx-studio
+    restart: unless-stopped
+    depends_on:
+      - strapi
+    environment:
+      NODE_ENV: production
+      STRAPI_URL: http://strapi:1337
+      # AI (optional): point at the litellm service or any OpenAI-compatible gateway
+      LITELLM_URL: ${LITELLM_URL:-}
+      LITELLM_KEY: ${LITELLM_KEY:-}
+      # RAG vector store: leave WEBX_VECTOR empty for in-app cosine, or 'pgvector'
+      WEBX_VECTOR: ${WEBX_VECTOR:-}
+      PGVECTOR_URL: ${PGVECTOR_URL:-}
+    ports:
+      - "${WEBX_PORT:-3000}:3000"
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    restart: unless-stopped
+    profiles: ["ai"]
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+
+volumes:
+  db-data:
+  strapi-uploads:
