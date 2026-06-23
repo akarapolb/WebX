@@ -293,6 +293,7 @@ export const DICT: Record<string, Entry> = {
   "f.complaint": { en: "Complaints", th: "ร้องเรียน" },
   "f.application": { en: "Applications", th: "ใบสมัคร" },
   "f.contact": { en: "Contact", th: "ติดต่อ" },
+  "f.registration": { en: "Registrations", th: "ลงทะเบียน" },
   "f.colItem": { en: "Subject / Ref", th: "หัวข้อ / อ้างอิง" },
   "f.colFrom": { en: "From", th: "จาก" },
   "f.colDate": { en: "Received", th: "รับเมื่อ" },

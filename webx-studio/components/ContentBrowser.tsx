@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Icon from "./Icon";
 import EntryEditor from "./EntryEditor";
 import { useLang } from "./LangProvider";
@@ -20,10 +21,45 @@ function fmtDate(s?: string): string {
   try { return new Date(s).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
   catch { return "—"; }
 }
+function relTime(s?: string, th?: boolean): string {
+  if (!s) return "—";
+  const d = (Date.now() - new Date(s).getTime()) / 1000;
+  if (isNaN(d)) return "—";
+  if (d < 60) return th ? "เมื่อสักครู่" : "just now";
+  const m = Math.floor(d / 60); if (m < 60) return th ? `${m} นาทีที่แล้ว` : `${m}m ago`;
+  const h = Math.floor(m / 60); if (h < 24) return th ? `${h} ชม.ที่แล้ว` : `${h}h ago`;
+  const dy = Math.floor(h / 24); if (dy < 30) return th ? `${dy} วันที่แล้ว` : `${dy}d ago`;
+  return fmtDate(s);
+}
+const TYPE_ICON: Record<string, string> = {
+  article: "doc", blog: "doc", landing: "doc", page: "doc", "home-page": "home",
+  service: "layout", catalog: "layout",
+  banner: "img", gallery: "img", "top-graphic": "img", popup: "img",
+  faq: "inbox", complaint: "inbox", "contact-message": "inbox",
+  application: "users", job: "users", registration: "users",
+  event: "calendar", video: "desktop", download: "doc", ebook: "doc",
+  award: "check", review: "check", poll: "check",
+  weblink: "code", "menu-item": "code", "block-type": "code",
+  "consent-log": "shield", "audit-log": "shield", "field-policy": "lock",
+  release: "package", location: "home", tenant: "package",
+};
+const typeIcon = (api: string) => TYPE_ICON[api] || "doc";
+const subtitleOf = (e: Entry): string => {
+  for (const k of ["slug", "ref", "code", "position"]) if (typeof e[k] === "string" && e[k].trim()) return e[k];
+  return "";
+};
+const mediaSrc = (u: string) => (u.startsWith("http") ? u : "/api/strapi" + u);
+function imageOf(e: Entry): string {
+  const pick = (v: any) => (v && typeof v === "object" && typeof v.url === "string") ? (v.formats?.thumbnail?.url || v.formats?.small?.url || v.url) : "";
+  for (const k of ["image", "cover", "coverImage", "thumbnail", "photo", "banner", "picture", "logo"]) { const u = pick(e[k]); if (u) return u; }
+  for (const k of Object.keys(e)) { if (Array.isArray(e[k])) continue; const u = pick(e[k]); if (u) return u; }
+  return "";
+}
 
 export default function ContentBrowser() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { currentKey } = useTenant();
+  const typeParam = useSearchParams().get("type");
   const [types, setTypes] = useState<CType[]>([]);
   const [tenantUids, setTenantUids] = useState<Set<string>>(new Set());
   const [uid, setUid] = useState<string>("");
@@ -39,6 +75,9 @@ export default function ContentBrowser() {
   const [editing, setEditing] = useState<{ docId: string; locale?: string } | null>(null);
   const [schemas, setSchemas] = useState<Record<string, any>>({});
   const [creating, setCreating] = useState(false);
+  const [view, setView] = useState<"list" | "grid">("list");
+  useEffect(() => { try { const v = localStorage.getItem("webx_content_view"); if (v === "grid" || v === "list") setView(v); } catch {} }, []);
+  const setViewP = (v: "list" | "grid") => { setView(v); try { localStorage.setItem("webx_content_view", v); } catch {} };
 
   useEffect(() => {
     (async () => {
@@ -56,7 +95,8 @@ export default function ContentBrowser() {
         raw.forEach((x: any) => { sch[x.uid] = x.attributes || {}; });
         setSchemas(sch);
         setTenantUids(new Set(raw.filter((x: any) => x.attributes?.tenant).map((x: any) => x.uid)));
-        const first = list.find((x) => x.api === "article") ?? list[0];
+        const want = typeParam ? list.find((x) => x.api === typeParam) : null;
+        const first = want ?? list.find((x) => x.api === "article") ?? list[0];
         if (first) setUid(first.uid); else setErr("No content types are exposed by this backend.");
       } catch { setErr("Cannot reach the backend."); }
       finally { setLoadingTypes(false); }
@@ -83,6 +123,14 @@ export default function ContentBrowser() {
 
   const tenantKey = (uid && tenantUids.has(uid) && currentKey && currentKey !== "workspace") ? currentKey : "";
   const opts = { status, q, page, tenantKey };
+
+  // react to ?type= changes (e.g. clicking a pinned type in the sidebar while already here)
+  useEffect(() => {
+    if (!typeParam || types.length === 0) return;
+    const m = types.find((x) => x.api === typeParam);
+    if (m && m.uid !== uid) setUid(m.uid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeParam, types]);
 
   useEffect(() => { setPage(1); }, [uid, status, currentKey]);
   useEffect(() => {
@@ -144,17 +192,7 @@ export default function ContentBrowser() {
       )}
 
       {!err && (
-        <div className="cgrid">
-          <aside className="ctypes">
-            {loadingTypes && <div className="muted" style={{ padding: 12 }}>{t("c.loadingTypes")}</div>}
-            {types.map((x) => (
-              <button key={x.uid} className={"ctype" + (x.uid === uid ? " on" : "")} onClick={() => setUid(x.uid)}>
-                <Icon name="doc" /><span>{x.name}</span>
-              </button>
-            ))}
-          </aside>
-
-          <div>
+        <>
             <div className="cbar">
               <div className="seg">
                 {SEG.map((s) => (
@@ -165,29 +203,98 @@ export default function ContentBrowser() {
                 <Icon name="search" />
                 <input value={q} placeholder={t("c.searchPh")} onChange={(e) => setQ(e.target.value)} />
               </div>
+              <div className="view-tg" role="tablist" aria-label="View mode">
+                <button className={view === "list" ? "on" : ""} onClick={() => setViewP("list")} title={lang === "th" ? "มุมมองรายการ" : "List view"} aria-label="List"><Icon name="list" /></button>
+                <button className={view === "grid" ? "on" : ""} onClick={() => setViewP("grid")} title={lang === "th" ? "มุมมองตาราง" : "Grid view"} aria-label="Grid"><Icon name="grid" /></button>
+              </div>
             </div>
 
-            <div className="panel" style={{ padding: "8px 0", minHeight: 200 }}>
-              {loadingRows && <div className="muted" style={{ padding: 20 }}>{t("c.loadingRows")}</div>}
-              {!loadingRows && entries.length === 0 && <div className="muted" style={{ padding: 24, textAlign: "center" }}>{t("c.noEntries")}</div>}
-              {!loadingRows && entries.length > 0 && (
+            <div className={"panel " + (view === "grid" ? "cgwrap" : "ctbl")} style={view === "grid" ? { padding: 16, minHeight: 220 } : { padding: "6px 0", minHeight: 220 }}>
+              {(loadingRows || loadingTypes) && view === "grid" && (
+                <div className="cgridv">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="cgc cgc--sk">
+                      <span className="skln" style={{ display: "block", height: 94, borderRadius: 10 }} />
+                      <span className="skln" style={{ display: "block", width: "72%", marginTop: 11 }} />
+                      <span className="skln" style={{ display: "block", width: "44%", marginTop: 7 }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(loadingRows || loadingTypes) && view === "list" && (
+                <table className="tbl">
+                  <thead><tr><th>{t("c.colTitle")}</th><th>{t("c.colStatus")}</th><th>{t("c.colLocale")}</th><th>{t("c.colUpdated")}</th><th aria-hidden /></tr></thead>
+                  <tbody>
+                    {Array.from({ length: 7 }).map((_, i) => (
+                      <tr key={i}>
+                        <td><div className="row-ti"><span className="skln skln-av" /><span className="skln" style={{ width: 150 + (i % 4) * 40 }} /></div></td>
+                        <td><span className="skln" style={{ width: 72 }} /></td>
+                        <td><span className="skln" style={{ width: 28 }} /></td>
+                        <td><span className="skln" style={{ width: 64 }} /></td>
+                        <td />
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {!loadingRows && !loadingTypes && entries.length === 0 && (
+                <div className="cempty">
+                  <span className="ic"><Icon name={current ? typeIcon(current.api) : "doc"} /></span>
+                  <b>{lang === "th" ? "ยังไม่มีเนื้อหา" : "No entries yet"}</b>
+                  <p>{lang === "th" ? `เริ่มสร้างรายการแรกของ ${current?.name ?? ""}` : `Create your first ${current?.name ?? ""} entry`}</p>
+                  <button className="btn btn--p" onClick={createNew} disabled={!uid || creating}><Icon name="plus" />{t("c.new")}</button>
+                </div>
+              )}
+              {!loadingRows && !loadingTypes && entries.length > 0 && (
                 <>
+                  {view === "list" && (
                   <table className="tbl">
-                    <thead><tr><th>{t("c.colTitle")}</th><th>{t("c.colStatus")}</th><th>{t("c.colLocale")}</th><th>{t("c.colUpdated")}</th></tr></thead>
+                    <thead><tr><th>{t("c.colTitle")}</th><th>{t("c.colStatus")}</th><th>{t("c.colLocale")}</th><th>{t("c.colUpdated")}</th><th aria-hidden /></tr></thead>
                     <tbody>
-                      {entries.map((e) => (
-                        <tr className="row" key={e.documentId ?? e.id}
-                          onClick={() => setEditing({ docId: String(e.documentId ?? e.id), locale: e.locale })}>
-                          <td><b>{titleOf(e)}</b></td>
-                          <td>{(e.status === "published" || e.publishedAt)
-                            ? <span className="badge b-ok"><span className="dot" />{t("c.published")}</span>
-                            : <span className="badge b-mut"><span className="dot" />{t("c.draft")}</span>}</td>
-                          <td className="mono" style={{ fontSize: 12 }}>{e.locale ?? "—"}</td>
-                          <td>{fmtDate(e.updatedAt)}</td>
-                        </tr>
-                      ))}
+                      {entries.map((e) => {
+                        const sub = subtitleOf(e);
+                        const pub = e.status === "published" || e.publishedAt;
+                        return (
+                          <tr className="row" key={e.documentId ?? e.id}
+                            onClick={() => setEditing({ docId: String(e.documentId ?? e.id), locale: e.locale })}>
+                            <td>
+                              <div className="row-ti">
+                                <span className="row-av">{titleOf(e)[0]?.toUpperCase() || "#"}</span>
+                                <span className="row-tt"><b>{titleOf(e)}</b>{sub && <span>{sub}</span>}</span>
+                              </div>
+                            </td>
+                            <td>{pub
+                              ? <span className="badge b-ok"><span className="dot" />{t("c.published")}</span>
+                              : <span className="badge b-mut"><span className="dot" />{t("c.draft")}</span>}</td>
+                            <td className="mono" style={{ fontSize: 12 }}>{e.locale ?? "—"}</td>
+                            <td className="muted">{relTime(e.updatedAt, lang === "th")}</td>
+                            <td className="row-go-cell"><span className="row-go"><Icon name="chevron" /></span></td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
+                  )}
+                  {view === "grid" && (
+                    <div className="cgridv">
+                      {entries.map((e) => {
+                        const img = imageOf(e);
+                        const pub = e.status === "published" || e.publishedAt;
+                        return (
+                          <button className="cgc" key={e.documentId ?? e.id} onClick={() => setEditing({ docId: String(e.documentId ?? e.id), locale: e.locale })}>
+                            <div className="cgc-thumb">
+                              {img ? <img src={mediaSrc(img)} alt="" loading="lazy" /> : <span className="cgc-ini">{titleOf(e)[0]?.toUpperCase() || "#"}</span>}
+                              <span className={"cgc-badge badge " + (pub ? "b-ok" : "b-mut")}><span className="dot" />{pub ? t("c.published") : t("c.draft")}</span>
+                            </div>
+                            <div className="cgc-b">
+                              <div className="cgc-title">{titleOf(e)}</div>
+                              <div className="cgc-meta">{(e.locale ?? "—") + " · " + relTime(e.updatedAt, lang === "th")}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   {pageCount > 1 && (
                     <div className="pager">
                       <span className="pinfo">{t("c.page")} {page} / {pageCount}</span>
@@ -198,8 +305,7 @@ export default function ContentBrowser() {
                 </>
               )}
             </div>
-          </div>
-        </div>
+        </>
       )}
 
       <div className="notice"><Icon name="shield" /> {t("c.bffnote")}</div>

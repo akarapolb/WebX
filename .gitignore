@@ -25,6 +25,9 @@ site/DGA-Website/bid/deck-assets/
 webx-studio/.next/
 webx-studio/.env.local
 
+# Local demo seed scripts (contain dev admin credentials — keep out of git)
+_seed/
+
 # OS / editor
 .DS_Store
 Thumbs.db

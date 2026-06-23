@@ -26,7 +26,7 @@ export default function EntryEditor({
   uid: string; docId: string; locale?: string; typeName: string; mediaKeys?: string[];
   onClose: () => void; onSaved: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [fields, setFields] = useState<Field[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"" | "save" | "publish">("");
@@ -204,6 +204,20 @@ export default function EntryEditor({
 
   const mainAssistKey = (fields.find((f) => f.kind === "rich") ?? fields.find((f) => f.kind === "textarea") ?? fields[0])?.key;
 
+  // Live preview — derived from the current field values, updates as you type.
+  const THEME: Record<string, string> = {
+    blue: "#3B82F6", red: "#EF4444", green: "#10B981", orange: "#F97316", purple: "#8B5CF6",
+    pink: "#EC4899", teal: "#14B8A6", yellow: "#F59E0B", amber: "#F59E0B", gray: "#6B7280",
+    grey: "#6B7280", indigo: "#6366F1", navy: "#13497A", cyan: "#06B6D4",
+  };
+  const pvGet = (keys: string[]) => fields.find((f) => keys.includes(f.key))?.value?.trim() || "";
+  const pvTitle = pvGet(["title", "name", "subject", "question", "label"]) || ((lang === "th" ? "ยังไม่มีชื่อ · " : "Untitled · ") + typeName);
+  const pvBody = pvGet(["excerpt", "description", "detail", "summary", "answer", "body", "content"]).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const pvUrl = pvGet(["url", "link", "href", "slug"]);
+  const pvColor = pvGet(["color", "colorTheme", "theme", "colour"]).toLowerCase();
+  const pvAccent = THEME[pvColor] || "var(--accent)";
+  const pvImg = media?.url ? mediaSrc(media.url) : "";
+
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -233,7 +247,10 @@ export default function EntryEditor({
             </div>
           )}
           {loading && <div className="muted">{t("e.loading")}</div>}
-          {!loading && fields.length === 0 && <div className="muted">{t("e.noFields")}</div>}
+          {!loading && (
+          <div className="ed-split">
+          <div className="ed-form">
+          {fields.length === 0 && <div className="muted">{t("e.noFields")}</div>}
           {fields.filter((f) => !fp.hidden.has(f.key)).map((f) => {
             const ro = fp.readonly.has(f.key);
             const lock = ro ? <span className="muted" style={{ fontWeight: 500 }}> · {t("e.locked")}</span> : null;
@@ -288,6 +305,25 @@ export default function EntryEditor({
             </div>
           ))}
           {rels.length > 0 && <div className="muted" style={{ fontSize: 11 }}>{t("m.relnote")}</div>}
+          </div>
+
+          <aside className="ed-preview">
+            <div className="pv-h"><Icon name="eye" />{lang === "th" ? "ตัวอย่างสด" : "Live preview"}</div>
+            <div className="pv-card">
+              {pvImg
+                ? <div className="pv-cover"><img src={pvImg} alt="" /></div>
+                : <div className="pv-tile" style={{ background: pvAccent }}>{pvTitle[0]?.toUpperCase() || "•"}</div>}
+              <div className="pv-card-in">
+                <span className="pv-badge">{typeName}</span>
+                <h4 className="pv-title">{pvTitle}</h4>
+                {pvBody && <p className="pv-body">{pvBody.slice(0, 180)}{pvBody.length > 180 ? "…" : ""}</p>}
+                {pvUrl && pvUrl !== "#" && <div className="pv-url"><Icon name="code" /><span>{pvUrl}</span></div>}
+              </div>
+            </div>
+            <div className="pv-note">{lang === "th" ? "อัปเดตสดตามที่คุณพิมพ์ · เผยแพร่จริงเมื่อกด Publish" : "Updates live as you type · goes live on Publish"}</div>
+          </aside>
+          </div>
+          )}
         </div>
 
         <div className="ovfoot">
