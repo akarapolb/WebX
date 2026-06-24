@@ -73,7 +73,7 @@
     const DEPT_ICON = { tech: 'i-build', data: 'i-grid', design: 'i-eye', security: 'i-shield', pm: 'i-briefcase', corporate: 'i-users' };
     function card(j) {
       const ic = DEPT_ICON[j.deptKey] || 'i-briefcase';
-      return `<a class="job-card" href="${jobBase}job.html?id=${encodeURIComponent(j.id)}">
+      return `<a class="job-card" href="${jobBase}job?id=${encodeURIComponent(j.id)}">
         <span class="job-card__ic" aria-hidden="true"><svg class="icon"><use href="#${ic}"/></svg></span>
         <div class="job-card__main">
           <div class="job-badges">
@@ -229,35 +229,10 @@
         </div>
       </div></section>`;
 
-    /* ----- JSON-LD: JobPosting + Breadcrumb (GEO/AEO/SEO) ----- */
-    (function () {
-      const EMP = { fulltime: 'FULL_TIME', contract: 'CONTRACTOR', internship: 'INTERN' };
-      const org = LANG === 'en' ? 'Digital Government Development Agency (DGA)' : 'สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)';
-      const ld = {
-        '@context': 'https://schema.org', '@type': 'JobPosting',
-        title: t(job.title), description: t(job.summary) || t(job.title),
-        employmentType: EMP[job.typeKey] || 'FULL_TIME',
-        hiringOrganization: { '@type': 'GovernmentOrganization', name: org },
-        jobLocation: { '@type': 'Place', address: { '@type': 'PostalAddress', addressLocality: t(job.location), addressCountry: 'TH' } },
-        directApply: true
-      };
-      const crumb = {
-        '@context': 'https://schema.org', '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: LANG === 'en' ? 'Home' : 'หน้าแรก', item: jobBase },
-          { '@type': 'ListItem', position: 2, name: LANG === 'en' ? 'Careers' : 'ร่วมงานกับเรา', item: jobBase + 'careers.html' },
-          { '@type': 'ListItem', position: 3, name: t(job.title) }
-        ]
-      };
-      [ld, crumb].forEach(function (o) { const s = document.createElement('script'); s.type = 'application/ld+json'; s.textContent = JSON.stringify(o); document.head.appendChild(s); });
-    })();
-
     /* ----- Apply modal ----- */
     const modal = $('#applyModal'), dialog = modal.querySelector('.cpl-modal__dialog');
     const formView = $('#applyFormView'), doneView = $('#applyDone');
     const aForm = $('#applyForm');
-    // CAPTCHA: โหลด helper แล้วแทรกช่องโจทย์ก่อนปุ่มส่งในฟอร์มสมัคร
-    (function () { function go() { window.DGACaptcha && DGACaptcha.mount(aForm); } if (window.DGACaptcha) go(); else { const s = document.createElement('script'); s.src = '/assets/captcha.js'; s.onload = go; document.head.appendChild(s); } })();
     let lastFocus = null;
 
     $('#applyJobTitle').textContent = t(job.title);
@@ -288,7 +263,9 @@
     const clrErr = el => { el.removeAttribute('aria-invalid'); const e = document.getElementById(el.id + '-err'); if (e) e.textContent = ''; };
     aForm.querySelectorAll('input,textarea').forEach(el => el.addEventListener('input', () => clrErr(el)));
 
-    aForm.addEventListener('submit', e => {
+    if (window.DGACaptcha) DGACaptcha.mount(aForm);
+    const CMS_A = window.DGA_CMS_URL || 'http://localhost:1337';
+    aForm.addEventListener('submit', async e => {
       e.preventDefault();
       const errs = [];
       const name = $('#aName'), email = $('#aEmail'), phone = $('#aPhone'), consent = $('#aConsent');
@@ -299,6 +276,8 @@
       else if (!/^[0-9+\-\s()]{6,20}$/.test(phone.value.trim())) { setErr(phone, T.vPhoneF); errs.push({ id: 'aPhone', l: T.lblPhone }); }
       if (aFile.files[0] && aFile.files[0].size > 5 * 1024 * 1024) { setErr(aFile, T.vFile); errs.push({ id: 'aResume', l: 'resume' }); }
       if (!consent.checked) { setErr(consent, T.vConsent); errs.push({ id: 'aConsent', l: T.lblConsent }); }
+      const capEl = aForm.querySelector('.cap-a');
+      if (capEl && !capEl.value.trim()) { capEl.setAttribute('aria-invalid', 'true'); errs.push({ id: capEl.id || '', l: (LANG === 'en' ? 'CAPTCHA code' : 'รหัสยืนยัน CAPTCHA') }); }
 
       const sum = $('#applyErrSum'), list = $('#applyErrList');
       if (errs.length) {
@@ -309,36 +288,52 @@
         return;
       }
       sum.hidden = true;
-      const M = { th: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
-      const d = new Date(), ds = l => d.getDate() + ' ' + M[l][d.getMonth()] + ' ' + (d.getFullYear() + (l === 'th' ? 543 : 0));
-      const note = $('#aNote');
-      const payload = {
-        jobId: job.id, position: t(job.title),
-        name: $('#aName').value.trim(), email: $('#aEmail').value.trim(),
-        phone: $('#aPhone').value.trim(), note: note ? note.value.trim() : '', date: ds(LANG)
-      };
-      const showDone = ref => { $('#applyRef').textContent = ref; formView.hidden = true; doneView.hidden = false; dialog.focus(); };
-      const saveLocal = ref => { try { const apps = JSON.parse(localStorage.getItem('dga-applications') || '{}'); apps[ref] = { ref, position: job.title, name: payload.name, email: payload.email, date: { th: ds('th'), en: ds('en') }, stage: 0 }; localStorage.setItem('dga-applications', JSON.stringify(apps)); } catch (e) {} };
-      // ส่งใบสมัครเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่อ้างอิง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
-      const base = window.DGA_CMS_URL || 'http://localhost:1337';
+      const ref = 'DGA-JOB-' + (new Date().getFullYear() + 543) + '-' + (100000 + Math.floor(Math.random() * 899999));
       const cap = window.DGACaptcha ? DGACaptcha.get(aForm) : {};
-      const tq = window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : '';
-      const resumeFile = aFile && aFile.files && aFile.files[0];
-      let aReq;
-      if (resumeFile) {
-        // แนบเรซูเม่ (TOR 17.5) → multipart ไป /applications/submit
-        const fd = new FormData();
-        fd.append('data', JSON.stringify(payload));
-        fd.append('files.resume', resumeFile, resumeFile.name);
-        Object.keys(cap).forEach(k => fd.append(k, cap[k]));
-        aReq = fetch(base + '/api/applications/submit' + tq, { method: 'POST', body: fd });
-      } else {
-        aReq = fetch(base + '/api/applications' + tq, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) });
+
+      // ส่งใบสมัครเข้า Strapi (เข้า Forms inbox หลังบ้าน)
+      try {
+        const r = await fetch(CMS_A + '/api/applications', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            captchaId: cap.captchaId, captchaAnswer: cap.captchaAnswer,
+            data: {
+              ref, position: (job && job.title) || '',
+              jobId: (job && (job.jobId || job.id)) ? String(job.jobId || job.id) : '',
+              name: name.value.trim(), email: email.value.trim(), phone: phone.value.trim(), stage: 0
+            }
+          })
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          if (j.error && j.error.name === 'CaptchaError') {
+            if (window.DGACaptcha) DGACaptcha.reload(aForm);
+            list.innerHTML = '<li>' + (LANG === 'en' ? 'CAPTCHA code is incorrect — please try again' : 'รหัสยืนยัน CAPTCHA ไม่ถูกต้อง กรุณากรอกใหม่') + '</li>';
+            sum.hidden = false; sum.focus();
+            const ca = aForm.querySelector('.cap-a'); if (ca) ca.focus();
+            return;
+          }
+          list.innerHTML = '<li>' + (LANG === 'en' ? 'Submission failed — please try again' : 'ส่งใบสมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง') + '</li>';
+          sum.hidden = false; sum.focus();
+          return;
+        }
+      } catch (err) {
+        list.innerHTML = '<li>' + (LANG === 'en' ? 'Cannot reach server — please try again' : 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง') + '</li>';
+        sum.hidden = false; sum.focus();
+        return;
       }
-      aReq
-        .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(aForm); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
-        .then(j => { const ref = j.data.ref; saveLocal(ref); showDone(ref); })
-        .catch(err => { if (err && err.captcha) return; const ref = 'DGA-JOB-' + (new Date().getFullYear() + 543) + '-' + (100000 + Math.floor(Math.random() * 899999)); saveLocal(ref); showDone(ref); });
+
+      // บันทึกใบสมัครลง localStorage เพื่อใช้ตรวจสอบสถานะภายหลัง
+      try {
+        const M = { th: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
+        const d = new Date(), ds = l => d.getDate() + ' ' + M[l][d.getMonth()] + ' ' + (d.getFullYear() + (l === 'th' ? 543 : 0));
+        const apps = JSON.parse(localStorage.getItem('dga-applications') || '{}');
+        apps[ref] = { ref, position: job.title, name: $('#aName').value.trim(), email: $('#aEmail').value.trim(), date: { th: ds('th'), en: ds('en') }, stage: 0 };
+        localStorage.setItem('dga-applications', JSON.stringify(apps));
+      } catch (e) {}
+      $('#applyRef').textContent = ref;
+      if (window.DGACaptcha) DGACaptcha.reload(aForm);
+      formView.hidden = true; doneView.hidden = false; dialog.focus();
     });
   }
 })();

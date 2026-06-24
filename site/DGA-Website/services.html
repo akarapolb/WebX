@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — บริการและโครงการ (Services) ภาษาไทย
+  รวมบริการดิจิทัลภาครัฐ แยกตามกลุ่มผู้ใช้งาน: ประชาชน / หน่วยงานรัฐ / นักพัฒนา-ธุรกิจ
+  ใช้ Design System: /assets/design-system.css + /assets/home.css + /assets/complaint.css
+-->
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>บริการและโครงการ | สพร. (DGA)</title>
+  <meta name="description" content="รวมบริการและโครงการดิจิทัลภาครัฐของสำนักงานพัฒนารัฐบาลดิจิทัล (สพร./DGA) แยกตามกลุ่มผู้ใช้งาน — สำหรับประชาชน หน่วยงานรัฐ และนักพัฒนา/ธุรกิจ">
+  <link rel="canonical" href="https://www.dga.or.th/services">
+  <link rel="alternate" hreflang="th" href="https://www.dga.or.th/services">
+  <link rel="alternate" hreflang="en" href="https://www.dga.or.th/en/services">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@300;400;500;700&display=swap">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/complaint.css">
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"หน้าแรก","item":"https://www.dga.or.th/"},
+    {"@type":"ListItem","position":2,"name":"บริการและโครงการ","item":"https://www.dga.or.th/services"}
+  ]}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17.5 18z"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 9-3 3 3 3"/><path d="m16 9 3 3-3 3"/><path d="M13 7l-2 10"/></symbol>
+  </defs></svg>
+
+  <!-- แถบการเข้าถึง -->
+  <div class="a11y-bar" role="region" aria-label="เครื่องมือการเข้าถึง"><div class="wrap">
+    <span>การเข้าถึง:</span>
+    <button id="fontDown" aria-label="ลดขนาดตัวอักษร">ก-</button>
+    <button id="fontReset" aria-label="ขนาดตัวอักษรปกติ">ก</button>
+    <button id="fontUp" aria-label="เพิ่มขนาดตัวอักษร">ก+</button>
+    <button id="contrastBtn" aria-pressed="false">โหมดความต่างสูง</button>
+    <a href="#main">ข้ามไปเนื้อหา</a>
+    <span class="grow"></span>
+    <a href="/accessibility.html">การเข้าถึงเว็บไซต์ (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="เมนูหลัก">
+        <a href="/">หน้าแรก</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega class="is-active">บริการ</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>ข่าวสาร</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>บริการออนไลน์</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>เกี่ยวกับ สพร.</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/services.html" aria-current="true" lang="th">TH</a><a href="/en/services.html" lang="en">EN</a></span>
+        <a class="btn btn--primary btn-login" href="/login.html"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3.2"/><path d="M6.3 18.4a6 6 0 0 1 11.4 0"/></svg> เข้าสู่ระบบ</a>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="สลับโหมดมืด"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="เปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>สำหรับประชาชน</h3>
+          <a href="/services.html#citizens"><span class="dot"></span>บัตรประชาชนดิจิทัล (ThaID)</a>
+          <a href="/services.html#citizens"><span class="dot"></span>แอปทางรัฐ</a>
+          <a href="/services.html#citizens"><span class="dot"></span>ตรวจสอบสิทธิ์สวัสดิการ</a></div>
+        <div class="mega-col"><h3>สำหรับหน่วยงานรัฐ</h3>
+          <a href="/services.html#gov"><span class="dot"></span>GDX ศูนย์แลกเปลี่ยนข้อมูล</a>
+          <a href="/services.html#gov"><span class="dot"></span>คลาวด์ภาครัฐ (GDCC)</a>
+          <a href="/services.html#gov"><span class="dot"></span>มาตรฐานรัฐบาลดิจิทัล</a></div>
+        <div class="mega-col"><h3>นักพัฒนา/ธุรกิจ</h3>
+          <a href="/services.html#biz"><span class="dot"></span>API Gateway ภาครัฐ</a>
+          <a href="/services.html#biz"><span class="dot"></span>ข้อมูลเปิดภาครัฐ (Open Data)</a>
+          <a href="/services.html#biz"><span class="dot"></span>BizPortal เริ่มต้นธุรกิจ</a></div>
+      </div>
+      <a class="mega-feature" href="/services.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-grid"/></svg></span>
+        <b>ดูบริการและโครงการทั้งหมด</b><span>รวมบริการดิจิทัลภาครัฐ แยกตามกลุ่มผู้ใช้งานอย่างชัดเจน</span>
+        <span class="cta">เปิดหน้าบริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ข่าว &amp; ประกาศ</h3>
+          <a href="/news.html"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>ประกาศ สพร.</a>
+          <a href="#"><span class="dot"></span>ประกาศจัดซื้อจัดจ้าง</a></div>
+        <div class="mega-col"><h3>บทความ &amp; ความรู้</h3>
+          <a href="/blog.html"><span class="dot"></span>บทความรัฐบาลดิจิทัล</a>
+          <a href="#"><span class="dot"></span>คลังความรู้ (Knowledge)</a>
+          <a href="/gallery.html"><span class="dot"></span>อินโฟกราฟิก</a></div>
+        <div class="mega-col"><h3>สื่อ &amp; กิจกรรม</h3>
+          <a href="/video.html"><span class="dot"></span>DGA Channel (วิดีโอ)</a>
+          <a href="/calendar.html"><span class="dot"></span>ปฏิทินกิจกรรม/สัมมนา</a>
+          <a href="#"><span class="dot"></span>รางวัลและผลงาน</a></div>
+      </div>
+      <a class="mega-feature" href="/news.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>ข่าวเด่นล่าสุด</b><span>ติดตามความเคลื่อนไหวรัฐบาลดิจิทัลและบริการใหม่ของ สพร.</span>
+        <span class="cta">อ่านข่าวทั้งหมด <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ลงทะเบียน &amp; สมัครงาน</h3>
+          <a href="/register.html"><span class="dot"></span>ลงทะเบียนผู้ใช้งานระบบ</a>
+          <a href="/careers.html"><span class="dot"></span>ระบบรับสมัครงาน (ร่วมงานกับ สพร.)</a>
+          <a href="/application-status.html"><span class="dot"></span>ตรวจสอบสถานะใบสมัคร</a></div>
+        <div class="mega-col"><h3>ร้องเรียน &amp; ข้อเสนอแนะ</h3>
+          <a href="/complaint.html"><span class="dot"></span>ระบบรับเรื่องร้องเรียน</a>
+          <a href="/complaint.html"><span class="dot"></span>แจ้งปัญหาการใช้งาน</a>
+          <a href="/complaint.html#track"><span class="dot"></span>ติดตามสถานะเรื่องร้องเรียน</a></div>
+        <div class="mega-col"><h3>บริการช่วยเหลือ</h3>
+          <a href="#"><span class="dot"></span>ตรวจสอบสถานะคำขอ</a>
+          <a href="/download.html"><span class="dot"></span>ดาวน์โหลดเอกสาร/แบบฟอร์ม</a>
+          <a href="/faq.html"><span class="dot"></span>ศูนย์ช่วยเหลือ (Help Center)</a></div>
+      </div>
+      <a class="mega-feature" href="/careers.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-build"/></svg></span>
+        <b>ร่วมงานกับ สพร.</b><span>ดูตำแหน่งงานที่เปิดรับและสมัครออนไลน์</span>
+        <span class="cta">ดูตำแหน่งงาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>องค์กร</h3>
+          <a href="#"><span class="dot"></span>วิสัยทัศน์ &amp; บทบาท</a>
+          <a href="#"><span class="dot"></span>โครงสร้างองค์กร</a>
+          <a href="#"><span class="dot"></span>คณะผู้บริหาร</a></div>
+        <div class="mega-col"><h3>เผยแพร่</h3>
+          <a href="/news.html"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>รายงานประจำปี</a>
+          <a href="#"><span class="dot"></span>จัดซื้อจัดจ้างของ สพร.</a></div>
+        <div class="mega-col"><h3>ธรรมาภิบาล</h3>
+          <a href="/faq.html"><span class="dot"></span>คำถามที่พบบ่อย (FAQ)</a>
+          <a href="#"><span class="dot"></span>คุณธรรมและความโปร่งใส (ITA)</a>
+          <a href="/careers.html"><span class="dot"></span>ร่วมงานกับเรา</a>
+          <a href="/accessibility.html"><span class="dot"></span>การเข้าถึงเว็บไซต์</a></div>
+      </div>
+      <a class="mega-feature" href="/sitemap.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-map"/></svg></span>
+        <b>แผนผังเว็บไซต์</b><span>ดูโครงสร้างทั้งหมดและเส้นทางการเข้าถึงบริการ</span>
+        <span class="cta">ดูแผนผัง <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+  </header>
+
+  <!-- Mobile drawer -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="เมนูหลัก">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="ปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">ค้นหาบริการหรือเอกสาร</label>
+      <input id="mq" name="q" type="search" placeholder="ค้นหาบริการหรือเอกสาร…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="เมนูหลัก (อุปกรณ์พกพา)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/services.html" aria-current="true" lang="th">TH</a><a href="/en/services.html" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="/login.html" style="flex:1;justify-content:center">เข้าสู่ระบบ</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="เส้นทางนำทาง"><div class="wrap">
+      <ol>
+        <li><a href="/index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg> หน้าแรก</a></li>
+        <li aria-current="page">บริการและโครงการ</li>
+      </ol>
+    </div></nav>
+
+    <!-- Hero -->
+    <section class="cpl-hero" aria-labelledby="srv-h"><div class="wrap">
+      <div class="cpl-hero__tx">
+        <span class="cpl-eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg> บริการดิจิทัลภาครัฐ</span>
+        <h1 id="srv-h">บริการและโครงการ</h1>
+        <p>สพร. ให้คำปรึกษาและสนับสนุนหน่วยงานภาครัฐในการขับเคลื่อนการบริการด้วยเทคโนโลยีดิจิทัล เพื่อให้ประชาชนและภาคธุรกิจเข้าถึงบริการได้อย่างสะดวก รวดเร็ว และมั่นคงปลอดภัย — เลือกดูบริการตามกลุ่มผู้ใช้งานด้านล่าง</p>
+        <nav class="sm-jump" aria-label="ลัดไปยังกลุ่มบริการ">
+          <a href="#citizens"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg> สำหรับประชาชน</a>
+          <a href="#gov"><svg class="icon" aria-hidden="true"><use href="#i-build"/></svg> สำหรับหน่วยงานรัฐ</a>
+          <a href="#biz"><svg class="icon" aria-hidden="true"><use href="#i-briefcase"/></svg> นักพัฒนา / ธุรกิจ</a>
+        </nav>
+      </div>
+    </div></section>
+
+    <section class="srv-wrap"><div class="wrap">
+
+      <p class="srv-law"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>
+        ดำเนินการตามมาตรา 10 ของพระราชกฤษฎีกาว่าด้วยหลักเกณฑ์และวิธีการบริหารกิจการบ้านเมืองที่ดี (ฉบับที่ 2) พ.ศ. 2562 เพื่อยกระดับการให้บริการภาครัฐผ่านระบบดิจิทัล</p>
+
+      <!-- บริการดิจิทัลหลัก — ดึงสดจาก CMS (จัดการได้จากหลังบ้าน WebX Studio) -->
+      <section class="srv-cms" aria-labelledby="srv-cms-h" style="margin:4px 0 40px">
+        <h2 id="srv-cms-h" style="font-size:var(--fs-h3);margin:0 0 18px;color:var(--c-text)">บริการดิจิทัลหลัก</h2>
+        <ul class="svc-grid" id="svcCmsGrid"><li class="svc-cms-loading" style="list-style:none;color:var(--c-text-muted)">กำลังโหลดบริการ…</li></ul>
+      </section>
+
+      <!-- 1) ภาคประชาชน -->
+      <section class="srv-sec srv-sec--citizen" id="citizens">
+        <div class="srv-sec__head">
+          <span class="srv-sec__ic" aria-hidden="true"><svg class="icon"><use href="#i-users"/></svg></span>
+          <div class="srv-sec__tx">
+            <span class="eyebrow">ภาคประชาชน</span>
+            <h2>บริการสำหรับประชาชน<span class="srv-count">4 บริการ</span></h2>
+            <p>บริการดิจิทัลที่ช่วยให้ประชาชนติดต่อราชการ ยืนยันตัวตน และเข้าถึงสิทธิประโยชน์ได้สะดวก ทุกที่ทุกเวลา</p>
+          </div>
+        </div>
+        <div class="srv2-list">
+          <!-- ทางรัฐ -->
+          <div class="srv2-row">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">แอปพลิเคชัน “ทางรัฐ”</h3>
+              <p class="srv2-sub">ระบบพอร์ทัลกลางเพื่อประชาชน<small>Citizen Portal</small></p>
+              <p class="srv2-desc">รวมบริการภาครัฐกว่า 150 บริการไว้ในแอปเดียว ตรวจสอบสิทธิ ชำระค่าบริการ และติดต่อราชการได้สะดวกทุกที่ทุกเวลา</p>
+              <a class="srv2-link" href="#">เปิดบริการ ทางรัฐ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-grid"/></svg></span> 150+ บริการ</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">ทางรัฐ.com</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/tangrat.webp" alt="ตัวอย่างหน้าจอแอปพลิเคชันทางรัฐ" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-grid"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- ThaID -->
+          <div class="srv2-row srv2-row--rev">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">บัตรประชาชนดิจิทัล (ThaID)</h3>
+              <p class="srv2-sub">ยืนยันตัวตนทางดิจิทัล<small>Digital ID</small></p>
+              <p class="srv2-desc">ใช้แทนบัตรประชาชนกับบริการภาครัฐและเอกชนได้อย่างปลอดภัย ยืนยันตัวตนออนไลน์ได้ในไม่กี่ขั้นตอน</p>
+              <a class="srv2-link" href="#">เริ่มใช้ ThaID <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-shield"/></svg></span> ปลอดภัยระดับสูง</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">ThaID</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/thaid.webp" alt="ตัวอย่างหน้าจอ ThaID" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-id"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- data.go.th -->
+          <div class="srv2-row">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">ข้อมูลเปิดภาครัฐ</h3>
+              <p class="srv2-sub">ศูนย์กลางข้อมูลเปิดของประเทศ<small>Open Government Data · data.go.th</small></p>
+              <p class="srv2-desc">ค้นหา ดาวน์โหลด และใช้ประโยชน์จากชุดข้อมูลภาครัฐได้ฟรี พร้อม API สำหรับนำไปต่อยอด</p>
+              <a class="srv2-link" href="https://data.go.th" target="_blank" rel="noopener">data.go.th <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-doc"/></svg></span> เปิดให้ใช้ฟรี</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">data.go.th</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/opendata.webp" alt="ตัวอย่างหน้าจอ data.go.th" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-doc"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- ตรวจสอบสิทธิสวัสดิการ -->
+          <div class="srv2-row srv2-row--rev">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">ตรวจสอบสิทธิสวัสดิการ</h3>
+              <p class="srv2-sub">เช็กสิทธิประโยชน์จากภาครัฐ<small>Welfare Check</small></p>
+              <p class="srv2-desc">ตรวจสอบสิทธิประโยชน์และสวัสดิการที่ท่านมี ผ่านระบบออนไลน์ที่เชื่อมโยงข้อมูลให้อัตโนมัติ ไม่ต้องยื่นเอกสารซ้ำ</p>
+              <a class="srv2-link" href="#">ตรวจสอบสิทธิ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-check"/></svg></span> เชื่อมข้อมูลอัตโนมัติ</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">ทางรัฐ.com/welfare</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/welfare.webp" alt="ตัวอย่างหน้าจอตรวจสอบสิทธิสวัสดิการ" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-check"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2) ภาคหน่วยงานรัฐ -->
+      <section class="srv-sec srv-sec--gov" id="gov">
+        <div class="srv-sec__head">
+          <span class="srv-sec__ic" aria-hidden="true"><svg class="icon"><use href="#i-build"/></svg></span>
+          <div class="srv-sec__tx">
+            <span class="eyebrow">ภาคหน่วยงานรัฐ</span>
+            <h2>บริการสำหรับหน่วยงานรัฐ<span class="srv-count">4 บริการ</span></h2>
+            <p>โครงสร้างพื้นฐานและมาตรฐานกลางที่ช่วยให้หน่วยงานรัฐเชื่อมโยงข้อมูล ใช้คลาวด์ และพัฒนาบริการดิจิทัลร่วมกัน</p>
+          </div>
+        </div>
+        <div class="srv2-list">
+          <!-- GDX -->
+          <div class="srv2-row">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">ศูนย์แลกเปลี่ยนข้อมูลกลาง (GDX)</h3>
+              <p class="srv2-sub">เชื่อมโยงข้อมูลระหว่างหน่วยงาน<small>Government Data Exchange · gdx.dga.or.th</small></p>
+              <p class="srv2-desc">แลกเปลี่ยนข้อมูลระหว่างหน่วยงานรัฐแบบบูรณาการ ลดการขอเอกสารซ้ำซ้อนจากประชาชน และเร่งการให้บริการแบบเบ็ดเสร็จ</p>
+              <a class="srv2-link" href="https://gdx.dga.or.th" target="_blank" rel="noopener">gdx.dga.or.th <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-map"/></svg></span> เชื่อมโยงข้อมูล</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">gdx.dga.or.th</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/gdx.webp" alt="ตัวอย่างหน้าจอ GDX" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-map"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- GDCC -->
+          <div class="srv2-row srv2-row--rev">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">คลาวด์ภาครัฐ (GDCC)</h3>
+              <p class="srv2-sub">โครงสร้างพื้นฐานคลาวด์กลาง<small>Government Cloud</small></p>
+              <p class="srv2-desc">บริการคลาวด์กลางสำหรับหน่วยงานรัฐ รองรับการประมวลผลและจัดเก็บข้อมูลอย่างมั่นคงปลอดภัย ขยายขนาดได้ตามการใช้งาน</p>
+              <a class="srv2-link" href="#">รายละเอียดบริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-cloud"/></svg></span> มั่นคงปลอดภัย</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">gdcc.or.th</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/gdcc.webp" alt="ตัวอย่างหน้าจอ GDCC" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-cloud"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- มาตรฐานรัฐบาลดิจิทัล -->
+          <div class="srv2-row">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">มาตรฐานรัฐบาลดิจิทัล</h3>
+              <p class="srv2-sub">กรอบและมาตรฐานกลาง<small>Digital Government Standard</small></p>
+              <p class="srv2-desc">แนวทางและมาตรฐานกลางสำหรับการพัฒนาบริการดิจิทัลภาครัฐ ให้สอดคล้อง เชื่อมต่อ และทำงานร่วมกันได้ทั้งระบบ</p>
+              <a class="srv2-link" href="#">ดูมาตรฐาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-check"/></svg></span> มาตรฐานกลาง</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">standard.dga.or.th</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/standard.webp" alt="ตัวอย่างหน้าจอมาตรฐานรัฐบาลดิจิทัล" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-check"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- e-Saraban -->
+          <div class="srv2-row srv2-row--rev">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">ระบบสารบรรณอิเล็กทรอนิกส์</h3>
+              <p class="srv2-sub">รับ-ส่งหนังสือราชการดิจิทัล<small>e-Saraban</small></p>
+              <p class="srv2-desc">รับ-ส่งหนังสือราชการระหว่างหน่วยงานในรูปแบบอิเล็กทรอนิกส์ ลดการใช้กระดาษ เพิ่มความรวดเร็วและตรวจสอบย้อนหลังได้</p>
+              <a class="srv2-link" href="#">รายละเอียดบริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-doc"/></svg></span> ลดการใช้กระดาษ</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">saraban.dga.or.th</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/esaraban.webp" alt="ตัวอย่างหน้าจอระบบสารบรรณอิเล็กทรอนิกส์" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-doc"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3) นักพัฒนา/ธุรกิจ -->
+      <section class="srv-sec srv-sec--biz" id="biz">
+        <div class="srv-sec__head">
+          <span class="srv-sec__ic" aria-hidden="true"><svg class="icon"><use href="#i-briefcase"/></svg></span>
+          <div class="srv-sec__tx">
+            <span class="eyebrow">นักพัฒนา / ภาคธุรกิจ</span>
+            <h2>บริการสำหรับนักพัฒนาและธุรกิจ<span class="srv-count">4 บริการ</span></h2>
+            <p>เครื่องมือและช่องทางที่ช่วยให้ภาคธุรกิจเริ่มต้นกิจการ และนักพัฒนาต่อยอดบริการผ่าน API และข้อมูลเปิดของภาครัฐ</p>
+          </div>
+        </div>
+        <div class="srv2-list">
+          <!-- BizPortal -->
+          <div class="srv2-row">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">BizPortal เริ่มต้นธุรกิจ</h3>
+              <p class="srv2-sub">ศูนย์กลางบริการเพื่อภาคธุรกิจ<small>Biz Portal · bizportal.go.th</small></p>
+              <p class="srv2-desc">ขอใบอนุญาตและจดทะเบียนกว่า 70 รายการแบบเบ็ดเสร็จในที่เดียว เริ่มต้นและขยายธุรกิจได้สะดวกผ่านช่องทางออนไลน์</p>
+              <a class="srv2-link" href="https://bizportal.go.th" target="_blank" rel="noopener">bizportal.go.th <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-briefcase"/></svg></span> 70+ ใบอนุญาต</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">bizportal.go.th</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/bizportal.webp" alt="ตัวอย่างหน้าจอ BizPortal" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-briefcase"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- Thailand NSW -->
+          <div class="srv2-row srv2-row--rev">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">Thailand NSW</h3>
+              <p class="srv2-sub">เชื่อมโยงนำเข้า-ส่งออกเบ็ดเสร็จ<small>National Single Window · thainsw.net</small></p>
+              <p class="srv2-desc">ระบบเชื่อมโยงข้อมูลนำเข้า-ส่งออกและโลจิสติกส์แบบเบ็ดเสร็จระหว่างหน่วยงาน ลดเอกสารและขั้นตอนสำหรับผู้ประกอบการ</p>
+              <a class="srv2-link" href="https://www.thainsw.net" target="_blank" rel="noopener">thainsw.net <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-build"/></svg></span> นำเข้า-ส่งออก</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">thainsw.net</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/thainsw.webp" alt="ตัวอย่างหน้าจอ Thailand NSW" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-build"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- API Gateway -->
+          <div class="srv2-row">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">API Gateway ภาครัฐ</h3>
+              <p class="srv2-sub">ศูนย์กลาง API สำหรับนักพัฒนา<small>API Gateway · api.egov.go.th</small></p>
+              <p class="srv2-desc">เชื่อมต่อบริการและข้อมูลภาครัฐได้อย่างปลอดภัยและเป็นมาตรฐาน พร้อมเอกสารและเครื่องมือสำหรับนักพัฒนา</p>
+              <a class="srv2-link" href="https://api.egov.go.th" target="_blank" rel="noopener">api.egov.go.th <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-code"/></svg></span> เชื่อมต่อ API</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">api.egov.go.th</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/api.webp" alt="ตัวอย่างหน้าจอ API Gateway" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-code"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <!-- Open Data API -->
+          <div class="srv2-row srv2-row--rev">
+            <div class="srv2-row__tx">
+              <h3 class="srv2-title">ชุดข้อมูลเปิด &amp; Open Data API</h3>
+              <p class="srv2-sub">ข้อมูลและ API เพื่อต่อยอด<small>Open Data API · data.go.th</small></p>
+              <p class="srv2-desc">ชุดข้อมูลเปิดและ API สำหรับนำไปพัฒนาต่อยอดแอปพลิเคชันและบริการเชิงนวัตกรรม เข้าถึงได้ฟรีในรูปแบบมาตรฐาน</p>
+              <a class="srv2-link" href="https://data.go.th" target="_blank" rel="noopener">data.go.th <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="srv2-row__media">
+              <span class="srv2-blob" aria-hidden="true"></span>
+              <span class="srv2-chip" aria-hidden="true"><span class="ic"><svg class="icon"><use href="#i-grid"/></svg></span> เปิดให้ใช้ฟรี</span>
+              <div class="srv2-float">
+                <figure class="mockup">
+                  <div class="mockup__bar" aria-hidden="true"><i></i><i></i><i></i><span class="mockup__url">data.go.th/api</span></div>
+                  <div class="mockup__screen">
+                    <img class="mockup__img" src="/assets/image/services/opendata-api.webp" alt="ตัวอย่างหน้าจอ Open Data API" loading="lazy" onerror="this.style.display='none'">
+                    <div class="mockup__fallback" aria-hidden="true">
+                      <div class="mockup__fhead"><span class="mockup__fic"><svg class="icon"><use href="#i-grid"/></svg></span><span class="mockup__fbars"><span class="mockup__fline"></span><span class="mockup__fline"></span></span></div>
+                      <div class="mockup__fgrid"><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span><span class="mockup__fcell"></span></div>
+                    </div>
+                  </div>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div></section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+        <p class="footer-org">สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน) (สพร.)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>อาคารสถาบันเพื่อการยุติธรรมแห่งประเทศไทย (TIJ) ชั้น 4 เลขที่ 999 ถนนแจ้งวัฒนะ แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพฯ 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>โทร 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="แผนที่ที่ตั้ง สพร." loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">ดูแผนที่ขนาดใหญ่ <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>บริการ</h3><ul><li><a href="/services.html#citizens">ThaID</a></li><li><a href="/services.html#citizens">ทางรัฐ</a></li><li><a href="/services.html#biz">Open Data</a></li><li><a href="/services.html#biz">API Gateway</a></li></ul></div>
+      <div><h3>เกี่ยวกับ</h3><ul><li><a href="#">วิสัยทัศน์</a></li><li><a href="/news.html">ข่าวสาร</a></li><li><a href="/careers.html">ร่วมงานกับเรา</a></li><li><a href="/contact.html">ติดต่อเรา</a></li></ul></div>
+      <div><h3>นโยบาย</h3><ul><li><a href="#">นโยบายความเป็นส่วนตัว (PDPA)</a></li><li><a href="#">นโยบายคุกกี้</a></li><li><a href="/accessibility.html">การเข้าถึง (WCAG)</a></li><li><a href="/sitemap.html">แผนผังเว็บไซต์</a></li><li><a href="/design-system.html" target="_blank" rel="noopener">Design System</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2569 สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">ตั้งค่าคุกกี้</button></div></div>
+  </footer>
+
+  <!-- Cookie Consent (PDPA) -->
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">เว็บไซต์นี้ใช้คุกกี้</h2>
+    <p id="ck-d">เราใช้คุกกี้ที่จำเป็นเพื่อให้เว็บทำงาน และคุกกี้วิเคราะห์เพื่อปรับปรุงบริการ (ปิดเป็นค่าเริ่มต้น) ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">ยอมรับทั้งหมด</button><button class="btn btn--ghost" data-cookie="necessary">เฉพาะที่จำเป็น</button><button class="btn btn--ghost" data-cookie="settings">ตั้งค่า</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+  <script src="/assets/cms-config.js"></script>
+  <script src="/assets/services-cms.js"></script>
+  <script>
+    /* scroll reveal สำหรับ feature rows (เคารพ prefers-reduced-motion) */
+    (function(){
+      var rows = document.querySelectorAll('.srv2-row');
+      if (!rows.length || !('IntersectionObserver' in window)) return;
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      document.body.classList.add('srv2-reveal');
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add('is-in'); io.unobserve(e.target); } });
+      }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+      rows.forEach(function(r){ io.observe(r); });
+    })();
+  </script>
+  <script src="/assets/hero-cms.js?v=1"></script>
+</body>
+</html>

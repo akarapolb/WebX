@@ -1,28 +1,420 @@
 <!DOCTYPE html>
-<!-- DGA Website — แผนผังเว็บไซต์ (TOR ภาคผนวก ก ข้อ 25) · จัดโครงสร้างผ่าน CMS (Strapi) · Multi-tenant -->
+<!--
+  DGA Website — แผนผังเว็บไซต์ (Sitemap) ภาษาไทย
+  แสดงโครงสร้างเว็บไซต์ + ทางลัดบริการหลัก + User Flow ของบริการสำคัญ
+  ใช้ Design System: /assets/design-system.css + /assets/home.css + /assets/complaint.css
+-->
 <html lang="th">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>แผนผังเว็บไซต์ | สพร. (DGA)</title>
-  <meta name="description" content="แผนผังเว็บไซต์สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)">
-  <script>(function(){try{var t=localStorage.getItem('dga-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
-  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@400;500;700&display=swap">
+  <title>แผนผังเว็บไซต์ (Sitemap) | สพร. (DGA)</title>
+  <meta name="description" content="แผนผังเว็บไซต์ของสำนักงานพัฒนารัฐบาลดิจิทัล (สพร./DGA) แสดงโครงสร้างเว็บไซต์ทั้งหมด ทางลัดบริการหลัก และเส้นทางการใช้งาน (User Flow) อย่างชัดเจน">
+  <link rel="canonical" href="https://www.dga.or.th/sitemap">
+  <link rel="alternate" hreflang="th" href="https://www.dga.or.th/sitemap">
+  <link rel="alternate" hreflang="en" href="https://www.dga.or.th/en/sitemap">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@300;400;500;700&display=swap">
   <link rel="stylesheet" href="/assets/design-system.css">
-  <link rel="stylesheet" href="/assets/groupa.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/complaint.css">
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"หน้าแรก","item":"https://www.dga.or.th/"},
+    {"@type":"ListItem","position":2,"name":"แผนผังเว็บไซต์","item":"https://www.dga.or.th/sitemap"}
+  ]}
+  </script>
 </head>
-<body data-ga-page="sitemap">
+<body>
   <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
-  <header class="site-header" style="border-bottom:1px solid var(--c-border)">
-    <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;max-width:1080px;margin:0 auto">
-      <a href="index.html" style="text-decoration:none;color:var(--c-text);font-weight:600">← สพร. หน้าแรก</a>
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></symbol>
+  </defs></svg>
+
+  <!-- แถบการเข้าถึง -->
+  <div class="a11y-bar" role="region" aria-label="เครื่องมือการเข้าถึง"><div class="wrap">
+    <span>การเข้าถึง:</span>
+    <button id="fontDown" aria-label="ลดขนาดตัวอักษร">ก-</button>
+    <button id="fontReset" aria-label="ขนาดตัวอักษรปกติ">ก</button>
+    <button id="fontUp" aria-label="เพิ่มขนาดตัวอักษร">ก+</button>
+    <button id="contrastBtn" aria-pressed="false">โหมดความต่างสูง</button>
+    <a href="#main">ข้ามไปเนื้อหา</a>
+    <span class="grow"></span>
+    <a href="/accessibility.html">การเข้าถึงเว็บไซต์ (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="เมนูหลัก">
+        <a href="/">หน้าแรก</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega>บริการ</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>ข่าวสาร</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>บริการออนไลน์</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>เกี่ยวกับ สพร.</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/sitemap.html" aria-current="true" lang="th">TH</a><a href="/en/sitemap.html" lang="en">EN</a></span>
+        <a class="btn btn--primary btn-login" href="/login.html"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3.2"/><path d="M6.3 18.4a6 6 0 0 1 11.4 0"/></svg> เข้าสู่ระบบ</a>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="สลับโหมดมืด"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="เปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
     </div>
+
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>สำหรับประชาชน</h3>
+          <a href="#"><span class="dot"></span>บัตรประชาชนดิจิทัล (ThaID)</a>
+          <a href="#"><span class="dot"></span>แอปทางรัฐ</a>
+          <a href="#"><span class="dot"></span>ตรวจสอบสิทธิ์สวัสดิการ</a></div>
+        <div class="mega-col"><h3>สำหรับหน่วยงานรัฐ</h3>
+          <a href="#"><span class="dot"></span>GDX ศูนย์แลกเปลี่ยนข้อมูล</a>
+          <a href="#"><span class="dot"></span>คลาวด์ภาครัฐ (GDCC)</a>
+          <a href="#"><span class="dot"></span>มาตรฐานรัฐบาลดิจิทัล</a></div>
+        <div class="mega-col"><h3>นักพัฒนา/ธุรกิจ</h3>
+          <a href="#"><span class="dot"></span>API Gateway ภาครัฐ</a>
+          <a href="#"><span class="dot"></span>ข้อมูลเปิดภาครัฐ (Open Data)</a>
+          <a href="#"><span class="dot"></span>BizPortal เริ่มต้นธุรกิจ</a></div>
+      </div>
+      <a class="mega-feature" href="/services.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-grid"/></svg></span>
+        <b>ดูบริการและโครงการทั้งหมด</b><span>รวมบริการดิจิทัลภาครัฐ แยกตามกลุ่มผู้ใช้งานอย่างชัดเจน</span>
+        <span class="cta">เปิดหน้าบริการ <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ข่าว &amp; ประกาศ</h3>
+          <a href="/news.html"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>ประกาศ สพร.</a>
+          <a href="#"><span class="dot"></span>ประกาศจัดซื้อจัดจ้าง</a></div>
+        <div class="mega-col"><h3>บทความ &amp; ความรู้</h3>
+          <a href="/blog.html"><span class="dot"></span>บทความรัฐบาลดิจิทัล</a>
+          <a href="#"><span class="dot"></span>คลังความรู้ (Knowledge)</a>
+          <a href="/gallery.html"><span class="dot"></span>อินโฟกราฟิก</a></div>
+        <div class="mega-col"><h3>สื่อ &amp; กิจกรรม</h3>
+          <a href="/video.html"><span class="dot"></span>DGA Channel (วิดีโอ)</a>
+          <a href="/calendar.html"><span class="dot"></span>ปฏิทินกิจกรรม/สัมมนา</a>
+          <a href="#"><span class="dot"></span>รางวัลและผลงาน</a></div>
+      </div>
+      <a class="mega-feature" href="/news.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>ข่าวเด่นล่าสุด</b><span>ติดตามความเคลื่อนไหวรัฐบาลดิจิทัลและบริการใหม่ของ สพร.</span>
+        <span class="cta">อ่านข่าวทั้งหมด <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>ลงทะเบียน &amp; สมัครงาน</h3>
+          <a href="/register.html"><span class="dot"></span>ลงทะเบียนผู้ใช้งานระบบ</a>
+          <a href="/careers.html"><span class="dot"></span>ระบบรับสมัครงาน (ร่วมงานกับ สพร.)</a>
+          <a href="/application-status.html"><span class="dot"></span>ตรวจสอบสถานะใบสมัคร</a></div>
+        <div class="mega-col"><h3>ร้องเรียน &amp; ข้อเสนอแนะ</h3>
+          <a href="/complaint.html"><span class="dot"></span>ระบบรับเรื่องร้องเรียน</a>
+          <a href="/complaint.html"><span class="dot"></span>แจ้งปัญหาการใช้งาน</a>
+          <a href="/complaint.html#track"><span class="dot"></span>ติดตามสถานะเรื่องร้องเรียน</a></div>
+        <div class="mega-col"><h3>บริการช่วยเหลือ</h3>
+          <a href="#"><span class="dot"></span>ตรวจสอบสถานะคำขอ</a>
+          <a href="/download.html"><span class="dot"></span>ดาวน์โหลดเอกสาร/แบบฟอร์ม</a>
+          <a href="/faq.html"><span class="dot"></span>ศูนย์ช่วยเหลือ (Help Center)</a></div>
+      </div>
+      <a class="mega-feature" href="/careers.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-build"/></svg></span>
+        <b>ร่วมงานกับ สพร.</b><span>ดูตำแหน่งงานที่เปิดรับและสมัครออนไลน์</span>
+        <span class="cta">ดูตำแหน่งงาน <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>องค์กร</h3>
+          <a href="#"><span class="dot"></span>วิสัยทัศน์ &amp; บทบาท</a>
+          <a href="#"><span class="dot"></span>โครงสร้างองค์กร</a>
+          <a href="#"><span class="dot"></span>คณะผู้บริหาร</a></div>
+        <div class="mega-col"><h3>เผยแพร่</h3>
+          <a href="/news.html"><span class="dot"></span>ข่าวประชาสัมพันธ์</a>
+          <a href="#"><span class="dot"></span>รายงานประจำปี</a>
+          <a href="#"><span class="dot"></span>จัดซื้อจัดจ้างของ สพร.</a></div>
+        <div class="mega-col"><h3>ธรรมาภิบาล</h3>
+          <a href="/faq.html"><span class="dot"></span>คำถามที่พบบ่อย (FAQ)</a>
+          <a href="#"><span class="dot"></span>คุณธรรมและความโปร่งใส (ITA)</a>
+          <a href="/careers.html"><span class="dot"></span>ร่วมงานกับเรา</a>
+          <a href="/accessibility.html"><span class="dot"></span>การเข้าถึงเว็บไซต์</a></div>
+      </div>
+      <a class="mega-feature" href="/sitemap.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-map"/></svg></span>
+        <b>แผนผังเว็บไซต์</b><span>ดูโครงสร้างทั้งหมดและเส้นทางการเข้าถึงบริการ</span>
+        <span class="cta">ดูแผนผัง <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
   </header>
+
+  <!-- Mobile drawer -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="เมนูหลัก">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="ปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">ค้นหาบริการหรือเอกสาร</label>
+      <input id="mq" name="q" type="search" placeholder="ค้นหาบริการหรือเอกสาร…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="เมนูหลัก (อุปกรณ์พกพา)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/sitemap.html" aria-current="true" lang="th">TH</a><a href="/en/sitemap.html" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="/login.html" style="flex:1;justify-content:center">เข้าสู่ระบบ</a>
+    </div>
+  </aside>
+
   <main id="main">
-    <div class="ga-head"><h1>แผนผังเว็บไซต์</h1><p>โครงสร้างเมนูและหน้าทั้งหมดของเว็บไซต์</p></div>
-    <div class="ga-wrap ga-sec"><div id="ga-root"></div></div>
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="เส้นทางนำทาง"><div class="wrap">
+      <ol>
+        <li><a href="/index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg> หน้าแรก</a></li>
+        <li aria-current="page">แผนผังเว็บไซต์</li>
+      </ol>
+    </div></nav>
+
+    <!-- Hero -->
+    <section class="cpl-hero" aria-labelledby="sm-h"><div class="wrap">
+      <div class="cpl-hero__tx">
+        <span class="cpl-eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-map"/></svg> โครงสร้างเว็บไซต์</span>
+        <h1 id="sm-h">แผนผังเว็บไซต์</h1>
+        <p>สำรวจโครงสร้างเว็บไซต์ทั้งหมดของ สพร. เข้าถึงบริการหลักได้อย่างรวดเร็ว และดูเส้นทางการใช้งาน (User Flow) ของบริการสำคัญได้จากที่เดียว</p>
+        <nav class="sm-jump" aria-label="ลัดไปยังหัวข้อ">
+          <a href="#services"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg> ทางลัดบริการหลัก</a>
+          <a href="#flow"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg> เส้นทางการใช้งาน</a>
+          <a href="#tree"><svg class="icon" aria-hidden="true"><use href="#i-map"/></svg> โครงสร้างทั้งหมด</a>
+        </nav>
+      </div>
+    </div></section>
+
+    <section class="sm-wrap"><div class="wrap">
+
+      <!-- 1) ทางลัดบริการหลัก -->
+      <section class="sm-sec" id="services">
+        <div class="sm-sec__head">
+          <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg> บริการที่ใช้บ่อย</span>
+          <h2>ทางลัดบริการหลัก</h2>
+          <p>เข้าถึงบริการออนไลน์ที่ประชาชนและหน่วยงานใช้บ่อยที่สุดได้ทันที พร้อมแสดงเส้นทางเมนูของแต่ละบริการอย่างชัดเจน</p>
+        </div>
+        <div class="svc-grid">
+          <a class="svc-card" href="/complaint.html">
+            <span class="svc-card__go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span>
+            <span class="svc-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span>
+            <h3>ระบบรับเรื่องร้องเรียน</h3>
+            <p>แจ้งเรื่องร้องเรียน ข้อเสนอแนะ และติดตามสถานะการดำเนินการได้แบบเรียลไทม์</p>
+            <div class="svc-card__path"><span class="s">หน้าแรก</span><span class="a">›</span><span class="s">บริการออนไลน์</span><span class="a">›</span><span class="s e">รับเรื่องร้องเรียน</span></div>
+          </a>
+          <a class="svc-card" href="/register.html">
+            <span class="svc-card__go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span>
+            <span class="svc-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-id"/></svg></span>
+            <h3>ลงทะเบียนผู้ใช้งานระบบ</h3>
+            <p>สมัครบัญชีเพื่อเข้าใช้บริการดิจิทัลของ สพร. ผ่านแบบฟอร์มทีละขั้นที่ใช้งานง่าย</p>
+            <div class="svc-card__path"><span class="s">หน้าแรก</span><span class="a">›</span><span class="s">บริการออนไลน์</span><span class="a">›</span><span class="s e">ลงทะเบียน</span></div>
+          </a>
+          <a class="svc-card" href="/careers.html">
+            <span class="svc-tag">เปิดรับสมัคร</span>
+            <span class="svc-card__go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span>
+            <span class="svc-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-briefcase"/></svg></span>
+            <h3>ระบบรับสมัครงาน</h3>
+            <p>ดูตำแหน่งงานที่เปิดรับของ สพร. อ่านรายละเอียด และสมัครออนไลน์ได้ทันที</p>
+            <div class="svc-card__path"><span class="s">หน้าแรก</span><span class="a">›</span><span class="s">บริการออนไลน์</span><span class="a">›</span><span class="s e">รับสมัครงาน</span></div>
+          </a>
+          <a class="svc-card" href="/application-status.html">
+            <span class="svc-card__go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span>
+            <span class="svc-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-search"/></svg></span>
+            <h3>ตรวจสอบสถานะใบสมัคร</h3>
+            <p>กรอกเลขที่ใบสมัครเพื่อติดตามขั้นตอนการพิจารณาตำแหน่งงานที่สมัครไว้</p>
+            <div class="svc-card__path"><span class="s">หน้าแรก</span><span class="a">›</span><span class="s">บริการออนไลน์</span><span class="a">›</span><span class="s e">ตรวจสอบสถานะ</span></div>
+          </a>
+          <a class="svc-card" href="/accessibility.html">
+            <span class="svc-card__go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span>
+            <span class="svc-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>
+            <h3>การเข้าถึงเว็บไซต์</h3>
+            <p>นโยบายและแนวทางการเข้าถึงตามมาตรฐาน WCAG 2.2 ระดับ AA พร้อมเครื่องมือช่วยใช้งาน</p>
+            <div class="svc-card__path"><span class="s">หน้าแรก</span><span class="a">›</span><span class="s e">การเข้าถึง</span></div>
+          </a>
+          <a class="svc-card" href="/news.html">
+            <span class="svc-card__go" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg></span>
+            <span class="svc-card__ic" aria-hidden="true"><svg class="icon"><use href="#i-doc"/></svg></span>
+            <h3>ข่าวสาร &amp; ประกาศ</h3>
+            <p>ติดตามข่าวประชาสัมพันธ์ ประกาศ และความเคลื่อนไหวล่าสุดด้านรัฐบาลดิจิทัล</p>
+            <div class="svc-card__path"><span class="s">หน้าแรก</span><span class="a">›</span><span class="s e">ข่าวสาร</span></div>
+          </a>
+        </div>
+      </section>
+
+      <!-- 2) User Flow -->
+      <section class="sm-sec" id="flow">
+        <div class="sm-sec__head">
+          <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg> เส้นทางการใช้งาน</span>
+          <h2>User Flow ของบริการหลัก</h2>
+          <p>แผนภาพเส้นทางการใช้งานจริงตั้งแต่เริ่มต้นจนเสร็จสิ้น ของบริการสำคัญที่ สพร. กำหนด</p>
+          <div class="flow-legend" aria-hidden="true">
+            <span><i class="lg-nav"></i> ขั้นตอนนำทาง / เลือกบริการ</span>
+            <span><i class="lg-act"></i> ลงมือกรอก / ทำรายการ</span>
+            <span><i class="lg-ok"></i> สำเร็จ / ได้รับผล</span>
+          </div>
+        </div>
+
+        <div class="flow-block">
+          <div class="flow-head">
+            <span class="flow-head__b" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span>
+            <h3>ยื่นเรื่องร้องเรียนและติดตามผล<span>6 ขั้นตอน · ระบบรับเรื่องร้องเรียน</span></h3>
+          </div>
+          <div class="flow" role="list" aria-label="เส้นทางการยื่นเรื่องร้องเรียน">
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">1</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-home"/></svg></span><strong>หน้าแรก</strong><span>เริ่มต้น</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">2</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-grid"/></svg></span><strong>บริการออนไลน์</strong><span>เปิดเมนู</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">3</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-chat"/></svg></span><strong>รับเรื่องร้องเรียน</strong><span>เลือกบริการ</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">4</span><span class="flow-step__ic flow-step__ic--act" aria-hidden="true"><svg class="icon"><use href="#i-doc"/></svg></span><strong>กรอกแบบฟอร์ม</strong><span>ระบุรายละเอียด</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">5</span><span class="flow-step__ic flow-step__ic--ok" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><strong>รับเลขที่เรื่อง</strong><span>ยืนยันสำเร็จ</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">6</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-clock"/></svg></span><strong>ติดตามสถานะ</strong><span>ดูความคืบหน้า</span></div>
+          </div>
+        </div>
+
+        <div class="flow-block">
+          <div class="flow-head">
+            <span class="flow-head__b" aria-hidden="true"><svg class="icon"><use href="#i-briefcase"/></svg></span>
+            <h3>สมัครงานและตรวจสอบสถานะ<span>6 ขั้นตอน · ระบบรับสมัครงาน</span></h3>
+          </div>
+          <div class="flow" role="list" aria-label="เส้นทางการสมัครงาน">
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">1</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-home"/></svg></span><strong>หน้าแรก</strong><span>เริ่มต้น</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">2</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-grid"/></svg></span><strong>บริการออนไลน์</strong><span>เปิดเมนู</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">3</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-briefcase"/></svg></span><strong>รับสมัครงาน</strong><span>ดูตำแหน่ง</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">4</span><span class="flow-step__ic flow-step__ic--act" aria-hidden="true"><svg class="icon"><use href="#i-doc"/></svg></span><strong>เลือกตำแหน่ง</strong><span>อ่านรายละเอียด</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">5</span><span class="flow-step__ic flow-step__ic--ok" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><strong>สมัครงาน</strong><span>รับเลขใบสมัคร</span></div>
+            <div class="flow-step" role="listitem"><span class="flow-step__n" aria-hidden="true">6</span><span class="flow-step__ic" aria-hidden="true"><svg class="icon"><use href="#i-clock"/></svg></span><strong>ตรวจสอบสถานะ</strong><span>ติดตามผล</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3) Sitemap tree -->
+      <section class="sm-sec" id="tree">
+        <div class="sm-sec__head">
+          <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-map"/></svg> โครงสร้างทั้งหมด</span>
+          <h2>แผนผังเว็บไซต์ทั้งหมด</h2>
+          <p>ทุกหน้าและบริการ จัดกลุ่มตามเมนูหลัก — ป้าย <span class="sm-live">LIVE</span> คือบริการที่ใช้งานได้จริงแล้ว</p>
+        </div>
+        <div class="sm-grid">
+          <div class="sm-card">
+            <div class="sm-card__h"><span class="ic" aria-hidden="true"><svg class="icon"><use href="#i-home"/></svg></span><h3>หน้าแรก</h3><span class="sm-count">4 รายการ</span></div>
+            <ul class="sm-list">
+              <li><a href="/index.html"><span class="dot"></span>หน้าแรก <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/news.html"><span class="dot"></span>ข่าว &amp; ประกาศล่าสุด <span class="sm-live">LIVE</span></a></li>
+              <li><a href="#"><span class="dot"></span>ค้นหาอัจฉริยะ (Smart Search)</a></li>
+              <li><a href="#"><span class="dot"></span>ผู้ช่วย DGA Guide (Chat AI)</a></li>
+            </ul>
+          </div>
+          <div class="sm-card">
+            <div class="sm-card__h"><span class="ic" aria-hidden="true"><svg class="icon"><use href="#i-id"/></svg></span><h3>บริการ</h3><span class="sm-count">6 รายการ</span></div>
+            <ul class="sm-list">
+              <li><a href="#"><span class="dot"></span>บัตรประชาชนดิจิทัล (ThaID)</a></li>
+              <li><a href="#"><span class="dot"></span>แอปทางรัฐ</a></li>
+              <li><a href="#"><span class="dot"></span>GDX / คลาวด์ภาครัฐ (GDCC)</a></li>
+              <li><a href="#"><span class="dot"></span>มาตรฐานรัฐบาลดิจิทัล</a></li>
+              <li><a href="#"><span class="dot"></span>API Gateway / Open Data</a></li>
+              <li><a href="#"><span class="dot"></span>BizPortal / จัดซื้อจัดจ้าง (e-GP)</a></li>
+            </ul>
+          </div>
+          <div class="sm-card">
+            <div class="sm-card__h"><span class="ic" aria-hidden="true"><svg class="icon"><use href="#i-doc"/></svg></span><h3>ข่าวสาร</h3><span class="sm-count">4 รายการ</span></div>
+            <ul class="sm-list">
+              <li><a href="/news.html"><span class="dot"></span>ข่าวประชาสัมพันธ์ <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/blog.html"><span class="dot"></span>บทความรัฐบาลดิจิทัล</a></li>
+              <li><a href="/video.html"><span class="dot"></span>DGA Channel (วิดีโอ)</a></li>
+              <li><a href="#"><span class="dot"></span>รางวัลและผลงาน</a></li>
+            </ul>
+          </div>
+          <div class="sm-card">
+            <div class="sm-card__h"><span class="ic" aria-hidden="true"><svg class="icon"><use href="#i-grid"/></svg></span><h3>บริการออนไลน์</h3><span class="sm-count">5 รายการ</span></div>
+            <ul class="sm-list">
+              <li><a href="/register.html"><span class="dot"></span>ลงทะเบียนผู้ใช้งานระบบ <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/careers.html"><span class="dot"></span>ระบบรับสมัครงาน <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/application-status.html"><span class="dot"></span>ตรวจสอบสถานะใบสมัคร <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/complaint.html"><span class="dot"></span>ระบบรับเรื่องร้องเรียน <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/complaint.html#track"><span class="dot"></span>ติดตามสถานะเรื่องร้องเรียน <span class="sm-live">LIVE</span></a></li>
+            </ul>
+          </div>
+          <div class="sm-card">
+            <div class="sm-card__h"><span class="ic" aria-hidden="true"><svg class="icon"><use href="#i-users"/></svg></span><h3>เกี่ยวกับ สพร.</h3><span class="sm-count">5 รายการ</span></div>
+            <ul class="sm-list">
+              <li><a href="#"><span class="dot"></span>วิสัยทัศน์ &amp; โครงสร้างองค์กร</a></li>
+              <li><a href="#"><span class="dot"></span>รายงานประจำปี</a></li>
+              <li><a href="#"><span class="dot"></span>คุณธรรมและความโปร่งใส (ITA)</a></li>
+              <li><a href="/careers.html"><span class="dot"></span>ร่วมงานกับเรา <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/accessibility.html"><span class="dot"></span>การเข้าถึงเว็บไซต์ <span class="sm-live">LIVE</span></a></li>
+            </ul>
+          </div>
+          <div class="sm-card">
+            <div class="sm-card__h"><span class="ic" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span><h3>นโยบาย &amp; ช่วยเหลือ</h3><span class="sm-count">4 รายการ</span></div>
+            <ul class="sm-list">
+              <li><a href="#"><span class="dot"></span>นโยบายความเป็นส่วนตัว (PDPA)</a></li>
+              <li><a href="#"><span class="dot"></span>นโยบายคุกกี้</a></li>
+              <li><a href="/accessibility.html"><span class="dot"></span>การเข้าถึงเว็บไซต์ (WCAG) <span class="sm-live">LIVE</span></a></li>
+              <li><a href="/sitemap.html"><span class="dot"></span>แผนผังเว็บไซต์ <span class="sm-live">LIVE</span></a></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div></section>
   </main>
-  <script src="/assets/groupa.js?v=1"></script>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/" aria-label="สพร. — หน้าแรก"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA สำนักงานพัฒนารัฐบาลดิจิทัล" width="150" height="46"></a>
+        <p class="footer-org">สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน) (สพร.)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>อาคารสถาบันเพื่อการยุติธรรมแห่งประเทศไทย (TIJ) ชั้น 4 เลขที่ 999 ถนนแจ้งวัฒนะ แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพฯ 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>โทร 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="แผนที่ที่ตั้ง สพร." loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">ดูแผนที่ขนาดใหญ่ <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>บริการ</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">ทางรัฐ</a></li><li><a href="#">Open Data</a></li><li><a href="#">API Gateway</a></li></ul></div>
+      <div><h3>เกี่ยวกับ</h3><ul><li><a href="#">วิสัยทัศน์</a></li><li><a href="/news.html">ข่าวสาร</a></li><li><a href="/careers.html">ร่วมงานกับเรา</a></li><li><a href="/contact.html">ติดต่อเรา</a></li></ul></div>
+      <div><h3>นโยบาย</h3><ul><li><a href="#">นโยบายความเป็นส่วนตัว (PDPA)</a></li><li><a href="#">นโยบายคุกกี้</a></li><li><a href="/accessibility.html">การเข้าถึง (WCAG)</a></li><li><a href="/sitemap.html">แผนผังเว็บไซต์</a></li><li><a href="/design-system.html" target="_blank" rel="noopener">Design System</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2569 สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">ตั้งค่าคุกกี้</button></div></div>
+  </footer>
+
+  <!-- Cookie Consent (PDPA) -->
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">เว็บไซต์นี้ใช้คุกกี้</h2>
+    <p id="ck-d">เราใช้คุกกี้ที่จำเป็นเพื่อให้เว็บทำงาน และคุกกี้วิเคราะห์เพื่อปรับปรุงบริการ (ปิดเป็นค่าเริ่มต้น) ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">ยอมรับทั้งหมด</button><button class="btn btn--ghost" data-cookie="necessary">เฉพาะที่จำเป็น</button><button class="btn btn--ghost" data-cookie="settings">ตั้งค่า</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+  <script src="/assets/cms-config.js"></script>
+  <script src="/assets/hero-cms.js?v=1"></script>
 </body>
 </html>

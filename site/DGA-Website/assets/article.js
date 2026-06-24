@@ -48,12 +48,12 @@
   function render(a) {
     document.title = a.title + " | สพร. (DGA)";
     var cover = media(a.coverImage);
-    var tags = (a.tags || []).map(function (t) { return '<a class="art__tag" href="news.html?tag=' + encodeURIComponent(t) + '">#' + esc(t) + "</a>"; }).join("");
+    var tags = (a.tags || []).map(function (t) { return '<a class="art__tag" href="news?tag=' + encodeURIComponent(t) + '">#' + esc(t) + "</a>"; }).join("");
     var rel = (a.related || []).filter(function (r) { return r && r.slug; });
     var relHtml = rel.length ? '<div class="art__related"><h2>ข่าวที่เกี่ยวข้อง</h2><div class="gb-news">' +
       rel.map(function (r) {
         var img = media(r.coverImage, "medium");
-        return '<a class="ga-post" href="article.html?slug=' + encodeURIComponent(r.slug) + '" style="text-decoration:none">' +
+        return '<a class="ga-post" href="article?slug=' + encodeURIComponent(r.slug) + '" style="text-decoration:none">' +
           (img ? '<div class="ga-post__img" style="background-image:url(\'' + img + "')\"></div>" : '<div class="ga-post__img"></div>') +
           '<div class="ga-post__body">' + (r.categoryLabel ? '<span class="ga-post__cat">' + esc(r.categoryLabel) + "</span>" : "") +
           "<h3>" + esc(r.title) + "</h3></div></a>";

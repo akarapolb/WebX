@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — Accessibility Statement (English)
+  Declares WCAG 2.2 Level AA conformance · accessibility features · feedback channels
+  Uses Design System: /assets/design-system.css + /assets/home.css + /assets/complaint.css · Ubuntu font
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accessibility Statement (WCAG 2.2 AA) | DGA</title>
+  <meta name="description" content="Accessibility statement for the Digital Government Development Agency (DGA) website, built to WCAG 2.2 Level AA so everyone can access services equally.">
+  <link rel="canonical" href="https://www.dga.or.th/en/accessibility">
+  <link rel="alternate" hreflang="th" href="https://www.dga.or.th/accessibility">
+  <link rel="alternate" hreflang="en" href="https://www.dga.or.th/en/accessibility">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@300;400;500;700&display=swap">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/complaint.css">
+  <style>:root{ --font-base: var(--font-en); }</style>
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"Home","item":"https://www.dga.or.th/en/"},
+    {"@type":"ListItem","position":2,"name":"Accessibility Statement","item":"https://www.dga.or.th/en/accessibility"}
+  ]}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+  </defs></svg>
+
+  <!-- Accessibility bar -->
+  <div class="a11y-bar" role="region" aria-label="Accessibility tools"><div class="wrap">
+    <span>Accessibility:</span>
+    <button id="fontDown" aria-label="Decrease text size">A-</button>
+    <button id="fontReset" aria-label="Default text size">A</button>
+    <button id="fontUp" aria-label="Increase text size">A+</button>
+    <button id="contrastBtn" aria-pressed="false">High contrast</button>
+    <a href="#main">Skip to content</a>
+    <span class="grow"></span>
+    <a href="/en/accessibility.html">Accessibility Statement (WCAG 2.2 AA)</a>
+  </div></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+      <nav class="main-nav" aria-label="Main menu">
+        <a href="/en/">Home</a>
+        <button aria-expanded="false" aria-controls="mega-service" data-mega>Services</button>
+        <button aria-expanded="false" aria-controls="mega-news" data-mega>News</button>
+        <button aria-expanded="false" aria-controls="mega-eservice" data-mega>Online Services</button>
+        <button aria-expanded="false" aria-controls="mega-about" data-mega>About DGA</button>
+      </nav>
+      <div class="header-tools">
+        <span class="lang-switch"><a href="/accessibility.html" lang="th">TH</a><a href="/en/accessibility.html" aria-current="true" lang="en">EN</a></span>
+        <a class="btn btn--primary btn-login" href="/en/login.html"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3.2"/><path d="M6.3 18.4a6 6 0 0 1 11.4 0"/></svg> Sign in</a>
+        <button class="btn btn--ghost btn--icon" id="themeBtn" aria-pressed="false" aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="btn btn--ghost btn--icon nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="Open menu"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+
+    <div class="mega" id="mega-service" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>For Citizens</h3>
+          <a href="#"><span class="dot"></span>Digital ID (ThaID)</a>
+          <a href="#"><span class="dot"></span>Tang Rath App</a>
+          <a href="#"><span class="dot"></span>Check welfare eligibility</a></div>
+        <div class="mega-col"><h3>For Agencies</h3>
+          <a href="#"><span class="dot"></span>GDX Data Exchange</a>
+          <a href="#"><span class="dot"></span>Government Cloud (GDCC)</a>
+          <a href="#"><span class="dot"></span>Digital Gov Standards</a></div>
+        <div class="mega-col"><h3>Developers/Business</h3>
+          <a href="#"><span class="dot"></span>Government API Gateway</a>
+          <a href="#"><span class="dot"></span>Open Government Data</a>
+          <a href="#"><span class="dot"></span>BizPortal</a></div>
+      </div>
+      <a class="mega-feature" href="/en/services.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-grid"/></svg></span>
+        <b>See all services &amp; projects</b><span>All digital government services, clearly grouped by audience</span>
+        <span class="cta">Open services <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-news" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>News &amp; Notices</h3>
+          <a href="/en/news.html"><span class="dot"></span>Press releases</a>
+          <a href="#"><span class="dot"></span>DGA announcements</a>
+          <a href="#"><span class="dot"></span>Procurement notices</a></div>
+        <div class="mega-col"><h3>Articles &amp; Knowledge</h3>
+          <a href="#"><span class="dot"></span>Digital government articles</a>
+          <a href="#"><span class="dot"></span>Knowledge hub</a>
+          <a href="#"><span class="dot"></span>Infographics</a></div>
+        <div class="mega-col"><h3>Media &amp; Events</h3>
+          <a href="#"><span class="dot"></span>DGA Channel (video)</a>
+          <a href="#"><span class="dot"></span>Events &amp; seminars</a>
+          <a href="#"><span class="dot"></span>Awards &amp; achievements</a></div>
+      </div>
+      <a class="mega-feature" href="/en/news.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Latest headlines</b><span>Follow digital-government updates and DGA's newest services.</span>
+        <span class="cta">Read all news <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-eservice" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Register &amp; Careers</h3>
+          <a href="/en/register.html"><span class="dot"></span>Register a user account</a>
+          <a href="/en/careers.html"><span class="dot"></span>Job application system (Careers)</a>
+          <a href="/en/application-status.html"><span class="dot"></span>Check application status</a></div>
+        <div class="mega-col"><h3>Complaints &amp; Feedback</h3>
+          <a href="/en/complaint.html"><span class="dot"></span>Complaint submission system</a>
+          <a href="/en/complaint.html#track"><span class="dot"></span>Track complaint status</a>
+          <a href="#"><span class="dot"></span>Report a problem</a></div>
+        <div class="mega-col"><h3>Support</h3>
+          <a href="#"><span class="dot"></span>Check request status</a>
+          <a href="#"><span class="dot"></span>Download forms &amp; documents</a>
+          <a href="#"><span class="dot"></span>Help Center</a></div>
+      </div>
+      <a class="mega-feature" href="/en/careers.html"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-build"/></svg></span>
+        <b>Join DGA</b><span>Browse open positions and apply online.</span>
+        <span class="cta">View positions <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+
+    <div class="mega" id="mega-about" hidden><div class="wrap">
+      <div class="mega-cols">
+        <div class="mega-col"><h3>Organization</h3>
+          <a href="#"><span class="dot"></span>Vision &amp; role</a>
+          <a href="#"><span class="dot"></span>Structure</a>
+          <a href="#"><span class="dot"></span>Executives</a></div>
+        <div class="mega-col"><h3>Publications</h3>
+          <a href="#"><span class="dot"></span>Annual reports</a>
+          <a href="/en/news.html"><span class="dot"></span>News</a>
+          <a href="#"><span class="dot"></span>DGA procurement</a></div>
+        <div class="mega-col"><h3>Governance</h3>
+          <a href="#"><span class="dot"></span>Integrity &amp; transparency (ITA)</a>
+          <a href="/en/careers.html"><span class="dot"></span>Careers</a>
+          <a href="/design-system.html" target="_blank" rel="noopener"><span class="dot"></span>Design System</a>
+          <a href="/en/accessibility.html"><span class="dot"></span>Accessibility Statement</a></div>
+      </div>
+      <a class="mega-feature" href="#"><span class="ic" aria-hidden="true"><svg class="icon icon--lg"><use href="#i-doc"/></svg></span>
+        <b>Annual Report 2025</b><span>Performance and the national direction for digital government.</span>
+        <span class="cta">Read report <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span></a>
+    </div></div>
+  </header>
+
+  <!-- Mobile drawer -->
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <aside class="drawer" id="mobileDrawer" aria-label="Main menu">
+    <div class="drawer__head">
+      <img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="124" height="38">
+      <button class="btn btn--ghost btn--icon" id="drawerClose" aria-label="Close menu"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="drawer__search" role="search" action="/en/search" method="get">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <label for="mq" class="visually-hidden">Search services or documents</label>
+      <input id="mq" name="q" type="search" placeholder="Search services or documents…">
+    </form>
+    <nav class="drawer__nav" id="drawerNav" aria-label="Main menu (mobile)"></nav>
+    <div class="drawer__foot">
+      <span class="lang-switch"><a href="/accessibility.html" lang="th">TH</a><a href="/en/accessibility.html" aria-current="true" lang="en">EN</a></span>
+      <a class="btn btn--primary" href="/en/login.html" style="flex:1;justify-content:center">Sign in</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="Breadcrumb"><div class="wrap">
+      <ol>
+        <li><a href="/en/index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg> Home</a></li>
+        <li aria-current="page">Accessibility Statement</li>
+      </ol>
+    </div></nav>
+
+    <!-- Hero -->
+    <section class="cpl-hero" aria-labelledby="acc-h"><div class="wrap">
+      <div class="cpl-hero__tx">
+        <span class="cpl-eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> Accessibility for everyone</span>
+        <h1 id="acc-h">Accessibility Statement</h1>
+        <p>The Digital Government Development Agency (DGA) is committed to ensuring everyone — including people with disabilities and older users — can access and use this website equally, conforming to <strong>WCAG 2.2 Level AA</strong>.</p>
+        <ul class="cpl-trust">
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Fully keyboard operable</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Screen-reader friendly</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Adjustable size &amp; contrast</li>
+        </ul>
+      </div>
+    </div></section>
+
+    <section class="acc-wrap"><div class="wrap"><div class="acc-layout">
+      <!-- Table of contents -->
+      <nav class="acc-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+          <li><a href="#commitment">Our commitment</a></li>
+          <li><a href="#standard">Standard &amp; conformance level</a></li>
+          <li><a href="#features">Accessibility features</a></li>
+          <li><a href="#compat">Technology compatibility</a></li>
+          <li><a href="#limitations">Known limitations</a></li>
+          <li><a href="#assessment">Assessment approach</a></li>
+          <li><a href="#feedback">Contact &amp; feedback</a></li>
+          <li><a href="#references">Standards &amp; references</a></li>
+        </ol>
+      </nav>
+
+      <div class="acc-main">
+        <div class="acc-badge">
+          <span class="acc-badge__seal" aria-hidden="true"><span><b>AA</b><small>WCAG 2.2</small></span></span>
+          <div class="acc-badge__tx">
+            <strong>Conforms to WCAG 2.2 Level AA</strong>
+            <p>This website is designed, developed and evaluated against the Web Content Accessibility Guidelines (WCAG) version 2.2, Level AA.</p>
+          </div>
+        </div>
+        <dl class="acc-meta">
+          <div><dt>Published</dt><dd>17 June 2026</dd></div>
+          <div><dt>Last reviewed</dt><dd>17 June 2026</dd></div>
+          <div><dt>Conformance</dt><dd>WCAG 2.2 — AA</dd></div>
+          <div><dt>Scope</dt><dd>All pages under dga.or.th</dd></div>
+        </dl>
+
+        <section class="acc-sec" id="commitment" tabindex="-1" style="margin-top:var(--sp-6)">
+          <h2><span class="num" aria-hidden="true">1</span> Our commitment</h2>
+          <p>DGA believes government digital services must be accessible to every citizen equally — regardless of visual, hearing, motor or cognitive ability. We apply inclusive-design principles at every stage of development and continuously improve.</p>
+        </section>
+
+        <section class="acc-sec" id="standard" tabindex="-1">
+          <h2><span class="num" aria-hidden="true">2</span> Standard &amp; conformance level</h2>
+          <p>This website follows the <a href="https://www.w3.org/TR/WCAG22/" target="_blank" rel="noopener">Web Content Accessibility Guidelines (WCAG) 2.2</a> at Level <strong>AA</strong>, covering the four core principles:</p>
+          <ul class="acc-list acc-list--plain">
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><div><strong>Perceivable</strong> — text alternatives, sufficient colour contrast, resizable text.</div></li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><div><strong>Operable</strong> — full keyboard access, skip links, no harmful flashing.</div></li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><div><strong>Understandable</strong> — clear language, consistent structure, helpful form guidance.</div></li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><div><strong>Robust</strong> — valid HTML and ARIA, compatible with assistive technologies.</div></li>
+          </ul>
+        </section>
+
+        <section class="acc-sec" id="features" tabindex="-1">
+          <h2><span class="num" aria-hidden="true">3</span> Accessibility features</h2>
+          <ul class="acc-list">
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Adjustable text size (small/normal/large) and zoom to 200% without breaking layout.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Multiple display modes: default, dark mode and high contrast.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>“Accessibility” widget (bottom-left button): highlight links, highlight headings, increase line spacing, big cursor.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Text-to-Speech read-aloud in Thai and English.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Full keyboard operation with a clearly visible focus indicator.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>“Skip to main content” link and a logical heading structure.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Image alt text, form labels and ARIA live status announcements.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Respects reduced-motion preference · bilingual · fully responsive.</li>
+          </ul>
+        </section>
+
+        <section class="acc-sec" id="compat" tabindex="-1">
+          <h2><span class="num" aria-hidden="true">4</span> Technology compatibility</h2>
+          <p>The website has been tested with the following environments to ensure it works with assistive technologies:</p>
+          <ul class="acc-list acc-list--plain">
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Latest browsers: Chrome, Microsoft Edge, Safari, Firefox.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Screen readers: NVDA, JAWS (Windows) and VoiceOver (macOS/iOS).</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Keyboard control and operating-system screen magnification.</li>
+          </ul>
+        </section>
+
+        <section class="acc-sec" id="limitations" tabindex="-1">
+          <h2><span class="num" aria-hidden="true">5</span> Known limitations</h2>
+          <p>While we aim for full accessibility, some areas are still being improved:</p>
+          <ul class="acc-list acc-list--plain">
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Some older PDF documents may not yet be fully accessible — these are being remediated progressively.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Embedded third-party content or maps may have a different accessibility level from the main site.</li>
+          </ul>
+          <p style="margin-top:14px">If you find anything you cannot use, please tell us so we can fix it quickly.</p>
+        </section>
+
+        <section class="acc-sec" id="assessment" tabindex="-1">
+          <h2><span class="num" aria-hidden="true">6</span> Assessment approach</h2>
+          <p>We assess accessibility using a combination of automated tools (e.g. axe, Lighthouse), expert review against WCAG 2.2 AA criteria, and real-world testing with keyboard and screen readers.</p>
+        </section>
+
+        <section class="acc-sec" id="feedback" tabindex="-1">
+          <h2><span class="num" aria-hidden="true">7</span> Contact &amp; accessibility feedback</h2>
+          <p>If you encounter an accessibility barrier, or have suggestions, please contact us via the channels below. We aim to respond within 3 business days.</p>
+          <div class="acc-contact">
+            <a class="btn btn--primary" href="tel:026126000"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> Call 0-2612-6000</a>
+            <a class="btn btn--ghost" href="/en/complaint.html"><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg> Report via complaint system</a>
+          </div>
+        </section>
+
+        <section class="acc-sec" id="references" tabindex="-1">
+          <h2><span class="num" aria-hidden="true">8</span> Standards &amp; references</h2>
+          <ul class="acc-list acc-list--plain">
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><a href="https://www.w3.org/TR/WCAG22/" target="_blank" rel="noopener">WCAG 2.2 — W3C Recommendation</a></li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><a href="https://www.w3.org/WAI/WCAG2AA-Conformance" target="_blank" rel="noopener">W3C — WCAG 2 Level AA Conformance</a></li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Thailand Government Website Standard and TWCAG.</li>
+            <li><span class="ck" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>Persons with Disabilities Empowerment Act and public-information accessibility guidelines.</li>
+          </ul>
+        </section>
+      </div>
+    </div></div></section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-brand"><a class="brand" href="/en/" aria-label="DGA — Home"><img class="logo" src="/assets/image/logo-dga.webp" alt="DGA — Digital Government Development Agency" width="150" height="46"></a>
+        <p class="footer-org">Digital Government Development Agency (DGA)</p>
+        <address class="footer-addr">
+          <span class="footer-addr__line"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.6-7-11a7 7 0 1 1 14 0c0 4.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Thailand Institute of Justice (TIJ) Building, 4th Floor, 999 Chaeng Watthana Rd., Thung Song Hong, Lak Si, Bangkok 10210</span>
+          <a class="footer-addr__line" href="tel:026126000"><svg class="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z"/></svg>Tel 0-2612-6000</a>
+        </address>
+        <div class="footer-map"><iframe title="DGA location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=100.5602%2C13.8864%2C100.5682%2C13.8914&layer=mapnik&marker=13.8889%2C100.5642"></iframe></div>
+        <a class="footer-maplink" href="https://maps.google.com/maps?q=Thailand%20Institute%20of%20Justice%20Chaeng%20Watthana%20Bangkok&z=16" target="_blank" rel="noopener">View larger map <span aria-hidden="true">→</span></a>
+      </div>
+      <div><h3>Services</h3><ul><li><a href="#">ThaID</a></li><li><a href="#">Tang Rath</a></li><li><a href="#">Open Data</a></li><li><a href="#">API Gateway</a></li></ul></div>
+      <div><h3>About</h3><ul><li><a href="#">Vision</a></li><li><a href="/en/news.html">News</a></li><li><a href="/en/careers.html">Careers</a></li><li><a href="#">Contact</a></li></ul></div>
+      <div><h3>Policy</h3><ul><li><a href="#">Privacy (PDPA)</a></li><li><a href="#">Cookie Policy</a></li><li><a href="/en/accessibility.html">Accessibility (WCAG)</a></li><li><a href="/en/sitemap.html">Sitemap</a></li><li><a href="/design-system.html" target="_blank" rel="noopener">Design System</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><div class="wrap"><span>© 2026 Digital Government Development Agency</span>
+      <button class="btn btn--ghost" id="cookieSettings" style="min-height:36px">Cookie settings</button></div></div>
+  </footer>
+
+  <!-- Cookie Consent (PDPA) -->
+  <section class="cookie" id="cookie" role="dialog" aria-labelledby="ck-h" aria-describedby="ck-d" hidden>
+    <h2 id="ck-h">This website uses cookies</h2>
+    <p id="ck-d">We use necessary cookies to run the site and analytics cookies to improve services (off by default), in line with Thailand's Personal Data Protection Act (PDPA).</p>
+    <div class="row"><button class="btn btn--primary" data-cookie="all">Accept all</button><button class="btn btn--ghost" data-cookie="necessary">Necessary only</button><button class="btn btn--ghost" data-cookie="settings">Settings</button></div>
+  </section>
+
+  <script src="/assets/search-data.js"></script>
+  <script src="/assets/home.js"></script>
+</body>
+</html>

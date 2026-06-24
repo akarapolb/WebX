@@ -6,7 +6,7 @@
    วิธีใช้: <link rel="stylesheet" href="/assets/design-system.css"> แล้วใช้ var(--...)
    ============================================================================ */
 
-/* fonts โหลดผ่าน <link preconnect>+stylesheet ใน <head> (perf: เลิก @import) */
+/* fonts: โหลดผ่าน <link rel=preconnect>+stylesheet ใน <head> (perf + กัน FOUT) */
 /* production: ควร self-host ฟอนต์ + preload เพื่อคะแนน Lighthouse (TOR 4.1.6) */
 
 /* ============================ TOKENS: LIGHT ============================ */
@@ -206,5 +206,5 @@ dialog.modal::backdrop{ background:rgba(10,8,6,.55); backdrop-filter:blur(2px); 
 .grid{ display:grid; gap:var(--sp-5); }
 @media (min-width:768px){ .grid--3{ grid-template-columns:repeat(2,1fr);} }
 @media (min-width:1024px){ .grid--3{ grid-template-columns:repeat(3,1fr);} }
-.visually-hidden{ position:absolute!important; width:1px; height:1px; padding:0; margin:-1px;
-  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+.visually-hidden{ position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important;
+  overflow:hidden!important; clip:rect(0 0 0 0)!important; white-space:nowrap; border:0!important; }

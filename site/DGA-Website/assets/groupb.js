@@ -157,7 +157,7 @@
       return '<div class="gb-news">' + list.map(function (a) {
         var img = media(a.coverImage, "medium");
         var tags = (a.tags || []).slice(0, 3).map(function (t) { return "<span>#" + esc(t) + "</span>"; }).join("");
-        var href = a.slug ? 'article.html?slug=' + encodeURIComponent(a.slug) : "#";
+        var href = a.slug ? 'article?slug=' + encodeURIComponent(a.slug) : "#";
         return '<a class="ga-post" href="' + href + '" style="text-decoration:none;color:inherit">' +
           (img ? '<div class="ga-post__img" style="background-image:url(\'' + img + "')\"></div>" : '<div class="ga-post__img"></div>') +
           '<div class="ga-post__body">' + (a.categoryLabel ? '<span class="ga-post__cat">' + esc(a.categoryLabel) + "</span>" : "") +

@@ -67,7 +67,7 @@
     (articles || []).forEach(function (a) { items.push({ icon: "i-doc", url: "#", cat: bi(a.categoryLabel || (LANG === "en" ? "News" : "ข่าว")), title: bi(a.title), desc: bi(a.excerpt || ""), kw: (a.title || "") + " " + (a.excerpt || ""), answer: bi(a.excerpt || a.title) }); });
     (services || []).forEach(function (s) { items.push({ icon: s.icon || "i-grid", url: s.url || "#", cat: bi(LANG === "en" ? "Service" : "บริการ"), title: bi(s.title), desc: bi(s.description || ""), kw: (s.title || "") + " " + (s.description || ""), answer: bi(s.description || s.title) }); });
     (faqs || []).forEach(function (f) { items.push({ icon: "i-chat", url: "#", cat: bi(LANG === "en" ? "FAQ" : "คำถามที่พบบ่อย"), title: bi(f.question), desc: bi(f.answer || ""), kw: (f.question || "") + " " + (f.answer || ""), answer: bi(f.answer || "") }); });
-    (jobs || []).forEach(function (j) { items.push({ icon: "i-users", url: jb + "careers.html?id=" + j.jobId, cat: bi(LANG === "en" ? "Careers" : "ร่วมงานกับเรา"), title: bi(j.title), desc: bi(j.summary || ""), kw: (j.title || "") + " " + (j.summary || ""), answer: bi(j.summary || j.title) }); });
+    (jobs || []).forEach(function (j) { items.push({ icon: "i-users", url: jb + "careers?id=" + j.jobId, cat: bi(LANG === "en" ? "Careers" : "ร่วมงานกับเรา"), title: bi(j.title), desc: bi(j.summary || ""), kw: (j.title || "") + " " + (j.summary || ""), answer: bi(j.summary || j.title) }); });
     if (items.length) window.DGA_DATA = { items: items };
   }
 

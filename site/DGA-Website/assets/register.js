@@ -286,32 +286,55 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
 
-  // CAPTCHA: แทรกช่องโจทย์ก่อนปุ่มยืนยัน (ขั้นตอนที่ 3)
-  (function () { function go() { window.DGACaptcha && DGACaptcha.mount(form, '#regSubmit'); } if (window.DGACaptcha) go(); else { const s = document.createElement('script'); s.src = '/assets/captcha.js'; s.onload = go; document.head.appendChild(s); } })();
-
   /* --- ส่งฟอร์ม (ขั้นตอนสุดท้าย) --- */
-  form.addEventListener('submit', e => {
+  if (window.DGACaptcha) DGACaptcha.mount(form);
+  const CMS = window.DGA_CMS_URL || 'http://localhost:1337';
+  form.addEventListener('submit', async e => {
     e.preventDefault();
     if (showErrors(validateStep(2))) return;
-    // username สำรอง (กรณีออฟไลน์) จาก local-part ของอีเมล + เลขสุ่ม
+    // สร้าง username จาก local-part ของอีเมล + เลขสุ่ม
     const local = ($('#rEmail').value.split('@')[0] || 'user').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 16) || 'user';
-    const fallbackUser = local + (1000 + Math.floor(Math.random() * 9000));
-    const nidRaw = ($('#rNid').value || '').replace(/\D/g, '');
-    // หมายเหตุ: ไม่ส่งรหัสผ่านไปเก็บใน CMS (ความปลอดภัย/PDPA)
-    const payload = {
-      utype: (form.querySelector('input[name="utype"]:checked') || {}).value || '',
-      email: $('#rEmail').value.trim(),
-      firstname: $('#rFirst').value.trim(), lastname: $('#rLast').value.trim(),
-      nidMasked: nidRaw ? nidRaw.slice(0, 1) + '-••••-•••••-••-' + nidRaw.slice(-1) : '',
-      phone: $('#rPhone').value.trim(), verified: !!verified
-    };
-    const done = (username) => { $('#regUser').textContent = username; openModal(); };
-    const base = window.DGA_CMS_URL || 'http://localhost:1337';
+    const username = local + (1000 + Math.floor(Math.random() * 9000));
     const cap = window.DGACaptcha ? DGACaptcha.get(form) : {};
-    fetch(base + '/api/registrations' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) })
-      .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(form); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
-      .then(j => done((j.data && j.data.username) || fallbackUser))
-      .catch(err => { if (err && err.captcha) return; done(fallbackUser); });
+    const utype = (form.querySelector('input[name="utype"]:checked') || {}).value || '';
+
+    // ส่งคำขอลงทะเบียนเข้า Strapi (ไม่ส่งรหัสผ่าน — ตาม schema)
+    try {
+      const r = await fetch(CMS + '/api/registrations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captchaId: cap.captchaId, captchaAnswer: cap.captchaAnswer,
+          data: {
+            username, utype, email: $('#rEmail').value.trim(),
+            firstname: $('#rFirst') ? $('#rFirst').value.trim() : '',
+            lastname: $('#rLast') ? $('#rLast').value.trim() : '',
+            phone: $('#rPhone') ? $('#rPhone').value.trim() : '',
+            nidMasked: $('#rNid') ? $('#rNid').value.trim() : '', verified: false
+          }
+        })
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        if (j.error && j.error.name === 'CaptchaError') {
+          if (window.DGACaptcha) DGACaptcha.reload(form);
+          errList.innerHTML = '<li>รหัสยืนยัน CAPTCHA ไม่ถูกต้อง กรุณากรอกใหม่</li>';
+          errSum.hidden = false; errSum.focus();
+          const ca = form.querySelector('.cap-a'); if (ca) ca.focus();
+          return;
+        }
+        errList.innerHTML = '<li>ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</li>';
+        errSum.hidden = false; errSum.focus();
+        return;
+      }
+    } catch (err) {
+      errList.innerHTML = '<li>เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง</li>';
+      errSum.hidden = false; errSum.focus();
+      return;
+    }
+
+    $('#regUser').textContent = username;
+    if (window.DGACaptcha) DGACaptcha.reload(form);
+    openModal();
   });
 
   syncUtype();

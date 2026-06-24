@@ -184,8 +184,6 @@
      ==================================================================== */
   const form = $('#cplForm');
   if (form) {
-    // CAPTCHA: โหลด helper แล้วแทรกช่องโจทย์ก่อนปุ่มส่ง
-    (function () { function go() { window.DGACaptcha && DGACaptcha.mount(form); } if (window.DGACaptcha) go(); else { const s = document.createElement('script'); s.src = '/assets/captcha.js'; s.onload = go; document.head.appendChild(s); } })();
     const anon = $('#cAnon'), person = $('#cplPerson');
     const detail = $('#cDetail'), detailCount = $('#cDetail-count');
     const fileInput = $('#cFile'), fileDrop = $('.file-drop'), fileText = $('#cFileText');
@@ -292,7 +290,11 @@
     }
 
     /* --- ส่งฟอร์ม --- */
-    form.addEventListener('submit', e => {
+    // แสดง CAPTCHA ก่อนปุ่มส่ง (กันสแปม — ตรง guard ของ Strapi)
+    if (window.DGACaptcha) DGACaptcha.mount(form);
+    const CMS = window.DGA_CMS_URL || 'http://localhost:1337';
+
+    form.addEventListener('submit', async e => {
       e.preventDefault();
       const errors = validate();
       if (errors.length) {
@@ -307,50 +309,61 @@
       }
       errSum.hidden = true;
 
-      const anonChecked = anon.checked;
-      const cAgency = $('#cAgency');
-      const steps = T.newSteps.map((s, i) => ({ t: s.t, time: i === 0 ? today() : '—', d: s.d }));
-      const payload = {
-        type: (form.querySelector('input[name="type"]:checked') || {}).value || '',
-        subject: $('#cSubject').value.trim(),
-        agency: cAgency ? cAgency.value.trim() : '',
-        detail: $('#cDetail').value.trim(),
-        anonymous: anonChecked,
-        name: anonChecked ? '' : $('#cName').value.trim(),
-        email: anonChecked ? '' : $('#cEmail').value.trim(),
-        phone: anonChecked ? '' : $('#cPhone').value.trim(),
-        date: today(), steps
-      };
-      // เด้ง popup สำเร็จ + เก็บสำเนา localStorage ให้ติดตามได้แม้ออฟไลน์
-      const finishOk = (ref) => {
-        try { const store = readStore(); store[ref] = { ref, type: payload.type, subject: payload.subject, date: payload.date, stage: 0, steps }; writeStore(store); } catch (e) {}
-        $('#cplRefNo').textContent = ref;
-        form.reset(); updateCount(); showFile(); clearTypeErr(); syncTypeCards();
-        person.classList.remove('is-disabled'); person.querySelectorAll('input').forEach(i => i.disabled = false);
-        form.querySelectorAll('[aria-invalid]').forEach(clearError);
-        openModal();
-      };
-      // ส่งเข้า Strapi CMS (เซิร์ฟเวอร์ออกเลขที่เรื่อง) — ออฟไลน์ → สร้างเลขเองและเก็บ localStorage
-      const base = window.DGA_CMS_URL || 'http://localhost:1337';
+      const ref = genRef();
+      const typeVal = (form.querySelector('input[name="type"]:checked') || {}).value || '';
+      const isAnon = anon.checked;
       const cap = window.DGACaptcha ? DGACaptcha.get(form) : {};
-      const url = base + '/api/complaints' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : '');
-      // แนบไฟล์ (TOR 13.2): ถ้ามีไฟล์ → multipart (data + files.attachment); ถ้าไม่มี → JSON
-      const fEl = document.getElementById('cFile');
-      const file = fEl && fEl.files && fEl.files[0];
-      let req;
-      if (file) {
-        const fd = new FormData();
-        fd.append('data', JSON.stringify(payload));
-        fd.append('files.attachment', file, file.name);
-        Object.keys(cap).forEach(k => fd.append(k, cap[k]));
-        req = fetch(base + '/api/complaints/submit' + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { method: 'POST', body: fd });
-      } else {
-        req = fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ data: payload }, cap)) });
+
+      // ส่งเข้า Strapi (เข้า Forms inbox หลังบ้านจริง)
+      try {
+        const r = await fetch(CMS + '/api/complaints', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            captchaId: cap.captchaId, captchaAnswer: cap.captchaAnswer,
+            data: {
+              ref, type: typeVal, subject: $('#cSubject').value.trim(),
+              detail: $('#cDetail').value.trim(), anonymous: isAnon,
+              name: isAnon ? '' : $('#cName').value.trim(),
+              email: isAnon ? '' : $('#cEmail').value.trim(),
+              phone: isAnon ? '' : $('#cPhone').value.trim(),
+              date: today(), stage: 0
+            }
+          })
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          if (j.error && j.error.name === 'CaptchaError') {
+            if (window.DGACaptcha) DGACaptcha.reload(form);
+            errList.innerHTML = '<li>รหัสยืนยัน CAPTCHA ไม่ถูกต้อง กรุณากรอกใหม่</li>';
+            errSum.hidden = false; errSum.focus();
+            const ca = form.querySelector('.cap-a'); if (ca) ca.focus();
+            return;
+          }
+          errList.innerHTML = '<li>ส่งเรื่องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</li>';
+          errSum.hidden = false; errSum.focus();
+          return;
+        }
+      } catch (err) {
+        errList.innerHTML = '<li>เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง</li>';
+        errSum.hidden = false; errSum.focus();
+        return;
       }
-      req
-        .then(r => { if (r.status === 400) { if (window.DGACaptcha) DGACaptcha.reload(form); throw { captcha: true }; } return r.ok ? r.json() : Promise.reject(r.status); })
-        .then(j => finishOk(j.data.ref))
-        .catch(err => { if (err && err.captcha) return; finishOk(genRef()); });
+
+      // บันทึก local ไว้ติดตามสถานะในเครื่อง (ฟีเจอร์ "ติดตามเรื่อง")
+      const record = {
+        ref, type: typeVal, subject: $('#cSubject').value.trim(),
+        date: today(), stage: 0,
+        steps: T.newSteps.map((s, i) => ({ t: s.t, time: i === 0 ? today() : '—', d: s.d }))
+      };
+      const store = readStore(); store[ref] = record; writeStore(store);
+
+      // รีเซ็ตฟอร์มให้พร้อมใช้ใหม่ แล้วเด้ง popup แจ้งสำเร็จ
+      $('#cplRefNo').textContent = ref;
+      form.reset(); updateCount(); showFile(); clearTypeErr(); syncTypeCards();
+      person.classList.remove('is-disabled'); person.querySelectorAll('input').forEach(i => i.disabled = false);
+      form.querySelectorAll('[aria-invalid]').forEach(clearError);
+      if (window.DGACaptcha) DGACaptcha.reload(form);
+      openModal();
     });
 
     /* --- ปุ่มใน popup --- */
@@ -407,16 +420,9 @@
       result.hidden = false;
     }
 
-    async function lookup(ref) {
+    function lookup(ref) {
       ref = (ref || '').trim().toUpperCase();
       if (!ref) return;
-      // 1) ดึงจาก Strapi CMS ก่อน (endpoint ปลอดภัย ค้นด้วย ref)
-      try {
-        const base = window.DGA_CMS_URL || 'http://localhost:1337';
-        const r = await fetch(base + '/api/complaints/track/' + encodeURIComponent(ref) + (window.DGA_TENANT ? '?tenant=' + encodeURIComponent(window.DGA_TENANT) : ''), { headers: { Accept: 'application/json' } });
-        if (r.ok) { const j = await r.json(); if (j && j.data && Array.isArray(j.data.steps)) { render(j.data); return; } }
-      } catch (e) { /* ออฟไลน์ → ใช้ fallback */ }
-      // 2) fallback: เลขตัวอย่าง / localStorage
       const rec = DEMO[ref] || readStore()[ref];
       if (rec) render(rec);
       else { result.hidden = true; notFound.hidden = false; }

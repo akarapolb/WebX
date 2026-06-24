@@ -1,0 +1,108 @@
+/* =====================================================================
+   login-modal.css — popup เข้าสู่ระบบ (โหลดทุกหน้าโดย home.js)
+   ใช้ token จาก design-system.css (มีทุกหน้า) + .field/.input/.btn
+   ===================================================================== */
+.lgm-overlay{ position:fixed; inset:0; z-index:1200; display:grid; place-items:center; padding:18px;
+  background:rgba(10,16,30,.55); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+  opacity:0; visibility:hidden; transition:opacity .2s ease, visibility .2s ease; }
+.lgm-overlay.is-open{ opacity:1; visibility:visible; }
+
+.lgm-dialog{ position:relative; width:100%; max-width:840px; border-radius:24px; overflow:hidden;
+  background:var(--c-surface); color:var(--c-text); border:1px solid var(--c-border);
+  box-shadow:0 36px 80px -24px rgba(0,0,0,.55); display:grid; grid-template-columns:1fr;
+  transform:translateY(18px) scale(.98); transition:transform .24s ease; }
+@media (min-width:760px){ .lgm-dialog{ grid-template-columns:0.92fr 1.08fr; } }
+.lgm-overlay.is-open .lgm-dialog{ transform:none; }
+
+/* แผงแบรนด์ (ซ้าย) */
+.lgm-brand{ display:none; }
+@media (min-width:760px){ .lgm-brand{ display:flex; } }
+.lgm-brand{ position:relative; overflow:hidden; flex-direction:column; color:#fff; padding:40px 34px;
+  background:radial-gradient(120% 90% at 100% 0%, rgba(238,80,32,.3), transparent 52%), linear-gradient(155deg,#1C355E 0%,#13284A 60%,#0E1C36 100%); }
+.lgm-brand::before{ content:""; position:absolute; width:300px; height:300px; border-radius:50%; top:-100px; left:-110px; background:rgba(238,80,32,.14); }
+.lgm-brand::after{ content:""; position:absolute; width:220px; height:220px; border-radius:50%; bottom:-80px; right:-60px; background:rgba(255,255,255,.05); }
+.lgm-brand svg{ fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.lgm-brand-in{ position:relative; z-index:1; margin:auto 0; }
+.lgm-brand .b-badge{ display:inline-grid; place-items:center; width:50px; height:50px; border-radius:14px; margin-bottom:22px;
+  background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); }
+.lgm-brand .b-badge svg{ width:25px; height:25px; }
+.lgm-brand h3{ font-size:1.4rem; line-height:1.28; margin:0 0 12px; letter-spacing:-.01em; }
+.lgm-brand-in > p{ opacity:.84; font-size:.92rem; line-height:1.7; margin:0 0 24px; }
+.lgm-pts{ list-style:none; margin:0 0 26px; padding:0; display:flex; flex-direction:column; gap:13px; }
+.lgm-pts li{ display:flex; align-items:flex-start; gap:11px; font-size:.86rem; opacity:.96; line-height:1.5; }
+.lgm-pts .ic{ flex:none; width:25px; height:25px; border-radius:7px; display:grid; place-items:center; background:rgba(255,255,255,.14); }
+.lgm-pts .ic svg{ width:14px; height:14px; }
+.lgm-tbadge{ display:inline-flex; align-items:center; gap:12px; background:rgba(255,255,255,.96); border-radius:13px; padding:10px 14px; box-shadow:0 14px 30px -16px rgba(0,0,0,.5); }
+.lgm-tbadge img{ height:36px; width:auto; border-radius:8px; }
+.lgm-tbadge .tb-ic{ flex:none; width:36px; height:36px; border-radius:9px; display:grid; place-items:center; color:#fff;
+  background:linear-gradient(150deg,#274472,#16294A); }
+.lgm-tbadge .tb-ic svg{ width:19px; height:19px; }
+.lgm-tbadge span{ font-size:12px; color:#1C355E; font-weight:600; line-height:1.4; }
+
+/* แผงฟอร์ม (ขวา) */
+.lgm-form-side{ position:relative; padding:clamp(26px,3vw,40px); max-height:calc(100vh - 36px); overflow:auto; }
+
+.lgm-close{ position:absolute; top:14px; right:14px; z-index:2; width:38px; height:38px; border-radius:50%; border:0; cursor:pointer;
+  background:var(--c-sunken); color:var(--c-text-muted); display:grid; place-items:center; transition:background .15s, color .15s; }
+.lgm-close:hover{ background:var(--c-border); color:var(--c-text); }
+.lgm-close svg{ width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+
+.lgm-head{ text-align:center; margin-bottom:22px; }
+.lgm-head .lgm-tile{ width:56px; height:56px; border-radius:16px; display:grid; place-items:center; margin:0 auto 14px; color:#fff;
+  background:linear-gradient(150deg,#274472,#16294A); box-shadow:0 12px 26px -12px rgba(22,41,74,.7); }
+.lgm-head .lgm-tile svg{ width:28px; height:28px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.lgm-head h2{ font-size:1.5rem; margin:0 0 6px; line-height:1.2; }
+.lgm-head p{ color:var(--c-text-muted); margin:0; font-size:var(--fs-small); }
+
+.lgm-thaid{ width:100%; display:inline-flex; align-items:center; justify-content:center; gap:12px; padding:10px 18px;
+  border:1.5px solid var(--c-border-strong); border-radius:var(--radius-md); background:var(--c-surface); color:var(--c-text);
+  font:inherit; font-weight:700; font-size:1rem; cursor:pointer; transition:transform .16s, box-shadow .16s, border-color .16s; }
+.lgm-thaid:hover{ transform:translateY(-2px); border-color:#1C355E; box-shadow:0 12px 26px -12px rgba(28,53,94,.5); }
+.lgm-thaid:disabled{ cursor:wait; transform:none; color:var(--c-text-muted); }
+.lgm-thaid img{ height:34px; width:auto; border-radius:8px; flex:none; }
+.lgm-spin{ width:20px; height:20px; border:2.5px solid var(--c-border-strong); border-top-color:#1C355E; border-radius:50%; animation:lgmSpin .7s linear infinite; }
+@keyframes lgmSpin{ to{ transform:rotate(360deg); } }
+.lgm-hint{ text-align:center; font-size:12.5px; color:var(--c-text-muted); margin:11px 0 0; }
+
+.lgm-or{ display:flex; align-items:center; gap:14px; color:var(--c-text-muted); font-size:var(--fs-small); margin:20px 0; }
+.lgm-or::before, .lgm-or::after{ content:""; flex:1; height:1px; background:var(--c-border); }
+
+.lgm-field{ margin-bottom:var(--sp-4); }
+.lgm-field > label{ display:block; font-weight:500; margin-bottom:var(--sp-1); font-size:var(--fs-small); }
+.lgm-ic{ position:relative; }
+.lgm-ic > .lgm-lead{ position:absolute; left:14px; top:50%; transform:translateY(-50%); width:19px; height:19px;
+  color:var(--c-text-muted); pointer-events:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.lgm-ic .input{ padding-left:44px; }
+.lgm-ic:focus-within > .lgm-lead{ color:var(--c-primary); }
+.lgm-ic.has-toggle .input{ padding-right:46px; }
+.lgm-toggle{ position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:0; cursor:pointer;
+  color:var(--c-text-muted); padding:8px; border-radius:8px; display:grid; place-items:center; }
+.lgm-toggle:hover{ color:var(--c-primary); }
+.lgm-toggle svg{ width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.lgm-err{ color:var(--c-danger); font-size:var(--fs-small); margin:var(--sp-1) 0 0; }
+
+.lgm-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:-2px 0 18px; flex-wrap:wrap; }
+.lgm-row label{ display:inline-flex; align-items:center; gap:8px; font-size:var(--fs-small); color:var(--c-text-muted); cursor:pointer; }
+.lgm-row a{ font-size:var(--fs-small); font-weight:600; }
+.lgm-submit{ width:100%; justify-content:center; }
+.lgm-submit svg{ width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+.lgm-foot{ text-align:center; margin-top:20px; font-size:var(--fs-small); color:var(--c-text-muted); }
+.lgm-foot a{ font-weight:700; }
+.lgm-note{ display:flex; gap:9px; align-items:flex-start; margin-top:18px; padding:11px 14px; background:var(--c-sunken);
+  border-radius:11px; font-size:12px; color:var(--c-text-muted); line-height:1.6; }
+.lgm-note svg{ flex:none; width:17px; height:17px; color:#15803D; margin-top:1px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+.lgm-ok{ display:none; text-align:center; padding:6px 0 2px; }
+.lgm-ok.is-on{ display:block; }
+.lgm-ok .ok-ic{ width:62px; height:62px; border-radius:50%; display:grid; place-items:center; margin:0 auto 15px;
+  background:#dcfce7; color:#166534; }
+[data-theme="dark"] .lgm-ok .ok-ic{ background:rgba(34,197,94,.2); color:#86efac; }
+.lgm-ok .ok-ic svg{ width:31px; height:31px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+.lgm-ok h2{ font-size:1.25rem; margin:0 0 7px; }
+.lgm-ok p{ color:var(--c-text-muted); font-size:var(--fs-small); margin:0 0 20px; }
+
+@media (prefers-reduced-motion: reduce){
+  .lgm-overlay, .lgm-overlay .lgm-dialog{ transition:none; }
+  .lgm-spin{ animation:none; }
+}

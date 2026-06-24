@@ -6,6 +6,30 @@
 (function(){
   const root = document.documentElement;
 
+  /* ---- โหลดวิดเจ็ตช่วยการเข้าถึง (Accessibility Widget) ทุกหน้า ---- */
+  (function(){
+    if (!document.getElementById('a11y-css')){
+      const l = document.createElement('link'); l.id='a11y-css'; l.rel='stylesheet'; l.href='/assets/a11y.css';
+      document.head.appendChild(l);
+    }
+    if (!document.getElementById('a11y-js')){
+      const s = document.createElement('script'); s.id='a11y-js'; s.src='/assets/a11y.js'; s.defer=true;
+      document.body.appendChild(s);
+    }
+  })();
+
+  /* ---- โหลด Login Modal (popup เข้าสู่ระบบ) ทุกหน้า ---- */
+  (function(){
+    if (!document.getElementById('lgm-css')){
+      const l = document.createElement('link'); l.id='lgm-css'; l.rel='stylesheet'; l.href='/assets/login-modal.css';
+      document.head.appendChild(l);
+    }
+    if (!document.getElementById('lgm-js')){
+      const s = document.createElement('script'); s.id='lgm-js'; s.src='/assets/login-modal.js'; s.defer=true;
+      document.body.appendChild(s);
+    }
+  })();
+
   /* ---- โหมดมืด ---- */
   const themeBtn = document.getElementById('themeBtn');
   function syncTheme(){ const d = root.getAttribute('data-theme')==='dark';
@@ -67,6 +91,8 @@
         panel.querySelectorAll('.mega-col a, .mega-feature').forEach(a=>{
           const link = document.createElement('a');
           link.href = a.getAttribute('href') || '#';
+          const tgt = a.getAttribute('target'); if (tgt) link.target = tgt;
+          const rel = a.getAttribute('rel'); if (rel) link.rel = rel;
           const b = a.querySelector('b');
           link.textContent = (b ? b.textContent : a.textContent).trim();
           links.appendChild(link);
@@ -106,7 +132,12 @@
 
   /* ---- DGA Guide chatbot ถูกสร้างในส่วนท้าย (ดูบล็อก "DGA Guide") ---- */
 
-  /* ---- Cookie consent (PDPA) — จัดการโดย /assets/consent.js (granular + consent log + analytics) ---- */
+  /* ---- Cookie consent (PDPA) ---- */
+  const cookie = document.getElementById('cookie');
+  if (cookie && !localStorage.getItem('dga-cookie')) cookie.hidden = false;
+  function setCookie(v){ try{localStorage.setItem('dga-cookie', v)}catch(e){} cookie.hidden = true; }
+  cookie?.querySelectorAll('[data-cookie]').forEach(b=>b.addEventListener('click', ()=>setCookie(b.dataset.cookie)));
+  document.getElementById('cookieSettings')?.addEventListener('click', ()=>{ cookie.hidden = false; cookie.querySelector('button').focus(); });
 
   /* ---- Scroll reveal / action animation (ปิดถ้าผู้ใช้ขอลดการเคลื่อนไหว) ---- */
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;

@@ -49,6 +49,7 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::award.award": ["find", "findOne"],
     "api::faq.faq": ["find", "findOne"],
     "api::job.job": ["find", "findOne"],
+    "api::page-hero.page-hero": ["find", "findOne"],
     // ฟอร์มสาธารณะ: เปิดเฉพาะ create (ไม่เปิด find/findOne เพื่อกันข้อมูลรั่ว/PDPA)
     // การติดตามสถานะใช้ route /track/:ref แบบ auth:false แยกต่างหาก
     "api::complaint.complaint": ["create"],

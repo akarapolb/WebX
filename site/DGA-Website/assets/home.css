@@ -3,6 +3,10 @@
    ต่อยอดจาก /assets/design-system.css — เน้น layout มีมิติ, ภาพประกอบ, สีสัน
    ============================================================================ */
 
+/* ===== เลื่อนแบบสมูทเมื่อกดลิงก์ในหน้า (เคารพ prefers-reduced-motion) ===== */
+html{ scroll-behavior:smooth; }
+@media (prefers-reduced-motion:reduce){ html{ scroll-behavior:auto; } }
+
 /* ===== โหมดความต่างสูง (รองรับผู้พิการ) ===== */
 [data-contrast="high"]{ --c-text:#000; --c-text-muted:#1a1a1a; --c-bg:#fff; --c-surface:#fff; --c-sunken:#fff;
   --c-border:#000; --c-border-strong:#000; --c-primary:#8a2c00; --c-focus:#0040ff; }
@@ -11,14 +15,33 @@
   --c-sunken:#000; --c-border:#fff; --c-border-strong:#fff; --c-primary:#ffb37a; --c-focus:#ffd400; }
 
 /* ===== แถบการเข้าถึง ===== */
-.a11y-bar{ background:var(--c-text); color:var(--c-bg); font-size:var(--fs-small); }
-.a11y-bar .wrap{ max-width:var(--container); margin-inline:auto; padding:6px clamp(16px,4vw,40px);
-  display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; }
+.a11y-bar{ background:#16294A; color:#fff; font-size:var(--fs-small); }
+.a11y-bar .wrap{ max-width:var(--container); margin-inline:auto; padding:8px clamp(14px,4vw,40px);
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.a11y-bar > .wrap > span:first-child{ font-weight:600; color:rgba(255,255,255,.65); margin-right:2px; }
 .a11y-bar .grow{ margin-left:auto; }
-.a11y-bar button{ font:inherit; background:transparent; color:inherit; border:1px solid currentColor; border-radius:6px;
-  min-height:32px; min-width:32px; padding:2px 8px; cursor:pointer; }
-.a11y-bar button[aria-pressed="true"]{ background:var(--c-bg); color:var(--c-text); }
-.a11y-bar a{ color:inherit; }
+.a11y-bar button{ font:inherit; font-weight:600; background:rgba(255,255,255,.1); color:#fff;
+  border:1px solid rgba(255,255,255,.2); border-radius:8px; min-height:36px; min-width:38px; padding:4px 13px;
+  cursor:pointer; line-height:1; transition:background .14s, border-color .14s, color .14s; }
+.a11y-bar button:hover{ background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.38); }
+.a11y-bar button:focus-visible{ outline:3px solid #ffd166; outline-offset:2px; }
+.a11y-bar button[aria-pressed="true"]{ background:#fff; color:#16294A; border-color:#fff; }
+/* ปุ่มขนาดอักษร 3 ปุ่ม = ชุดเดียว (segmented) */
+.a11y-bar #fontDown{ border-radius:8px 0 0 8px; }
+.a11y-bar #fontReset{ border-radius:0; border-inline-width:0; margin-inline:-8px; }
+.a11y-bar #fontUp{ border-radius:0 8px 8px 0; }
+.a11y-bar #fontReset, .a11y-bar #fontUp{ margin-left:-8px; }
+.a11y-bar a{ color:#fff; text-decoration:none; font-weight:600; padding:5px 7px; border-radius:7px; }
+.a11y-bar a:hover{ color:#ffd9a8; text-decoration:underline; }
+.a11y-bar a:focus-visible{ outline:3px solid #ffd166; outline-offset:2px; }
+/* มือถือ: ซ่อน label, จัดกลาง, ลิงก์ WCAG ขึ้นบรรทัดเต็ม */
+@media (max-width:600px){
+  .a11y-bar > .wrap{ justify-content:center; gap:7px; padding-block:9px; }
+  .a11y-bar > .wrap > span:first-child{ display:none; }
+  .a11y-bar .grow{ display:none; }
+  .a11y-bar .wrap > a:last-child{ flex-basis:100%; text-align:center; margin-top:2px;
+    border-top:1px solid rgba(255,255,255,.12); padding-top:9px; }
+}
 
 /* ===== Header / Nav ===== */
 .site-header{ position:sticky; top:0; z-index:60; background:color-mix(in srgb,var(--c-surface) 88%, transparent);
@@ -48,6 +71,10 @@
 .lang-switch{ display:inline-flex; border:1px solid var(--c-border-strong); border-radius:999px; overflow:hidden; margin-right:var(--sp-1); }
 .lang-switch a{ text-decoration:none; color:var(--c-text-muted); padding:6px 12px; font-size:var(--fs-small); font-weight:600; }
 .lang-switch a[aria-current="true"]{ background:var(--c-primary); color:#fff; }
+/* ปุ่มเข้าสู่ระบบในเฮดเดอร์ */
+.btn-login{ gap:8px; white-space:nowrap; }
+.btn-login .icon{ width:18px; height:18px; }
+@media (max-width:960px){ .btn-login{ display:none; } }
 
 /* ===== Mega menu (dropdown ออกแบบใหม่: มีกรอบ + การ์ดโปรโมต) ===== */
 .mega{ position:absolute; left:0; right:0; top:100%; background:var(--c-surface);
