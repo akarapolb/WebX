@@ -15,7 +15,7 @@ html{ scroll-behavior:smooth; }
   --c-sunken:#000; --c-border:#fff; --c-border-strong:#fff; --c-primary:#ffb37a; --c-focus:#ffd400; }
 
 /* ===== แถบการเข้าถึง ===== */
-.a11y-bar{ background:#16294A; color:#fff; font-size:var(--fs-small); }
+.a11y-bar{ background:var(--c-accent-bar,#16294A); color:#fff; font-size:var(--fs-small); }
 .a11y-bar .wrap{ max-width:var(--container); margin-inline:auto; padding:8px clamp(14px,4vw,40px);
   display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .a11y-bar > .wrap > span:first-child{ font-weight:600; color:rgba(255,255,255,.65); margin-right:2px; }
@@ -94,7 +94,7 @@ html{ scroll-behavior:smooth; }
 /* การ์ดโปรโมตในเมนู */
 .mega-feature{ display:flex; flex-direction:column; gap:8px; padding:var(--sp-5); border-radius:var(--radius-lg);
   color:#fff; text-decoration:none; min-height:180px;
-  background:radial-gradient(120% 120% at 100% 0%, rgba(255,138,92,.55), transparent 55%), linear-gradient(140deg,#7A2D0E,#C2410C); }
+  background:radial-gradient(120% 120% at 100% 0%, rgba(255,255,255,.22), transparent 55%), linear-gradient(140deg, var(--c-primary-700), var(--c-primary)); }
 .mega-feature .ic{ width:46px; height:46px; border-radius:13px; background:rgba(255,255,255,.18); display:grid; place-items:center; }
 .mega-feature b{ font-size:var(--fs-h3); margin-top:auto; }
 .mega-feature span{ opacity:.92; font-size:var(--fs-small); }

@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "site_banners",
+  "info": {
+    "singularName": "site-banner",
+    "pluralName": "site-banners",
+    "displayName": "Site Banner",
+    "description": "แถบประกาศบนหน้าแรก (แทน popup) — แสดงตามประเภท/ช่วงเวลา"
+  },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "title": { "type": "string", "required": true },
+    "body": { "type": "text" },
+    "bannerType": {
+      "type": "enumeration",
+      "enum": ["announcement", "mourning", "royal", "urgent", "maintenance"],
+      "default": "announcement",
+      "required": true
+    },
+    "image": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "ctaLabel": { "type": "string" },
+    "ctaUrl": { "type": "string" },
+    "startAt": { "type": "datetime" },
+    "endAt": { "type": "datetime" },
+    "priority": { "type": "integer", "default": 0 },
+    "targetPages": { "type": "string" }
+  }
+}

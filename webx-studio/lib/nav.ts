@@ -30,10 +30,11 @@ export const CONTENT_MENUS: ContentMenu[] = [
   {
     id: "media", icon: "img", th: "สื่อ · มีเดีย", en: "Media", types: [
       { api: "banner", th: "แบนเนอร์", en: "Banners" },
+      { api: "page-hero", th: "แบนเนอร์หัวหน้า (Hero)", en: "Page Heroes" },
       { api: "gallery", th: "แกลเลอรี", en: "Gallery" },
       { api: "video", th: "วิดีโอ", en: "Video" },
       { api: "top-graphic", th: "Top Graphic", en: "Top Graphic" },
-      { api: "popup", th: "ป๊อปอัป", en: "Popups" },
+      { api: "site-banner", th: "ป๊อปอัป", en: "Popup" },
     ],
   },
   {

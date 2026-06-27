@@ -14,6 +14,7 @@ const SCOPED = new Set([
   'api::complaint.complaint', 'api::application.application', 'api::registration.registration',
   'api::consent-log.consent-log',
   'api::download.download', 'api::ebook.ebook', 'api::gallery.gallery', 'api::popup.popup', 'api::poll.poll',
+  'api::site-banner.site-banner',
   'api::landing.landing',
   'api::blog.blog', 'api::catalog.catalog', 'api::weblink.weblink', 'api::top-graphic.top-graphic',
   'api::event.event', 'api::location.location', 'api::sitemap-node.sitemap-node',

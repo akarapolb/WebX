@@ -301,10 +301,10 @@
       console.warn("[DGA] เรียก CMS ไม่สำเร็จ — ใช้เนื้อหา static เดิม", e);
     }).finally(function () {
       loadHomeJs();                         // โหลด home.js หลังเรนเดอร์เสมอ
-      var ts = document.createElement("script"); ts.src = "/assets/tenant.js"; document.body.appendChild(ts); // footer/แบรนด์ต่อ tenant
+      var ts = document.createElement("script"); ts.src = "/assets/tenant.js?v=3"; document.body.appendChild(ts); // footer/แบรนด์ต่อ tenant
       var cs = document.createElement("script"); cs.src = "/assets/consent.js"; document.body.appendChild(cs); // คุกกี้ PDPA + analytics
-      var ms = document.createElement("script"); ms.src = "/assets/modules.js"; document.body.appendChild(ms); // popup + poll
-      var lc = document.createElement("script"); lc.src = "/assets/livechat.js"; document.body.appendChild(lc); // live chat + social
+      var ms = document.createElement("script"); ms.src = "/assets/modules.js?v=4"; document.body.appendChild(ms); // popup + poll
+      var lc = document.createElement("script"); lc.src = "/assets/livechat.js?v=3"; document.body.appendChild(lc); // live chat + social
     });
   }
 

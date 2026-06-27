@@ -1678,6 +1678,105 @@ export interface ApiMenuItemMenuItem extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiPageHeroPageHero extends Struct.CollectionTypeSchema {
+  collectionName: 'page_heroes';
+  info: {
+    description: '\u0E41\u0E1A\u0E19\u0E40\u0E19\u0E2D\u0E23\u0E4C\u0E2B\u0E31\u0E27\u0E2B\u0E19\u0E49\u0E32 (Hero) \u0E41\u0E01\u0E49\u0E44\u0E02\u0E44\u0E14\u0E49\u0E23\u0E32\u0E22\u0E2B\u0E19\u0E49\u0E32 \u2014 \u0E01\u0E33\u0E2B\u0E19\u0E14\u0E14\u0E49\u0E27\u0E22 pageKey';
+    displayName: 'Page Hero';
+    pluralName: 'page-heroes';
+    singularName: 'page-hero';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  pluginOptions: {
+    i18n: {
+      localized: true;
+    };
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    eyebrow: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    icon: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<'i-doc'>;
+    image: Schema.Attribute.Media<'images'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    locale: Schema.Attribute.String;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::page-hero.page-hero'
+    >;
+    pageKey: Schema.Attribute.Enumeration<
+      [
+        'home',
+        'news',
+        'services',
+        'careers',
+        'job',
+        'video',
+        'calendar',
+        'blog',
+        'gallery',
+        'catalog',
+        'download',
+        'faq',
+        'complaint',
+        'contact',
+        'register',
+        'accessibility',
+        'sitemap',
+        'application-status',
+        'map',
+      ]
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    title: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPageVersionPageVersion extends Struct.CollectionTypeSchema {
   collectionName: 'page_versions';
   info: {
@@ -1978,6 +2077,49 @@ export interface ApiServiceService extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiSiteBannerSiteBanner extends Struct.CollectionTypeSchema {
+  collectionName: 'site_banners';
+  info: {
+    description: '\u0E41\u0E16\u0E1A\u0E1B\u0E23\u0E30\u0E01\u0E32\u0E28\u0E1A\u0E19\u0E2B\u0E19\u0E49\u0E32\u0E41\u0E23\u0E01 (\u0E41\u0E17\u0E19 popup) \u2014 \u0E41\u0E2A\u0E14\u0E07\u0E15\u0E32\u0E21\u0E1B\u0E23\u0E30\u0E40\u0E20\u0E17/\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32';
+    displayName: 'Site Banner';
+    pluralName: 'site-banners';
+    singularName: 'site-banner';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    bannerType: Schema.Attribute.Enumeration<
+      ['announcement', 'mourning', 'royal', 'urgent', 'maintenance']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'announcement'>;
+    body: Schema.Attribute.Text;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    ctaLabel: Schema.Attribute.String;
+    ctaUrl: Schema.Attribute.String;
+    endAt: Schema.Attribute.DateTime;
+    image: Schema.Attribute.Media<'images'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::site-banner.site-banner'
+    > &
+      Schema.Attribute.Private;
+    priority: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    startAt: Schema.Attribute.DateTime;
+    targetPages: Schema.Attribute.String;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiSitemapNodeSitemapNode extends Struct.CollectionTypeSchema {
   collectionName: 'sitemap_nodes';
   info: {
@@ -2032,6 +2174,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     domains: Schema.Attribute.JSON;
+    features: Schema.Attribute.JSON;
     footerColumns: Schema.Attribute.JSON;
     key: Schema.Attribute.UID & Schema.Attribute.Required;
     liveChat: Schema.Attribute.JSON;
@@ -2753,6 +2896,7 @@ declare module '@strapi/strapi' {
       'api::landing.landing': ApiLandingLanding;
       'api::location.location': ApiLocationLocation;
       'api::menu-item.menu-item': ApiMenuItemMenuItem;
+      'api::page-hero.page-hero': ApiPageHeroPageHero;
       'api::page-version.page-version': ApiPageVersionPageVersion;
       'api::poll.poll': ApiPollPoll;
       'api::popup.popup': ApiPopupPopup;
@@ -2760,6 +2904,7 @@ declare module '@strapi/strapi' {
       'api::release.release': ApiReleaseRelease;
       'api::review.review': ApiReviewReview;
       'api::service.service': ApiServiceService;
+      'api::site-banner.site-banner': ApiSiteBannerSiteBanner;
       'api::sitemap-node.sitemap-node': ApiSitemapNodeSitemapNode;
       'api::tenant.tenant': ApiTenantTenant;
       'api::top-graphic.top-graphic': ApiTopGraphicTopGraphic;

@@ -23,7 +23,8 @@
       "pluginOptions": { "i18n": { "localized": false } }
     },
     "pageKey": {
-      "type": "string",
+      "type": "enumeration",
+      "enum": ["home", "news", "services", "careers", "job", "video", "calendar", "blog", "gallery", "catalog", "download", "faq", "complaint", "contact", "register", "accessibility", "sitemap", "application-status", "map"],
       "required": true,
       "pluginOptions": { "i18n": { "localized": false } }
     },

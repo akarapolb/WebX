@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!--
+  DGA Website — Landing/Splash (no-code page builder) · English
+  This page is an empty "renderer" — all content comes from the CMS (Strapi Dynamic Zone).
+  Admins arrange blocks (Hero/Feature/Rich text/Image/CTA) in the back office, and this page renders them in order.
+  Open with: landing.html?slug=<page-name>  (e.g. landing.html?slug=thaid)
+  Uses Design System: /assets/design-system.css + /assets/home.css + /assets/landing.css
+  Responsive · Dark mode · WCAG 2.2 AA · Multi-tenant (supports ?tenant=)
+  Landing blocks are CMS-driven and render in English (lang=en); asset paths stay shared (not /en/).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Landing | DGA</title>
+  <meta name="description" content="Landing page of the Digital Government Development Agency (DGA) — content created and managed through the CMS.">
+  <link rel="canonical" href="https://www.dga.or.th/en/landing">
+  <link rel="alternate" hreflang="th" href="https://www.dga.or.th/landing">
+  <link rel="alternate" hreflang="en" href="https://www.dga.or.th/en/landing">
+  <script>
+    (function(){ try{
+      var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (localStorage.getItem('dga-contrast')==='high') document.documentElement.setAttribute('data-contrast','high');
+      var fs = localStorage.getItem('dga-fontscale'); if (fs) document.documentElement.style.fontSize = fs;
+    }catch(e){} })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@300;400;500;700&display=swap">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/templates.css">
+  <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="/assets/landing.css">
+  <!-- English pages: use Ubuntu as the primary font -->
+  <style>:root{ --font-base: var(--font-en); }</style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <!-- icon sprite (icons for Feature blocks + header) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h4M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/><path d="M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M19 19H6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5a3 3 0 0 1 0 6M17 20c0-2.5-1-4-2.5-4.6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 1 1 18 0z"/><path d="M8 11h8M8 14h5"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/></symbol>
+  </defs></svg>
+
+  <!-- Simple header (splash) -->
+  <header class="site-header" style="border-bottom:1px solid var(--c-border)">
+    <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;max-width:var(--container);margin:0 auto">
+      <a href="/en/" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--c-text);font-weight:600">
+        <img class="logo" src="/assets/image/logo.svg" alt="DGA" style="height:34px;width:auto" onerror="this.style.display='none'">
+        <span>DGA — Digital Government</span>
+      </a>
+      <nav aria-label="Shortcuts" style="display:flex;align-items:center;gap:8px">
+        <a class="btn btn--ghost" href="/en/"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-home"></use></svg> Home</a>
+        <button class="btn btn--ghost" id="themeToggle" aria-label="Toggle light/dark mode"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Content rendered by landing.js from the CMS -->
+    <div id="landing-root">
+      <section class="l-state"><h1>Loading…</h1><p>Fetching the Landing page content from the system</p></section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap" style="max-width:var(--container);margin:0 auto;padding:32px 20px">
+      <div class="footer-brand">
+        <p class="footer-org" style="font-weight:600;margin:0 0 6px">Digital Government Development Agency (Public Organization)</p>
+        <div class="footer-addr" style="color:var(--c-text-muted);font-size:var(--fs-small)">
+          <p class="footer-addr__line">17th Floor, Bangkok Thai Tower, Rang Nam Road, Bangkok</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom" style="border-top:1px solid var(--c-border);padding:14px 20px;text-align:center;color:var(--c-text-muted);font-size:var(--fs-small)">
+      <div class="wrap"><span>© 2026 Digital Government Development Agency (DGA)</span></div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('themeToggle').addEventListener('click', function () {
+      var d = document.documentElement, n = d.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      d.setAttribute('data-theme', n); try { localStorage.setItem('dga-theme', n); } catch (e) {}
+    });
+  </script>
+  <script src="/assets/landing.js?v=3"></script>
+  <script src="/assets/theme-cms.js"></script>
+  <script src="/assets/banner-cms.js?v=2"></script>
+</body>
+</html>
