@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Icon from "./Icon";
 import RichText from "./RichText";
 import InlineText from "./InlineText";
@@ -53,6 +53,88 @@ const TYPES = [
 const metaOf = (c: string) => TYPES.find((t) => t.comp === c);
 const DEVW: Record<Device, string> = { desktop: "100%", tablet: "800px", mobile: "390px" };
 
+const AI_EXAMPLES: Record<string, string[]> = {
+  th: ["บริการดิจิทัลสำหรับประชาชน", "ขั้นตอนขอเอกสารออนไลน์", "ดาวน์โหลดแอป ThaID"],
+  en: ["Digital services for citizens", "How to request documents online", "Download the ThaID app"],
+};
+
+// mini visual preview of each block type — shown on the palette card before dragging
+function blockThumb(comp: string) {
+  switch (comp) {
+    case "block.hero":
+      return <span className="vbt vbt-hero"><span className="vbt-h" /><span className="vbt-l vbt-w80" /><span className="vbt-l vbt-w55" /><span className="vbt-btn" /></span>;
+    case "block.richtext":
+      return <span className="vbt vbt-rt"><span className="vbt-l vbt-w100" /><span className="vbt-l vbt-w90" /><span className="vbt-l vbt-w95" /><span className="vbt-l vbt-w60" /></span>;
+    case "block.cta-banner":
+      return <span className="vbt vbt-cta"><span className="vbt-band"><span className="vbt-l vbt-w55" /><span className="vbt-btn" /></span></span>;
+    case "block.image":
+      return <span className="vbt vbt-img"><span className="vbt-photo"><span className="vbt-sun" /><span className="vbt-mtn" /></span></span>;
+    case "block.feature-grid":
+      return <span className="vbt vbt-grid"><span className="vbt-cell" /><span className="vbt-cell" /><span className="vbt-cell" /></span>;
+    default:
+      return <span className="vbt vbt-rt"><span className="vbt-l vbt-w90" /><span className="vbt-l vbt-w70" /><span className="vbt-l vbt-w50" /></span>;
+  }
+}
+
+// guided first-run spotlight — dims the page, rings each target, walks drag → edit → publish
+const TOUR = [
+  { sel: ".vb-add", tk: "vb.tour1t", bk: "vb.tour1b" },
+  { sel: ".vb-stage", tk: "vb.tour2t", bk: "vb.tour2b" },
+  { sel: "[data-tour='publish']", tk: "vb.tour3t", bk: "vb.tour3b" },
+];
+
+function VbTour({ step, setStep, t, onDone }: { step: number; setStep: (n: number) => void; t: (k: string) => string; onDone: () => void }) {
+  const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  useEffect(() => {
+    function measure() {
+      const el = document.querySelector(TOUR[step].sel) as HTMLElement | null;
+      if (!el) { setRect(null); return; }
+      el.scrollIntoView({ block: "nearest" });
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => { window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
+  }, [step]);
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if (e.key === "Escape") onDone();
+      else if (e.key === "ArrowRight" || e.key === "Enter") { if (step < TOUR.length - 1) setStep(step + 1); else onDone(); }
+      else if (e.key === "ArrowLeft" && step > 0) setStep(step - 1);
+    }
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [step]);
+  if (!rect) return null;
+  const pad = 8;
+  const hole = { top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 };
+  const vw = window.innerWidth, vh = window.innerHeight, cardW = 300;
+  let cl: number, ct: number;
+  if (hole.left + hole.width + cardW + 24 < vw) { cl = hole.left + hole.width + 16; ct = hole.top; }
+  else if (hole.left - cardW - 24 > 0) { cl = hole.left - cardW - 16; ct = hole.top; }
+  else { cl = Math.min(hole.left, vw - cardW - 16); ct = hole.top + hole.height + 14; }
+  ct = Math.max(16, Math.min(ct, vh - 200));
+  cl = Math.max(16, cl);
+  const last = step === TOUR.length - 1;
+  return (
+    <div className="vb-tour" role="dialog" aria-modal="true" aria-label={t(TOUR[step].tk)}>
+      <div className="vb-tour-hole" style={{ top: hole.top, left: hole.left, width: hole.width, height: hole.height }} />
+      <div className="vb-tour-card" style={{ top: ct, left: cl, width: cardW }}>
+        <div className="vb-tour-num">{step + 1}<span>/ {TOUR.length}</span></div>
+        <h4>{t(TOUR[step].tk)}</h4>
+        <p>{t(TOUR[step].bk)}</p>
+        <div className="vb-tour-foot">
+          <button className="vb-tour-skip" onClick={onDone}>{t("vb.tourskip")}</button>
+          <div className="vb-tour-dots">{TOUR.map((_, i) => <span key={i} className={i === step ? "on" : ""} onClick={() => setStep(i)} />)}</div>
+          <button className="vb-tour-next" onClick={() => last ? onDone() : setStep(step + 1)}>{last ? t("vb.tourdone") : t("vb.tournext")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function serialize(b: Block) {
   const out: Record<string, any> = { __component: b.__component };
   if (typeof b.id === "number") out.id = b.id;
@@ -85,6 +167,8 @@ export default function VisualBuilder() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [active, setActive] = useState<number>(-1);
   const [device, setDevice] = useState<Device>("desktop");
+  const [tour, setTour] = useState(-1);
+  const tourInit = useRef(false);
   const [dragI, setDragI] = useState<number>(-1);
   const [insAt, setInsAt] = useState<number>(-1);
   const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType } | null>(null);
@@ -154,6 +238,13 @@ export default function VisualBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantKey]);
   useEffect(() => { loadTypes(); }, [loadTypes]);
+  useEffect(() => {
+    if (tourInit.current || !sel || loading) return;
+    tourInit.current = true;
+    let id: any;
+    try { if (!localStorage.getItem("vb_tour_v1")) id = setTimeout(() => setTour(0), 650); } catch {}
+    return () => clearTimeout(id);
+  }, [sel, loading]);
 
   async function open(p: Page) {
     setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null);
@@ -434,6 +525,7 @@ export default function VisualBuilder() {
             ))}
           </div>
           {sel && !previewMode && <>
+            <button className="btn btn--g btn--icon" onClick={() => setTour(0)} title={t("vb.tourreplay")} aria-label={t("vb.tourreplay")}><Icon name="help" /></button>
             <button className={"btn btn--g" + (abEnabled ? " ab-on" : "")} onClick={openAb} title={t("vb.ab")}><Icon name="split" />{t("vb.ab")}{abEnabled ? " ·" + (editing) : ""}</button>
             <button className="btn btn--g" onClick={openSchedule} title={t("vb.schedule")}><Icon name="calendar" />{t("vb.schedule")}</button>
             <button className="btn btn--g" onClick={loadHistory} title={t("vb.history")}><Icon name="clock" />{t("vb.history")}</button>
@@ -441,7 +533,7 @@ export default function VisualBuilder() {
           {sel && <>
             <button className="btn btn--g" onClick={() => setPreviewMode((p) => !p)}><Icon name="eye" />{previewMode ? t("vb.exitpreview") : t("vb.preview")}</button>
             <button className="btn btn--g" onClick={save} disabled={saving}>{t("vb.save")}</button>
-            <button className="btn btn--p" onClick={publish} disabled={saving}><Icon name="spark" />{saving ? t("vb.publishing") : t("vb.publish")}</button>
+            <button className="btn btn--p" data-tour="publish" onClick={publish} disabled={saving}><Icon name="spark" />{saving ? t("vb.publishing") : t("vb.publish")}</button>
           </>}
         </div>
       </div>
@@ -535,24 +627,51 @@ export default function VisualBuilder() {
             );
           })}
           <div className="vb-add">
-            <div className="vb-ai">
-              <Icon name="spark" />
-              <input value={aiPrompt} placeholder={t("vb.aiph")} onChange={(e) => setAiPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && aiGenerate()} />
-              <button className="vb-ai-btn" onClick={aiGenerate} disabled={aiBusy || !aiPrompt.trim()}>{aiBusy ? t("vb.aigen") : t("vb.aibtn")}</button>
+            <div className={"vb-ai-card" + (aiBusy ? " busy" : "")}>
+              <div className="vb-ai-card__h">
+                <span className="vb-ai-card__ic"><Icon name="spark" /></span>
+                <div className="vb-ai-card__tx">
+                  <b>{t("vb.aiTitle")}</b>
+                  <span>{t("vb.aiSub")}</span>
+                </div>
+              </div>
+              <div className="vb-ai-row">
+                <input value={aiPrompt} placeholder={t("vb.aiph")} onChange={(e) => setAiPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && aiGenerate()} />
+                <button className="vb-ai-btn" onClick={aiGenerate} disabled={aiBusy || !aiPrompt.trim()}>
+                  {aiBusy ? <><span className="vb-ai-spin" />{t("vb.aigen")}</> : <><Icon name="spark" />{t("vb.aibtn")}</>}
+                </button>
+              </div>
+              <div className="vb-ai-ex">
+                {(AI_EXAMPLES[lang] || AI_EXAMPLES.th).map((ex) => <button key={ex} type="button" onClick={() => setAiPrompt(ex)} disabled={aiBusy}>{ex}</button>)}
+              </div>
             </div>
-            <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.addblock")}</div>
-            <div className="vb-add-grid">
-              {TYPES.map((ty) => <button key={ty.comp} className="vb-add-btn" draggable onDragStart={() => setDragNew({ comp: ty.comp })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} onClick={() => add(ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
+            <div className="vb-add-divider"><span>{t("vb.orpick")}</span></div>
+            <div className="vb-add-cards">
+              {TYPES.map((ty) => (
+                <button key={ty.comp} className="vb-add-card" draggable title={t(ty.key)}
+                  onDragStart={() => setDragNew({ comp: ty.comp })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }}
+                  onClick={() => add(ty.comp)}>
+                  {blockThumb(ty.comp)}
+                  <span className="vb-add-card__lbl"><Icon name={ty.icon} />{t(ty.key)}</span>
+                </button>
+              ))}
             </div>
             {customTypes.length > 0 && (
               <>
-                <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.custom")}</div>
-                <div className="vb-add-grid">
-                  {customTypes.map((ct) => <button key={ct.key} className="vb-add-btn" draggable onDragStart={() => setDragNew({ custom: ct })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} onClick={() => addCustom(ct)}><Icon name={ct.icon || "grid"} />{ct.name}</button>)}
+                <div className="muted" style={{ fontSize: 11, margin: "14px 0 7px" }}>{t("vb.custom")}</div>
+                <div className="vb-add-cards">
+                  {customTypes.map((ct) => (
+                    <button key={ct.key} className="vb-add-card" draggable title={ct.name}
+                      onDragStart={() => setDragNew({ custom: ct })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }}
+                      onClick={() => addCustom(ct)}>
+                      <span className="vbt vbt-custom"><Icon name={ct.icon || "grid"} /></span>
+                      <span className="vb-add-card__lbl"><Icon name={ct.icon || "grid"} />{ct.name}</span>
+                    </button>
+                  ))}
                 </div>
               </>
             )}
-            <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={() => setShowTypeEditor(true)}><Icon name="code" />{t("vb.manage")}</button>
+            <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginTop: 10 }} onClick={() => setShowTypeEditor(true)}><Icon name="code" />{t("vb.manage")}</button>
           </div>
         </aside>
 
@@ -562,7 +681,18 @@ export default function VisualBuilder() {
               <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th/" + (sel.title || "").slice(0, 14)}</span><span className="vb-dev-tag">{device}</span></div>
               <div className={"vb-canvas" + (dragNew || dragBlock >= 0 ? " dragging" : "")} style={{ maxWidth: DEVW[device] }}>
                 <div className="vbk-nav"><b>{current?.name || "WebX"}</b><span>Home</span><span>Services</span><span>News</span></div>
-                {blocks.length === 0 && <div className="muted" style={{ padding: 50, textAlign: "center" }}>{t("vb.noblocks")}</div>}
+                {blocks.length === 0 && (
+                  <div className={"vbk-empty" + (dragNew || dragBlock >= 0 ? " over" : "")}
+                    onDragOver={(e) => { if (dragNew) e.preventDefault(); }}
+                    onDrop={(e) => { e.preventDefault(); handleDrop(0); }}>
+                    <span className="vbk-empty-ic"><Icon name="layout" /></span>
+                    <h4>{t("vb.emptyTitle")}</h4>
+                    <p>{t("vb.emptyHint")}</p>
+                    <div className="vbk-empty-quick">
+                      {TYPES.slice(0, 4).map((ty) => <button key={ty.comp} onClick={() => add(ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
+                    </div>
+                  </div>
+                )}
                 {blocks.map((b, i) => (
                   <div key={i}>
                     {ins(i)}
@@ -588,6 +718,7 @@ export default function VisualBuilder() {
       </div>
 
       {showTypeEditor && <BlockTypeEditor tenantKey={tenantKey} onClose={() => setShowTypeEditor(false)} onSaved={loadTypes} />}
+      {tour >= 0 && sel && <VbTour step={tour} setStep={setTour} t={t} onDone={() => { setTour(-1); try { localStorage.setItem("vb_tour_v1", "1"); } catch {} }} />}
 
       {historyOpen && (
         <>

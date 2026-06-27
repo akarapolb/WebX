@@ -227,7 +227,7 @@ self-host fonts, brotli/gzip, รูป webp/avif + responsive sizes, HTTP/2
 - **บล็อกสำเร็จรูป** (`src/components/block/`): `hero`, `richtext`, `image`, `cta-banner`, `feature-grid` (+`feature-item`)
   → แอดมินกด **เพิ่ม/ลาก/สลับบล็อก** ในหลังบ้าน พิมพ์ข้อความ-อัปรูปเองได้ **โดยไม่เขียนโค้ด** = no-code page builder
 - **หน้าเรนเดอร์**: `site/DGA-Website/landing.html` (shell ว่าง) + `assets/landing.js` (ดึง CMS → เรนเดอร์บล็อกตามลำดับ) + `assets/landing.css`
-  → เปิดด้วย `landing.html?slug=<slug>` เช่น `landing.html?slug=thaid` · รองรับ `?tenant=` (multi-tenant)
+  → เปิดด้วย `/landing?slug=<slug>` เช่น `/landing?slug=thaid` · รองรับ `?tenant=` (multi-tenant)
   → `landing.js` มี markdown ย่อ (## ### , รายการเลข/จุด, **ตัวหนา**) สำหรับบล็อก rich text
 - **Multi-tenant**: `landing` อยู่ใน SCOPED (index.ts) + backfill + public perm (find/findOne) — ทดสอบแล้ว pea เปิด landing ของ dga ไม่ได้ (data isolation)
 - seed ตัวอย่าง: `seedLanding()` สร้างหน้า `thaid` (hero + feature-grid 3 + richtext + cta) ให้ dga

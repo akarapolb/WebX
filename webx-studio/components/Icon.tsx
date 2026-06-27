@@ -16,9 +16,9 @@ const P: Record<string, string> = {
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   close: '<path d="M18 6L6 18M6 6l12 12"/>',
   img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
-  desktop: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
-  tablet: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>',
-  mobile: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 18h.01"/>',
+  desktop: '<rect x="2" y="4" width="20" height="12" rx="2"/><path d="M9 20h6M12 16v4"/>',
+  tablet: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="17.5" cy="12" r="0.9" fill="currentColor"/>',
+  mobile: '<rect x="8" y="2.5" width="8" height="19" rx="2.5"/><path d="M10.5 5.5h3M11 18.5h2"/>',
   drag: '<circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>',
   trash: '<path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m2 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>',
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
@@ -36,6 +36,7 @@ const P: Record<string, string> = {
   chart: '<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/>',
   cookie: '<path d="M12 3a9 9 0 1 0 9 9 4 4 0 0 1-4-4 4 4 0 0 1-4-4 .5.5 0 0 0-1-1z"/><circle cx="9" cy="10" r="1"/><circle cx="14" cy="13" r="1"/><circle cx="10" cy="15" r="1"/>',
   card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 4.8 1c0 1.7-2.3 2-2.3 3.3"/><path d="M12 17.5h.01"/>',
 };
 
 export default function Icon({ name, className }: { name: string; className?: string }) {

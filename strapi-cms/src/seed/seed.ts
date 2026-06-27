@@ -377,7 +377,7 @@ export async function seedGroupA(strapi: any) {
 
   if ((await strapi.db.query("api::top-graphic.top-graphic").count()) === 0) {
     const tops = [
-      { title: "ประกาศ: ยกระดับบริการดิจิทัลภาครัฐ 2569", linkUrl: "landing.html?slug=thaid", transition: "fade", order: 1 },
+      { title: "ประกาศ: ยกระดับบริการดิจิทัลภาครัฐ 2569", linkUrl: "/landing?slug=thaid", transition: "fade", order: 1 },
       { title: "เปิดรับฟังความคิดเห็นแผนพัฒนารัฐบาลดิจิทัล", linkUrl: "#", transition: "slide", order: 2 },
     ];
     for (const t of tops) await strapi.documents("api::top-graphic.top-graphic").create({ ...P, data: { ...t, tenant: dgaId } });
@@ -435,7 +435,7 @@ export async function seedCmsCore(strapi: any) {
   // 4.1 เมนูหลัก (mega-menu) จาก CMS
   if ((await strapi.db.query("api::menu-item.menu-item").count()) === 0) {
     const items = [
-      { menu: "service", column: "สำหรับประชาชน", label: "บัตรประชาชนดิจิทัล (ThaID)", url: "landing.html?slug=thaid", order: 1 },
+      { menu: "service", column: "สำหรับประชาชน", label: "บัตรประชาชนดิจิทัล (ThaID)", url: "/landing?slug=thaid", order: 1 },
       { menu: "service", column: "สำหรับประชาชน", label: "แอปทางรัฐ", url: "#", order: 2 },
       { menu: "service", column: "สำหรับหน่วยงานรัฐ", label: "GDX ศูนย์แลกเปลี่ยนข้อมูล", url: "#", order: 1 },
       { menu: "service", column: "นักพัฒนา/ธุรกิจ", label: "ข้อมูลเปิดภาครัฐ (Open Data)", url: "links.html", order: 1 },
