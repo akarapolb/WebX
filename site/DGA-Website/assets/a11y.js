@@ -9,6 +9,11 @@
 (function () {
   'use strict';
   if (window.__dgaA11y) return; window.__dgaA11y = true;
+  // โหลด CSS ของตัวเองให้ครบทุกหน้า (เดิม home.js เป็นคนใส่ → หน้า landing/อื่นที่ไม่มี home.js เลยไอคอนบานเต็มจอ)
+  if (!document.getElementById('a11y-css')) {
+    var _css = document.createElement('link'); _css.id = 'a11y-css'; _css.rel = 'stylesheet'; _css.href = '/assets/a11y.css';
+    document.head.appendChild(_css);
+  }
   var LANG = document.documentElement.lang === 'en' ? 'en' : 'th';
   var KEY = 'dga-a11y';
   var root = document.documentElement;
