@@ -76,6 +76,8 @@ export default function ContentBrowser() {
   const [editing, setEditing] = useState<{ docId: string; locale?: string } | null>(null);
   const [schemas, setSchemas] = useState<Record<string, any>>({});
   const [creating, setCreating] = useState(false);
+  const [confirmDel, setConfirmDel] = useState<Entry | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [view, setView] = useState<"list" | "grid">("list");
   useEffect(() => { try { const v = localStorage.getItem("webx_content_view"); if (v === "grid" || v === "list") setView(v); } catch {} }, []);
   const setViewP = (v: "list" | "grid") => { setView(v); try { localStorage.setItem("webx_content_view", v); } catch {} };
@@ -190,6 +192,21 @@ export default function ContentBrowser() {
     finally { setCreating(false); }
   }
 
+  // ลบรายการโดยตรงจากการ์ด/แถว (ไม่ต้องเปิด editor) — มี popup ยืนยันก่อน
+  async function doDelete() {
+    if (!confirmDel || !uid) return;
+    setDeleting(true); setErr("");
+    const docId = String(confirmDel.documentId ?? confirmDel.id);
+    const url = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + (confirmDel.locale ? "?locale=" + confirmDel.locale : "");
+    try {
+      const r = await fetch(url, { method: "DELETE" });
+      if (!r.ok) { setErr(t("c.delFail") + " (HTTP " + r.status + ")"); setDeleting(false); return; }
+      setConfirmDel(null);
+      loadEntries(uid, opts);
+    } catch { setErr("Cannot reach the backend."); }
+    finally { setDeleting(false); }
+  }
+
   const SEG: { v: Status; k: string }[] = [{ v: "", k: "c.all" }, { v: "draft", k: "c.draft" }, { v: "published", k: "c.published" }];
 
   return (
@@ -286,7 +303,10 @@ export default function ContentBrowser() {
                               : <span className="badge b-mut"><span className="dot" />{t("c.draft")}</span>}</td>
                             <td className="mono" style={{ fontSize: 12 }}>{e.locale ?? "—"}</td>
                             <td className="muted">{relTime(e.updatedAt, lang === "th")}</td>
-                            <td className="row-go-cell"><span className="row-go"><Icon name="chevron" /></span></td>
+                            <td className="row-go-cell"><div className="row-actions">
+                              <button className="row-del" title={t("c.delete")} aria-label={t("c.delete")} onClick={(ev) => { ev.stopPropagation(); setConfirmDel(e); }}><Icon name="trash" /></button>
+                              <span className="row-go"><Icon name="chevron" /></span>
+                            </div></td>
                           </tr>
                         );
                       })}
@@ -299,7 +319,8 @@ export default function ContentBrowser() {
                         const img = imageOf(e);
                         const pub = e.status === "published" || e.publishedAt;
                         return (
-                          <button className="cgc" key={e.documentId ?? e.id} onClick={() => setEditing({ docId: String(e.documentId ?? e.id), locale: e.locale })}>
+                          <div className="cgc-wrap" key={e.documentId ?? e.id}>
+                          <button className="cgc" onClick={() => setEditing({ docId: String(e.documentId ?? e.id), locale: e.locale })}>
                             <div className="cgc-thumb">
                               {img ? <img src={mediaSrc(img)} alt="" loading="lazy" /> : <span className="cgc-ini">{titleOf(e)[0]?.toUpperCase() || "#"}</span>}
                               <span className={"cgc-badge badge " + (pub ? "b-ok" : "b-mut")}><span className="dot" />{pub ? t("c.published") : t("c.draft")}</span>
@@ -309,6 +330,8 @@ export default function ContentBrowser() {
                               <div className="cgc-meta">{(e.locale ?? "—") + " · " + relTime(e.updatedAt, lang === "th")}</div>
                             </div>
                           </button>
+                          <button className="cgc-del" title={t("c.delete")} aria-label={t("c.delete")} onClick={(ev) => { ev.stopPropagation(); setConfirmDel(e); }}><Icon name="trash" /></button>
+                          </div>
                         );
                       })}
                     </div>
@@ -327,6 +350,19 @@ export default function ContentBrowser() {
       )}
 
       <div className="notice"><Icon name="shield" /> {t("c.bffnote")}</div>
+
+      {confirmDel && (
+        <div className="scrim" style={{ zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => !deleting && setConfirmDel(null)}>
+          <div className="panel" style={{ maxWidth: 420, width: "90%" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, color: "var(--bad)" }}><Icon name="trash" /> {t("e.delTitle")}</h3>
+            <p className="muted" style={{ marginTop: 0 }}>{t("e.delWarn")} <b style={{ color: "var(--ink, inherit)" }}>{titleOf(confirmDel)}</b></p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button className="btn btn--g" onClick={() => setConfirmDel(null)} disabled={deleting}>{t("e.cancel")}</button>
+              <button className="btn btn--p" style={{ background: "var(--bad)", borderColor: "var(--bad)" }} disabled={deleting} onClick={doDelete}><Icon name="trash" />{deleting ? t("e.deleting") : t("e.delConfirm")}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editing && current && (
         <EntryEditor

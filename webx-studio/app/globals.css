@@ -938,7 +938,12 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .row-tt b{color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42ch}
 .row-tt span{font-size:11px;color:var(--mut);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ctbl .tbl td.muted{color:var(--mut);font-size:12.5px}
-.row-go-cell{width:34px;text-align:right;padding-right:14px!important}
+.row-go-cell{width:72px;text-align:right;padding-right:14px!important}
+.row-actions{display:inline-flex;align-items:center;gap:2px;justify-content:flex-end}
+.row-del{width:28px;height:28px;border-radius:7px;border:none;background:none;color:var(--mut);display:grid;place-items:center;cursor:pointer;opacity:0;transition:opacity var(--t),background var(--t),color var(--t)}
+.tbl tr.row:hover .row-del,.row-del:focus-visible{opacity:1}
+.row-del:hover{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.row-del svg{width:15px;height:15px}
 .row-go{display:inline-flex;color:var(--mut);opacity:0;transform:translateX(-4px);transition:opacity .16s,transform .16s}
 .row-go svg{width:16px;height:16px;transform:rotate(-90deg)}
 .tbl tr.row:hover .row-go{opacity:1;transform:none}
@@ -963,6 +968,11 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .cgc-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .cgc-ini{font-size:38px;font-weight:800;color:var(--accent);opacity:.5}
 .cgc-badge{position:absolute;top:9px;left:9px}
+.cgc-wrap{position:relative}
+.cgc-del{position:absolute;top:9px;right:9px;z-index:3;width:30px;height:30px;border-radius:9px;border:none;background:rgba(8,10,16,.6);color:#fff;display:grid;place-items:center;cursor:pointer;opacity:0;backdrop-filter:blur(2px);transition:opacity var(--t),background var(--t),transform var(--t)}
+.cgc-wrap:hover .cgc-del,.cgc-del:focus-visible{opacity:1}
+.cgc-del:hover{background:var(--bad);transform:scale(1.08)}
+.cgc-del svg{width:15px;height:15px}
 .cgc-b{padding:11px 13px 13px}
 .cgc-title{font-size:13px;font-weight:600;color:var(--ink);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:35px}
 .cgc-meta{font-size:11px;color:var(--mut);margin-top:6px;font-variant-numeric:tabular-nums}
