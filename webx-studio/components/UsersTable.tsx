@@ -65,14 +65,14 @@ export default function UsersTable() {
     <>
       <div className="vh">
         <div><h1>{t("nav.users")}</h1><p>{t("u.sub")}</p></div>
-        <button className="btn btn--p" onClick={() => setShowAdd(true)} disabled={!pageTenant}><Icon name="plus" /> {t("u.add")}</button>
+        <button data-testid="add-user-btn" className="btn btn--p" onClick={() => setShowAdd(true)} disabled={!pageTenant}><Icon name="plus" /> {t("u.add")}</button>
       </div>
 
       {manageable.length > 1 && (
         <div className="panel" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
             <span className="muted">{t("u.workspace")}</span>
-            <select className="vb-sel" value={pageTenant} onChange={(e) => setPageTenant(e.target.value)}>
+            <select data-testid="users-workspace-picker" className="vb-sel" value={pageTenant} onChange={(e) => setPageTenant(e.target.value)}>
               {manageable.map((m) => (
                 <option key={m.key} value={m.key}>{m.name || m.key}{m.engine === "wordpress" ? " (WordPress)" : ""}</option>
               ))}
@@ -92,7 +92,7 @@ export default function UsersTable() {
               <thead><tr><th>{t("u.colUser")}</th><th>{t("u.colRole")}</th><th>{t("u.colStatus")}</th><th /></tr></thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id}>
+                  <tr key={u.id} data-testid="user-row" data-email={u.email}>
                     <td>
                       <b>{[u.firstname, u.lastname].filter(Boolean).join(" ") || "—"}</b>
                       <div className="muted mono" style={{ fontSize: 11, marginTop: 3 }}>{u.email}</div>
@@ -103,6 +103,7 @@ export default function UsersTable() {
                       : <span className="badge b-mut"><span className="dot" />{t("u.inactive")}</span>}</td>
                     <td style={{ textAlign: "right" }}>
                       <button
+                        data-testid="remove-user-btn"
                         className={"btn " + (confirmId === u.id ? "btn--p" : "btn--g")}
                         style={{ padding: "4px 10px", fontSize: 12 }}
                         disabled={removingId === u.id}
@@ -174,23 +175,23 @@ function AddUserModal({ tenantKey, onClose, onCreated }: { tenantKey: string; on
             {err && <div className="badge b-warn" style={{ display: "inline-flex", marginBottom: 8 }}><span className="dot" />{err}</div>}
 
             <label style={lbl}>{t("u.firstname")}</label>
-            <input className="rv-assignee" style={{ width: "100%" }} value={firstname} onChange={(e) => setFirstname(e.target.value)} autoFocus />
+            <input data-testid="new-user-firstname" className="rv-assignee" style={{ width: "100%" }} value={firstname} onChange={(e) => setFirstname(e.target.value)} autoFocus />
 
             <label style={lbl}>{t("u.lastname")}</label>
-            <input className="rv-assignee" style={{ width: "100%" }} value={lastname} onChange={(e) => setLastname(e.target.value)} />
+            <input data-testid="new-user-lastname" className="rv-assignee" style={{ width: "100%" }} value={lastname} onChange={(e) => setLastname(e.target.value)} />
 
             <label style={lbl}>{t("u.email")}</label>
-            <input className="rv-assignee" style={{ width: "100%" }} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.go.th" />
+            <input data-testid="new-user-email" className="rv-assignee" style={{ width: "100%" }} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.go.th" />
 
             <label style={lbl}>{t("u.role")}</label>
-            <select className="vb-sel" style={{ width: "100%" }} value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+            <select data-testid="new-user-role" className="vb-sel" style={{ width: "100%" }} value={roleId} onChange={(e) => setRoleId(e.target.value)}>
               <option value="">{t("u.pickrole")}</option>
               {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button className="btn btn--g" onClick={onClose} disabled={busy}>{t("e.cancel")}</button>
-              <button className="btn btn--p" onClick={submit} disabled={busy}>{busy ? t("u.creatingUser") : t("u.createBtn")}</button>
+              <button data-testid="create-user-submit" className="btn btn--p" onClick={submit} disabled={busy}>{busy ? t("u.creatingUser") : t("u.createBtn")}</button>
             </div>
           </>
         )}
@@ -204,7 +205,7 @@ function AddUserModal({ tenantKey, onClose, onCreated }: { tenantKey: string; on
               background: "var(--panel-2, rgba(255,255,255,0.06))", border: "1px solid var(--line, rgba(255,255,255,0.12))",
               borderRadius: 8, padding: "10px 12px", fontSize: 15, margin: "12px 0",
             }}>
-              <span>{result.tempPassword}</span>
+              <span data-testid="temp-password">{result.tempPassword}</span>
               <button className="btn btn--g" style={{ padding: "4px 10px" }} onClick={copyPassword}>
                 <Icon name={copied ? "check" : "copy"} /> {copied ? t("u.copied") : t("u.copy")}
               </button>
@@ -213,7 +214,7 @@ function AddUserModal({ tenantKey, onClose, onCreated }: { tenantKey: string; on
               <span className="dot" />{result.user.email}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button className="btn btn--p" onClick={finish}>{t("u.done")}</button>
+              <button data-testid="temp-password-done" className="btn btn--p" onClick={finish}>{t("u.done")}</button>
             </div>
           </>
         )}

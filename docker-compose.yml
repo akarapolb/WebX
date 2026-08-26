@@ -1,6 +1,7 @@
 # WebX Studio — full stack for self-hosting / DGA on-prem.
-#   docker compose up -d --build              # db + strapi + webx
-#   docker compose --profile ai up -d --build # also the LiteLLM gateway
+#   docker compose up -d --build                     # db + strapi + webx
+#   docker compose --profile wordpress up -d --build  # + WordPress engine (ORST/RoyalSociety-style tenants)
+#   docker compose --profile ai up -d --build         # + the LiteLLM gateway
 # Copy .env.production.example -> .env and fill the secrets first.
 services:
   db:
@@ -100,6 +101,70 @@ services:
           sleep "$$INTERVAL_SECONDS"
         done
 
+  # WordPress engine — optional (profile "wordpress"): only needed for
+  # tenants created with engine:"wordpress" (see webx-studio's
+  # NewWorkspace.tsx). Mirrors docker-compose.wordpress.yml's dev setup —
+  # same custom image (./wordpress/Dockerfile), same bootstrap script — with
+  # production credentials/URL instead of localhost:8081 defaults, and
+  # WITHOUT WP_ALLOW_HTTP_APP_PASSWORDS (this must be served over real HTTPS,
+  # e.g. behind a reverse proxy that terminates TLS in front of it).
+  wp-mysql:
+    image: mysql:8
+    restart: unless-stopped
+    profiles: ["wordpress"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WORDPRESS_DB_ROOT_PASSWORD:?set WORDPRESS_DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: ${WORDPRESS_DB_PASSWORD:?set WORDPRESS_DB_PASSWORD}
+    volumes:
+      - wp-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${WORDPRESS_DB_ROOT_PASSWORD:?set WORDPRESS_DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  wordpress:
+    build: ./wordpress
+    restart: unless-stopped
+    profiles: ["wordpress"]
+    depends_on:
+      wp-mysql:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: wp-mysql:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?set WORDPRESS_DB_PASSWORD}
+    volumes:
+      - wp-content-data:/var/www/html
+    ports:
+      - "${WORDPRESS_PORT:-8081}:80"
+
+  # Runs once against the wordpress service above (installs core, activates
+  # ACF, sets pretty permalinks — see wordpress/bootstrap.sh), then idles so
+  # `docker compose exec wp-cli wp ...` still works for ad-hoc admin
+  # commands afterward. Safe to leave running; harmless if it never
+  # restarts, since the bootstrap itself is idempotent.
+  wp-cli:
+    image: wordpress:cli
+    restart: unless-stopped
+    profiles: ["wordpress"]
+    depends_on:
+      wordpress:
+        condition: service_started
+    volumes:
+      - wp-content-data:/var/www/html
+      - ./wordpress/bootstrap.sh:/bootstrap.sh:ro
+    environment:
+      WP_SITE_URL: ${WORDPRESS_SITE_URL:?set WORDPRESS_SITE_URL — the real public URL this WordPress will be served at}
+      WP_SITE_TITLE: ${WORDPRESS_SITE_TITLE:-WebX WordPress}
+      WORDPRESS_SCHEDULER_USERNAME: ${WORDPRESS_SCHEDULER_USERNAME:?set WORDPRESS_SCHEDULER_USERNAME}
+      WP_ADMIN_PASSWORD: ${WORDPRESS_ADMIN_PASSWORD:?set WORDPRESS_ADMIN_PASSWORD}
+      WP_ADMIN_EMAIL: ${WORDPRESS_ADMIN_EMAIL:?set WORDPRESS_ADMIN_EMAIL}
+    entrypoint: ["sh", "-c", "sh /bootstrap.sh; tail -f /dev/null"]
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     restart: unless-stopped
@@ -118,3 +183,5 @@ services:
 volumes:
   db-data:
   strapi-uploads:
+  wp-db-data:
+  wp-content-data:

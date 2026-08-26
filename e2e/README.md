@@ -26,9 +26,10 @@ cd ../public-site && npm run build && npx serve out -l 8095
 ```bash
 npm install
 npx playwright install --with-deps chromium   # first time only
-npm test                    # all 3 suites
+npm test                    # all suites
 npm run test:public         # public-site rendering + nav-overlap regression check only
 npm run test:studio         # WebX Studio round trip (needs WP_ADMIN_APP_PASSWORD)
+npm run test:users          # user management + rebuild-now (needs STRAPI_SCHEDULER_PASSWORD)
 npm run test:wp-admin       # WordPress admin direct edit (needs WP_ADMIN_PASSWORD)
 ```
 
@@ -47,7 +48,18 @@ npm run test:studio
 
 Logs into WebX Studio with the WordPress engine, opens a Mission Item (a Phase 10 ACF-backed content type), edits its numeric `Order` field, saves, then verifies the change via a direct WordPress REST fetch — and restores the original value afterward so re-runs stay idempotent.
 
-## Suite 3 — WordPress admin direct edit
+## Suite 3 — user management + rebuild-now
+
+Needs `STRAPI_SCHEDULER_PASSWORD` (matches webx-studio's own `.env.local` — the seeded scheduler service account, a real Strapi super-admin) to log into WebX Studio's Strapi tab:
+
+```bash
+export STRAPI_SCHEDULER_PASSWORD="the scheduler account's password"
+npm run test:users
+```
+
+Covers Users & Roles' own workspace picker (confirms it reaches a WordPress-engine tenant — `orst` — from a Strapi session, which the sidebar switcher deliberately never does), creating and removing a user against both a WordPress-engine and a Strapi-engine workspace (verified directly against each backend, not just the UI's own claim — a real login for the Strapi case, a real REST lookup for the WordPress case), and the Status page's "Rebuild now" button (waits for a real `next build` to complete, so this one runs slower than the rest). The WordPress round-trip test additionally needs `WP_ADMIN_APP_PASSWORD` (same as Suite 2) and is skipped without it.
+
+## Suite 4 — WordPress admin direct edit
 
 Needs `WP_ADMIN_PASSWORD` — the wp-admin user's **real interactive password**, not the Application Password above (WordPress's login form rejects Application Passwords by design). Set it yourself; this suite is skipped entirely if it's absent:
 

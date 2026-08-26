@@ -1,6 +1,14 @@
 # Dev-only WordPress instance for the Phase 2 CmsAdapter proof of concept.
 # Separate from the production docker-compose.yml (Strapi/Postgres stack).
-#   docker compose -f docker-compose.wordpress.yml up -d
+#   docker compose -f docker-compose.wordpress.yml up -d --build
+# First boot takes a minute or two: the wp-cli service waits for WordPress
+# itself to come up, installs it, activates ACF, and sets pretty permalinks
+# (see wordpress/bootstrap.sh) — `docker compose logs -f wp-cli` to watch it.
+# The one thing it can't do for you: after that finishes, log into
+# http://localhost:8081/wp-admin (WORDPRESS_SCHEDULER_USERNAME below) and
+# create an Application Password (Users -> Profile -> Application Passwords)
+# for webx-studio's own WORDPRESS_SCHEDULER_APP_PASSWORD — WordPress won't
+# let that be set to a chosen value, only generated interactively.
 services:
   wp-mysql:
     image: mysql:8
@@ -19,7 +27,7 @@ services:
       retries: 20
 
   wordpress:
-    image: wordpress:latest
+    build: ./wordpress
     restart: unless-stopped
     depends_on:
       wp-mysql:
@@ -29,6 +37,11 @@ services:
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wpsecret
+      # Dev-only: this instance is served over plain HTTP (localhost:8081),
+      # which WordPress core normally refuses for Application Passwords —
+      # see mu-plugins/auth-header-fix.php's own comment for why this is
+      # opt-in and unset in production.
+      WP_ALLOW_HTTP_APP_PASSWORDS: "1"
     volumes:
       - wp-content-data:/var/www/html
     ports:
@@ -41,7 +54,17 @@ services:
         condition: service_started
     volumes:
       - wp-content-data:/var/www/html
-    entrypoint: ["tail", "-f", "/dev/null"] # kept alive so we can `docker compose exec` wp-cli commands
+      - ./wordpress/bootstrap.sh:/bootstrap.sh:ro
+    environment:
+      WP_SITE_URL: http://localhost:8081
+      WP_SITE_TITLE: WebX WordPress (dev)
+      WORDPRESS_SCHEDULER_USERNAME: wpadmin
+      WP_ADMIN_PASSWORD: ${WP_DEV_ADMIN_PASSWORD:-ChangeMe!Dev2569}
+      WP_ADMIN_EMAIL: admin@webx.local
+    # Runs the bootstrap once, then idles so `docker compose exec wp-cli wp
+    # ...` still works for ad-hoc commands afterward — same as before this
+    # existed, just no longer starting from a completely bare WordPress.
+    entrypoint: ["sh", "-c", "sh /bootstrap.sh; tail -f /dev/null"]
 
 volumes:
   wp-db-data:

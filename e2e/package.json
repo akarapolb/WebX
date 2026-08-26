@@ -6,6 +6,7 @@
     "test": "playwright test",
     "test:public": "playwright test tests/public-site.spec.ts",
     "test:studio": "playwright test tests/studio-roundtrip.spec.ts",
+    "test:users": "playwright test tests/user-management.spec.ts",
     "test:wp-admin": "playwright test tests/wp-admin.spec.ts"
   },
   "devDependencies": {

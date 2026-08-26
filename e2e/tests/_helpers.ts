@@ -25,3 +25,11 @@ export const PLACEHOLDER_PATTERN = /\[[^\]]{3,}\]/;
 
 export const WP_ADMIN_USER = process.env.WP_ADMIN_USER || "wpadmin";
 export const WP_ADMIN_APP_PASSWORD = process.env.WP_ADMIN_APP_PASSWORD || "";
+
+// The seeded scheduler service account (strapi-cms/src/seed/seed.ts's
+// seedScheduler) — a real Strapi super-admin, already used server-side by
+// webx-studio's own governance.ts for exactly this "unscoped admin" role.
+// Reused here rather than provisioning a dedicated e2e account: it's the
+// one Strapi login this repo already guarantees exists in any dev setup.
+export const STRAPI_SCHEDULER_EMAIL = process.env.STRAPI_SCHEDULER_EMAIL || "scheduler@webx.local";
+export const STRAPI_SCHEDULER_PASSWORD = process.env.STRAPI_SCHEDULER_PASSWORD || "";

@@ -103,17 +103,17 @@ export default function Status() {
         <div style={{ flex: "1 1 260px" }}>
           <h3 style={{ margin: "0 0 6px" }}>{t("st.publicSite")}</h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className={"badge " + (pub?.building ? "b-acc" : pub?.lastError ? "b-warn" : "b-ok")}>
+            <span data-testid="public-site-status" data-building={String(Boolean(pub?.building))} className={"badge " + (pub?.building ? "b-acc" : pub?.lastError ? "b-warn" : "b-ok")}>
               <span className="dot" />{pub?.building ? t("st.building") : pub?.lastError ? t("st.buildFailed") : t("st.upToDate")}
             </span>
-            <span className="muted" style={{ fontSize: 12.5 }}>
+            <span data-testid="public-site-last-built" data-last-built={pub?.lastBuiltAt || ""} className="muted" style={{ fontSize: 12.5 }}>
               {pub?.lastBuiltAt ? `${t("st.lastBuilt")} ${new Date(pub.lastBuiltAt).toLocaleString()}` : t("st.neverBuilt")}
             </span>
           </div>
           {pub?.lastError && <div className="mono" style={{ fontSize: 11.5, color: "var(--warn)", marginTop: 6 }}>{pub.lastError}</div>}
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{t("st.publicSiteE")}</div>
         </div>
-        <button className="btn btn--p" onClick={rebuildNow} disabled={rebuilding || Boolean(pub?.building)}>
+        <button data-testid="rebuild-now-btn" className="btn btn--p" onClick={rebuildNow} disabled={rebuilding || Boolean(pub?.building)}>
           <Icon name="undo" />{(rebuilding || pub?.building) ? t("st.rebuilding") : t("st.rebuildNow")}
         </button>
       </div>
