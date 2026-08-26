@@ -1,0 +1,76 @@
+/* ============================================================================
+ * 01-tokens.css — Phase 10 design system for the Royal Society of Thailand
+ * (ราชบัณฑิตยสภา), the "parent" institution to the ORST tenant. More formal
+ * and ceremonial: rectilinear component language with thin gold rule
+ * accents, larger serif display sizes, a more formal spacing rhythm — same
+ * real-world brand family as ORST (same two typefaces, a related but darker
+ * palette) but deliberately differentiated so the two sister sites read as
+ * related, not identical. See the Phase 10 plan for the rationale.
+ *
+ * No selector other than :root here (see main.css's own documented
+ * convention) — every other stylesheet in this tenant's CSS should
+ * reference these custom properties, never a literal hex/px value.
+ * ========================================================================== */
+:root {
+  /* Color */
+  --rs-primary: #06473f;
+  --rs-primary-strong: #033029;
+  --rs-primary-soft: #0d6b5e;
+  --rs-gold: #b99143;
+  --rs-gold-strong: #8a6a2e;
+  --rs-gold-soft: #f5ecd9;
+  --rs-ground: #fbf7ef;
+  --rs-surface: #ffffff;
+  --rs-ink: #16201d;
+  --rs-ink-soft: #47534e;
+  --rs-ink-faint: #79847f;
+  --rs-line: rgba(6, 71, 63, 0.14);
+  --rs-line-gold: rgba(185, 145, 67, 0.32);
+  --rs-focus: #0d6b5e;
+
+  /* Type — same two typefaces as ORST (shared asset budget, same real
+     organization) but this tenant leans on larger serif display sizes for
+     a more formal/monumental register. */
+  --rs-font-display: "Noto Serif Thai", "Noto Serif", serif;
+  --rs-font-body: "IBM Plex Sans Thai", "IBM Plex Sans", -apple-system, sans-serif;
+
+  /* Radius — rectilinear, deliberately NOT pill-heavy (contrast with ORST) */
+  --rs-radius-card: 6px;
+  --rs-radius-sm: 3px;
+  --rs-radius-pill: 999px; /* reserved for chips/badges only, not cards/buttons */
+
+  /* Shadow — flatter, rule-driven rather than soft/floating */
+  --rs-shadow-card: 0 1px 0 rgba(6, 71, 63, 0.10);
+  --rs-shadow-lift: 0 16px 40px rgba(6, 71, 63, 0.16);
+
+  /* Spacing (4px base scale, same rhythm as ORST, slightly more formal use) */
+  --rs-space-1: 4px;
+  --rs-space-2: 8px;
+  --rs-space-3: 12px;
+  --rs-space-4: 16px;
+  --rs-space-5: 24px;
+  --rs-space-6: 32px;
+  --rs-space-7: 48px;
+  --rs-space-8: 64px;
+  --rs-space-9: 96px;
+
+  /* Layout — kept from the source's own --container convention */
+  --container: 1800px;
+  --rs-container-pad: clamp(20px, 4vw, 56px);
+
+  /* Structural sizing — header/topbar heights referenced by both 02-base.css
+     (scroll-padding-top) and 03-layout.css (sticky header sizing), added here
+     so the two files never drift out of sync with each other. */
+  --rs-topbar-h: 40px;
+  --rs-header-h: clamp(72px, 7vw, 92px);
+
+  /* Motion + elevation scale */
+  --rs-transition: 180ms ease;
+  --rs-transition-slow: 320ms ease;
+
+  /* z-index scale, low to high */
+  --rs-z-header: 900;
+  --rs-z-mega: 950;
+  --rs-z-overlay: 980;
+  --rs-z-drawer: 990;
+}

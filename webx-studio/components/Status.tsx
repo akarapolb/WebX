@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
+import { cms } from "@/lib/cms";
 
 // Status & Observability — live service checks, SLA per plan, tenant-isolation
 // posture, and a recent-activity feed (from the audit log). Read-only.
@@ -24,12 +25,12 @@ export default function Status() {
   const load = useCallback(async () => {
     setLoading(true);
     const checks = await Promise.all([
-      fetch("/api/strapi/content-manager/content-types").then((r) => r.ok).catch(() => false),
+      cms.schema.listContentTypes().then(() => true).catch(() => false),
       fetch("/api/strapi/sitemap.xml").then((r) => r.ok).catch(() => false),
     ]);
     setSvc([{ k: "bff", up: true }, { k: "strapi", up: checks[0] }, { k: "delivery", up: checks[1] }]);
-    const a = await fetch("/api/strapi/content-manager/collection-types/api::audit-log.audit-log?sort=at:DESC&pageSize=8").then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    setActivity(a?.results ?? a?.data ?? []);
+    const { data } = await cms.entries.list<any>("api::audit-log.audit-log", { sort: "at:DESC", pageSize: 8 }).catch(() => ({ data: [] as any[] }));
+    setActivity(data);
     setLoading(false);
   }, [tenant]);
   useEffect(() => { load(); }, [load]);

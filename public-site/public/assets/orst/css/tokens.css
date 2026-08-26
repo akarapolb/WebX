@@ -1,0 +1,103 @@
+/* ============================================================================
+ * tokens.css — Phase 10 design system for ORST (Office of the Royal Society
+ * of Thailand). Softer, service-forward institutional feel: pill/rounded
+ * component language, warm ivory ground, deep teal + gold accent.
+ *
+ * No selectors other than :root here — every other stylesheet in this
+ * tenant's CSS should reference these custom properties, never a literal
+ * hex/px value, so the whole system stays coherent and themeable from one
+ * place. See the Phase 10 plan for the rationale behind these exact values
+ * (they extend the tenant's already-configured Strapi brand.primaryColor/
+ * template.background rather than inventing an unrelated palette).
+ * ========================================================================== */
+:root {
+  /* Color */
+  --orst-primary: #073b34;
+  --orst-primary-strong: #052a25;
+  --orst-primary-soft: #0f5c50;
+  --orst-gold: #b98d3e;
+  --orst-gold-strong: #8f6a23;
+  --orst-gold-soft: #f7ecd6;
+  --orst-ground: #fbf7ef;
+  --orst-surface: #ffffff;
+  --orst-ink: #1c211f;
+  --orst-ink-soft: #4d5652;
+  --orst-ink-faint: #7c8985;
+  --orst-line: #e6ded0;
+  --orst-focus: #1a7a68;
+
+  /* Type */
+  --orst-font-display: "Noto Serif Thai", "Noto Serif", serif;
+  --orst-font-body: "IBM Plex Sans Thai", "IBM Plex Sans", -apple-system, sans-serif;
+  --orst-type-scale-ratio: 1.2;
+
+  /* Radius — pill/rounded component language, deliberately reinforced */
+  --orst-radius-pill: 999px;
+  --orst-radius-card: 22px;
+  --orst-radius-sm: 12px;
+
+  /* Shadow */
+  --orst-shadow-soft: 0 12px 32px rgba(7, 59, 52, 0.08);
+  --orst-shadow-card: 0 2px 10px rgba(7, 59, 52, 0.06);
+  --orst-shadow-lift: 0 20px 48px rgba(7, 59, 52, 0.14);
+
+  /* Spacing (4px base scale) */
+  --orst-space-1: 4px;
+  --orst-space-2: 8px;
+  --orst-space-3: 12px;
+  --orst-space-4: 16px;
+  --orst-space-5: 24px;
+  --orst-space-6: 32px;
+  --orst-space-7: 48px;
+  --orst-space-8: 64px;
+  --orst-space-9: 96px;
+
+  /* Layout */
+  --orst-container-max: 1400px;
+  --orst-container-pad: clamp(20px, 4vw, 48px);
+
+  /* ---- Phase 11 (full visual redesign) additions below. Existing tokens
+     above are untouched — every consumer written against them keeps working. */
+
+  /* Extra color surfaces derived from the palette above, for section
+     backgrounds / dark bands / subtle tints, so components never invent a
+     one-off rgba() of their own. */
+  --orst-primary-faint: #eef4f2;
+  --orst-primary-line: rgba(7, 59, 52, 0.14);
+  --orst-gold-faint: #fbf3e2;
+  --orst-ink-inverse: #fdfaf3;
+  --orst-ink-inverse-soft: rgba(253, 250, 243, 0.76);
+  --orst-ink-inverse-faint: rgba(253, 250, 243, 0.5);
+  --orst-surface-sunk: #f4efe3;
+  --orst-line-strong: #d8cdb4;
+  --orst-focus-ring: 0 0 0 3px rgba(26, 122, 104, 0.32);
+
+  /* Gradients used for hero / band surfaces, named so every section reaches
+     for the same two rather than hand-rolling gradients inline. */
+  --orst-gradient-primary: linear-gradient(155deg, #0a4a41 0%, #073b34 46%, #052a25 100%);
+  --orst-gradient-gold: linear-gradient(135deg, #c99c4c 0%, #b98d3e 100%);
+
+  /* Motion */
+  --orst-ease: cubic-bezier(.2, .7, .3, 1);
+  --orst-duration: 200ms;
+
+  /* Layering */
+  --orst-z-header: 60;
+  --orst-z-mega: 55;
+  --orst-z-mobile-menu: 70;
+  --orst-z-skip-link: 100;
+
+  /* Breakpoints (documented here for consistency; plain CSS can't consume a
+     custom property inside @media, so every stylesheet below keys off these
+     exact px numbers instead of re-deriving its own). Mobile-first:
+       480  — small phone -> large phone
+       640  — large phone -> small tablet, header-actions gains search+CTA
+       860  — small tablet -> tablet, topbar becomes visible
+       1024/1080 — tablet -> small laptop, multi-column page layouts land
+       1400 — --orst-container-max itself
+       1600 — full desktop nav replaces the hamburger drawer (see
+              components.css's file header for why this is 1600, not a
+              narrower "laptop" width — the full 8-item nav genuinely
+              doesn't fit next to the logo/search/CTA any narrower than
+              this, even with header-inner's own wider max-width) */
+}

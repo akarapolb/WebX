@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Log = { id: number; action?: string; contentType?: string; entryId?: string; adminEmail?: string; tenantKey?: string; at?: string; actor?: string; targetRef?: string; createdAt?: string };
 const AL_UID = "api::audit-log.audit-log";
@@ -18,12 +19,13 @@ export default function AuditLog() {
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + AL_UID + "?sort=createdAt:DESC&pageSize=100");
-      if (r.status === 403) { setErr(t("c.noPerm")); setLoading(false); return; }
-      if (!r.ok) { setErr("Could not load logs (HTTP " + r.status + ")."); setLoading(false); return; }
-      const j = await r.json();
-      setLogs(j.results ?? j.data ?? []);
-    } catch { setErr("Cannot reach the backend."); }
+      const { data } = await cms.entries.list<Log>(AL_UID, { sort: "createdAt:DESC", pageSize: 100 });
+      setLogs(data);
+    } catch (e) {
+      if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+      else if (e instanceof CmsError) setErr("Could not load logs (HTTP " + e.status + ").");
+      else setErr("Cannot reach the backend.");
+    }
     finally { setLoading(false); }
   }, [t]);
   useEffect(() => { load(); }, [load]);

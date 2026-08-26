@@ -1,0 +1,27 @@
+// Shared constants/helpers across all 3 suites. Kept intentionally small —
+// each suite owns its own assertions; this just avoids repeating base URLs
+// and the couple of credential/env lookups every suite needs.
+export const PUBLIC_SITE = process.env.PUBLIC_SITE_URL || "http://localhost:8095";
+export const WEBX_STUDIO = process.env.WEBX_STUDIO_URL || "http://localhost:3000";
+export const STRAPI_URL = process.env.STRAPI_URL || "http://localhost:1337";
+export const WORDPRESS_URL = process.env.WORDPRESS_URL || "http://localhost:8081";
+
+// Pages known to exist per tenant today (Phase 10). If a page gets added or
+// renamed, update this list — the public-site suite iterates it, so a
+// stale entry here silently stops testing the real site rather than
+// failing loudly, which is why it's kept in one obvious place.
+export const TENANT_PAGES: Record<string, string[]> = {
+  orst: ["", "/about", "/dictionary", "/news", "/publications", "/services", "/knowledge", "/contact"],
+  royalsociety: ["", "/about", "/knowledge", "/services", "/publications", "/activities", "/contact"],
+};
+
+// A leftover bracketed placeholder (e.g. "[ปีงบประมาณ]") is the one class of
+// defect Phase 9/10 explicitly promised not to ship silently — anything
+// matching this on a rendered page is worth failing loudly on, with the
+// narrow exception of the ITA-document list's tag/date fields, which are
+// deliberately left blank (not bracketed) rather than fabricated, so they
+// don't trip this check at all.
+export const PLACEHOLDER_PATTERN = /\[[^\]]{3,}\]/;
+
+export const WP_ADMIN_USER = process.env.WP_ADMIN_USER || "wpadmin";
+export const WP_ADMIN_APP_PASSWORD = process.env.WP_ADMIN_APP_PASSWORD || "";

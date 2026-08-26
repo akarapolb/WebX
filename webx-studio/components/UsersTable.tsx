@@ -2,24 +2,23 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
-
-type User = { id: number; firstname?: string; lastname?: string; email: string; isActive?: boolean; roles?: { name: string }[] };
+import { cms, CmsError, type AdminUser } from "@/lib/cms";
 
 export default function UsersTable() {
   const { t } = useLang();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch("/api/strapi/admin/users?pageSize=100");
-        if (r.status === 403) { setErr(t("c.noPerm")); setLoading(false); return; }
-        if (!r.ok) { setErr("Could not load users (HTTP " + r.status + ")."); setLoading(false); return; }
-        const j = await r.json();
-        setUsers(j.data?.results ?? j.results ?? []);
-      } catch { setErr("Cannot reach the backend."); }
+        setUsers(await cms.auth.listUsers());
+      } catch (e) {
+        if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+        else if (e instanceof CmsError) setErr("Could not load users (HTTP " + e.status + ").");
+        else setErr("Cannot reach the backend.");
+      }
       finally { setLoading(false); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -46,7 +45,7 @@ export default function UsersTable() {
                       <b>{[u.firstname, u.lastname].filter(Boolean).join(" ") || "—"}</b>
                       <div className="muted mono" style={{ fontSize: 11, marginTop: 3 }}>{u.email}</div>
                     </td>
-                    <td>{(u.roles ?? []).map((r) => <span key={r.name} className="badge b-acc" style={{ marginRight: 6 }}>{r.name}</span>)}</td>
+                    <td>{(u.roles ?? []).map((r) => <span key={r} className="badge b-acc" style={{ marginRight: 6 }}>{r}</span>)}</td>
                     <td>{u.isActive
                       ? <span className="badge b-ok"><span className="dot" />{t("u.active")}</span>
                       : <span className="badge b-mut"><span className="dot" />{t("u.inactive")}</span>}</td>

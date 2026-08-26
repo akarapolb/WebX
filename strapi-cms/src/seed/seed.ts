@@ -664,6 +664,51 @@ export async function grantLocalesToEditorRoles(strapi: any) {
   }
 }
 
+/** ปิดช่องโหว่: content type ที่เปิด i18n (I18N_SUBJECTS ด้านบน) ไม่เคยได้รับสิทธิ์
+ * publish (Editor) / delete (Editor, Author) มาตั้งแต่แรก — ต่างจาก content type
+ * อื่นที่มีสิทธิ์เต็มทุกตัว (พบตอนทดสอบ publish ของ Phase 6 ที่ dga-editor แก้ไข/สร้าง
+ * ได้ปกติแต่ publish ไม่ได้เลย, 403 จาก Strapi เอง ไม่ใช่จาก governance.ts). Needs
+ * properties.locales populated same as create/read/update — an i18n-enabled
+ * subject's permission with no locales key means an EMPTY allow-list (deny
+ * all), not "unrestricted"; confirmed by testing: an empty-properties row
+ * still 403'd until locales were added here too. */
+export async function ensureEditorPublishPermissions(strapi: any) {
+  let locales: string[] = [];
+  try {
+    const list = await strapi.plugin("i18n").service("locales").find();
+    locales = (list || []).map((l: any) => l.code);
+  } catch (e) { /* no i18n plugin / no locales yet — fall back to no locale restriction below */ }
+
+  const I18N_SUBJECTS = [
+    "api::home-page.home-page", "api::article.article", "api::service.service", "api::faq.faq",
+    "api::job.job", "api::banner.banner", "api::video.video", "api::award.award",
+  ];
+  const WANT: Record<string, string[]> = {
+    "strapi-editor": ["delete", "publish"],
+    "strapi-author": ["delete"],
+  };
+  const roles = await strapi.db.query("admin::role").findMany({ where: { code: { $in: Object.keys(WANT) } } });
+  for (const role of roles) {
+    const existing = await strapi.db.query("admin::permission").findMany({ where: { role: role.id } });
+    const have = new Set(existing.map((p: any) => p.action + "|" + p.subject));
+    let created = 0;
+    for (const subject of I18N_SUBJECTS) {
+      for (const action of WANT[role.code]) {
+        const key = `plugin::content-manager.explorer.${action}|${subject}`;
+        if (have.has(key)) continue;
+        await strapi.db.query("admin::permission").create({
+          data: {
+            action: `plugin::content-manager.explorer.${action}`, actionParameters: {}, subject,
+            properties: locales.length ? { locales } : {}, conditions: [], role: role.id,
+          },
+        });
+        created++;
+      }
+    }
+    if (created) strapi.log.info(`[seed] granted ${created} missing delete/publish perms to role ${role.code}`);
+  }
+}
+
 /* ---------- Admin editors ผูกกับ tenant (per-tenant RBAC) ---------- */
 export async function seedEditors(strapi: any) {
   const role = await strapi.db.query("admin::role").findOne({ where: { code: "strapi-editor" } });
@@ -687,6 +732,35 @@ export async function seedEditors(strapi: any) {
     } catch (err: any) {
       strapi.log.warn(`[seed] could not create editor ${e.email}: ${err.message}`);
     }
+  }
+}
+
+/* ---------- Scheduler service account (Phase 5) ----------
+ * webx-studio's release scheduler (lib/cms/governance.ts's
+ * processDueReleases, triggered via POST /api/internal/releases/process-due)
+ * runs with no browser session to read a token from, so it logs in as this
+ * dedicated account instead. Needs Super Admin so effectiveTenant() resolves
+ * it as unscoped (sees/publishes across every tenant) — the same "unscoped
+ * system caller" convention this file's own effectiveTenant() already uses
+ * for seeding. Dev-only credential, same pattern as the editors above; set
+ * STRAPI_SCHEDULER_EMAIL/PASSWORD in webx-studio's env to match. */
+export async function seedScheduler(strapi: any) {
+  const email = 'scheduler@webx.local';
+  const password = 'WebxSched@2569';
+  const existing = await strapi.db.query('admin::user').findOne({ where: { email } });
+  if (existing) return;
+  const role = await strapi.db.query('admin::role').findOne({ where: { code: 'strapi-super-admin' } });
+  if (!role) {
+    strapi.log.warn('[seed] super-admin role not found — skip scheduler account seeding');
+    return;
+  }
+  try {
+    await strapi.service('admin::user').create({
+      email, firstname: 'Release', lastname: 'Scheduler', password, roles: [role.id], isActive: true,
+    });
+    strapi.log.info(`[seed] scheduler service account ${email} created (role=Super Admin)`);
+  } catch (err: any) {
+    strapi.log.warn(`[seed] could not create scheduler account: ${err.message}`);
   }
 }
 

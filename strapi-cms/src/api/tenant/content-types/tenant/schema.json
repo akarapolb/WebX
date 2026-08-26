@@ -82,6 +82,18 @@
     "features": {
       "type": "json",
       "description": "Per-tenant front-end feature toggles, e.g. { a11y:true, simplify:true, serviceFinder:true, pwa:true } — unset = all on"
+    },
+    "engine": {
+      "type": "enumeration",
+      "enum": ["strapi", "wordpress"],
+      "default": "strapi",
+      "description": "Which CmsAdapter this tenant's own content lives in (Phase 6). The tenant record itself always lives in Strapi regardless."
+    },
+    "publicTemplate": {
+      "type": "enumeration",
+      "enum": ["gov-portal", "orst", "royalsociety"],
+      "default": "gov-portal",
+      "description": "Phase 8 — which public-site React component tree + page set to render for this tenant. NOT the same as the `template` field above, which is an unrelated preset/background setting for the gov-portal design itself."
     }
   }
 }

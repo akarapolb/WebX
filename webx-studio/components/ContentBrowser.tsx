@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Icon from "./Icon";
 import EntryEditor from "./EntryEditor";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 import { planLimit } from "@/lib/plans";
+import { cms, CmsError } from "@/lib/cms";
 
 type CType = { uid: string; name: string; api: string };
 type Entry = Record<string, any>;
@@ -44,42 +45,52 @@ export default function ContentBrowser() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch("/api/strapi/content-manager/content-types");
-        if (r.status === 403) { setErr(t("c.noPerm")); setLoadingTypes(false); return; }
-        if (!r.ok) { setErr("Could not load content types (HTTP " + r.status + ")."); setLoadingTypes(false); return; }
-        const j = await r.json();
-        const raw = (j.data ?? j.results ?? []).filter((x: any) => x.kind === "collectionType" && typeof x.uid === "string" && x.uid.startsWith("api::") && x.isDisplayed !== false);
-        const list: CType[] = raw
-          .map((x: any) => ({ uid: x.uid, name: x.info?.displayName ?? x.apiID ?? x.uid, api: x.apiID ?? "" }))
-          .sort((a: CType, b: CType) => a.name.localeCompare(b.name));
+        const raw = await cms.schema.listContentTypes();
+        const list: CType[] = raw.map((x) => ({ uid: x.uid, name: x.name, api: x.api }));
         setTypes(list);
         const sch: Record<string, any> = {};
-        raw.forEach((x: any) => { sch[x.uid] = x.attributes || {}; });
+        raw.forEach((x) => { sch[x.uid] = x.attributes || {}; });
         setSchemas(sch);
-        setTenantUids(new Set(raw.filter((x: any) => x.attributes?.tenant).map((x: any) => x.uid)));
+        setTenantUids(new Set(raw.filter((x) => x.attributes?.tenant).map((x) => x.uid)));
         const first = list.find((x) => x.api === "article") ?? list[0];
         if (first) setUid(first.uid); else setErr("No content types are exposed by this backend.");
-      } catch { setErr("Cannot reach the backend."); }
+      } catch (e) {
+        if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+        else if (e instanceof CmsError) setErr("Could not load content types (HTTP " + e.status + ").");
+        else setErr("Cannot reach the backend.");
+      }
       finally { setLoadingTypes(false); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Switching content type/status/page fires a new fetch before the
+  // previous one necessarily resolves — with no ordering guarantee between
+  // requests, an older in-flight response (e.g. still-loading "Post" rows)
+  // can resolve AFTER a newer one (freshly-selected "Mission Item" rows)
+  // and silently overwrite it, leaving the header/sidebar showing the new
+  // type while the table still shows the old type's entries. reqId guards
+  // against exactly that: only the most recently STARTED request is allowed
+  // to commit its result.
+  const reqId = useRef(0);
   const loadEntries = useCallback(async (u: string, opts: { status: Status; q: string; page: number; tenantKey: string }) => {
+    const id = ++reqId.current;
     setLoadingRows(true);
     try {
-      let qs = "?page=" + opts.page + "&pageSize=25&sort=updatedAt:DESC";
-      if (opts.status) qs += "&status=" + opts.status;
-      if (opts.q.trim()) qs += "&_q=" + encodeURIComponent(opts.q.trim());
-      if (opts.tenantKey) qs += "&filters[tenant][key][$eq]=" + encodeURIComponent(opts.tenantKey);
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + u + qs);
-      if (!r.ok) { setEntries([]); setLoadingRows(false); return; }
-      const j = await r.json();
-      const rows: Entry[] = j.results ?? j.data ?? [];
-      setEntries(rows);
-      setTotal(j.pagination?.total ?? rows.length);
-      setPageCount(j.pagination?.pageCount ?? 1);
-    } catch { setEntries([]); } finally { setLoadingRows(false); }
+      const filter = opts.tenantKey ? [{ field: "tenant.key", op: "eq" as const, value: opts.tenantKey }] : undefined;
+      const { data, total: t, pageCount: pc } = await cms.entries.list<Entry>(u, {
+        page: opts.page, pageSize: 25, sort: "updatedAt:DESC",
+        status: opts.status, q: opts.q.trim() || undefined, filter,
+      });
+      if (id !== reqId.current) return; // a newer request has since started — discard this stale result
+      setEntries(data);
+      setTotal(t);
+      setPageCount(pc);
+    } catch {
+      if (id === reqId.current) setEntries([]);
+    } finally {
+      if (id === reqId.current) setLoadingRows(false);
+    }
   }, []);
 
   const tenantKey = (uid && tenantUids.has(uid) && currentKey && currentKey !== "workspace") ? currentKey : "";
@@ -120,11 +131,11 @@ export default function ContentBrowser() {
     // new entry would otherwise have no tenant and vanish from the filtered list.
     if (tenantUids.has(uid) && currentKey && currentKey !== "workspace") {
       try {
-        const [tj, sum] = await Promise.all([
-          fetch("/api/strapi/content-manager/collection-types/api::tenant.tenant?pageSize=1&filters[key][$eq]=" + encodeURIComponent(currentKey)).then((r) => (r.ok ? r.json() : null)),
+        const [{ data: tRows }, sum] = await Promise.all([
+          cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: currentKey }] }),
           fetch("/api/strapi/api/analytics/summary?tenant=" + encodeURIComponent(currentKey)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
         ]);
-        const tn = (tj?.results ?? tj?.data ?? [])[0];
+        const tn = tRows[0];
         // usage metering: block creation once the plan's content limit is reached
         const limit = planLimit(tn?.plan).items;
         const used = sum?.contentTotal ?? 0;
@@ -133,12 +144,13 @@ export default function ContentBrowser() {
       } catch { /* fall back to backend tenant injection */ }
     }
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + uid, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!r.ok) { setErr(t("c.createFail") + " (HTTP " + r.status + ")"); setCreating(false); return; }
-      const j = await r.json(); const e = j.data ?? j;
+      const e: any = await cms.entries.create(uid, body);
       const docId = e.documentId ?? e.id;
       if (docId) { setEditing({ docId: String(docId), locale: e.locale }); loadEntries(uid, opts); }
-    } catch { setErr("Cannot reach the backend."); }
+    } catch (err) {
+      if (err instanceof CmsError) setErr(t("c.createFail") + " (HTTP " + err.status + ")");
+      else setErr("Cannot reach the backend.");
+    }
     finally { setCreating(false); }
   }
 

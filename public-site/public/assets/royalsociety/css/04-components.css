@@ -1,0 +1,946 @@
+/* ============================================================================
+ * 04-components.css — reusable blocks shared across "inner" pages
+ * ============================================================================
+ *
+ * Phase-11 full visual rebuild. Same class names as before (KnowledgePage,
+ * ServicesPage, PublicationsPage, ActivitiesPage and ContactPage already
+ * compose pages purely from these — see this tenant's Phase-9/10 notes), but
+ * every rule is rewritten against the new token set for a more formal,
+ * rectilinear, rule-driven register: thin 1px borders and a small
+ * --rs-radius-card instead of soft heavy-rounded shadow cards, gold hairline
+ * accents instead of glows. Pill radius (--rs-radius-pill) is reserved for
+ * small chips/badges (.rs-tag, .rs-list-item__tag, .page-hero__kicker),
+ * never for cards, panels, or primary buttons.
+ *
+ * Naming: .block / .block__element / .block--modifier (BEM-ish), matching
+ * the previous revision's own documented convention.
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 1. Buttons — .rs-btn
+ * ========================================================================== */
+
+.rs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 24px;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-surface);
+  color: var(--rs-primary);
+  font-family: var(--rs-font-body);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--rs-transition), color var(--rs-transition), border-color var(--rs-transition), transform var(--rs-transition);
+}
+
+.rs-btn:hover {
+  border-color: var(--rs-gold);
+  background: var(--rs-gold-soft);
+  transform: translateY(-1px);
+}
+
+.rs-btn--primary {
+  border-color: var(--rs-primary);
+  background: var(--rs-primary);
+  color: #fff;
+  box-shadow: var(--rs-shadow-card);
+}
+
+.rs-btn--primary:hover {
+  background: var(--rs-primary-strong);
+}
+
+.rs-btn--gold {
+  border-color: var(--rs-gold);
+  background: var(--rs-gold);
+  color: #fff;
+}
+
+.rs-btn--gold:hover {
+  background: var(--rs-gold-strong);
+}
+
+.rs-btn--ghost {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+  color: #fff;
+}
+
+.rs-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #fff;
+}
+
+.rs-btn--sm {
+  min-height: 40px;
+  padding: 6px 18px;
+  font-size: 0.92rem;
+}
+
+.rs-btn--lg {
+  min-height: 56px;
+  padding: 14px 32px;
+  font-size: 1.06rem;
+}
+
+.rs-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rs-space-3);
+}
+
+/* ==========================================================================
+ * 2. Inner-page hero — .page-hero
+ * ========================================================================== */
+
+.page-hero {
+  position: relative;
+  padding: clamp(40px, 5vw, 72px) 0 clamp(32px, 4.2vw, 56px);
+  background:
+    linear-gradient(120deg, var(--rs-gold-soft) 0%, var(--rs-ground) 55%, var(--rs-ground) 100%);
+  border-bottom: 1px solid var(--rs-line-gold);
+}
+
+.page-hero__inner {
+  display: grid;
+  gap: var(--rs-space-3);
+  max-width: 980px;
+}
+
+.page-hero__kicker {
+  justify-self: start;
+  padding: 5px 16px;
+  border-radius: var(--rs-radius-pill);
+  background: var(--rs-gold-soft);
+  border: 1px solid var(--rs-line-gold);
+  color: var(--rs-gold-strong);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.page-hero__title {
+  margin: 0;
+  color: var(--rs-primary);
+  font-family: var(--rs-font-display);
+  font-size: clamp(2.2rem, 4.2vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.page-hero__lead {
+  margin: 0;
+  max-width: 74ch;
+  color: var(--rs-ink-soft);
+  font-size: clamp(1rem, 1.15vw, 1.14rem);
+  line-height: 1.8;
+}
+
+.page-hero--deep {
+  background: linear-gradient(140deg, var(--rs-primary) 0%, var(--rs-primary-strong) 100%);
+  border-bottom-color: transparent;
+}
+
+.page-hero--deep .page-hero__kicker {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--rs-gold-soft);
+}
+
+.page-hero--deep .page-hero__title {
+  color: #fff;
+}
+
+.page-hero--deep .page-hero__lead {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.page-hero--deep .breadcrumb,
+.page-hero--deep .breadcrumb a {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.page-hero--deep .breadcrumb a:hover {
+  color: #fff;
+}
+
+/* ==========================================================================
+ * 3. Breadcrumb — .breadcrumb
+ * ========================================================================== */
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--rs-space-4);
+  color: var(--rs-ink-faint);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.breadcrumb a {
+  color: var(--rs-primary);
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.breadcrumb [aria-current="page"] {
+  color: var(--rs-ink-faint);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+ * 4. Grid — .rs-grid
+ * ========================================================================== */
+
+.rs-grid {
+  display: grid;
+  gap: clamp(16px, 1.6vw, 24px);
+}
+
+.rs-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rs-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rs-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rs-grid--sidebar {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+}
+
+/* ==========================================================================
+ * 5. Card — .rs-card
+ * ========================================================================== */
+
+.rs-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-surface);
+  box-shadow: var(--rs-shadow-card);
+  transition: transform var(--rs-transition), box-shadow var(--rs-transition), border-color var(--rs-transition);
+}
+
+.rs-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--rs-gold);
+  box-shadow: var(--rs-shadow-lift);
+}
+
+.rs-card__media {
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--rs-gold-soft);
+}
+
+.rs-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.rs-card:hover .rs-card__media img {
+  transform: scale(1.04);
+}
+
+.rs-card__body {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  flex: 1;
+  padding: clamp(18px, 1.8vw, 26px);
+  border-top: 2px solid var(--rs-gold);
+}
+
+.rs-card__media + .rs-card__body {
+  border-top: 0;
+}
+
+.rs-card__meta {
+  color: var(--rs-gold-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.rs-card__title {
+  margin: 0;
+  font-family: var(--rs-font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.rs-card__title a {
+  color: var(--rs-primary);
+}
+
+.rs-card__title a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rs-card__excerpt {
+  margin: 0;
+  color: var(--rs-ink-soft);
+  font-size: 0.96rem;
+  line-height: 1.75;
+}
+
+.rs-card__link {
+  margin-top: auto;
+  padding-top: 8px;
+  color: var(--rs-primary);
+  font-weight: 700;
+}
+
+.rs-card__link:hover {
+  color: var(--rs-gold-strong);
+}
+
+.rs-card--flat {
+  box-shadow: none;
+}
+
+.rs-card--flat:hover {
+  box-shadow: var(--rs-shadow-card);
+}
+
+.rs-card--row {
+  flex-direction: row;
+}
+
+.rs-card--row .rs-card__media {
+  flex: 0 0 clamp(120px, 26%, 260px);
+  aspect-ratio: auto;
+}
+
+.rs-card--row .rs-card__body {
+  border-top: 0;
+  border-left: 2px solid var(--rs-gold);
+}
+
+/* ==========================================================================
+ * 6. Dated list rows — .rs-list / .rs-list-item
+ * ========================================================================== */
+
+.rs-list {
+  display: grid;
+  gap: var(--rs-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rs-list-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 22px);
+  padding: clamp(14px, 1.6vw, 20px);
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-surface);
+  transition: border-color var(--rs-transition), box-shadow var(--rs-transition);
+}
+
+.rs-list-item:hover {
+  border-color: var(--rs-gold);
+  box-shadow: var(--rs-shadow-card);
+}
+
+.rs-list-item__date {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  width: 72px;
+  padding: 10px 6px;
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-primary);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.rs-list-item__date strong {
+  font-family: var(--rs-font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.rs-list-item__body {
+  display: grid;
+  gap: 6px;
+}
+
+.rs-list-item__body h3 {
+  margin: 0;
+  font-family: var(--rs-font-display);
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.rs-list-item__body h3 a {
+  color: var(--rs-primary);
+}
+
+.rs-list-item__body h3 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rs-list-item__body p {
+  margin: 0;
+  color: var(--rs-ink-soft);
+  font-size: 0.94rem;
+  line-height: 1.7;
+}
+
+.rs-list-item__tag {
+  justify-self: start;
+  padding: 3px 14px;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-pill);
+  background: var(--rs-gold-soft);
+  color: var(--rs-gold-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.rs-list-item__arrow {
+  color: var(--rs-gold);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+ * 7. Tags / filter chips — .rs-tags
+ * ========================================================================== */
+
+.rs-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rs-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 4px 18px;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-pill);
+  background: var(--rs-surface);
+  color: var(--rs-primary);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--rs-transition), color var(--rs-transition), border-color var(--rs-transition);
+}
+
+.rs-tag:hover {
+  border-color: var(--rs-gold);
+  background: var(--rs-gold-soft);
+}
+
+.rs-tag.is-active {
+  background: var(--rs-primary);
+  border-color: var(--rs-primary);
+  color: #fff;
+}
+
+/* ==========================================================================
+ * 8. Content panel — .rs-panel
+ * ========================================================================== */
+
+.rs-panel {
+  padding: clamp(22px, 2.4vw, 34px);
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-surface);
+}
+
+.rs-panel--soft {
+  background: var(--rs-gold-soft);
+  border-color: var(--rs-line-gold);
+}
+
+.rs-panel--deep {
+  background: linear-gradient(150deg, var(--rs-primary), var(--rs-primary-strong));
+  border-color: transparent;
+  color: #fff;
+}
+
+.rs-panel--deep h2,
+.rs-panel--deep h3 {
+  color: #fff;
+}
+
+.rs-panel--deep p {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+/* ==========================================================================
+ * 9. Rich text — .prose (WordPress content via dangerouslySetInnerHTML)
+ * ========================================================================== */
+
+.prose {
+  max-width: 78ch;
+  color: var(--rs-ink);
+  font-size: 1.02rem;
+  line-height: 1.9;
+}
+
+.prose > * + * {
+  margin-top: 1.1em;
+}
+
+.prose h2 {
+  margin-top: 1.8em;
+  color: var(--rs-primary);
+  font-family: var(--rs-font-display);
+  font-size: 1.6rem;
+  line-height: 1.4;
+}
+
+.prose h3 {
+  margin-top: 1.5em;
+  color: var(--rs-primary);
+  font-family: var(--rs-font-display);
+  font-size: 1.25rem;
+  line-height: 1.45;
+}
+
+.prose a {
+  color: var(--rs-primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+}
+
+.prose li + li {
+  margin-top: 0.5em;
+}
+
+.prose img {
+  border-radius: var(--rs-radius-card);
+}
+
+.prose blockquote {
+  margin-inline: 0;
+  padding: 4px 0 4px 20px;
+  border-left: 3px solid var(--rs-gold);
+  color: var(--rs-ink-soft);
+  font-style: italic;
+}
+
+.prose code {
+  padding: 2px 6px;
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-gold-soft);
+  font-size: 0.92em;
+}
+
+/* ==========================================================================
+ * 10. Data table — .rs-table (wrap in .rs-table-wrap for x-scroll)
+ * ========================================================================== */
+
+.rs-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+}
+
+.rs-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--rs-surface);
+  font-size: 0.96rem;
+}
+
+.rs-table th,
+.rs-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rs-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.rs-table thead th {
+  background: var(--rs-primary);
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rs-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.rs-table tbody tr:hover {
+  background: var(--rs-gold-soft);
+}
+
+/* ==========================================================================
+ * 11. In-page filter bar — .rs-filter
+ * ========================================================================== */
+
+.rs-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rs-space-3);
+  padding: clamp(16px, 1.8vw, 22px);
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-gold-soft);
+}
+
+.rs-filter .rs-field {
+  flex: 1 1 220px;
+}
+
+.rs-filter .rs-field--search {
+  flex: 2 1 320px;
+}
+
+/* ==========================================================================
+ * 12. Form fields — .rs-field
+ * ========================================================================== */
+
+.rs-field {
+  display: grid;
+  gap: 6px;
+}
+
+.rs-field > label {
+  color: var(--rs-primary);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.rs-field input,
+.rs-field select,
+.rs-field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-surface);
+  color: var(--rs-ink);
+  font-family: var(--rs-font-body);
+  font-size: 1rem;
+}
+
+.rs-field textarea {
+  min-height: 140px;
+  padding-top: 14px;
+  resize: vertical;
+}
+
+.rs-field input:focus,
+.rs-field select:focus,
+.rs-field textarea:focus {
+  outline: 3px solid var(--rs-gold-soft);
+  outline-offset: 1px;
+  border-color: var(--rs-gold);
+}
+
+.rs-field__hint {
+  color: var(--rs-ink-faint);
+  font-size: 0.86rem;
+}
+
+.rs-field__hint--error {
+  color: #a3341f;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+ * 13. FAQ accordion — .rs-accordion (native <details>/<summary>)
+ * ========================================================================== */
+
+.rs-accordion {
+  display: grid;
+  gap: var(--rs-space-3);
+}
+
+.rs-accordion details {
+  overflow: hidden;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-surface);
+}
+
+.rs-accordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rs-space-4);
+  min-height: 60px;
+  padding: 14px 22px;
+  color: var(--rs-primary);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.rs-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.rs-accordion summary::after {
+  content: "+";
+  flex: 0 0 auto;
+  color: var(--rs-gold);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.rs-accordion details[open] summary {
+  background: var(--rs-gold-soft);
+  border-bottom: 1px solid var(--rs-line-gold);
+}
+
+.rs-accordion details[open] summary::after {
+  content: "\2212";
+}
+
+.rs-accordion__body {
+  padding: 4px 22px 20px;
+  color: var(--rs-ink-soft);
+  line-height: 1.85;
+}
+
+/* ==========================================================================
+ * 14. Notice box — .rs-note
+ * ========================================================================== */
+
+.rs-note {
+  display: grid;
+  gap: 4px;
+  padding: 16px 22px;
+  border-left: 3px solid var(--rs-primary);
+  border-radius: 0 var(--rs-radius-card) var(--rs-radius-card) 0;
+  background: var(--rs-gold-soft);
+  color: var(--rs-ink);
+  line-height: 1.75;
+}
+
+.rs-note strong {
+  color: var(--rs-primary);
+}
+
+.rs-note--warn {
+  border-left-color: var(--rs-gold-strong);
+  background: #fdf6e6;
+}
+
+.rs-note--success {
+  border-left-color: #1c7a4f;
+  background: #eaf6ef;
+}
+
+/* ==========================================================================
+ * 15. Empty state — .rs-empty
+ * ========================================================================== */
+
+.rs-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: clamp(36px, 5vw, 64px) 20px;
+  border: 1px dashed var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-gold-soft);
+  color: var(--rs-ink-soft);
+  text-align: center;
+}
+
+.rs-empty__icon {
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.rs-empty h3 {
+  margin: 0;
+  color: var(--rs-primary);
+  font-size: 1.2rem;
+}
+
+.rs-empty p {
+  margin: 0;
+  max-width: 46ch;
+}
+
+/* ==========================================================================
+ * 16. Pagination — .rs-pagination
+ * ========================================================================== */
+
+.rs-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding-top: var(--rs-space-2);
+}
+
+.rs-pagination a,
+.rs-pagination span {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-surface);
+  color: var(--rs-primary);
+  font-weight: 700;
+}
+
+.rs-pagination a:hover {
+  border-color: var(--rs-gold);
+  background: var(--rs-gold-soft);
+}
+
+.rs-pagination [aria-current="page"] {
+  background: var(--rs-primary);
+  border-color: var(--rs-primary);
+  color: #fff;
+}
+
+/* ==========================================================================
+ * 17. Stat numbers — .rs-stats
+ * ========================================================================== */
+
+.rs-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: clamp(12px, 1.5vw, 20px);
+}
+
+.rs-stat {
+  display: grid;
+  gap: 6px;
+  padding: clamp(20px, 2vw, 28px);
+  border: 1px solid var(--rs-line-gold);
+  border-top: 2px solid var(--rs-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-surface);
+}
+
+.rs-stat__value {
+  color: var(--rs-primary);
+  font-family: var(--rs-font-display);
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.rs-stat__label {
+  color: var(--rs-ink-soft);
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+ * 18. Responsive — collapse points shared by every block above
+ * ========================================================================== */
+
+@media (max-width: 1024px) {
+  .rs-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rs-grid--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rs-grid--sidebar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .rs-grid--2,
+  .rs-grid--3,
+  .rs-grid--4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rs-card--row {
+    flex-direction: column;
+  }
+
+  .rs-card--row .rs-card__media {
+    flex: none;
+    aspect-ratio: 16 / 10;
+  }
+
+  .rs-card--row .rs-card__body {
+    border-top: 2px solid var(--rs-gold);
+    border-left: 0;
+  }
+
+  .rs-list-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--rs-space-3);
+  }
+
+  .rs-list-item__date {
+    width: auto;
+    justify-self: start;
+    grid-auto-flow: column;
+    gap: 8px;
+    padding: 6px 14px;
+  }
+
+  .rs-list-item__date strong {
+    font-size: 1.05rem;
+  }
+
+  .rs-list-item__arrow {
+    display: none;
+  }
+
+  .rs-filter {
+    flex-direction: column;
+  }
+
+  .rs-btn-row .rs-btn {
+    width: 100%;
+  }
+}

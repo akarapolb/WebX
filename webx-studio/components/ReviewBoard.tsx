@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Review = { id: number; documentId?: string; documentRef: string; contentType?: string; title?: string; stage: string; kind?: string; payload?: any; assignee?: string; requestedBy?: string; note?: string; history?: any[]; updatedAt?: string };
 const RV_UID = "api::review.review";
@@ -20,29 +21,30 @@ export default function ReviewBoard() {
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + RV_UID + "?sort=updatedAt:DESC&pageSize=200");
-      if (r.status === 403) { setErr(t("c.noPerm")); setLoading(false); return; }
-      if (!r.ok) { setErr("Could not load reviews (HTTP " + r.status + ")."); setLoading(false); return; }
-      const j = await r.json();
-      setReviews(j.results ?? j.data ?? []);
-    } catch { setErr("Cannot reach the backend."); }
+      const { data } = await cms.entries.list<Review>(RV_UID, { sort: "updatedAt:DESC", pageSize: 200 });
+      setReviews(data);
+    } catch (e) {
+      if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+      else if (e instanceof CmsError) setErr("Could not load reviews (HTTP " + e.status + ").");
+      else setErr("Cannot reach the backend.");
+    }
     finally { setLoading(false); }
   }, [t]);
   useEffect(() => {
     load();
-    fetch("/api/strapi/admin/users/me").then((r) => (r.ok ? r.json() : null)).then((j) => { const u = j?.data ?? j; if (u?.email) setMe(u.email); }).catch(() => {});
+    cms.auth.me().then((u) => { if (u?.email) setMe(u.email); }).catch(() => {});
   }, [load]);
 
   async function move(rv: Review, to: string) {
     setBusy(rv.id);
     const hist = Array.isArray(rv.history) ? rv.history : [];
     const entry = { from: rv.stage, to, by: me, at: new Date().toISOString() };
-    const id = rv.documentId ?? rv.id;
+    const id = String(rv.documentId ?? rv.id);
     try {
       if (to === "published" && rv.contentType && rv.documentRef) {
-        await fetch("/api/strapi/content-manager/collection-types/" + rv.contentType + "/" + rv.documentRef + "/actions/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+        await cms.publish.publish(rv.contentType, rv.documentRef).catch(() => {});
       }
-      await fetch("/api/strapi/content-manager/collection-types/" + RV_UID + "/" + id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: to, history: [...hist, entry] }) });
+      await cms.entries.update(RV_UID, id, { stage: to, history: [...hist, entry] });
       await load();
     } catch {} finally { setBusy(null); }
   }
@@ -53,22 +55,23 @@ export default function ReviewBoard() {
     if (!f || !loc || !rv.contentType || !rv.documentRef) return;
     setBusy(rv.id); setFlash("");
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + rv.contentType + "/" + rv.documentRef + "?locale=" + encodeURIComponent(loc), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, locale: loc }) });
-      if (r.ok) {
-        const hist = Array.isArray(rv.history) ? rv.history : [];
-        const id = rv.documentId ?? rv.id;
-        await fetch("/api/strapi/content-manager/collection-types/" + RV_UID + "/" + id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: "approved", history: [...hist, { from: rv.stage, to: "applied:" + loc, by: me, at: new Date().toISOString() }] }) }).catch(() => {});
-        setFlash(t("tr.applied").replace("{loc}", loc.toUpperCase()));
-        await load();
-      } else setFlash("Apply failed (HTTP " + r.status + ").");
-    } catch { setFlash("Cannot reach the backend."); }
+      await cms.entries.update(rv.contentType, rv.documentRef, f, { locale: loc });
+      const hist = Array.isArray(rv.history) ? rv.history : [];
+      const id = String(rv.documentId ?? rv.id);
+      await cms.entries.update(RV_UID, id, { stage: "approved", history: [...hist, { from: rv.stage, to: "applied:" + loc, by: me, at: new Date().toISOString() }] }).catch(() => {});
+      setFlash(t("tr.applied").replace("{loc}", loc.toUpperCase()));
+      await load();
+    } catch (e) {
+      if (e instanceof CmsError) setFlash("Apply failed (HTTP " + e.status + ").");
+      else setFlash("Cannot reach the backend.");
+    }
     finally { setBusy(null); }
   }
 
   async function setAssignee(rv: Review, val: string) {
     if (val === (rv.assignee || "")) return;
-    const id = rv.documentId ?? rv.id;
-    try { await fetch("/api/strapi/content-manager/collection-types/" + RV_UID + "/" + id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignee: val }) }); } catch {}
+    const id = String(rv.documentId ?? rv.id);
+    try { await cms.entries.update(RV_UID, id, { assignee: val }); } catch {}
   }
 
   const actionsFor = (stage: string): { to: string; label: string; cls: string }[] => {

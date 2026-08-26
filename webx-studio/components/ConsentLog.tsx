@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Log = { id: number; documentId?: string; consentId?: string; action?: string; categories?: any; language?: string; path?: string; userAgent?: string; createdAt?: string };
 const CL_UID = "api::consent-log.consent-log";
@@ -27,12 +28,13 @@ export default function ConsentLog() {
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + CL_UID + "?sort=createdAt:DESC&pageSize=200");
-      if (r.status === 403) { setErr(t("c.noPerm")); setLoading(false); return; }
-      if (!r.ok) { setErr("Could not load consent logs (HTTP " + r.status + ")."); setLoading(false); return; }
-      const j = await r.json();
-      setLogs(j.results ?? j.data ?? []);
-    } catch { setErr("Cannot reach the backend."); }
+      const { data } = await cms.entries.list<Log>(CL_UID, { sort: "createdAt:DESC", pageSize: 200 });
+      setLogs(data);
+    } catch (e) {
+      if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+      else if (e instanceof CmsError) setErr("Could not load consent logs (HTTP " + e.status + ").");
+      else setErr("Cannot reach the backend.");
+    }
     finally { setLoading(false); }
   }, [t]);
   useEffect(() => { load(); }, [load]);

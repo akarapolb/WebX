@@ -6,6 +6,7 @@ import InlineText from "./InlineText";
 import BlockTypeEditor, { BlockType } from "./BlockTypeEditor";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Block = Record<string, any> & { __component: string };
 type Page = { docId: string; locale?: string; title: string };
@@ -113,13 +114,12 @@ export default function VisualBuilder() {
   const tenantKey = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   const loadPages = useCallback(async () => {
-    let qs = "?page=1&pageSize=50&sort=updatedAt:DESC";
-    if (tenantKey) qs += "&filters[tenant][key][$eq]=" + encodeURIComponent(tenantKey);
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + qs);
-      if (!r.ok) return setPages([]);
-      const j = await r.json();
-      const list = (j.results ?? j.data ?? []).map((e: any) => ({ docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "#" + (e.documentId ?? e.id) }));
+      const { data } = await cms.entries.list<any>(LANDING_UID, {
+        page: 1, pageSize: 50, sort: "updatedAt:DESC",
+        ...(tenantKey ? { filter: [{ field: "tenant.key", op: "eq" as const, value: tenantKey }] } : {}),
+      });
+      const list = data.map((e: any) => ({ docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "#" + (e.documentId ?? e.id) }));
       setPages(list);
       if (list[0]) open(list[0]);
     } catch { setPages([]); }
@@ -130,20 +130,24 @@ export default function VisualBuilder() {
   async function createPage() {
     setSaving(true); setMsg(null);
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Untitled page", active: true }) });
-      if (!r.ok) { setMsg({ t: "Could not create page (HTTP " + r.status + ")", ok: false }); setSaving(false); return; }
-      const j = await r.json(); const e = j.data ?? j;
+      const e: any = await cms.entries.create(LANDING_UID, { title: "Untitled page", active: true });
       const np = { docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "Untitled page" };
       await loadPages();
       setPages((ps) => (ps.some((p) => p.docId === np.docId) ? ps : [np, ...ps])); // ensure selector shows it
       open(np); // open the new (empty) page directly
       setMsg({ t: t("vb.pagecreated"), ok: true });
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+    } catch (e) {
+      if (e instanceof CmsError) setMsg({ t: "Could not create page (HTTP " + e.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setSaving(false); }
   }
 
   const loadTypes = useCallback(async () => {
     try {
+      // NOTE: intentionally left as a raw fetch — this $or/$null filter combo
+      // (tenant-scoped OR global block types) isn't expressible via the
+      // adapter's EntryQuery.filter (which only supports flat eq/ne/contains).
       let qs = "?pageSize=100";
       if (tenantKey) qs += "&filters[$or][0][tenant][key][$eq]=" + encodeURIComponent(tenantKey) + "&filters[$or][1][tenant][id][$null]=true";
       const r = await fetch("/api/strapi/content-manager/collection-types/api::block-type.block-type" + qs);
@@ -158,9 +162,7 @@ export default function VisualBuilder() {
   async function open(p: Page) {
     setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null);
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + p.docId + (p.locale ? "?locale=" + p.locale : ""));
-      const j = await r.json();
-      const data = j.data ?? j;
+      const data: any = await cms.entries.get(LANDING_UID, p.docId, p.locale ? { locale: p.locale } : undefined);
       const bl = (data.blocks ?? []) as Block[];
       setBlocks(bl); setActive(bl.length ? 0 : -1);
       setOtherBlocks((data.variantBlocks ?? []) as Block[]);
@@ -186,19 +188,20 @@ export default function VisualBuilder() {
   }
   async function uploadImg(i: number, file: File) {
     setUploadingI(i);
-    const fd = new FormData(); fd.append("files", file);
     try {
-      const r = await fetch("/api/strapi/upload", { method: "POST", body: fd });
-      if (r.ok) { const j = await r.json(); const f = Array.isArray(j) ? j[0] : j; if (f?.id) setField(i, "image", { id: f.id, url: f.url }); }
-    } finally { setUploadingI(-1); }
+      const asset = await cms.media.upload(file);
+      setField(i, "image", { id: asset.id, url: asset.url });
+    } catch {} finally { setUploadingI(-1); }
   }
   // custom blocks
   const addCustom = (ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); setBlocks((b) => { setActive(b.length); return [...b, { __component: "block.custom", typeKey: ct.key, props }]; }); };
   const setProp = (i: number, key: string, val: any) => setBlocks((b) => b.map((x, j) => (j === i ? { ...x, props: { ...(x.props || {}), [key]: val } } : x)));
   async function uploadProp(i: number, key: string, file: File) {
     setUploadingI(i);
-    const fd = new FormData(); fd.append("files", file);
-    try { const r = await fetch("/api/strapi/upload", { method: "POST", body: fd }); if (r.ok) { const j = await r.json(); const f = Array.isArray(j) ? j[0] : j; if (f?.id) setProp(i, key, { id: f.id, url: f.url }); } } finally { setUploadingI(-1); }
+    try {
+      const asset = await cms.media.upload(file);
+      setProp(i, key, { id: asset.id, url: asset.url });
+    } catch {} finally { setUploadingI(-1); }
   }
   const iconOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.icon || "grid") : (metaOf(b.__component)?.icon || "doc");
   const labelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
@@ -245,26 +248,32 @@ export default function VisualBuilder() {
     if (!sel) return;
     setSaving(true); setMsg(null);
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : ""), {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pageBody()),
-      });
-      setMsg(r.ok ? { t: t("vb.saved"), ok: true } : { t: "Save failed (HTTP " + r.status + ")", ok: false });
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      await cms.entries.update(LANDING_UID, sel.docId, pageBody(), sel.locale ? { locale: sel.locale } : undefined);
+      setMsg({ t: t("vb.saved"), ok: true });
+    } catch (e) {
+      if (e instanceof CmsError) setMsg({ t: "Save failed (HTTP " + e.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setSaving(false); }
   }
 
   async function publish() {
     if (!sel) return;
     setSaving(true); setMsg(null);
-    const base = "/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : "");
+    const opts = sel.locale ? { locale: sel.locale } : undefined;
     try {
-      const sv = await fetch(base, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pageBody()) });
-      if (!sv.ok) { setMsg({ t: "Save failed (HTTP " + sv.status + ")", ok: false }); setSaving(false); return; }
-      const pr = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + "/actions/publish" + (sel.locale ? "?locale=" + sel.locale : ""), { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      setMsg(pr.ok ? { t: t("vb.published"), ok: true } : { t: "Publish failed (HTTP " + pr.status + ")", ok: false });
-      if (pr.ok) await saveVersion("Published");
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      await cms.entries.update(LANDING_UID, sel.docId, pageBody(), opts);
+    } catch (e) {
+      setMsg(e instanceof CmsError ? { t: "Save failed (HTTP " + e.status + ")", ok: false } : { t: "Cannot reach the backend.", ok: false });
+      setSaving(false); return;
+    }
+    try {
+      await cms.publish.publish(LANDING_UID, sel.docId, opts);
+      setMsg({ t: t("vb.published"), ok: true });
+      await saveVersion("Published");
+    } catch (e) {
+      setMsg(e instanceof CmsError ? { t: "Publish failed (HTTP " + e.status + ")", ok: false } : { t: "Cannot reach the backend.", ok: false });
+    }
     finally { setSaving(false); }
   }
 
@@ -272,20 +281,15 @@ export default function VisualBuilder() {
   async function saveVersion(label: string) {
     if (!sel) return;
     try {
-      await fetch("/api/strapi/content-manager/collection-types/" + PV_UID, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ documentRef: sel.docId, contentType: LANDING_UID, label, data: { title: sel.title, blocks } }),
-      });
+      await cms.entries.create(PV_UID, { documentRef: sel.docId, contentType: LANDING_UID, label, data: { title: sel.title, blocks } });
     } catch {}
   }
   async function loadHistory() {
     if (!sel) return;
     setHistoryOpen(true); setVersions([]);
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + PV_UID + "?sort=createdAt:DESC&pageSize=50&filters[documentRef][$eq]=" + encodeURIComponent(sel.docId));
-      if (!r.ok) return;
-      const j = await r.json();
-      setVersions((j.results ?? j.data ?? []).map((e: any) => ({ id: e.documentId ?? e.id, label: e.label, createdAt: e.createdAt, data: e.data })));
+      const { data } = await cms.entries.list<any>(PV_UID, { sort: "createdAt:DESC", pageSize: 50, filter: [{ field: "documentRef", op: "eq", value: sel.docId }] });
+      setVersions(data.map((e: any) => ({ id: e.documentId ?? e.id, label: e.label, createdAt: e.createdAt, data: e.data })));
     } catch {}
   }
   function restore(v: any) {
@@ -298,9 +302,7 @@ export default function VisualBuilder() {
     if (!sel) return;
     setSchedOpen(true); setSched({ start: "", end: "" });
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : ""));
-      if (!r.ok) return;
-      const j = await r.json(); const d = j?.data ?? j;
+      const d: any = await cms.entries.get(LANDING_UID, sel.docId, sel.locale ? { locale: sel.locale } : undefined);
       setSched({ start: toLocalInput(d.publishStart), end: toLocalInput(d.publishEnd) });
     } catch {}
   }
@@ -309,11 +311,13 @@ export default function VisualBuilder() {
     setSaving(true); setMsg(null);
     try {
       const body: any = { publishStart: sched.start ? new Date(sched.start).toISOString() : null, publishEnd: sched.end ? new Date(sched.end).toISOString() : null };
-      if (sel.locale) body.locale = sel.locale;
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + LANDING_UID + "/" + sel.docId + (sel.locale ? "?locale=" + sel.locale : ""), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      setMsg(r.ok ? { t: t("vb.schedsaved"), ok: true } : { t: "Save failed (HTTP " + r.status + ")", ok: false });
-      if (r.ok) setSchedOpen(false);
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      await cms.entries.update(LANDING_UID, sel.docId, body, sel.locale ? { locale: sel.locale } : undefined);
+      setMsg({ t: t("vb.schedsaved"), ok: true });
+      setSchedOpen(false);
+    } catch (e) {
+      if (e instanceof CmsError) setMsg({ t: "Save failed (HTTP " + e.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setSaving(false); }
   }
 
@@ -328,10 +332,7 @@ export default function VisualBuilder() {
   async function loadAbStats() {
     if (!sel) return;
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + AB_UID + "?pageSize=2000&filters[documentRef][$eq]=" + encodeURIComponent(sel.docId));
-      if (!r.ok) return;
-      const j = await r.json();
-      const ev = (j.results ?? j.data ?? []) as any[];
+      const { data: ev } = await cms.entries.list<any>(AB_UID, { pageSize: 2000, filter: [{ field: "documentRef", op: "eq", value: sel.docId }] });
       const agg = { A: { view: 0, conversion: 0 }, B: { view: 0, conversion: 0 } };
       ev.forEach((e) => { const v = e.variant === "B" ? "B" : "A"; const k = e.kind === "conversion" ? "conversion" : "view"; (agg as any)[v][k]++; });
       setAbStats(agg);

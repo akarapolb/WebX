@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Plan = { id: string; name: string; price: string; items: number; seats: number; features: string[] };
 const PLANS: Plan[] = [
@@ -25,15 +26,17 @@ export default function Billing() {
   const load = useCallback(async () => {
     setErr(""); setMsg(null);
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + TEN + "?pageSize=1&filters[key][$eq]=" + encodeURIComponent(key || "dga"));
-      if (r.status === 403) { setErr(t("c.noPerm")); return; }
-      const j = r.ok ? await r.json() : null;
-      const tn = (j?.results ?? j?.data ?? [])[0] || null;
+      const { data } = await cms.entries.list<any>(TEN, { pageSize: 1, filter: [{ field: "key", op: "eq", value: key || "dga" }] });
+      const tn = data[0] || null;
       setTenant(tn);
       const seats = Array.isArray(tn?.adminEmails) ? tn.adminEmails.length : 0;
       const a = await fetch("/api/strapi/api/analytics/summary" + (key ? "?tenant=" + encodeURIComponent(key) : "")).then((x) => (x.ok ? x.json() : null)).catch(() => null);
       setUsage({ content: a?.contentTotal ?? 0, seats });
-    } catch { setErr("Cannot reach the backend."); }
+    } catch (e) {
+      if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+      else if (e instanceof CmsError) setErr("Could not load billing info (HTTP " + e.status + ").");
+      else setErr("Cannot reach the backend.");
+    }
   }, [key, t]);
   useEffect(() => { load(); }, [load]);
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
+import { cms } from "@/lib/cms";
 
 // First-run checklist for a new workspace. Steps auto-complete from real signals;
 // hides itself once everything's done or the user dismisses it (per workspace).
@@ -17,17 +18,20 @@ export default function Onboarding() {
   const [dismissed, setDismissed] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
-  const tf = key ? "&filters[tenant][key][$eq]=" + encodeURIComponent(key) : "";
   const count = useCallback(async (uid: string) => {
-    try { const r = await fetch("/api/strapi/content-manager/collection-types/" + uid + "?page=1&pageSize=1" + tf); const j = r.ok ? await r.json() : null; return j?.pagination?.total ?? 0; } catch { return 0; }
-  }, [tf]);
+    try {
+      const filter = key ? [{ field: "tenant.key", op: "eq" as const, value: key }] : undefined;
+      const { total } = await cms.entries.list(uid, { page: 1, pageSize: 1, filter });
+      return total ?? 0;
+    } catch { return 0; }
+  }, [key]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       let dis = false;
       try { dis = localStorage.getItem("webx_onboard_" + (key || "default")) === "1"; } catch {}
-      const tn = await fetch("/api/strapi/content-manager/collection-types/" + TEN + "?pageSize=1&filters[key][$eq]=" + encodeURIComponent(key || "dga")).then((r) => (r.ok ? r.json() : null)).then((j) => (j?.results ?? j?.data ?? [])[0]).catch(() => null);
+      const tn = await cms.entries.list<any>(TEN, { pageSize: 1, filter: [{ field: "key", op: "eq" as const, value: key || "dga" }] }).then((r) => r.data[0]).catch(() => null);
       const [content, landings] = await Promise.all([count("api::article.article"), count("api::landing.landing")]);
       if (!alive) return;
       setSteps([

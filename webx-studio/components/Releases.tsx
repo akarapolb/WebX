@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Item = { contentType: string; documentRef: string; title?: string };
 type Release = { id: number; documentId?: string; name: string; state: string; scheduledAt?: string; publishedAt?: string; items?: Item[]; updatedAt?: string };
@@ -20,24 +21,25 @@ export default function Releases() {
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const res = await fetch("/api/strapi/content-manager/collection-types/" + RL_UID + "?sort=updatedAt:DESC&pageSize=100");
-      if (res.status === 403) { setErr(t("c.noPerm")); setLoading(false); return; }
-      if (!res.ok) { setErr("Could not load releases (HTTP " + res.status + ")."); setLoading(false); return; }
-      const j = await res.json();
-      setReleases(j.results ?? j.data ?? []);
-    } catch { setErr("Cannot reach the backend."); }
+      const { data } = await cms.entries.list<Release>(RL_UID, { sort: "updatedAt:DESC", pageSize: 100 });
+      setReleases(data);
+    } catch (e) {
+      if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+      else if (e instanceof CmsError) setErr("Could not load releases (HTTP " + e.status + ").");
+      else setErr("Cannot reach the backend.");
+    }
     finally { setLoading(false); }
   }, [t]);
   useEffect(() => { load(); }, [load]);
 
-  const idOf = (r: Release) => r.documentId ?? r.id;
+  const idOf = (r: Release) => String(r.documentId ?? r.id);
   async function put(r: Release, data: any) {
-    await fetch("/api/strapi/content-manager/collection-types/" + RL_UID + "/" + idOf(r), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    await cms.entries.update(RL_UID, idOf(r), data);
   }
   async function create() {
     if (!newName.trim()) return;
     try {
-      await fetch("/api/strapi/content-manager/collection-types/" + RL_UID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName.trim(), state: "draft", items: [] }) });
+      await cms.entries.create(RL_UID, { name: newName.trim(), state: "draft", items: [] });
       setNewName(""); await load();
     } catch {}
   }
@@ -46,7 +48,7 @@ export default function Releases() {
     try {
       for (const it of r.items || []) {
         if (!it.contentType || !it.documentRef) continue;
-        await fetch("/api/strapi/content-manager/collection-types/" + it.contentType + "/" + it.documentRef + "/actions/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+        await cms.publish.publish(it.contentType, it.documentRef).catch(() => {});
       }
       await put(r, { state: "done", publishedAt: new Date().toISOString() });
       await load();
@@ -59,7 +61,7 @@ export default function Releases() {
   }
   async function unschedule(r: Release) { setBusy(r.id); try { await put(r, { state: "draft", scheduledAt: null }); await load(); } catch {} finally { setBusy(null); } }
   async function removeItem(r: Release, idx: number) { setBusy(r.id); const items = (r.items || []).filter((_, i) => i !== idx); try { await put(r, { items }); await load(); } catch {} finally { setBusy(null); } }
-  async function del(r: Release) { setBusy(r.id); try { await fetch("/api/strapi/content-manager/collection-types/" + RL_UID + "/" + idOf(r), { method: "DELETE" }); await load(); } catch {} finally { setBusy(null); } }
+  async function del(r: Release) { setBusy(r.id); try { await cms.entries.remove(RL_UID, idOf(r)); await load(); } catch {} finally { setBusy(null); } }
 
   const fmt = (iso?: string) => { if (!iso) return ""; try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; } };
   const stBadge = (s: string) => (s === "done" ? "b-ok" : s === "scheduled" ? "b-acc" : "b-mut");

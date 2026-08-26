@@ -1,18 +1,26 @@
 import { redirect } from "next/navigation";
-import { sessionToken, strapiMe, strapiGet } from "@/lib/strapi";
+import { sessionToken, sessionEngine, strapiMe, strapiGet } from "@/lib/strapi";
+import { wordpressMe } from "@/lib/wordpress";
+import { resolveMyTenant } from "@/lib/cms/governance";
 import Shell from "@/components/Shell";
 import SessionKeeper from "@/components/SessionKeeper";
 import { TenantProvider } from "@/components/TenantProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const token = await sessionToken();
-  const me = token ? await strapiMe(token) : null;
+  const engine = await sessionEngine();
+  const wp = engine === "wordpress";
+  const me = token ? await (wp ? wordpressMe(token) : strapiMe(token)) : null;
   if (!me) redirect("/login");
 
-  // Tenants come from the WebX console endpoint when present; otherwise a single workspace.
-  const ctx = await strapiGet<any>("/api/console/context");
+  // Tenants come from the WebX console endpoint when present; otherwise a
+  // single workspace. The console endpoint is Strapi-admin-session-only
+  // (multi-tenant switching only works within one engine — see the Phase 6
+  // plan) — a WordPress session always gets the single-workspace fallback,
+  // now resolved to that org's real tenant record rather than a placeholder.
+  const ctx = wp ? null : await strapiGet<any>("/api/console/context");
   const rawTenants = ctx?.tenants ?? ctx?.data?.tenants ?? [];
-  const tenants =
+  let tenants =
     Array.isArray(rawTenants) && rawTenants.length
       ? rawTenants.map((t: any, i: number) => ({
           key: t.key ?? t.slug ?? String(t.id ?? i),
@@ -20,17 +28,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           plan: t.plan ?? "Workspace",
           brand: t.brand ?? {},
         }))
-      : [{ key: "workspace", name: "My Workspace", plan: "Connected to Strapi", brand: {} }];
+      : [];
+  if (!tenants.length) {
+    const mine = wp ? await resolveMyTenant() : null;
+    tenants = [
+      mine
+        ? { key: mine.key, name: mine.name || mine.key, plan: "Connected to WordPress", brand: mine.brand ?? {} }
+        : { key: "workspace", name: "My Workspace", plan: wp ? "Connected to WordPress" : "Connected to Strapi", brand: {} },
+    ];
+  }
 
   const user = {
-    email: me.email ?? "",
-    name: [me.firstname, me.lastname].filter(Boolean).join(" ") || me.email || "Admin",
+    email: me.email ?? me.name ?? "",
+    name: wp ? (me.name || me.email || "Admin") : ([me.firstname, me.lastname].filter(Boolean).join(" ") || me.email || "Admin"),
   };
 
   return (
-    <TenantProvider tenants={tenants}>
+    <TenantProvider tenants={tenants} engine={engine}>
       <SessionKeeper />
-      <Shell user={user} connected={Boolean(ctx)}>{children}</Shell>
+      {/* Under WordPress there's no equivalent "extra" console endpoint to
+          probe — reaching this point already proves the session is valid. */}
+      <Shell user={user} connected={wp ? true : Boolean(ctx)}>{children}</Shell>
     </TenantProvider>
   );
 }

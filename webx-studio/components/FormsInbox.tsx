@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Row = Record<string, any>;
 const TABS = [
@@ -31,13 +32,13 @@ export default function FormsInbox() {
   const load = useCallback(async (uid: string) => {
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + uid + "?page=1&pageSize=25&sort=createdAt:DESC");
-      if (r.status === 403) { setErr(t("c.noPerm")); setRows([]); setLoading(false); return; }
-      if (!r.ok) { setRows([]); setLoading(false); return; }
-      const j = await r.json();
-      const list: Row[] = j.results ?? j.data ?? [];
-      setRows(list); setTotal(j.pagination?.total ?? list.length);
-    } catch { setErr("Cannot reach the backend."); }
+      const { data, total } = await cms.entries.list<Row>(uid, { page: 1, pageSize: 25, sort: "createdAt:DESC" });
+      setRows(data); setTotal(total ?? data.length);
+    } catch (e) {
+      if (e instanceof CmsError && e.status === 403) { setErr(t("c.noPerm")); setRows([]); }
+      else if (e instanceof CmsError) { setRows([]); }
+      else setErr("Cannot reach the backend.");
+    }
     finally { setLoading(false); }
   }, [t]);
 

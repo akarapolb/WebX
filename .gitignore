@@ -25,6 +25,11 @@ site/DGA-Website/bid/deck-assets/
 webx-studio/.next/
 webx-studio/.env.local
 
+# Next.js / public-site (static export output + env)
+public-site/.next/
+public-site/out/
+public-site/.env.local
+
 # OS / editor
 .DS_Store
 Thumbs.db

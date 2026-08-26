@@ -4,21 +4,27 @@
     {
       "name": "dga-site",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "C:/Users/Avalant/ClaudeCode/site/DGA-Website"],
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "site/DGA-Website"],
       "port": 8080
     },
     {
       "name": "webx-demo",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8090", "--directory", "C:/Users/Avalant/ClaudeCode/webx-studio/design"],
+      "runtimeArgs": ["-m", "http.server", "8090", "--directory", "webx-studio/design"],
       "port": 8090
     },
     {
       "name": "webx-studio",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "cwd": "C:/Users/Avalant/ClaudeCode/webx-studio",
+      "cwd": "webx-studio",
       "port": 3000
+    },
+    {
+      "name": "public-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8095", "--directory", "public-site/out"],
+      "port": 8095
     }
   ]
 }

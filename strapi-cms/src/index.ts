@@ -4,6 +4,7 @@ import {
   ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedDemos,
   seedTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
   ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB, seedCmsCore,
+  seedScheduler, ensureEditorPublishPermissions,
 } from './seed/seed';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) */
@@ -106,22 +107,13 @@ async function cleanupOldRecords(strapi: any) {
   }
 }
 
-/** เผยแพร่ release ที่ถึงกำหนดเวลา (scheduled → publish รายการ → done) */
-async function processDueReleases(strapi: any) {
-  const now = new Date();
-  const due = await strapi.documents('api::release.release').findMany({
-    filters: { state: 'scheduled', scheduledAt: { $lte: now.toISOString() } },
-    limit: 50,
-  });
-  for (const rel of due || []) {
-    const items = Array.isArray(rel.items) ? rel.items : [];
-    for (const it of items) {
-      if (!it?.contentType || !it?.documentRef) continue;
-      try { await strapi.documents(it.contentType).publish({ documentId: it.documentRef }); } catch (e) { /* ข้ามรายการที่ publish ไม่ได้ */ }
-    }
-    try { await strapi.documents('api::release.release').update({ documentId: rel.documentId, data: { state: 'done', publishedAt: now.toISOString() } }); } catch (e) { /* noop */ }
-  }
-}
+// Scheduled-release publishing used to live here (processDueReleases, a
+// setInterval below) — moved to webx-studio/lib/cms/governance.ts (Phase 5)
+// so it can publish through whichever CmsAdapter a release's items actually
+// belong to; this process's own document-service API can only ever reach
+// Strapi content, so a WordPress-backed release item could never publish.
+// Triggered externally now via POST /api/internal/releases/process-due on
+// webx-studio, not by a timer in this process — see that route for why.
 
 export default {
   /**
@@ -165,7 +157,12 @@ export default {
       const result = await next();
 
       // Audit Log — บันทึกการเขียนของผู้ดูแลหลังบ้าน (รวม super admin)
-      if (adminEmail && WRITE_ACTIONS.has(action)) {
+      // ข้ามการเขียนตรงนี้ถ้าเรียกผ่าน WebX (webx-studio/lib/cms/governance.ts เขียน
+      // audit row ของตัวเองแล้ว หลัง action สำเร็จ) — กันไม่ให้บันทึกซ้ำสอง row ต่อ
+      // การกระทำเดียว การเขียนตรงจาก Strapi admin panel (ไม่มี header นี้) ยังถูก
+      // บันทึกที่นี่ตามเดิม เป็น backstop ครอบคลุมเส้นทางที่ข้าม WebX
+      const governedByWebx = (reqCtx?.get ? reqCtx.get('x-webx-governed') : reqCtx?.request?.header?.['x-webx-governed']) === '1';
+      if (adminEmail && WRITE_ACTIONS.has(action) && !governedByWebx) {
         try {
           await strapi.db.query('api::audit-log.audit-log').create({
             data: {
@@ -201,13 +198,13 @@ export default {
       await ensureTenantAnalytics(strapi);
       await ensureTenantLiveChat(strapi);
       await seedEditors(strapi);
+      await seedScheduler(strapi);
       await grantLocalesToEditorRoles(strapi);
+      await ensureEditorPublishPermissions(strapi);
       await ensurePublicPermissions(strapi);
     } catch (err) {
       strapi.log.error('[bootstrap] seed/setup failed: ' + (err as Error).stack);
     }
-    // scheduled releases: ตรวจทุก 60 วินาที แล้วเผยแพร่รายการที่ถึงกำหนด
-    setInterval(() => { processDueReleases(strapi).catch(() => {}); }, 60_000);
     // housekeeping: ล้าง log/version เก่า ตอนบูตและทุก 6 ชั่วโมง
     cleanupOldRecords(strapi).catch(() => {});
     setInterval(() => { cleanupOldRecords(strapi).catch(() => {}); }, 6 * 60 * 60 * 1000);

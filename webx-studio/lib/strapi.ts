@@ -1,12 +1,35 @@
 // Server-only Strapi helpers. The opaque admin session token never leaves the server;
 // it is read from the httpOnly cookie and attached here (BFF pattern).
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { cookies } from "next/headers";
-import { STRAPI_URL, SESSION_COOKIE } from "./config";
+import { STRAPI_URL, SESSION_COOKIE, ENGINE_COOKIE } from "./config";
+
+// Lets a caller with no incoming request/cookies (the Phase 5 release
+// scheduler — see lib/cms/governance.ts's processDueReleases, which has no
+// admin session to read a cookie from) supply a token explicitly for the
+// duration of an async call tree. cms/{strapi,wordpress}.ts both read
+// whichever engine's token they need through this same sessionToken(), so
+// one override point covers either adapter.
+const tokenOverride = new AsyncLocalStorage<string>();
+export function withServiceToken<T>(token: string, fn: () => Promise<T>): Promise<T> {
+  return tokenOverride.run(token, fn);
+}
 
 export async function sessionToken(): Promise<string | null> {
+  const override = tokenOverride.getStore();
+  if (override) return override;
   const jar = await cookies();
   return jar.get(SESSION_COOKIE)?.value ?? null;
+}
+
+/** Which engine this session's token authenticates against — set at login
+ * (app/api/auth/login/route.ts) from the target tenant's own engine field,
+ * not a global switch (Phase 6). Defaults to "strapi" for older sessions
+ * created before this cookie existed. */
+export async function sessionEngine(): Promise<"strapi" | "wordpress"> {
+  const jar = await cookies();
+  return jar.get(ENGINE_COOKIE)?.value === "wordpress" ? "wordpress" : "strapi";
 }
 
 /** Exchange admin credentials for an opaque session token (Strapi 5 /admin/login). */

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms } from "@/lib/cms";
 
 type Role = { id: number; name: string };
 type CType = { uid: string; label: string };
@@ -23,10 +24,10 @@ export default function FieldAccess() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/strapi/admin/roles").then((r) => (r.ok ? r.json() : null)).then((j) => { const list = j?.data ?? j?.results ?? []; setRoles(list.map((r: any) => ({ id: r.id, name: r.name }))); }).catch(() => {});
-    fetch("/api/strapi/content-manager/content-types").then((r) => (r.ok ? r.json() : null)).then((j) => {
-      const list = (j?.data ?? []).filter((d: any) => typeof d.uid === "string" && d.uid.startsWith("api::") && !HIDE.has(d.uid));
-      setTypes(list.map((d: any) => ({ uid: d.uid, label: d.info?.displayName || d.uid.replace(/^api::/, "").replace(/\..*$/, "") })));
+    cms.auth.listRoles().then((list) => setRoles(list.map((r) => ({ id: r.id, name: r.name })))).catch(() => {});
+    cms.schema.listContentTypes().then((list) => {
+      const filtered = list.filter((d) => !HIDE.has(d.uid));
+      setTypes(filtered.map((d) => ({ uid: d.uid, label: d.name || d.uid.replace(/^api::/, "").replace(/\..*$/, "") })));
     }).catch(() => {});
   }, []);
 
@@ -34,14 +35,12 @@ export default function FieldAccess() {
     if (!rl || !ct) { setFields([]); return; }
     setLoading(true); setMsg(null); setHidden(new Set()); setReadonly(new Set()); setPolicyId(null);
     try {
-      const er = await fetch("/api/strapi/content-manager/collection-types/" + ct + "?pageSize=1");
-      const ej = await er.json();
-      const e = (ej.results ?? ej.data ?? [])[0];
+      const { data: sample } = await cms.entries.list<any>(ct, { pageSize: 1 });
+      const e = sample[0];
       const fs = e ? Object.keys(e).filter((k) => !SYS.has(k) && (typeof e[k] === "string" || typeof e[k] === "number" || typeof e[k] === "boolean" || e[k] == null)).slice(0, 40) : [];
       setFields(fs);
-      const pr = await fetch("/api/strapi/content-manager/collection-types/" + FP_UID + "?pageSize=1&filters[role][$eq]=" + encodeURIComponent(rl) + "&filters[contentType][$eq]=" + encodeURIComponent(ct));
-      const pj = await pr.json();
-      const p = (pj.results ?? pj.data ?? [])[0];
+      const { data: policies } = await cms.entries.list<any>(FP_UID, { pageSize: 1, filter: [{ field: "role", op: "eq", value: rl }, { field: "contentType", op: "eq", value: ct }] });
+      const p = policies[0];
       if (p) { setPolicyId(p.documentId ?? p.id); setHidden(new Set(Array.isArray(p.hidden) ? p.hidden : [])); setReadonly(new Set(Array.isArray(p.readonly) ? p.readonly : [])); }
     } catch {} finally { setLoading(false); }
   }, []);
@@ -53,8 +52,8 @@ export default function FieldAccess() {
     if (!role || !ctype) return;
     const body: any = { role, contentType: ctype, hidden: [...hidden], readonly: [...readonly] };
     try {
-      if (policyId) await fetch("/api/strapi/content-manager/collection-types/" + FP_UID + "/" + policyId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      else { const r = await fetch("/api/strapi/content-manager/collection-types/" + FP_UID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); const e = j.data ?? j; if (e?.documentId) setPolicyId(e.documentId); }
+      if (policyId) await cms.entries.update(FP_UID, policyId, body);
+      else { const e: any = await cms.entries.create(FP_UID, body); if (e?.documentId) setPolicyId(e.documentId); }
       setMsg({ t: t("fp.saved"), ok: true });
     } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
   }

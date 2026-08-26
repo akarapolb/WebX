@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 // Productizes Schema.org / JSON-LD (GEO/AEO) + meta into WebX: pick a content
 // type + entry → generate the right structured data from its fields, optionally
@@ -32,14 +33,14 @@ export default function SchemaGen() {
   const load = useCallback(async () => {
     setErr(""); setEntries([]); setSel(""); setJsonld(""); setMeta("");
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + uid + "?sort=updatedAt:DESC&pageSize=100&status=published");
-      if (r.status === 403) { setErr(t("c.noPerm")); return; }
-      if (!r.ok) { setErr("Could not load entries (HTTP " + r.status + ")."); return; }
-      const j = await r.json();
-      const list = j.results ?? j.data ?? [];
-      setEntries(list);
-      if (schema !== "FAQPage" && list[0]) setSel(String(list[0].documentId ?? list[0].id));
-    } catch { setErr("Cannot reach the backend."); }
+      const { data } = await cms.entries.list<Entry>(uid, { sort: "updatedAt:DESC", pageSize: 100, status: "published" });
+      setEntries(data);
+      if (schema !== "FAQPage" && data[0]) setSel(String(data[0].documentId ?? data[0].id));
+    } catch (e) {
+      if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
+      else if (e instanceof CmsError) setErr("Could not load entries (HTTP " + e.status + ").");
+      else setErr("Cannot reach the backend.");
+    }
   }, [uid, schema, t]);
   useEffect(() => { load(); }, [load]);
 

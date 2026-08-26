@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
 import RichText from "./RichText";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 type Kind = "input" | "textarea" | "rich";
 type Field = { key: string; value: string; initial: string; kind: Kind };
@@ -57,20 +58,20 @@ export default function EntryEditor({
   const [releases, setReleases] = useState<any[]>([]);
   const [fp, setFp] = useState<{ hidden: Set<string>; readonly: Set<string> }>({ hidden: new Set(), readonly: new Set() });
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const base = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + (locale ? "?locale=" + locale : "");
+  const locOpt = locale ? { locale } : undefined;
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(base);
-        if (!r.ok) { setMsg({ t: "Could not load entry (HTTP " + r.status + ")", ok: false }); setLoading(false); return; }
-        const j = await r.json();
-        const e = j.data ?? j;
+        const e: any = await cms.entries.get(uid, docId, locOpt);
         const fs: Field[] = Object.keys(e)
-          .filter((k) => !SYS.has(k) && (typeof e[k] === "string" || (RICH.has(k) && e[k] == null)))
+          .filter((k) => !SYS.has(k) && (typeof e[k] === "string" || typeof e[k] === "number" || (RICH.has(k) && e[k] == null)))
           .slice(0, 12)
           .map((k) => {
-            const v = typeof e[k] === "string" ? (e[k] as string) : "";
+            // Phase 10 — ACF number fields (year/order/etc, see wordpress.ts's
+            // normalizePost) round-trip as plain JS numbers; editing them as
+            // text is fine since WP/ACF coerces a numeric string back on save.
+            const v = typeof e[k] === "number" ? String(e[k]) : typeof e[k] === "string" ? (e[k] as string) : "";
             const kind: Kind = RICH.has(k) ? "rich" : (LONG.has(k) || v.length > 100 || v.includes("\n")) ? "textarea" : "input";
             return { key: k, value: v, initial: v, kind };
           });
@@ -95,31 +96,31 @@ export default function EntryEditor({
         }
         setMedia(m); setRels(rs);
         try {
-          const rr = await fetch("/api/strapi/content-manager/collection-types/api::review.review?pageSize=1&sort=updatedAt:DESC&filters[documentRef][$eq]=" + encodeURIComponent(docId));
-          if (rr.ok) { const rj = await rr.json(); setReview((rj.results ?? rj.data ?? [])[0] || null); }
+          const { data } = await cms.entries.list<any>("api::review.review", { pageSize: 1, sort: "updatedAt:DESC", filter: [{ field: "documentRef", op: "eq", value: docId }] });
+          setReview(data[0] || null);
         } catch {}
         try {
-          const rl = await fetch("/api/strapi/content-manager/collection-types/api::release.release?filters[state][$ne]=done&pageSize=50&sort=updatedAt:DESC");
-          if (rl.ok) { const lj = await rl.json(); setReleases(lj.results ?? lj.data ?? []); }
+          const { data } = await cms.entries.list<any>("api::release.release", { pageSize: 50, sort: "updatedAt:DESC", filter: [{ field: "state", op: "ne", value: "done" }] });
+          setReleases(data);
         } catch {}
         try {
-          const meR = await fetch("/api/strapi/admin/users/me");
-          const mj = meR.ok ? await meR.json() : null;
-          const myRoles = ((mj?.data ?? mj)?.roles || []).map((x: any) => x.name).filter(Boolean);
+          const meU = await cms.auth.me();
+          const myRoles = meU?.roles || [];
           if (myRoles.length) {
-            const pr = await fetch("/api/strapi/content-manager/collection-types/api::field-policy.field-policy?pageSize=100&filters[contentType][$eq]=" + encodeURIComponent(uid));
-            if (pr.ok) {
-              const pj = await pr.json(); const hid = new Set<string>(), ro = new Set<string>();
-              (pj.results ?? pj.data ?? []).forEach((p: any) => { if (myRoles.includes(p.role)) { (Array.isArray(p.hidden) ? p.hidden : []).forEach((f: string) => hid.add(f)); (Array.isArray(p.readonly) ? p.readonly : []).forEach((f: string) => ro.add(f)); } });
-              setFp({ hidden: hid, readonly: ro });
-            }
+            const { data } = await cms.entries.list<any>("api::field-policy.field-policy", { pageSize: 100, filter: [{ field: "contentType", op: "eq", value: uid }] });
+            const hid = new Set<string>(), ro = new Set<string>();
+            data.forEach((p) => { if (myRoles.includes(p.role)) { (Array.isArray(p.hidden) ? p.hidden : []).forEach((f: string) => hid.add(f)); (Array.isArray(p.readonly) ? p.readonly : []).forEach((f: string) => ro.add(f)); } });
+            setFp({ hidden: hid, readonly: ro });
           }
         } catch {}
-      } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      } catch (err) {
+        if (err instanceof CmsError) setMsg({ t: "Could not load entry (HTTP " + err.status + ")", ok: false });
+        else setMsg({ t: "Cannot reach the backend.", ok: false });
+      }
       finally { setLoading(false); }
     })();
     return () => { if (typer.current) clearInterval(typer.current); };
-  }, [base]);
+  }, [uid, docId, locale]);
 
   function setVal(key: string, value: string) {
     setFields((f) => f.map((x) => (x.key === key ? { ...x, value } : x)));
@@ -170,12 +171,13 @@ export default function EntryEditor({
 
   async function upload(file: File) {
     setUploading(true); setMsg(null);
-    const fd = new FormData(); fd.append("files", file);
     try {
-      const r = await fetch("/api/strapi/upload", { method: "POST", body: fd });
-      if (r.ok) { const j = await r.json(); const f = Array.isArray(j) ? j[0] : j; if (f?.id) setMedia((m) => ({ key: m?.key || "coverImage", url: f.url, mime: f.mime, name: f.name, newId: f.id })); }
-      else setMsg({ t: "Upload failed (HTTP " + r.status + ")", ok: false });
-    } catch { setMsg({ t: "Upload failed", ok: false }); }
+      const asset = await cms.media.upload(file);
+      setMedia((m) => ({ key: m?.key || "coverImage", url: asset.url, mime: asset.mime, name: asset.name, newId: asset.id }));
+    } catch (err) {
+      if (err instanceof CmsError) setMsg({ t: "Upload failed (HTTP " + err.status + ")", ok: false });
+      else setMsg({ t: "Upload failed", ok: false });
+    }
     finally { setUploading(false); }
   }
 
@@ -186,40 +188,54 @@ export default function EntryEditor({
     const payload: Record<string, any> = {};
     changed.forEach((f) => (payload[f.key] = f.value));
     if (media?.newId) payload[media.key] = media.newId;
-    if (locale) payload.locale = locale;
     try {
-      const r = await fetch(base, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (r.ok) {
-        setFields((f) => f.map((x) => ({ ...x, initial: x.value })));
-        setMsg({ t: t("e.savedDraft"), ok: true }); onSaved(); setTimeout(onClose, 700);
-      } else setMsg({ t: "Save failed (HTTP " + r.status + ")", ok: false });
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      await cms.entries.update(uid, docId, payload, locOpt);
+      setFields((f) => f.map((x) => ({ ...x, initial: x.value })));
+      setMsg({ t: t("e.savedDraft"), ok: true }); onSaved(); setTimeout(onClose, 700);
+    } catch (err) {
+      if (err instanceof CmsError) setMsg({ t: "Save failed (HTTP " + err.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setBusy(""); }
   }
 
   async function publish() {
     setBusy("publish"); setMsg(null);
-    const url = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + "/actions/publish" + (locale ? "?locale=" + locale : "");
     try {
-      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      if (r.ok) { setMsg({ t: t("e.publishedOk"), ok: true }); onSaved(); setTimeout(onClose, 800); }
-      else setMsg({ t: "Publish failed (HTTP " + r.status + ")", ok: false });
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      // Publish must reflect what's on screen, not just what was last
+      // saved — without this, editing fields and hitting Publish straight
+      // away silently discarded the edits and published the entry's old
+      // saved state (found live: typed a real title/body, published, the
+      // live post still said "Untitled Post" with no content).
+      const changed = fields.filter((f) => f.value !== f.initial);
+      if (changed.length > 0 || media?.newId) {
+        const payload: Record<string, any> = {};
+        changed.forEach((f) => (payload[f.key] = f.value));
+        if (media?.newId) payload[media.key] = media.newId;
+        await cms.entries.update(uid, docId, payload, locOpt);
+        setFields((f) => f.map((x) => ({ ...x, initial: x.value })));
+      }
+      await cms.publish.publish(uid, docId, locOpt);
+      setMsg({ t: t("e.publishedOk"), ok: true }); onSaved(); setTimeout(onClose, 800);
+    } catch (err) {
+      if (err instanceof CmsError) setMsg({ t: "Publish failed (HTTP " + err.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setBusy(""); }
   }
 
   async function submitReview() {
     setRevBusy(true);
     let actor = "admin";
-    try { const m = await fetch("/api/strapi/admin/users/me"); if (m.ok) { const j = await m.json(); const u = j.data ?? j; actor = u.email || actor; } } catch {}
+    try { const u = await cms.auth.me(); if (u?.email) actor = u.email; } catch {}
     const title = fields.find((f) => f.key === "title")?.value || (typeName + " " + docId.slice(0, 6));
     const hist = Array.isArray(review?.history) ? review.history : [];
     const entry = { from: review?.stage || "draft", to: "in_review", by: actor, at: new Date().toISOString() };
     try {
       if (review) {
-        await fetch("/api/strapi/content-manager/collection-types/api::review.review/" + (review.documentId ?? review.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: "in_review", title, history: [...hist, entry] }) });
+        await cms.entries.update("api::review.review", String(review.documentId ?? review.id), { stage: "in_review", title, history: [...hist, entry] });
       } else {
-        await fetch("/api/strapi/content-manager/collection-types/api::review.review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentRef: docId, contentType: uid, title, stage: "in_review", requestedBy: actor, history: [entry] }) });
+        await cms.entries.create("api::review.review", { documentRef: docId, contentType: uid, title, stage: "in_review", requestedBy: actor, history: [entry] });
       }
       setReview({ ...(review || {}), stage: "in_review", title });
       setMsg({ t: t("rv.submitted"), ok: true });
@@ -241,22 +257,24 @@ export default function EntryEditor({
 
   async function unpublishEntry() {
     setDelBusy("unpub"); setMsg(null);
-    const url = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + "/actions/unpublish" + (locale ? "?locale=" + locale : "");
     try {
-      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      if (r.ok) { setMsg({ t: t("e.unpublished"), ok: true }); onSaved(); }
-      else setMsg({ t: t("e.unpubFail") + " (HTTP " + r.status + ")", ok: false });
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      await cms.publish.unpublish(uid, docId, locOpt);
+      setMsg({ t: t("e.unpublished"), ok: true }); onSaved();
+    } catch (err) {
+      if (err instanceof CmsError) setMsg({ t: t("e.unpubFail") + " (HTTP " + err.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setDelBusy(""); }
   }
   async function deleteEntry() {
     setDelBusy("del"); setMsg(null);
-    const url = "/api/strapi/content-manager/collection-types/" + uid + "/" + docId + (locale ? "?locale=" + locale : "");
     try {
-      const r = await fetch(url, { method: "DELETE" });
-      if (r.ok) { setConfirmDel(false); onSaved(); onClose(); }
-      else setMsg({ t: t("e.delFail") + " (HTTP " + r.status + ")", ok: false });
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      await cms.entries.remove(uid, docId, locOpt);
+      setConfirmDel(false); onSaved(); onClose();
+    } catch (err) {
+      if (err instanceof CmsError) setMsg({ t: t("e.delFail") + " (HTTP " + err.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setDelBusy(""); }
   }
 
@@ -267,7 +285,7 @@ export default function EntryEditor({
     if (items.some((it: any) => it.documentRef === docId)) { setMsg({ t: t("rl.added"), ok: true }); return; }
     const title = fields.find((f) => f.key === "title")?.value || (typeName + " " + docId.slice(0, 6));
     try {
-      await fetch("/api/strapi/content-manager/collection-types/api::release.release/" + (rel.documentId ?? rel.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [...items, { contentType: uid, documentRef: docId, title }] }) });
+      await cms.entries.update("api::release.release", String(rel.documentId ?? rel.id), { items: [...items, { contentType: uid, documentRef: docId, title }] });
       setMsg({ t: t("rl.added"), ok: true });
     } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
   }
@@ -331,10 +349,10 @@ export default function EntryEditor({
                   )}
                 </div>
                 {f.kind === "input"
-                  ? <input value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro || busy} />
+                  ? <input data-testid={"field-" + f.key} value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro || busy} />
                   : f.kind === "rich"
                     ? <RichText value={f.value} onChange={(html) => setVal(f.key, html)} placeholder={labelize(f.key)} />
-                    : <textarea value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro || busy} />}
+                    : <textarea data-testid={"field-" + f.key} value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro || busy} />}
               </div>
             );
           })}

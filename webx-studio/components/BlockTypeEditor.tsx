@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { cms, CmsError } from "@/lib/cms";
 
 export type BlockType = { docId?: string; key: string; name: string; icon?: string; fieldsSchema?: Field[]; template?: string; tenantKey?: string };
 type Field = { key: string; label?: string; type: "text" | "textarea" | "richtext" | "image" };
@@ -23,6 +24,8 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
 
   const mapBt = (e: any): BlockType => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "", tenantKey: e.tenant?.key });
   // marketplace: every block type across tenants (+ global), to install into this workspace
+  // NOTE: needs populate=tenant to show provenance; CmsAdapter's EntryQuery has no populate
+  // support, so this stays a raw fetch (see migration report).
   const loadMarket = async () => {
     try {
       const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID + "?pageSize=100&sort=updatedAt:DESC&populate=tenant");
@@ -35,13 +38,16 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
     const key = (bt.key || "block").replace(/-[a-z0-9]{3,6}$/, "") + "-" + Math.random().toString(36).slice(2, 5);
     const body: any = { name: bt.name, key, icon: bt.icon || "grid", fieldsSchema: bt.fieldsSchema || [], template: bt.template || "" };
     if (tenantDoc) body.tenant = tenantDoc;
-    try { const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (r.ok) { setMsg({ t: t("bt.saved"), ok: true }); await load(); onSaved(); } } catch {}
+    try { await cms.entries.create(BT_UID, body); setMsg({ t: t("bt.saved"), ok: true }); await load(); onSaved(); } catch {}
   }
   async function shareGlobal() {
     if (!cur?.docId) return;
-    try { const r = await fetch("/api/strapi/content-manager/collection-types/" + BT_UID + "/" + cur.docId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenant: null }) }); if (r.ok) { setMsg({ t: t("bt.shared"), ok: true }); await load(); onSaved(); } } catch {}
+    try { await cms.entries.update(BT_UID, cur.docId, { tenant: null }); setMsg({ t: t("bt.shared"), ok: true }); await load(); onSaved(); } catch {}
   }
 
+  // NOTE: needs an OR filter (tenant.key = X OR tenant.id is null) which
+  // CmsAdapter's EntryQuery can't express (flat AND-only filters, no $null op),
+  // so this stays a raw fetch (see migration report).
   const load = async () => {
     try {
       let qs = "?pageSize=100&sort=updatedAt:DESC";
@@ -57,8 +63,8 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
   // resolve the current tenant's documentId so new block types are scoped to it
   useEffect(() => {
     if (!tenantKey) return;
-    fetch("/api/strapi/content-manager/collection-types/api::tenant.tenant?pageSize=1&filters[key][$eq]=" + encodeURIComponent(tenantKey))
-      .then((r) => (r.ok ? r.json() : null)).then((j) => { const tn = (j?.results ?? j?.data ?? [])[0]; if (tn) setTenantDoc(String(tn.documentId ?? tn.id)); }).catch(() => {});
+    cms.entries.list("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: tenantKey }] })
+      .then(({ data }) => { const tn = data[0]; if (tn) setTenantDoc(String((tn as any).documentId ?? (tn as any).id)); }).catch(() => {});
   }, [tenantKey]);
 
   const blank = (): BlockType => ({ key: "", name: "", icon: "grid", fieldsSchema: [{ key: "heading", label: "Heading", type: "text" }], template: "<section style=\"padding:40px;text-align:center\">\n  <h2>{{heading}}</h2>\n</section>" });
@@ -74,11 +80,13 @@ export default function BlockTypeEditor({ tenantKey, onClose, onSaved }: { tenan
     const body: any = { name: cur.name || key, key, icon: cur.icon || "grid", fieldsSchema: cur.fieldsSchema || [], template: cur.template || "" };
     if (tenantDoc && !cur.docId) body.tenant = tenantDoc;
     try {
-      const url = "/api/strapi/content-manager/collection-types/" + BT_UID + (cur.docId ? "/" + cur.docId : "");
-      const r = await fetch(url, { method: cur.docId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (r.ok) { setMsg({ t: t("bt.saved"), ok: true }); await load(); onSaved(); const j = await r.json().catch(() => null); const e = j?.data ?? j; if (e) setCur({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "" }); }
-      else setMsg({ t: "Save failed (HTTP " + r.status + ")", ok: false });
-    } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
+      const e: any = cur.docId ? await cms.entries.update(BT_UID, cur.docId, body) : await cms.entries.create(BT_UID, body);
+      setMsg({ t: t("bt.saved"), ok: true }); await load(); onSaved();
+      if (e) setCur({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, icon: e.icon, fieldsSchema: e.fieldsSchema || [], template: e.template || "" });
+    } catch (e) {
+      if (e instanceof CmsError) setMsg({ t: "Save failed (HTTP " + e.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
     finally { setSaving(false); }
   }
 

@@ -1,0 +1,102 @@
+/* ============================================================================
+ * 05-accessibility.css — accessibility-mode utility hooks
+ * ============================================================================
+ *
+ * Phase-11 note: the previous revision of this file carried several hundred
+ * lines styling an "access-drawer" panel (access-quick-grid, access-segment,
+ * access-toggle, access-float, etc.) that no component in
+ * templates/royalsociety/ actually renders — Header.tsx's own file comment
+ * documents its topbar ก-/ก/ก+/"ความคมชัด" controls as intentionally inert
+ * (no onClick, no drawer). That dead CSS is dropped here rather than
+ * reskinned. What ships instead is a small, real set of `body.access-*`
+ * utility hooks a future settings panel can toggle, plus the high-contrast
+ * override — kept because it's cheap insurance and standard practice for a
+ * government institutional site, not because anything wires it up yet.
+ *
+ * The controls that DO render today (.top-tool, .access-label,
+ * .skip-link-inline) are styled in 03-layout.css alongside the rest of the
+ * topbar; reduced-motion is handled once, in 02-base.css.
+ * ========================================================================== */
+
+html[data-font-size="small"] {
+  font-size: 15px;
+}
+
+html[data-font-size="large"] {
+  font-size: 18px;
+}
+
+body.access-readable {
+  font-family: Arial, Tahoma, sans-serif !important;
+}
+
+body.access-readable p,
+body.access-readable li,
+body.access-readable a,
+body.access-readable button {
+  line-height: 1.9 !important;
+}
+
+body.access-underline-links a {
+  text-decoration: underline !important;
+  text-underline-offset: 4px;
+}
+
+body.access-highlight-headings h1,
+body.access-highlight-headings h2,
+body.access-highlight-headings h3 {
+  background: var(--rs-gold-soft) !important;
+  color: var(--rs-ink) !important;
+  padding-inline: 0.12em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+body.access-spacing p,
+body.access-spacing li {
+  line-height: 2.05 !important;
+  letter-spacing: 0.015em;
+}
+
+body.access-big-cursor,
+body.access-big-cursor * {
+  cursor: pointer !important;
+}
+
+body.access-contrast {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body.access-contrast main,
+body.access-contrast section,
+body.access-contrast header,
+body.access-contrast footer,
+body.access-contrast .site-header,
+body.access-contrast .topbar {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body.access-contrast h1,
+body.access-contrast h2,
+body.access-contrast h3,
+body.access-contrast p,
+body.access-contrast span,
+body.access-contrast small,
+body.access-contrast strong,
+body.access-contrast a {
+  color: #fff !important;
+}
+
+body.access-contrast a,
+body.access-contrast button,
+body.access-contrast input {
+  border-color: #fff !important;
+}
+
+body.access-contrast button,
+body.access-contrast .round-action {
+  background: #111 !important;
+  color: #fff !important;
+}

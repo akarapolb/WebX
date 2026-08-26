@@ -1,0 +1,60 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DGA Guide ผู้ช่วยข้อมูลภาครัฐดิจิทัล">
+  <!--
+    DGA Guide — มาสคอตผู้ช่วยข้อมูลภาครัฐ (เวอร์ชัน SVG / interim)
+    โทน: navy #16294A, ขาว, ฟ้าเทา, ส้ม accent (DGA) · gender-neutral · เป็นมิตร น่าเชื่อถือ
+    พื้นหลังโปร่ง · สลับเป็นภาพ 3D ภายหลังได้โดยเปลี่ยนไฟล์นี้
+  -->
+  <defs>
+    <linearGradient id="g-blz" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1C355E"/><stop offset="1" stop-color="#142847"/></linearGradient>
+    <linearGradient id="g-skn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F1CDA9"/><stop offset="1" stop-color="#E3B488"/></linearGradient>
+    <linearGradient id="g-hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B2723"/><stop offset="1" stop-color="#1B1714"/></linearGradient>
+  </defs>
+
+  <!-- ไหล่/เสื้อสูทลำลอง -->
+  <path d="M26 200 C28 156 56 138 100 138 C144 138 172 156 174 200 Z" fill="url(#g-blz)"/>
+  <!-- ปกเสื้อ + เสื้อเชิ้ตขาว -->
+  <path d="M83 144 L100 178 L117 144 L108 138 L92 138 Z" fill="#F5F8FC"/>
+  <path d="M84 142 L100 160 L88 150 Z" fill="#D9E2F0"/>
+  <path d="M116 142 L100 160 L112 150 Z" fill="#D9E2F0"/>
+  <!-- สายคล้องบัตร -->
+  <path d="M95 142 L92 178 98 178 Z" fill="#13497A"/>
+  <path d="M105 142 L108 178 102 178 Z" fill="#13497A"/>
+  <!-- บัตรประจำตัวดิจิทัล + ไอคอนโล่ -->
+  <rect x="89" y="172" width="22" height="26" rx="5" fill="#EE5020"/>
+  <rect x="93" y="176" width="14" height="3" rx="1.5" fill="#fff" opacity=".9"/>
+  <path d="M100 181 l5.5 2 v3.4 c0 3.2 -2.3 5.4 -5.5 6.4 c-3.2 -1 -5.5 -3.2 -5.5 -6.4 v-3.4 z" fill="#fff"/>
+  <path d="M97.4 186.2 l1.8 1.8 3.4 -3.6" stroke="#EE5020" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- คอ -->
+  <rect x="90" y="118" width="20" height="30" rx="9" fill="url(#g-skn)"/>
+  <path d="M90 130 q10 9 20 0 v-12 h-20 z" fill="#D6A171" opacity=".45"/>
+  <!-- หู -->
+  <ellipse cx="63" cy="95" rx="7" ry="10" fill="url(#g-skn)"/>
+  <ellipse cx="137" cy="95" rx="7" ry="10" fill="url(#g-skn)"/>
+  <!-- ศีรษะ -->
+  <path d="M61 90 C61 58 78 42 100 42 C122 42 139 58 139 90 C139 115 122 131 100 131 C78 131 61 115 61 90 Z" fill="url(#g-skn)"/>
+  <!-- ผมทรงสุภาพ gender-neutral -->
+  <path d="M59 92 C54 56 78 36 100 36 C122 36 146 56 141 92 C141 76 133 68 124 68 C119 57 108 55 100 55 C92 55 81 57 76 68 C67 68 59 76 59 92 Z" fill="url(#g-hair)"/>
+
+  <!-- คิ้ว -->
+  <path d="M77 84 q9 -4 17 0" stroke="#2B2723" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M106 84 q9 -4 17 0" stroke="#2B2723" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- ตา (เป็นมิตร) -->
+  <circle cx="85" cy="95" r="4.6" fill="#23313F"/><circle cx="86.6" cy="93.4" r="1.5" fill="#fff"/>
+  <circle cx="115" cy="95" r="4.6" fill="#23313F"/><circle cx="116.6" cy="93.4" r="1.5" fill="#fff"/>
+  <!-- แก้มอมชมพูจาง -->
+  <ellipse cx="79" cy="107" rx="6.5" ry="3.6" fill="#EE5020" opacity=".13"/>
+  <ellipse cx="121" cy="107" rx="6.5" ry="3.6" fill="#EE5020" opacity=".13"/>
+  <!-- จมูก -->
+  <path d="M100 99 q3.5 6 -2 9.5" stroke="#D29A6B" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- ยิ้มอย่างอบอุ่น -->
+  <path d="M87 112 q13 10 26 0" stroke="#9A4B2E" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+  <!-- โหนดข้อมูล/สัญญาณ (สื่อบริการดิจิทัลที่เชื่อมโยง) -->
+  <circle cx="42" cy="150" r="3.4" fill="#7FB1E6"/>
+  <circle cx="31" cy="167" r="2.4" fill="#AECBEC"/>
+  <line x1="42" y1="150" x2="31" y2="167" stroke="#7FB1E6" stroke-width="1.2" opacity=".6"/>
+  <circle cx="160" cy="151" r="3.4" fill="#EE5020" opacity=".85"/>
+  <circle cx="170" cy="166" r="2.4" fill="#F6A07C"/>
+  <line x1="160" y1="151" x2="170" y2="166" stroke="#EE5020" stroke-width="1.2" opacity=".5"/>
+</svg>

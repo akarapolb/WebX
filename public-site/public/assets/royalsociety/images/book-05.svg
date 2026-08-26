@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 220">
+<defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#073b34"/><stop offset="1" stop-color="#b99143"/></linearGradient></defs>
+<rect width="160" height="220" rx="14" fill="url(#g)"/><rect x="16" y="18" width="128" height="184" rx="8" fill="none" stroke="#f2d987" stroke-width="3"/>
+<path d="M80 38c14 18 20 32 20 48 0 19-9 35-20 51-11-16-20-32-20-51 0-16 6-30 20-48Z" fill="none" stroke="#f2d987" stroke-width="4"/>
+<text x="80" y="158" text-anchor="middle" font-family="serif" font-size="18" fill="#f2d987" font-weight="700">องค์ความรู้</text>
+<text x="80" y="184" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#fffaf1">เล่มที่ 5</text>
+</svg>

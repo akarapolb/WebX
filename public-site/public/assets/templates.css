@@ -1,0 +1,54 @@
+/* ============================================================
+   templates.css — เทมเพลตสำเร็จรูป 3 แบบ (no-code) · TOR ภาคผนวก ก ข้อ 3.1
+   เลือกผ่าน CMS → tenant.js ใส่ html[data-template="a|b|c"]
+   แต่ละแบบคุม Style + Layout ด้วย CSS ล้วน (ไม่แตะ HTML)
+   A = มาตรฐาน (ค่าเริ่มต้น) · B = คม/กระชับ · C = โค้งมน/โปร่ง
+   ============================================================ */
+
+/* ---------- Template B — คม กระชับ เป็นทางการ ---------- */
+html[data-template="b"] {
+  --radius-sm: 2px; --radius-md: 3px; --radius-lg: 5px; --radius-xl: 6px;
+}
+html[data-template="b"] .btn,
+html[data-template="b"] .wx-tile,
+html[data-template="b"] .ga-post,
+html[data-template="b"] .card { border-radius: 3px !important; }
+html[data-template="b"] .btn { text-transform: none; letter-spacing: .01em; }
+html[data-template="b"] .site-header { border-bottom: 3px solid var(--c-primary); }
+html[data-template="b"] .hero, html[data-template="b"] .home-hero { border-radius: 0 !important; }
+html[data-template="b"] .mega-col h3,
+html[data-template="b"] .section-head h2 { border-left: 4px solid var(--c-primary); padding-left: 10px; }
+html[data-template="b"] section { padding-top: 2.2rem !important; padding-bottom: 2.2rem !important; } /* กระชับ */
+
+/* ---------- Template C — โค้งมน โปร่ง ทันสมัย ---------- */
+html[data-template="c"] {
+  --radius-sm: 12px; --radius-md: 16px; --radius-lg: 22px; --radius-xl: 30px;
+  --fs-display: 3.3rem; --fs-h1: 2.7rem;
+}
+html[data-template="c"] .btn { border-radius: 999px !important; padding: 13px 26px; }
+html[data-template="c"] .card,
+html[data-template="c"] .ga-post,
+html[data-template="c"] .wx-tile { border-radius: 22px !important; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+html[data-template="c"] .site-header { backdrop-filter: blur(8px); }
+html[data-template="c"] section { padding-top: 4.5rem !important; padding-bottom: 4.5rem !important; } /* โปร่ง */
+html[data-template="c"] .hero, html[data-template="c"] .home-hero { border-radius: 0 0 32px 32px !important; }
+
+/* ---------- ตัวอย่างย่อ (ใช้ในหน้าพรีวิวของ Console) ---------- */
+.tpl-preview { border: 1px solid var(--c-border); border-radius: var(--radius-md); overflow: hidden; background: var(--c-bg); }
+.tpl-preview .tp-bar { height: 34px; background: var(--c-primary); display: flex; align-items: center; padding: 0 12px; gap: 6px; }
+.tpl-preview .tp-bar i { width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,.6); }
+.tpl-preview .tp-body { padding: 14px; }
+.tpl-preview .tp-h { height: 12px; width: 60%; background: var(--c-text); opacity: .8; border-radius: 4px; margin-bottom: 8px; }
+.tpl-preview .tp-line { height: 8px; background: var(--c-border-strong); border-radius: 4px; margin-bottom: 6px; }
+.tpl-preview .tp-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+.tpl-preview .tp-card { height: 44px; background: var(--c-surface); border: 1px solid var(--c-border); }
+.tpl-preview .tp-btn { display: inline-block; height: 22px; width: 70px; background: var(--c-action); margin-top: 10px; }
+.tpl-preview[data-template="b"] .tp-card, .tpl-preview[data-template="b"] .tp-btn { border-radius: 2px; }
+.tpl-preview[data-template="c"] .tp-card { border-radius: 14px; }
+.tpl-preview[data-template="c"] .tp-btn { border-radius: 999px; }
+
+/* ---------- ลายน้ำคลังภาพ (TOR 6.11) ---------- */
+.gb-wm { position: relative; }
+.gb-wm::after { content: attr(data-wm); position: absolute; right: 8px; bottom: 8px; color: rgba(255,255,255,.78);
+  font-size: 12px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.6); pointer-events: none; letter-spacing: .02em; }
+.gb-lb__wm { position: absolute; right: 22px; bottom: 50px; color: rgba(255,255,255,.7); font-size: 14px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.7); pointer-events: none; }

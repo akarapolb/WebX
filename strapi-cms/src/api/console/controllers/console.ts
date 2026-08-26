@@ -51,9 +51,12 @@ location.replace(redirect);
     const sup = await isSuperAdmin(strapi, admin.id);
 
     const all = await strapi.db.query('api::tenant.tenant')
-      .findMany({ select: ['key', 'name', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat'], limit: 200 }).catch(() => []);
+      .findMany({ select: ['key', 'name', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat', 'engine'], limit: 200 }).catch(() => []);
     const mine = all.filter((t: any) => (t.adminEmails || []).map(lc).includes(email));
-    const allowed = sup ? all : mine;
+    // A Strapi admin session can't operate a WordPress-engine tenant's content
+    // (different credential scheme entirely — see the Phase 6 plan), so don't
+    // offer it as a switch target here even for super admins.
+    const allowed = (sup ? all : mine).filter((t: any) => (t.engine || 'strapi') !== 'wordpress');
 
     ctx.body = {
       admin: { email: admin.email, firstname: admin.firstname || '', isSuper: sup },

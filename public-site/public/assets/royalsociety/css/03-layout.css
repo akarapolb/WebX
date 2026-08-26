@@ -1,0 +1,929 @@
+/* ============================================================================
+ * 03-layout.css — Header / main nav / mega-menu / mobile drawer / footer
+ * ============================================================================
+ *
+ * Phase-11 full visual rebuild, paired with Header.tsx / Footer.tsx /
+ * MobileMenuToggle.tsx (markup unchanged from the prior port — this file
+ * only supplies new, token-driven presentation).
+ *
+ * Responsive discipline (do not regress this): the sister ORST tenant once
+ * shipped a header where nav items overflowed and visually collided with the
+ * logo/buttons at common laptop widths (1200–1700px) because flex/grid
+ * children were never given room to shrink. The fix pattern kept here:
+ *   - .header-inner is a 3-column grid with the nav column set to
+ *     `minmax(0, 1fr)` — the `0` minimum is what lets it shrink below its
+ *     content size instead of pushing the grid wider than the viewport.
+ *   - Nav link padding/font-size are fluid via clamp(), so link width itself
+ *     shrinks continuously as the viewport narrows, rather than jumping at a
+ *     single breakpoint.
+ *   - Below 1280px the nav collapses to a hamburger + drawer entirely, so it
+ *     never has to be legible at a width too narrow for 7 Thai nav labels.
+ * Verified at 375 / 768 / 1280 / 1440 / 1920px — see build notes.
+ * ========================================================================== */
+
+#app-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--rs-z-header);
+  width: 100%;
+}
+
+/* ==========================================================================
+ * Topbar — accessibility tools + utility links
+ * ========================================================================== */
+
+.topbar {
+  background: var(--rs-primary-strong);
+  color: #fff;
+}
+
+.topbar-inner,
+.topbar .container {
+  min-height: var(--rs-topbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rs-space-4);
+}
+
+.topbar-access,
+.topbar-links {
+  display: flex;
+  align-items: center;
+  gap: var(--rs-space-3);
+  min-width: 0;
+}
+
+.skip-link-inline,
+.topbar-links a {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.skip-link-inline {
+  padding-right: var(--rs-space-3);
+  margin-right: 2px;
+  border-right: 1px solid rgba(255, 255, 255, 0.24);
+  font-weight: 700;
+}
+
+.skip-link-inline:hover,
+.topbar-links a:hover {
+  color: var(--rs-gold-soft);
+}
+
+.access-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.access-label .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.top-tool {
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: var(--rs-radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  transition: background var(--rs-transition), color var(--rs-transition), border-color var(--rs-transition);
+}
+
+.top-tool:hover,
+.top-tool.is-on,
+.top-tool[aria-pressed="true"] {
+  background: var(--rs-gold);
+  border-color: var(--rs-gold);
+  color: var(--rs-primary-strong);
+}
+
+/* ==========================================================================
+ * Site header — brand / main nav / mega-menu / header actions
+ * ========================================================================== */
+
+.site-header {
+  background: rgba(251, 247, 239, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--rs-line-gold);
+}
+
+.header-inner {
+  min-height: var(--rs-header-h);
+  display: grid;
+  grid-template-columns: minmax(240px, 370px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(14px, 1.5vw, 28px);
+}
+
+.brand {
+  min-width: 0;
+  max-width: 370px;
+  display: flex;
+  align-items: center;
+  gap: var(--rs-space-3);
+  color: var(--rs-primary);
+}
+
+.brand-logo-img,
+.brand-mark {
+  width: clamp(44px, 3.6vw, 58px);
+  height: clamp(44px, 3.6vw, 58px);
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.brand-text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.brand-title {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rs-primary);
+  font-family: var(--rs-font-display);
+  font-size: clamp(1.05rem, 1.05vw, 1.34rem);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.main-nav {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(2px, 0.45vw, 8px);
+}
+
+.main-nav > a {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px clamp(9px, 0.62vw, 14px);
+  border-radius: var(--rs-radius-sm);
+  color: var(--rs-ink);
+  font-size: clamp(0.86rem, 0.78vw, 0.96rem);
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background var(--rs-transition), color var(--rs-transition);
+}
+
+.main-nav > a:hover,
+.main-nav > a:focus-visible,
+.main-nav > a[aria-expanded="true"] {
+  background: var(--rs-gold-soft);
+  color: var(--rs-primary);
+}
+
+.main-nav > a.active {
+  color: var(--rs-primary);
+}
+
+.main-nav > a.active::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 3px;
+  height: 2px;
+  background: var(--rs-gold);
+}
+
+.nav-caret {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rs-gold);
+  transition: transform var(--rs-transition);
+}
+
+.nav-caret svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.main-nav > a:hover .nav-caret,
+.main-nav > a[aria-expanded="true"] .nav-caret {
+  transform: rotate(180deg);
+}
+
+.header-actions {
+  min-width: max-content;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--rs-space-2);
+}
+
+.round-action {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 clamp(12px, 1vw, 18px);
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-surface);
+  color: var(--rs-primary);
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background var(--rs-transition), border-color var(--rs-transition), transform var(--rs-transition);
+}
+
+.round-action:hover {
+  border-color: var(--rs-gold);
+  background: var(--rs-gold-soft);
+  transform: translateY(-1px);
+}
+
+.round-action.primary {
+  background: var(--rs-primary);
+  border-color: var(--rs-primary);
+  color: #fff;
+  box-shadow: var(--rs-shadow-card);
+}
+
+.round-action.primary:hover {
+  background: var(--rs-primary-strong);
+}
+
+/* Mega menu — CSS-only hover/focus reveal (Header.tsx ships a small inline
+   <style> with the actual :hover/:focus-within selectors; this file only
+   supplies the closed-state layout, which those selectors flip to block). */
+
+.main-nav > .mega-menu {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  width: min(1080px, calc(100vw - 48px));
+  z-index: var(--rs-z-mega);
+  padding-top: 14px;
+}
+
+.mega-inner {
+  display: grid;
+  grid-template-columns: minmax(250px, 320px) 1fr;
+  gap: var(--rs-space-5);
+  max-height: min(70vh, 600px);
+  overflow: auto;
+  padding: var(--rs-space-5);
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-surface);
+  box-shadow: var(--rs-shadow-lift);
+}
+
+.mega-feature {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 220px;
+  padding: var(--rs-space-5);
+  border-radius: var(--rs-radius-sm);
+  background: linear-gradient(150deg, var(--rs-primary), var(--rs-primary-strong));
+  color: #fff;
+}
+
+.mega-feature small {
+  color: var(--rs-gold-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mega-feature h3 {
+  margin: var(--rs-space-2) 0;
+  color: #fff;
+  font-size: 1.35rem;
+}
+
+.mega-feature p {
+  margin: 0 0 var(--rs-space-4);
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.7;
+}
+
+.mega-feature a {
+  display: inline-flex;
+  width: fit-content;
+  padding: 9px 16px;
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-gold);
+  color: var(--rs-primary-strong);
+  font-weight: 700;
+}
+
+.mega-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--rs-space-4);
+}
+
+.mega-group {
+  padding: var(--rs-space-4);
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-ground);
+}
+
+.mega-group h4 {
+  margin: 0 0 var(--rs-space-2);
+  color: var(--rs-primary);
+  font-family: var(--rs-font-body);
+  font-size: 0.98rem;
+}
+
+.mega-group a {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--rs-space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rs-line);
+  color: var(--rs-ink-soft);
+  font-weight: 600;
+}
+
+.mega-group a:last-child {
+  border-bottom: 0;
+}
+
+.mega-group a:hover {
+  color: var(--rs-primary);
+}
+
+.mega-group a::after {
+  content: "→";
+  color: var(--rs-gold);
+}
+
+.mobile-toggle {
+  display: none;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-surface);
+  place-items: center;
+}
+
+.mobile-toggle span {
+  width: 20px;
+  height: 2px;
+  margin: 3px auto;
+  border-radius: 1px;
+  background: var(--rs-primary);
+  display: block;
+}
+
+/* ==========================================================================
+ * Mobile drawer
+ * ========================================================================== */
+
+.rs-mobile-panel {
+  position: fixed;
+  inset: 0;
+  z-index: var(--rs-z-overlay);
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: var(--rs-space-4);
+  background: rgba(6, 20, 17, 0.55);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--rs-transition-slow), visibility var(--rs-transition-slow);
+}
+
+.rs-mobile-panel[hidden] {
+  display: flex;
+}
+
+.rs-mobile-panel.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.rs-mobile-drawer {
+  width: min(420px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--rs-radius-card);
+  background: var(--rs-surface);
+  border: 1px solid var(--rs-line-gold);
+  box-shadow: var(--rs-shadow-lift);
+  transform: translateX(24px);
+  opacity: 0;
+  transition: transform var(--rs-transition-slow), opacity var(--rs-transition-slow);
+}
+
+.rs-mobile-panel.is-open .rs-mobile-drawer {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.rs-mobile-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rs-space-3);
+  padding: var(--rs-space-4);
+  background: var(--rs-surface);
+  border-bottom: 1px solid var(--rs-line-gold);
+}
+
+.rs-mobile-head strong {
+  color: var(--rs-primary);
+  font-family: var(--rs-font-display);
+  font-size: 1.1rem;
+}
+
+.rs-mobile-head .round-action {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.rs-mobile-search {
+  margin: var(--rs-space-4);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--rs-space-2);
+  min-height: 50px;
+  padding: 0 var(--rs-space-3);
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-ground);
+}
+
+.rs-mobile-search .icon {
+  color: var(--rs-primary);
+}
+
+.rs-mobile-search input {
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.rs-mobile-acc {
+  display: grid;
+  gap: var(--rs-space-2);
+  padding: 0 var(--rs-space-4) var(--rs-space-4);
+}
+
+.rs-mobile-direct,
+.rs-mobile-acc summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rs-space-3);
+  min-height: 52px;
+  padding: 0 var(--rs-space-4);
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-sm);
+  color: var(--rs-primary);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.rs-mobile-acc summary::-webkit-details-marker {
+  display: none;
+}
+
+.rs-mobile-acc details[open] summary {
+  background: var(--rs-gold-soft);
+  border-color: var(--rs-gold);
+}
+
+.rs-mobile-acc summary .icon {
+  width: 16px;
+  height: 16px;
+  transition: transform var(--rs-transition);
+}
+
+.rs-mobile-acc details[open] summary .icon {
+  transform: rotate(180deg);
+}
+
+.rs-mobile-links {
+  display: grid;
+  gap: var(--rs-space-2);
+  padding-top: var(--rs-space-2);
+}
+
+.rs-mobile-links a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin-left: var(--rs-space-3);
+  padding: 0 var(--rs-space-4);
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-ground);
+  color: var(--rs-ink-soft);
+  font-weight: 600;
+}
+
+.rs-mobile-links a:hover {
+  color: var(--rs-primary);
+}
+
+body.mobile-menu-lock {
+  overflow: hidden;
+}
+
+/* ==========================================================================
+ * Footer
+ * ========================================================================== */
+
+.site-footer {
+  background: linear-gradient(165deg, var(--rs-primary) 0%, var(--rs-primary-strong) 100%);
+  color: #fff;
+}
+
+.footer-main {
+  display: grid;
+  grid-template-columns: 1.3fr repeat(3, minmax(0, 1fr));
+  gap: var(--rs-space-6);
+  padding: var(--rs-space-8) 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.footer-brand {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--rs-space-3);
+}
+
+.footer-brand .brand-mark {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+}
+
+.site-footer h3,
+.footer-brand h3 {
+  margin: 0 0 var(--rs-space-2);
+  color: #fff;
+  font-size: 1.2rem;
+}
+
+.site-footer h4 {
+  margin: 0 0 var(--rs-space-3);
+  color: var(--rs-gold-soft);
+  font-family: var(--rs-font-body);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.site-footer p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.75;
+}
+
+.site-footer ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--rs-space-2);
+}
+
+.site-footer li {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.site-footer a {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.site-footer a:hover {
+  color: var(--rs-gold-soft);
+}
+
+.socials {
+  display: flex;
+  gap: var(--rs-space-2);
+  margin-top: var(--rs-space-4);
+}
+
+.socials a {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+}
+
+.socials a:hover {
+  background: var(--rs-gold);
+  color: var(--rs-primary-strong);
+}
+
+.newsletter {
+  display: flex;
+  margin-top: var(--rs-space-3);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: var(--rs-radius-sm);
+  overflow: hidden;
+}
+
+.newsletter input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.newsletter input::placeholder {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.newsletter button {
+  border: 0;
+  padding: 0 18px;
+  background: var(--rs-gold);
+  color: var(--rs-primary-strong);
+  font-weight: 700;
+}
+
+.newsletter button:hover {
+  background: var(--rs-gold-strong);
+  color: #fff;
+}
+
+.footer-map-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
+  gap: var(--rs-space-5);
+  align-items: stretch;
+  padding: var(--rs-space-6) 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.footer-map-info {
+  padding: var(--rs-space-5);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--rs-radius-card);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.footer-map-info h4 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.footer-map-info p {
+  margin-top: var(--rs-space-2);
+  font-size: 0.92rem;
+}
+
+.footer-map-info a {
+  margin-top: var(--rs-space-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rs-space-2);
+  padding: 10px 18px;
+  border-radius: var(--rs-radius-sm);
+  background: var(--rs-gold);
+  color: var(--rs-primary-strong);
+  font-weight: 700;
+}
+
+.footer-map-info a:hover {
+  background: var(--rs-gold-strong);
+  color: #fff;
+}
+
+.footer-map-box {
+  min-height: 230px;
+  overflow: hidden;
+  border-radius: var(--rs-radius-card);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.footer-map-box iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 230px;
+  border: 0;
+  filter: saturate(0.9) contrast(0.96);
+}
+
+.footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rs-space-4);
+  padding: var(--rs-space-4) 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.88rem;
+}
+
+.footer-bottom div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rs-space-4);
+}
+
+/* ==========================================================================
+ * Responsive
+ * ========================================================================== */
+
+@media (max-width: 1700px) {
+  .header-inner {
+    grid-template-columns: minmax(220px, 320px) minmax(0, 1fr) auto;
+  }
+
+  .brand {
+    max-width: 320px;
+  }
+}
+
+@media (max-width: 1500px) {
+  .header-inner {
+    gap: 14px;
+  }
+
+  .main-nav > a {
+    padding-inline: 9px;
+    font-size: 0.88rem;
+  }
+
+  .round-action {
+    padding-inline: 14px;
+  }
+}
+
+@media (max-width: 1700px) {
+  /* Phase 10 fix: measured live, the 7-item nav's real content still
+     overflows its flex box even at this file's own reduced 1500px tier —
+     confirmed via getBoundingClientRect() bleeding past the nav's own
+     container edges (justify-content:center bleeds overflow symmetrically
+     on both sides once content doesn't fit, so the first/last items end up
+     outside the container's own bounds) at 1440/1500/1600px, first
+     resolving at 1700px. The header-inner comment above this block claimed
+     "verified at 1280/1440/1920px" but 1440 was never actually clean — the
+     gap between the old 1280px cutover and where content truly fits was
+     never tested. Matches ORST's sister-site fix (also 1700px). */
+  .main-nav {
+    display: none;
+  }
+
+  .mobile-toggle {
+    display: grid;
+  }
+
+  .header-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .brand {
+    max-width: 460px;
+  }
+
+  .footer-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .topbar {
+    display: none;
+  }
+
+  .header-inner {
+    min-height: 74px;
+  }
+
+  .brand-logo-img,
+  .brand-mark {
+    width: 48px;
+    height: 48px;
+  }
+
+  .brand-title {
+    max-width: 220px;
+    font-size: 1.02rem;
+  }
+
+  .header-actions .search-action span {
+    display: none;
+  }
+
+  .header-actions .search-action {
+    width: 46px;
+    padding: 0;
+  }
+
+  .footer-main {
+    grid-template-columns: 1fr;
+    padding: var(--rs-space-6) 0;
+  }
+
+  .footer-map-row {
+    grid-template-columns: 1fr;
+  }
+
+  .footer-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .rs-mobile-panel {
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .rs-mobile-drawer {
+    width: 100%;
+    max-height: 88dvh;
+    border-radius: var(--rs-radius-card) var(--rs-radius-card) 0 0;
+    transform: translateY(105%);
+  }
+
+  .rs-mobile-panel.is-open .rs-mobile-drawer {
+    transform: translateY(0);
+  }
+
+  .rs-mobile-head {
+    border-radius: var(--rs-radius-card) var(--rs-radius-card) 0 0;
+  }
+
+  .round-action.primary {
+    padding-inline: 14px;
+  }
+}
+
+@media (max-width: 520px) {
+  .brand-title {
+    max-width: 150px;
+  }
+
+  /* Icon-only header actions collapse below this width; both destinations
+     (search, "บริการออนไลน์") remain reachable from the mobile drawer, so
+     hiding them here trades a redundant control for legible brand text
+     instead of letting either get ellipsis-truncated into illegibility. */
+  .header-actions .search-action,
+  .header-actions .round-action.primary {
+    display: none;
+  }
+}

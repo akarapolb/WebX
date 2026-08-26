@@ -1,25 +1,34 @@
 #!/usr/bin/env node
 // WebX CMS — MCP server (zero-dependency, stdio JSON-RPC).
-// Lets MCP clients (Claude Code/Desktop, Cursor) operate the CMS via Strapi's
-// REST API using a Strapi API token. Safe surface: read + create/update DRAFTS.
-// No publish/delete tools — least privilege is enforced by the token's perms.
+// Lets MCP clients (Claude Code/Desktop, Cursor) operate the CMS via the
+// active engine's REST API using a service credential (Strapi API token, or
+// a WordPress Application Password). Safe surface: read + create/update
+// DRAFTS. No publish/delete tools — least privilege is enforced by the
+// credential's own permissions.
+//   CMS_ENGINE=strapi|wordpress (default strapi)
+//   STRAPI_URL, STRAPI_TOKEN — Strapi engine
+//   WORDPRESS_URL, WORDPRESS_USERNAME, WORDPRESS_APP_PASSWORD — WordPress engine
 import { createInterface } from "node:readline";
+import { createClient } from "../shared/cms-client.mjs";
 
+const ENGINE = process.env.CMS_ENGINE === "wordpress" ? "wordpress" : "strapi";
 const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
 const TOKEN = process.env.STRAPI_TOKEN || "";
+// Content operations go through whichever engine is active; the review
+// queue (submit_for_review/list_reviews) is WebX's own bookkeeping and
+// always lives in Strapi, same as webx-studio's field-policy/audit-log —
+// see the Phase 2 plan for why that's not per-engine data (yet).
+const reviewClient = createClient({ baseUrl: STRAPI, token: TOKEN, engine: "strapi" });
+const client = ENGINE === "wordpress"
+  ? createClient({
+      baseUrl: process.env.WORDPRESS_URL || "http://localhost:8081/wp-json",
+      token: process.env.WORDPRESS_USERNAME ? process.env.WORDPRESS_USERNAME + ":" + (process.env.WORDPRESS_APP_PASSWORD || "") : "",
+      engine: "wordpress",
+    })
+  : reviewClient;
 const send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 const log = (s) => process.stderr.write("[webx-mcp] " + s + "\n");
 
-async function strapi(path, opts = {}) {
-  const r = await fetch(STRAPI + path, {
-    ...opts,
-    headers: { "Content-Type": "application/json", ...(TOKEN ? { Authorization: "Bearer " + TOKEN } : {}), ...(opts.headers || {}) },
-  });
-  const text = await r.text();
-  let j; try { j = JSON.parse(text); } catch { j = { raw: text }; }
-  if (!r.ok) throw new Error("Strapi " + r.status + ": " + ((j && j.error && j.error.message) || text).slice(0, 240));
-  return j;
-}
 function simplify(e) {
   if (!e || typeof e !== "object") return e;
   const out = { documentId: e.documentId || e.id };
@@ -42,26 +51,23 @@ const UID = { articles: "api::article.article", services: "api::service.service"
 const toUid = (c) => UID[c] || ("api::" + c.replace(/s$/, "") + "." + c.replace(/s$/, ""));
 
 const handlers = {
-  list_content_types: async () => ["articles", "services", "faqs", "landings", "blogs", "events", "downloads"],
+  list_content_types: async () => (ENGINE === "wordpress" ? ["posts"] : ["articles", "services", "faqs", "landings", "blogs", "events", "downloads"]),
   search_content: async ({ contentType, query, limit = 10 }) => {
-    const qs = "?pagination[pageSize]=" + Math.min(Number(limit) || 10, 50) + "&sort=updatedAt:desc" + (query ? "&_q=" + encodeURIComponent(query) : "");
-    const j = await strapi("/api/" + contentType + qs);
-    return (j.data || []).map(simplify);
+    const { data } = await client.list(contentType, { pageSize: Math.min(Number(limit) || 10, 50), sort: "updatedAt:desc", q: query });
+    return data.map(simplify);
   },
-  get_entry: async ({ contentType, documentId }) => (await strapi("/api/" + contentType + "/" + documentId + "?populate=*")).data,
-  create_entry: async ({ contentType, data }) => simplify((await strapi("/api/" + contentType, { method: "POST", body: JSON.stringify({ data }) })).data),
-  update_entry: async ({ contentType, documentId, data }) => simplify((await strapi("/api/" + contentType + "/" + documentId, { method: "PUT", body: JSON.stringify({ data }) })).data),
+  get_entry: async ({ contentType, documentId }) => client.get(contentType, documentId),
+  create_entry: async ({ contentType, data }) => simplify(await client.create(contentType, data)),
+  update_entry: async ({ contentType, documentId, data }) => simplify(await client.update(contentType, documentId, data)),
   submit_for_review: async ({ contentType, documentId, note }) => {
-    const e = (await strapi("/api/" + contentType + "/" + documentId)).data || {};
+    const e = (await client.get(contentType, documentId)) || {};
     const title = e.title || e.name || e.subject || e.question || (contentType + " " + String(documentId).slice(0, 6));
-    const body = { data: { documentRef: documentId, contentType: toUid(contentType), title, stage: "in_review", kind: "review", requestedBy: "MCP agent", note: note || "", history: [{ to: "in_review", by: "MCP agent", at: new Date().toISOString() }] } };
-    const j = await strapi("/api/reviews", { method: "POST", body: JSON.stringify(body) });
-    return { ok: true, stage: "in_review", title, review: simplify(j.data) };
+    const created = await reviewClient.create("reviews", { documentRef: documentId, contentType: toUid(contentType), title, stage: "in_review", kind: "review", requestedBy: "MCP agent", note: note || "", history: [{ to: "in_review", by: "MCP agent", at: new Date().toISOString() }] });
+    return { ok: true, stage: "in_review", title, review: simplify(created) };
   },
   list_reviews: async ({ stage, limit = 20 }) => {
-    const qs = "?pagination[pageSize]=" + Math.min(Number(limit) || 20, 100) + "&sort=updatedAt:desc" + (stage ? "&filters[stage][$eq]=" + encodeURIComponent(stage) : "");
-    const j = await strapi("/api/reviews" + qs);
-    return (j.data || []).map((r) => ({ documentId: r.documentId || r.id, title: r.title, stage: r.stage, contentType: r.contentType, kind: r.kind, requestedBy: r.requestedBy }));
+    const { data } = await reviewClient.list("reviews", { pageSize: Math.min(Number(limit) || 20, 100), sort: "updatedAt:desc", filters: stage ? [{ field: "stage", op: "eq", value: stage }] : undefined });
+    return data.map((r) => ({ documentId: r.documentId || r.id, title: r.title, stage: r.stage, contentType: r.contentType, kind: r.kind, requestedBy: r.requestedBy }));
   },
 };
 
@@ -86,6 +92,6 @@ rl.on("line", async (line) => {
     if (id != null) send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: "Error: " + (e && e.message || e) }] } });
   }
 });
-log("WebX CMS MCP server ready (STRAPI=" + STRAPI + ", token=" + (TOKEN ? "set" : "MISSING") + ")");
+log("WebX CMS MCP server ready (engine=" + ENGINE + ", " + (ENGINE === "wordpress" ? "WORDPRESS_URL=" + (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json") : "STRAPI=" + STRAPI) + ", credential=" + (client === reviewClient ? (TOKEN ? "set" : "MISSING") : (process.env.WORDPRESS_APP_PASSWORD ? "set" : "MISSING")) + ")");
 
 rl.on("close", () => process.exit(0));

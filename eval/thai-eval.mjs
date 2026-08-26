@@ -4,16 +4,28 @@
 //   • When LITELLM_URL is set: semantic retrieval (embeddings + cosine) too.
 // Reports recall@k and MRR so you can validate retrieval on Thai content
 // BEFORE locking the RAG stack (and use it as a CI quality gate).
-//   STRAPI_URL (default http://localhost:1337) · LITELLM_URL · LITELLM_KEY · LITELLM_EMBED_MODEL
+//   CMS_ENGINE=strapi|wordpress (default strapi)
+//   STRAPI_URL (default http://localhost:1337) · STRAPI_TOKEN — Strapi engine
+//   WORDPRESS_URL · WORDPRESS_USERNAME · WORDPRESS_APP_PASSWORD — WordPress engine
+//   LITELLM_URL · LITELLM_KEY · LITELLM_EMBED_MODEL
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { createClient } from "../shared/cms-client.mjs";
 
+const ENGINE = process.env.CMS_ENGINE === "wordpress" ? "wordpress" : "strapi";
 const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
 const LITELLM = (process.env.LITELLM_URL || "").replace(/\/$/, "");
 const LKEY = process.env.LITELLM_KEY || "";
 const EMBED = process.env.LITELLM_EMBED_MODEL || "webx-embed";
-const TYPES = ["articles", "services", "faqs"];
+const TYPES = ENGINE === "wordpress" ? ["posts"] : ["articles", "services", "faqs"];
+const client = ENGINE === "wordpress"
+  ? createClient({
+      baseUrl: process.env.WORDPRESS_URL || "http://localhost:8081/wp-json",
+      token: process.env.WORDPRESS_USERNAME ? process.env.WORDPRESS_USERNAME + ":" + (process.env.WORDPRESS_APP_PASSWORD || "") : "",
+      engine: "wordpress",
+    })
+  : createClient({ baseUrl: STRAPI, token: process.env.STRAPI_TOKEN || "", engine: "strapi" });
 const here = dirname(fileURLToPath(import.meta.url));
 const data = JSON.parse(readFileSync(join(here, "dataset.thai.json"), "utf8"));
 const K = data.k || 5;
@@ -27,12 +39,10 @@ async function corpus() {
   const docs = [];
   for (const type of TYPES) {
     try {
-      const r = await fetch(STRAPI + "/api/" + type + "?pagination[pageSize]=100&sort=updatedAt:desc");
-      if (!r.ok) continue;
-      const j = await r.json();
-      for (const e of (j.data || [])) {
+      const { data } = await client.list(type, { pageSize: 100, sort: "updatedAt:desc" });
+      for (const e of (data || [])) {
         const title = e.title || e.name || e.question || "";
-        const text = (title + " " + stripHtml([e.excerpt, e.body, e.answer, e.description].filter((x) => typeof x === "string").join(" "))).slice(0, 1200);
+        const text = (title + " " + stripHtml([e.excerpt, e.body, e.content, e.answer, e.description].filter((x) => typeof x === "string").join(" "))).slice(0, 1200);
         if (text.trim()) docs.push({ source: title || (type + ":" + (e.documentId || e.id)), text });
       }
     } catch {}
@@ -56,7 +66,7 @@ function score(ranked, expect) {
 
 async function run() {
   const docs = await corpus();
-  if (!docs.length) { console.error("No corpus — is Strapi running at " + STRAPI + " with public read on " + TYPES.join("/") + "?"); process.exit(1); }
+  if (!docs.length) { console.error("No corpus — is the " + ENGINE + " engine running and reachable, with content on " + TYPES.join("/") + "?"); process.exit(1); }
   console.log("Corpus: " + docs.length + " docs · k=" + K + " · cases=" + data.cases.length + (LITELLM ? " · semantic ON" : " · keyword-only (set LITELLM_URL for semantic)") + "\n");
 
   // Pre-embed corpus once for the semantic run

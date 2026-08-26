@@ -1,0 +1,250 @@
+/* ============================================================================
+ * 02-base.css — reset, typography defaults, and page-wide utility classes
+ * ============================================================================
+ *
+ * Phase-11 full visual rebuild. Every value below reads from 01-tokens.css —
+ * no literal hex/px color, and no leftover pre-token custom properties
+ * (--deep/--gold/--paper/--ink/--muted/--line/--font-head/--font-body etc.)
+ * from the previous revision of this tenant's CSS.
+ *
+ * Provides: .container .section .section-head .eyebrow .section-kicker
+ * .view-all .icon .sr-only .reveal .no-wrap-desktop and element defaults.
+ * ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--rs-header-h) + var(--rs-topbar-h) + 18px);
+}
+
+body {
+  margin: 0;
+  background: var(--rs-ground);
+  color: var(--rs-ink);
+  font-family: var(--rs-font-body);
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+img,
+svg {
+  max-width: 100%;
+  display: block;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  color: var(--rs-primary);
+  font-family: var(--rs-font-display);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+/* ==========================================================================
+ * Layout primitives
+ * ========================================================================== */
+
+.container {
+  width: min(var(--container), calc(100% - (var(--rs-container-pad) * 2)));
+  margin-inline: auto;
+}
+
+.section {
+  padding: var(--rs-space-9) 0;
+}
+
+.section-soft {
+  background: var(--rs-gold-soft);
+}
+
+.section-head {
+  display: grid;
+  gap: var(--rs-space-3);
+  max-width: 68ch;
+  margin-bottom: var(--rs-space-7);
+}
+
+.section-head.center {
+  justify-items: center;
+  text-align: center;
+  margin-inline: auto;
+}
+
+.section-head.small h2 {
+  font-size: clamp(1.5rem, 2vw, 1.8rem);
+}
+
+.section-head h2 {
+  font-size: clamp(1.9rem, 2.6vw, 2.6rem);
+}
+
+.section-head p {
+  color: var(--rs-ink-soft);
+  font-size: 1.02rem;
+  line-height: 1.8;
+}
+
+/* Small gold eyebrow label used above section headings — a short tick mark
+   rather than a filled pill, matching the ceremonial/rule-driven language. */
+.eyebrow,
+.section-kicker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rs-space-2);
+  padding-left: var(--rs-space-4);
+  color: var(--rs-gold-strong);
+  font-family: var(--rs-font-body);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eyebrow::before,
+.section-kicker::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  background: var(--rs-gold);
+  transform: translateY(-50%);
+}
+
+.view-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rs-space-2);
+  color: var(--rs-primary);
+  font-weight: 700;
+}
+
+.view-all:hover {
+  color: var(--rs-gold-strong);
+}
+
+.no-wrap-desktop {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .no-wrap-desktop {
+    display: inline;
+  }
+}
+
+/* Screen-reader-only utility (used by table captions, hidden labels). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ==========================================================================
+ * Motion + focus
+ * ========================================================================== */
+
+/* HomePage.tsx marks several section wrappers ".reveal" (ported verbatim
+   from the pre-Phase-11 markup), but no IntersectionObserver exists
+   anywhere in this tenant to ever add the matching ".is-visible" class —
+   the sister ORST tenant hit the exact same gap and its own HomePage.tsx
+   file comment documents the fix it landed on: drop any opacity:0 default
+   so content "renders immediately instead of staying invisible" rather
+   than depending on JS that was never built. Same fix here, for the same
+   reason: content must never be invisible-by-default. .reveal stays a
+   valid, inert hook (harmless if a real scroll-reveal observer is added
+   later) rather than being stripped out of the markup. */
+.reveal {
+  opacity: 1;
+  transform: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--rs-gold);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .section {
+    padding: var(--rs-space-7) 0;
+  }
+
+  .section-head {
+    margin-bottom: var(--rs-space-5);
+  }
+}

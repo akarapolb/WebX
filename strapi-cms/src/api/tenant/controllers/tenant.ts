@@ -22,7 +22,19 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
         contact: t.contact, social: t.social, footerColumns: t.footerColumns,
         analytics: t.analytics, liveChat: t.liveChat,
         template: t.template, watermark: t.watermark,
+        engine: t.engine || 'strapi',
+        publicTemplate: t.publicTemplate || 'gov-portal',
       },
     };
+  },
+
+  /** รายชื่อ tenant ที่ active ทั้งหมด (key + engine + publicTemplate เท่านั้น) —
+   * สาธารณะ ใช้โดย public-site เพื่อรู้ว่ามี tenant อะไรบ้างสำหรับ
+   * generateStaticParams() โดยไม่ต้องเผยข้อมูลอื่นของ tenant (Phase 6/8) */
+  async keys(ctx: any) {
+    const strapi = (global as any).strapi;
+    const all = await strapi.db.query('api::tenant.tenant')
+      .findMany({ where: { active: true }, select: ['key', 'engine', 'publicTemplate'], limit: 200 }).catch(() => []);
+    ctx.body = { data: all.map((t: any) => ({ key: t.key, engine: t.engine || 'strapi', publicTemplate: t.publicTemplate || 'gov-portal' })) };
   },
 }));

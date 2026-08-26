@@ -2,12 +2,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 export type Tenant = { key: string; name: string; plan?: string; brand?: { primaryColor?: string; color?: string } };
-type Ctx = { tenants: Tenant[]; currentKey: string; setCurrentKey: (k: string) => void; current: Tenant | null };
+type Engine = "strapi" | "wordpress";
+type Ctx = { tenants: Tenant[]; currentKey: string; setCurrentKey: (k: string) => void; current: Tenant | null; engine: Engine };
 
-const TenantCtx = createContext<Ctx>({ tenants: [], currentKey: "", setCurrentKey: () => {}, current: null });
+const TenantCtx = createContext<Ctx>({ tenants: [], currentKey: "", setCurrentKey: () => {}, current: null, engine: "strapi" });
 const ACCENTS = [["#6E8BFF", "#A36BFF"], ["#8B5CF6", "#EC4899"], ["#14B8A6", "#0EA5E9"], ["#EE5020", "#D63B12"]];
 
-export function TenantProvider({ tenants, children }: { tenants: Tenant[]; children: React.ReactNode }) {
+export function TenantProvider({ tenants, engine = "strapi", children }: { tenants: Tenant[]; engine?: Engine; children: React.ReactNode }) {
   const [currentKey, setCurrentKeyState] = useState(tenants[0]?.key ?? "");
   const current = tenants.find((t) => t.key === currentKey) ?? tenants[0] ?? null;
 
@@ -30,7 +31,7 @@ export function TenantProvider({ tenants, children }: { tenants: Tenant[]; child
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey]);
 
-  return <TenantCtx.Provider value={{ tenants, currentKey, setCurrentKey, current }}>{children}</TenantCtx.Provider>;
+  return <TenantCtx.Provider value={{ tenants, currentKey, setCurrentKey, current, engine }}>{children}</TenantCtx.Provider>;
 }
 
 export const useTenant = () => useContext(TenantCtx);

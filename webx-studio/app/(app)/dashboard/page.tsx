@@ -4,6 +4,7 @@ import Icon from "@/components/Icon";
 import { useLang } from "@/components/LangProvider";
 import { useTenant } from "@/components/TenantProvider";
 import Onboarding from "@/components/Onboarding";
+import { cms } from "@/lib/cms";
 
 const SERIES = [42, 55, 48, 63, 58, 71, 66, 80, 76, 88, 82, 95];
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
@@ -13,23 +14,21 @@ const HEALTH: [string, string][] = [
 ];
 
 export default function Dashboard() {
-  const { t } = useLang();
-  const { currentKey } = useTenant();
+  const { t, lang } = useLang();
+  const { currentKey, engine } = useTenant();
   const [email, setEmail] = useState<string | null>(null);
   const [counts, setCounts] = useState<{ articles?: number; services?: number; submissions?: number }>({});
   const mx = Math.max(...SERIES);
 
   useEffect(() => {
-    fetch("/api/strapi/admin/users/me").then((r) => (r.ok ? r.json() : null)).then((j) => setEmail(j?.data?.email ?? null)).catch(() => {});
+    cms.auth.me().then((u) => setEmail(u?.email ?? null)).catch(() => {});
   }, []);
 
   const count = useCallback(async (uid: string): Promise<number | undefined> => {
-    const tf = currentKey && currentKey !== "workspace" ? "&filters[tenant][key][$eq]=" + encodeURIComponent(currentKey) : "";
+    const filter = currentKey && currentKey !== "workspace" ? [{ field: "tenant.key", op: "eq" as const, value: currentKey }] : undefined;
     try {
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + uid + "?page=1&pageSize=1" + tf);
-      if (!r.ok) return undefined;
-      const j = await r.json();
-      return j.pagination?.total;
+      const { total } = await cms.entries.list(uid, { page: 1, pageSize: 1, filter });
+      return total;
     } catch { return undefined; }
   }, [currentKey]);
 
@@ -68,8 +67,8 @@ export default function Dashboard() {
 
       {email && (
         <div className="panel" style={{ marginBottom: 18, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span className="badge b-ok"><span className="dot" />{t("tb.connected")}</span>
-          <span className="muted">{t("dash.connected")} <b style={{ color: "var(--ink)" }}>{email}</b> · {t("dash.httponly")}</span>
+          <span className="badge b-ok"><span className="dot" />{engine === "wordpress" ? (lang === "th" ? "WORDPRESS · เชื่อมต่อแล้ว" : "WORDPRESS · CONNECTED") : t("tb.connected")}</span>
+          <span className="muted">{engine === "wordpress" ? (lang === "th" ? "เข้าสู่ระบบ WordPress เป็น" : "Authenticated to WordPress as") : t("dash.connected")} <b style={{ color: "var(--ink)" }}>{email}</b> · {t("dash.httponly")}</span>
         </div>
       )}
 

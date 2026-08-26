@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="1"><stop stop-color="#fffaf1"/><stop offset="1" stop-color="#dfe8df"/></linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#dce7e2"/><stop offset="1" stop-color="#6c7a73"/></linearGradient>
+    <linearGradient id="gold" x1="0" x2="1"><stop stop-color="#d8bd72"/><stop offset="1" stop-color="#9f7427"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="20" stdDeviation="20" flood-opacity=".18"/></filter>
+  </defs>
+  <rect width="900" height="620" fill="url(#sky)"/>
+  <circle cx="90" cy="110" r="72" fill="#e9f3ec" opacity=".7"/>
+  <path d="M66 315 C230 90 522 36 880 40 V620 H66Z" fill="#f8f1e6" opacity=".65"/>
+  <g filter="url(#sh)">
+    <path d="M250 118h508v408H250z" fill="#f3eadc"/>
+    <path d="M300 86h418v440H300z" fill="#d8d0c4"/>
+    <path d="M315 105h370v421H315z" fill="url(#glass)" opacity=".82"/>
+    <g fill="#b87745" opacity=".95">
+      <rect x="335" y="105" width="22" height="421"/><rect x="397" y="105" width="22" height="421"/><rect x="459" y="105" width="22" height="421"/><rect x="521" y="105" width="22" height="421"/><rect x="583" y="105" width="22" height="421"/><rect x="645" y="105" width="22" height="421"/>
+    </g>
+    <g stroke="#fff" stroke-width="4" opacity=".55"><path d="M315 175h370M315 245h370M315 315h370M315 385h370M315 455h370"/></g>
+    <path d="M208 526h600v62H208z" fill="#263b35"/>
+    <path d="M238 526h190v62H238z" fill="#0b483e"/>
+    <path d="M480 526h120v62H480z" fill="#0b483e"/>
+  </g>
+  <g transform="translate(630 300)">
+    <path d="M80 4c22 32 34 58 34 90 0 36-15 63-34 90-20-27-34-54-34-90 0-32 12-58 34-90Z" fill="none" stroke="url(#gold)" stroke-width="9"/>
+    <path d="M80 36v116M56 100h48M62 72h36" stroke="#b99143" stroke-width="7" stroke-linecap="round"/>
+    <text x="80" y="220" text-anchor="middle" font-family="serif" font-size="30" fill="#b99143" font-weight="700">ราชบัณฑิตยสภา</text>
+  </g>
+</svg>
