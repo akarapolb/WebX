@@ -16,8 +16,10 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Protect everything except login, the auth API, api/internal (its own
-  // secret-header auth — see app/api/internal/releases/process-due, called
-  // by an external scheduler with no session cookie), and static assets.
-  matcher: ["/((?!login|api/auth|api/internal|_next/static|_next/image|favicon.ico).*)"],
+  // Protect everything except login, signup (both public by definition —
+  // gating signup on already having a session would defeat the point of
+  // it), the auth API, api/internal (its own secret-header auth — see
+  // app/api/internal/releases/process-due, called by an external scheduler
+  // with no session cookie), and static assets.
+  matcher: ["/((?!login|signup|api/auth|api/internal|_next/static|_next/image|favicon.ico).*)"],
 };

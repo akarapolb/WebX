@@ -196,7 +196,7 @@ export const strapiAdapter: CmsAdapter = {
       });
       if (!createRes.ok) throw new CmsError("create user failed", createRes.status);
       const created = (await json(createRes))?.data;
-      const tempPassword = genTempPassword();
+      const tempPassword = input.password || genTempPassword();
       const activateRes = await fetch(BASE + "/admin/users/" + created.id, {
         method: "PUT", headers: await authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ password: tempPassword, isActive: true }),

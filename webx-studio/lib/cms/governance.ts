@@ -208,6 +208,78 @@ export async function listManageableTenants(): Promise<{ key: string; name?: str
     .sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key));
 }
 
+function slugifyOrgKey(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9ก-๙]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+}
+
+/** Self-serve, fully public signup — no existing account or admin
+ * intervention required (see webx-studio/app/signup). Always creates a
+ * Strapi-engine, free-plan tenant: a WordPress-engine one needs a real
+ * WordPress admin account provisioned by hand (see NewWorkspace.tsx's own
+ * note), never something an anonymous request should trigger itself.
+ *
+ * The new user gets Strapi's "Editor" role, never "Super Admin" — tenant
+ * scoping comes entirely from adminEmails/resolveEffectiveTenant, not from
+ * the Strapi role itself, so granting Super Admin here would hand every
+ * self-serve signup unscoped access to every OTHER tenant too.
+ *
+ * No email verification: consistent with the rest of this app (see
+ * genPassword.ts / the "show once" temp-password flow) — nothing here ever
+ * configures SMTP, so this doesn't invent a one-off exception to that. */
+export async function selfServeSignup(input: {
+  orgName: string; key?: string; firstname: string; lastname: string; email: string; password: string;
+}): Promise<{ token: string; refresh: string | null }> {
+  const orgName = input.orgName?.trim();
+  const key = slugifyOrgKey(input.key || input.orgName || "");
+  const email = input.email?.trim().toLowerCase();
+  if (!orgName || !key) throw new CmsError("A workspace name is required", 400);
+  if (!input.firstname?.trim()) throw new CmsError("Your name is required", 400);
+  if (!email || !email.includes("@")) throw new CmsError("A valid email is required", 400);
+  if (!input.password || input.password.length < 8) throw new CmsError("Password must be at least 8 characters", 400);
+
+  if (await resolveTenantByKey(key)) throw new CmsError("That workspace name is already taken", 409);
+
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("Signup is temporarily unavailable", 500);
+
+  return withServiceToken(token, async () => {
+    const roles = await strapiAdapter.auth.listRoles();
+    const editorRole = roles.find((r) => r.name === "Editor") ?? roles[0];
+    if (!editorRole) throw new CmsError("Signup is temporarily unavailable", 500);
+
+    let tenant: any;
+    try {
+      tenant = await strapiAdapter.entries.create(TENANT_UID, {
+        key, name: orgName, active: true, plan: "free", seats: 3, subscriptionStatus: "active",
+        adminEmails: [email], engine: "strapi",
+        brand: { orgName: { th: orgName, en: orgName } },
+      });
+    } catch {
+      throw new CmsError("That workspace name is already taken", 409);
+    }
+
+    try {
+      await strapiAdapter.auth.create({
+        email, firstname: input.firstname.trim(), lastname: (input.lastname || "").trim(),
+        roleId: editorRole.id, password: input.password,
+      });
+    } catch (e) {
+      // A workspace with no real admin account behind it is worse than no
+      // workspace at all — don't leave the orphan around.
+      await strapiAdapter.entries.remove(TENANT_UID, tenant.documentId ?? tenant.id).catch(() => {});
+      throw e;
+    }
+
+    invalidateTenantCache();
+    const actor: CurrentUser = { id: "signup", email, roles: [], isSuperAdmin: false };
+    await writeAudit("signup", TENANT_UID, tenant.documentId ?? tenant.id, actor, key);
+
+    const login = await strapiLogin(email, input.password);
+    if (!login.ok) throw new CmsError("Account created, but automatic sign-in failed — please log in.", 500);
+    return { token: login.token, refresh: login.refresh ?? null };
+  });
+}
+
 let policyCache: { at: number; list: any[] } = { at: 0, list: [] };
 async function getFieldPolicies(): Promise<any[]> {
   const now = Date.now();

@@ -61,6 +61,12 @@ export type NewUserInput = {
    * slug (e.g. "editor") — exactly what that adapter's own listRoles()
    * already returns as `{id, name}`. */
   roleId: string | number;
+  /** Omit to generate one (the admin-creates-a-user flow — the temp
+   * password is shown once, never chosen by the admin). Pass one when the
+   * account holder is choosing their own password in the same request (the
+   * self-serve signup flow) — there's nothing to "show once" if they just
+   * typed it themselves. */
+  password?: string;
 };
 
 /** removed: the caller's workspace membership was always revoked.

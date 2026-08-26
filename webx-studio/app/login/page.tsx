@@ -66,6 +66,11 @@ export default function Login() {
         <div className="auth-foot">
           <Icon name="shield" /> Secured with httpOnly session · token never touches the browser
         </div>
+        {engine === "strapi" && (
+          <p className="sub" style={{ textAlign: "center", marginTop: 14 }}>
+            No workspace yet? <a href="/signup">Create one free</a>
+          </p>
+        )}
       </form>
     </div>
   );
