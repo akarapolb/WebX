@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import IconSprite from "@/components/IconSprite";
+import CookieConsent from "@/components/CookieConsent";
 
 export const metadata: Metadata = {
   title: "WebX public site",
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <IconSprite />
         <a className="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
         {children}
+        <CookieConsent />
       </body>
     </html>
   );
