@@ -19,13 +19,29 @@ import {
 test.describe("WebX Studio user management + public-site rebuild", () => {
   test.skip(!STRAPI_SCHEDULER_PASSWORD, "STRAPI_SCHEDULER_PASSWORD not set — see e2e/README.md");
 
-  test.beforeEach(async ({ page }) => {
+  // Logs in ONCE for the whole file, not per test — Strapi's own
+  // /admin/login rate limiter trips easily in this dev environment (see the
+  // scheduler-account comment in governance.ts) and 4 real logins back to
+  // back was enough to hit it directly while writing this suite. The
+  // session cookie is httpOnly, so it's captured via storageState and
+  // seeded into each test's own page/context instead of re-authenticating.
+  let sessionState: any;
+
+  test.beforeAll(async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
     await page.goto(WEBX_STUDIO + "/login");
     await page.getByRole("tab", { name: "Strapi" }).click();
     await page.getByPlaceholder("admin@webx.io").fill(STRAPI_SCHEDULER_EMAIL);
     await page.getByPlaceholder("••••••••").fill(STRAPI_SCHEDULER_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+    sessionState = await context.storageState();
+    await context.close();
+  });
+
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies(sessionState.cookies);
   });
 
   test("Users & Roles workspace picker reaches a WordPress-engine tenant from a Strapi session", async ({ page }) => {
