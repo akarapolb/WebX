@@ -32,7 +32,7 @@ import { CmsError } from "./types";
 import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput } from "./types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
 import { wordpressLogin } from "../wordpress";
-import { requestPublicSiteRebuild } from "../publicSiteBuild";
+import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
 import {
   STRAPI_URL, STRAPI_INTERNAL_SECRET,
   STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD,
@@ -166,6 +166,24 @@ export async function resolveMyTenant(): Promise<Tenant | null> {
   const user = await (await activeAdapter()).auth.me();
   if (!user?.email) return null;
   return resolveEffectiveTenant(user.email);
+}
+
+/** The Status page's "Rebuild now" button — any authenticated admin can
+ * force one, engine-agnostic and not tenant-scoped (a rebuild regenerates
+ * the whole public site, same as an automatic publish-triggered one would).
+ * Audited like every other governed write; skipped when the build didn't
+ * actually start (already running — see forceRebuildNow's own reasoning),
+ * so a queued-not-started click doesn't leave a misleading audit row. */
+export async function rebuildPublicSiteNow(): Promise<{ started: boolean; reason?: string }> {
+  const user = await requireUser();
+  const result = forceRebuildNow();
+  if (result.started) await writeAudit("rebuild_public_site", "public-site", null, user, null);
+  return result;
+}
+
+export async function publicSiteStatus(): Promise<{ building: boolean; lastBuiltAt: string | null; lastError: string | null }> {
+  await requireUser();
+  return getPublicSiteBuildStatus();
 }
 
 let policyCache: { at: number; list: any[] } = { at: 0, list: [] };

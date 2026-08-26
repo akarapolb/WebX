@@ -14,6 +14,8 @@ const SLA = [
 ];
 const shortType = (c?: string) => String(c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
 
+type PubStatus = { building: boolean; lastBuiltAt: string | null; lastError: string | null };
+
 export default function Status() {
   const { t } = useLang();
   const { currentKey } = useTenant();
@@ -21,6 +23,13 @@ export default function Status() {
   const [svc, setSvc] = useState<{ k: string; up: boolean }[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pub, setPub] = useState<PubStatus | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+
+  const loadPub = useCallback(async () => {
+    const r = await fetch("/api/cms/public-site/status");
+    if (r.ok) setPub(await r.json());
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -31,9 +40,30 @@ export default function Status() {
     setSvc([{ k: "bff", up: true }, { k: "strapi", up: checks[0] }, { k: "delivery", up: checks[1] }]);
     const { data } = await cms.entries.list<any>("api::audit-log.audit-log", { sort: "at:DESC", pageSize: 8 }).catch(() => ({ data: [] as any[] }));
     setActivity(data);
+    await loadPub();
     setLoading(false);
-  }, [tenant]);
+  }, [tenant, loadPub]);
   useEffect(() => { load(); }, [load]);
+
+  async function rebuildNow() {
+    setRebuilding(true);
+    try {
+      await fetch("/api/cms/public-site/rebuild", { method: "POST" }).catch(() => {});
+      // Builds take tens of seconds; poll status until it flips back to idle
+      // rather than making the admin hit Refresh repeatedly to find out.
+      for (let i = 0; i < 150; i++) {
+        await new Promise((res) => setTimeout(res, 3000));
+        const r = await fetch("/api/cms/public-site/status");
+        if (!r.ok) break;
+        const s: PubStatus = await r.json();
+        setPub(s);
+        if (!s.building) break;
+      }
+    } finally {
+      setRebuilding(false);
+      load();
+    }
+  }
 
   const allUp = svc.length > 0 && svc.every((s) => s.up);
 
@@ -67,6 +97,25 @@ export default function Status() {
             <tbody>{SLA.map((r) => <tr key={r.plan} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: "6px 0" }}><b>{r.plan}</b></td><td className="mono">{r.target}</td><td className="muted">{r.dr}</td></tr>)}</tbody>
           </table>
         </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 260px" }}>
+          <h3 style={{ margin: "0 0 6px" }}>{t("st.publicSite")}</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className={"badge " + (pub?.building ? "b-acc" : pub?.lastError ? "b-warn" : "b-ok")}>
+              <span className="dot" />{pub?.building ? t("st.building") : pub?.lastError ? t("st.buildFailed") : t("st.upToDate")}
+            </span>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {pub?.lastBuiltAt ? `${t("st.lastBuilt")} ${new Date(pub.lastBuiltAt).toLocaleString()}` : t("st.neverBuilt")}
+            </span>
+          </div>
+          {pub?.lastError && <div className="mono" style={{ fontSize: 11.5, color: "var(--warn)", marginTop: 6 }}>{pub.lastError}</div>}
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{t("st.publicSiteE")}</div>
+        </div>
+        <button className="btn btn--p" onClick={rebuildNow} disabled={rebuilding || Boolean(pub?.building)}>
+          <Icon name="undo" />{(rebuilding || pub?.building) ? t("st.rebuilding") : t("st.rebuildNow")}
+        </button>
       </div>
 
       <div className="panel" style={{ marginTop: 16 }}>

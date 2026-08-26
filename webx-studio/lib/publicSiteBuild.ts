@@ -107,3 +107,18 @@ async function execBuild(): Promise<void> {
 export function getPublicSiteBuildStatus(): BuildStatus {
   return { building, lastBuiltAt, lastError };
 }
+
+/** Explicit, on-demand rebuild — the Status page's "Rebuild now" button.
+ * Unlike requestPublicSiteRebuild(), this skips the debounce (a human
+ * clicking a button already knows they want a build to start now, not in
+ * 20s) and ignores PUBLIC_SITE_AUTO_REBUILD (that flag only turns off the
+ * automatic publish-triggered path — a manual request should still work).
+ * Still respects the single-flight guard: a build already running just gets
+ * queued, same as a second automatic trigger would. */
+export function forceRebuildNow(): { started: boolean; reason?: string } {
+  if (!existsSync(PUBLIC_SITE_DIR)) return { started: false, reason: "public-site directory not found" };
+  if (building) { pendingRebuild = true; return { started: false, reason: "a build is already running — queued to run again after" }; }
+  if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+  void runBuild();
+  return { started: true };
+}
