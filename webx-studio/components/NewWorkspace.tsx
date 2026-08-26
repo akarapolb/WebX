@@ -74,7 +74,7 @@ export default function NewWorkspace({ userEmail, onClose }: { userEmail: string
         </div>
         {engine === "wordpress" && (
           <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 16 }}>
-            This creates the workspace record only — a WordPress admin account for this org still needs to be provisioned separately.
+            The matching wtenant tag in WordPress is created automatically — a WordPress user account for this org still needs to be provisioned separately (Users → Profile → Application Passwords), and today any existing WordPress user can already reach every WordPress-backed workspace.
           </p>
         )}
         {engine === "strapi" && <div style={{ marginBottom: 16 }} />}

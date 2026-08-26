@@ -116,6 +116,34 @@ async function wtenantTerms(): Promise<typeof wtenantCache> {
   return wtenantCache;
 }
 
+// Phase 10 — the other half of "create a new WordPress-backed tenant":
+// NewWorkspace.tsx only ever created the Strapi Tenant record; nothing made
+// the matching wtenant TERM this shared WordPress instance actually scopes
+// content by, so every new WordPress tenant needed that created by hand
+// before any of its content could be tagged correctly. Called from
+// governance.ts's create() right after a new tenant with engine:"wordpress"
+// is created, under the scheduler's service credentials (see
+// withServiceToken there) since there's no ambient admin session for a
+// brand-new workspace to author WordPress content with yet.
+// Idempotent (checks for an existing term with this slug first) and safe to
+// call speculatively — if it fails, tenant creation itself must not fail;
+// the term can still be created by hand exactly as before this existed.
+export async function ensureWtenantTerm(key: string): Promise<void> {
+  const existing = await fetch(BASE + "/wp/v2/wtenant?slug=" + encodeURIComponent(key), { headers: await authHeaders(), cache: "no-store" });
+  if (existing.ok) {
+    const rows = await json(existing);
+    if (Array.isArray(rows) && rows.length) return;
+  }
+  const r = await fetch(BASE + "/wp/v2/wtenant", {
+    method: "POST",
+    headers: await authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name: key, slug: key }),
+    cache: "no-store",
+  });
+  if (!r.ok) throw new CmsError("failed to create wtenant term", r.status);
+  wtenantCache = { at: 0, byKey: new Map(), byId: new Map() }; // invalidate so the new term is visible on the very next lookup
+}
+
 function normalizePost(p: any, terms?: typeof wtenantCache): any {
   const published = p.status === "publish";
   const wtenantId: number | undefined = Array.isArray(p.wtenant) ? p.wtenant[0] : undefined;

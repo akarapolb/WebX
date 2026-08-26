@@ -27,7 +27,7 @@
 // DB lookup Strapi's own hook uses for this exact check, unscoped.
 import "server-only";
 import { strapiAdapter } from "./strapi";
-import { wordpressAdapter } from "./wordpress";
+import { wordpressAdapter, ensureWtenantTerm } from "./wordpress";
 import { CmsError } from "./types";
 import type { CmsAdapter, EntryQuery, EntryList, CurrentUser } from "./types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
@@ -294,6 +294,9 @@ export const governed = {
     d = { ...d, ...tenantStamp(uid, eff) };
     const result: any = await withContentAdapter(uid, (cms) => cms.entries.create<any>(uid, d));
     await writeAudit("create", uid, result?.documentId ?? result?.id ?? null, user, eff?.key ?? null);
+    if (uid === TENANT_UID && d.engine === "wordpress" && result?.key) {
+      await ensureWordpressTenantTerm(result.key);
+    }
     return result;
   },
   async update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T> {
@@ -402,6 +405,23 @@ async function schedulerWpToken(): Promise<string | null> {
     schedulerWpTok = r.ok ? r.token : null; // Application Passwords don't expire — safe to cache for the process lifetime
   }
   return schedulerWpTok;
+}
+
+/** Creating a new engine:"wordpress" tenant used to only create the Strapi
+ * Tenant record — the matching wtenant TERM in the shared WordPress instance
+ * (the only thing that actually scopes its content) had to be created by
+ * hand afterward. Called from create() below right after a new WordPress
+ * tenant is made, under the scheduler's service credentials the same way
+ * processDueReleases() authors WordPress content with no ambient session.
+ * Best-effort: a WordPress outage or missing scheduler credentials must not
+ * fail tenant creation itself — the term can still be added by hand exactly
+ * as before this existed, so failures here are swallowed, not surfaced. */
+async function ensureWordpressTenantTerm(key: string): Promise<void> {
+  try {
+    const wpToken = await schedulerWpToken();
+    if (!wpToken) return;
+    await withServiceToken(wpToken, () => ensureWtenantTerm(key));
+  } catch { /* see comment above — non-fatal */ }
 }
 
 /** Publish every release whose scheduledAt has passed — engine-agnostic: each
