@@ -63,6 +63,13 @@ export type NewUserInput = {
   roleId: string | number;
 };
 
+/** removed: the caller's workspace membership was always revoked.
+ * accountDeleted: whether the underlying Strapi/WordPress account was also
+ * deleted — only true when that email is no longer a member of ANY
+ * workspace, so removing someone from one tenant never breaks their access
+ * to another they're also a member of. */
+export type RemoveUserResult = { removed: boolean; accountDeleted: boolean };
+
 /** Thrown by adapter calls on a non-2xx response; `status` lets callers
  * branch on it (e.g. 403 -> "no permission" vs. a generic error message). */
 export class CmsError extends Error {
@@ -91,6 +98,7 @@ export interface BrowserCmsAdapter extends Omit<CmsAdapter, "auth"> {
     listRoles(tenantKey?: string): Promise<{ id: any; name: string }[]>;
     listUsers(tenantKey: string): Promise<AdminUser[]>;
     create(tenantKey: string, input: NewUserInput): Promise<{ user: AdminUser; tempPassword: string }>;
+    remove(tenantKey: string, input: { id: any; email: string }): Promise<RemoveUserResult>;
   };
 }
 
@@ -124,5 +132,8 @@ export interface CmsAdapter {
      * temp password — never emailed, returned once to the caller.
      * Throws CmsError on a non-2xx response from either backend call. */
     create(input: NewUserInput): Promise<{ user: AdminUser; tempPassword: string }>;
+    /** Deletes the account outright — no soft-delete/trash on either engine.
+     * Throws CmsError on a non-2xx response. */
+    remove(id: string | number): Promise<void>;
   };
 }

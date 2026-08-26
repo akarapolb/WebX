@@ -3,7 +3,7 @@
 // server-side into governance.ts + strapi.ts as of Phase 1). This is what
 // components actually get from `cms` in lib/cms/index.ts.
 import type {
-  BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput,
+  BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput, RemoveUserResult,
 } from "./types";
 import { CmsError } from "./types";
 
@@ -124,6 +124,12 @@ export const browserAdapter: BrowserCmsAdapter = {
       });
       if (!r.ok) throw await errorFrom(r);
       return await json(r);
+    },
+    async remove(tenantKey: string, input: { id: any; email: string }): Promise<RemoveUserResult> {
+      const qs = "?tenant=" + encodeURIComponent(tenantKey) + "&email=" + encodeURIComponent(input.email);
+      const r = await fetch(BASE + "/auth/users/" + encodeURIComponent(String(input.id)) + qs, { method: "DELETE" });
+      if (!r.ok) throw await errorFrom(r);
+      return (await json(r)) || { removed: true, accountDeleted: false };
     },
   },
 };

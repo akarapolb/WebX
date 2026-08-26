@@ -742,11 +742,15 @@ export async function seedEditors(strapi: any) {
  * dedicated account instead. Needs Super Admin so effectiveTenant() resolves
  * it as unscoped (sees/publishes across every tenant) — the same "unscoped
  * system caller" convention this file's own effectiveTenant() already uses
- * for seeding. Dev-only credential, same pattern as the editors above; set
- * STRAPI_SCHEDULER_EMAIL/PASSWORD in webx-studio's env to match. */
+ * for seeding. Set STRAPI_SCHEDULER_EMAIL/PASSWORD in webx-studio's env to
+ * match whatever this seeds. The password falls back to a fixed dev value
+ * only when STRAPI_SCHEDULER_PASSWORD isn't set — a production deploy (see
+ * docker-compose.yml's `strapi` service) must set it to something real, or
+ * every self-hosted instance would otherwise ship the same well-known
+ * super-admin credential (this repo is public). */
 export async function seedScheduler(strapi: any) {
   const email = 'scheduler@webx.local';
-  const password = 'WebxSched@2569';
+  const password = process.env.STRAPI_SCHEDULER_PASSWORD || 'WebxSched@2569';
   const existing = await strapi.db.query('admin::user').findOne({ where: { email } });
   if (existing) return;
   const role = await strapi.db.query('admin::role').findOne({ where: { code: 'strapi-super-admin' } });

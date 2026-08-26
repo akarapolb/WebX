@@ -38,6 +38,10 @@ services:
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?set ADMIN_JWT_SECRET}
       TRANSFER_TOKEN_SALT: ${TRANSFER_TOKEN_SALT:?set TRANSFER_TOKEN_SALT}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      # Seeds the release-scheduler's own login (src/seed/seed.ts's
+      # seedScheduler) — must match what's set on `webx` and `release-scheduler`
+      # below, since all three just reference the same .env value.
+      STRAPI_SCHEDULER_PASSWORD: ${STRAPI_SCHEDULER_PASSWORD:?set STRAPI_SCHEDULER_PASSWORD}
     volumes:
       - strapi-uploads:/app/public/uploads
     ports:
@@ -57,8 +61,44 @@ services:
       # RAG vector store: leave WEBX_VECTOR empty for in-app cosine, or 'pgvector'
       WEBX_VECTOR: ${WEBX_VECTOR:-}
       PGVECTOR_URL: ${PGVECTOR_URL:-}
+      # Release scheduler (see the release-scheduler service below): the
+      # secret protects POST /api/internal/releases/process-due itself; the
+      # STRAPI_SCHEDULER_* pair is the account this process logs in as to
+      # actually publish (must match the strapi service's own
+      # STRAPI_SCHEDULER_PASSWORD above — same seeded account, same secret).
+      # WORDPRESS_SCHEDULER_* only matters if a release ever contains a
+      # WordPress-backed item; leave blank if this deployment has no
+      # WordPress engine tenant.
+      WEBX_SCHEDULER_SECRET: ${WEBX_SCHEDULER_SECRET:?set WEBX_SCHEDULER_SECRET}
+      STRAPI_SCHEDULER_EMAIL: scheduler@webx.local
+      STRAPI_SCHEDULER_PASSWORD: ${STRAPI_SCHEDULER_PASSWORD:?set STRAPI_SCHEDULER_PASSWORD}
+      WORDPRESS_SCHEDULER_USERNAME: ${WORDPRESS_SCHEDULER_USERNAME:-}
+      WORDPRESS_SCHEDULER_APP_PASSWORD: ${WORDPRESS_SCHEDULER_APP_PASSWORD:-}
     ports:
       - "${WEBX_PORT:-3000}:3000"
+
+  # Ticks POST /api/internal/releases/process-due on an interval so scheduled
+  # Releases (Releases.tsx's "Schedule" button) actually fire — nothing else
+  # in this stack calls that endpoint (deliberately not an in-process timer
+  # inside `webx` itself: this repo may run multiple `webx` replicas behind a
+  # load balancer, and an in-process interval would tick once per replica,
+  # double-processing the same due release — see the route's own comment).
+  release-scheduler:
+    image: curlimages/curl:8.10.1
+    restart: unless-stopped
+    depends_on:
+      - webx
+    environment:
+      WEBX_SCHEDULER_SECRET: ${WEBX_SCHEDULER_SECRET:?set WEBX_SCHEDULER_SECRET}
+      INTERVAL_SECONDS: ${RELEASE_SCHEDULER_INTERVAL_SECONDS:-60}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -sf -X POST -H "X-Internal-Secret: $$WEBX_SCHEDULER_SECRET" http://webx:3000/api/internal/releases/process-due \
+            || echo "[release-scheduler] tick failed"
+          sleep "$$INTERVAL_SECONDS"
+        done
 
   litellm:
     image: ghcr.io/berriai/litellm:main-latest

@@ -29,7 +29,7 @@ import "server-only";
 import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm } from "./wordpress";
 import { CmsError } from "./types";
-import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput } from "./types";
+import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult } from "./types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
 import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
@@ -186,6 +186,27 @@ export async function publicSiteStatus(): Promise<{ building: boolean; lastBuilt
   return getPublicSiteBuildStatus();
 }
 
+/** Every workspace the caller can act on — unscoped/super admin sees all of
+ * them, a workspace-scoped admin sees just their own. Deliberately includes
+ * WordPress-engine tenants regardless of the caller's own session engine
+ * (unlike the sidebar switcher's /api/console/context, which excludes them
+ * because a Strapi session genuinely can't edit WordPress CONTENT through
+ * activeAdapter() — see that endpoint's own comment). Users & Roles has no
+ * such restriction: governed.auth.* already resolves the right engine and
+ * service credential per tenant regardless of the caller's session, so this
+ * is what lets the Users & Roles page reach a WordPress workspace that the
+ * sidebar itself won't switch to. */
+export async function listManageableTenants(): Promise<{ key: string; name?: string; engine: "strapi" | "wordpress" }[]> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  const { byKey } = await refreshTenantCache();
+  const all = [...byKey.values()];
+  const list = eff ? all.filter((t) => t.key === eff.key) : all;
+  return list
+    .map((t) => ({ key: t.key, name: t.name, engine: (t.engine || "strapi") as "strapi" | "wordpress" }))
+    .sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key));
+}
+
 let policyCache: { at: number; list: any[] } = { at: 0, list: [] };
 async function getFieldPolicies(): Promise<any[]> {
   const now = Date.now();
@@ -335,6 +356,43 @@ export const governed = {
       // Never the password — it exists only in this call's return value.
       await writeAudit("create_user", "admin::user", result.user.id, caller, tenantKey);
       return result;
+    },
+    async remove(tenantKey: string, input: { id: any; email: string }): Promise<RemoveUserResult> {
+      const caller = await requireUser();
+      const eff = await resolveEffectiveTenant(caller.email);
+      assertCanActOnTenant(eff, tenantKey);
+      const target = await resolveTenantByKey(tenantKey);
+      if (!target) throw new CmsError("Unknown workspace", 404);
+
+      // Revoking workspace membership is the primary, always-happens effect
+      // — this is what actually controls whether they can reach this
+      // tenant's data, same as create() granting it via the same list.
+      const remaining = (target.adminEmails || []).filter((e) => e.toLowerCase() !== input.email.toLowerCase());
+      await strapiBookkeeping(() =>
+        strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { adminEmails: remaining })
+      );
+      invalidateTenantCache();
+
+      // Only delete the underlying account if this was their last workspace
+      // — otherwise removing someone from one tenant would silently break
+      // their still-valid access to another. Scans every tenant, not the
+      // (single-tenant-per-email) byEmail cache, since that map can only
+      // hold one tenant per email and would give a false negative here.
+      const { byKey } = await refreshTenantCache();
+      const stillMember = [...byKey.values()].some((t) =>
+        (t.adminEmails || []).some((e) => e.toLowerCase() === input.email.toLowerCase())
+      );
+      let accountDeleted = false;
+      if (!stillMember) {
+        try {
+          await withEngineAdapter(target.engine || "strapi", (a) => a.auth.remove(input.id));
+          accountDeleted = true;
+        } catch { /* membership is already revoked — an orphaned account left
+                    behind is a cleanup nit, not a reason to fail this call */ }
+      }
+
+      await writeAudit("remove_user", "admin::user", input.id ?? null, caller, tenantKey);
+      return { removed: true, accountDeleted };
     },
   },
   media: { upload: async (file: File) => (await activeAdapter()).media.upload(file) },

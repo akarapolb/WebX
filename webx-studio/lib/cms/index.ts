@@ -7,4 +7,4 @@ import type { BrowserCmsAdapter } from "./types";
 
 export const cms: BrowserCmsAdapter = browserAdapter;
 export { CmsError } from "./types";
-export type { CmsAdapter, BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput } from "./types";
+export type { CmsAdapter, BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput, RemoveUserResult } from "./types";

@@ -7,7 +7,11 @@ import { cms, CmsError } from "@/lib/cms";
 type Log = { id: number; action?: string; contentType?: string; entryId?: string; adminEmail?: string; tenantKey?: string; at?: string; actor?: string; targetRef?: string; createdAt?: string };
 const AL_UID = "api::audit-log.audit-log";
 const shortType = (c?: string) => (c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
-const badgeOf = (a?: string) => (a === "delete" ? "b-warn" : a === "publish" ? "b-ok" : a === "create" ? "b-acc" : "b-mut");
+const badgeOf = (a?: string) =>
+  a === "delete" || a === "remove_user" ? "b-warn"
+  : a === "publish" ? "b-ok"
+  : a === "create" || a === "create_user" ? "b-acc"
+  : "b-mut";
 
 export default function AuditLog() {
   const { t, lang } = useLang();
@@ -31,7 +35,7 @@ export default function AuditLog() {
   useEffect(() => { load(); }, [load]);
 
   const fmt = (iso?: string) => { if (!iso) return ""; try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; } };
-  const actions = ["create", "update", "publish", "delete"];
+  const actions = ["create", "update", "publish", "unpublish", "delete", "create_user", "remove_user", "rebuild_public_site"];
   const shown = filter ? logs.filter((l) => l.action === filter) : logs;
 
   return (

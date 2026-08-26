@@ -365,5 +365,22 @@ export const wordpressAdapter: CmsAdapter = {
       }
       throw new CmsError("create user failed", 500); // unreachable — satisfies the return-type checker
     },
+    // WordPress core doesn't support trashing a user, only a hard delete —
+    // and its REST endpoint outright rejects the request without a
+    // `reassign` target (confirmed live: 400 rest_missing_callback_param),
+    // even for a brand-new account with nothing to reassign. Reassigns to
+    // whichever credential is making this call (the scheduler service
+    // account under withEngineAdapter — see governance.ts), since that's
+    // always a valid, always-present WordPress user unlike trying to guess
+    // the acting admin's own WP id.
+    async remove(id: string | number): Promise<void> {
+      const meR = await fetch(BASE + "/wp/v2/users/me", { headers: await authHeaders(), cache: "no-store" });
+      const me = await json(meR);
+      const reassign = me?.id ? "&reassign=" + me.id : "";
+      const r = await fetch(BASE + "/wp/v2/users/" + id + "?force=true" + reassign, {
+        method: "DELETE", headers: await authHeaders(), cache: "no-store",
+      });
+      if (!r.ok) throw new CmsError("remove user failed", r.status);
+    },
   },
 };

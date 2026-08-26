@@ -2032,6 +2032,8 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     domains: Schema.Attribute.JSON;
+    engine: Schema.Attribute.Enumeration<['strapi', 'wordpress']> &
+      Schema.Attribute.DefaultTo<'strapi'>;
     features: Schema.Attribute.JSON;
     footerColumns: Schema.Attribute.JSON;
     key: Schema.Attribute.UID & Schema.Attribute.Required;
@@ -2045,6 +2047,10 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String & Schema.Attribute.Required;
     plan: Schema.Attribute.Enumeration<['free', 'pro', 'enterprise']> &
       Schema.Attribute.DefaultTo<'free'>;
+    publicTemplate: Schema.Attribute.Enumeration<
+      ['gov-portal', 'orst', 'royalsociety']
+    > &
+      Schema.Attribute.DefaultTo<'gov-portal'>;
     publishedAt: Schema.Attribute.DateTime;
     seats: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
     social: Schema.Attribute.JSON;

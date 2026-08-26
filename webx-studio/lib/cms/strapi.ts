@@ -210,5 +210,9 @@ export const strapiAdapter: CmsAdapter = {
       };
       return { user, tempPassword };
     },
+    async remove(id: string | number): Promise<void> {
+      const r = await fetch(BASE + "/admin/users/" + id, { method: "DELETE", headers: await authHeaders(), cache: "no-store" });
+      if (!r.ok) throw new CmsError("remove user failed", r.status);
+    },
   },
 };
