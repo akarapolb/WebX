@@ -15,6 +15,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [mfaStep, setMfaStep] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
   const cfg = ENGINES.find((e) => e.id === engine)!;
 
   async function submit(e: React.FormEvent) {
@@ -26,9 +28,51 @@ export default function Login() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, engine }),
       });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.mfaRequired) { setMfaStep(true); setBusy(false); return; }
       if (r.ok) { router.replace("/dashboard"); router.refresh(); }
-      else { const j = await r.json().catch(() => ({})); setErr(j.error || "Sign-in failed"); setBusy(false); }
+      else { setErr(j.error || "Sign-in failed"); setBusy(false); }
     } catch { setErr("Cannot reach the server"); setBusy(false); }
+  }
+
+  async function submitMfa(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setErr("");
+    try {
+      const r = await fetch("/api/auth/mfa/verify-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: mfaCode }),
+      });
+      if (r.ok) { router.replace("/dashboard"); router.refresh(); }
+      else { const j = await r.json().catch(() => ({})); setErr(j.error || "Verification failed"); setBusy(false); }
+    } catch { setErr("Cannot reach the server"); setBusy(false); }
+  }
+
+  if (mfaStep) {
+    return (
+      <div className="auth">
+        <form className="auth-card" onSubmit={submitMfa}>
+          <div className="auth-logo">
+            <div className="brand-mark">W</div>
+            <div><h1>WebX <span className="gw">Studio</span></h1></div>
+          </div>
+          <p className="sub">Enter the 6-digit code from your authenticator app, or a recovery code.</p>
+          <p className="auth-err">{err}</p>
+          <div className="fld">
+            <label htmlFor="mfaCode">Code</label>
+            <input id="mfaCode" type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus required
+              value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} placeholder="000000" />
+          </div>
+          <button className="btn btn--p" type="submit" disabled={busy}>
+            {busy ? "Verifying…" : "Verify  →"}
+          </button>
+          <div className="auth-foot">
+            <Icon name="shield" /> Two-factor authentication
+          </div>
+        </form>
+      </div>
+    );
   }
 
   return (

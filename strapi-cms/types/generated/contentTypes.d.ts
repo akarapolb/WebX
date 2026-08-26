@@ -1678,6 +1678,44 @@ export interface ApiMenuItemMenuItem extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiMfaEnrollmentMfaEnrollment
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'mfa_enrollments';
+  info: {
+    description: "Per-admin TOTP secret + recovery codes for webx-studio's own login MFA (not Strapi's admin-panel-only demo gate)";
+    displayName: 'MFA Enrollment';
+    pluralName: 'mfa-enrollments';
+    singularName: 'mfa-enrollment';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    adminEmail: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    enabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::mfa-enrollment.mfa-enrollment'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    recoveryCodesHash: Schema.Attribute.JSON & Schema.Attribute.Private;
+    recoveryCodesUsed: Schema.Attribute.JSON & Schema.Attribute.Private;
+    secret: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPageVersionPageVersion extends Struct.CollectionTypeSchema {
   collectionName: 'page_versions';
   info: {
@@ -2760,6 +2798,7 @@ declare module '@strapi/strapi' {
       'api::landing.landing': ApiLandingLanding;
       'api::location.location': ApiLocationLocation;
       'api::menu-item.menu-item': ApiMenuItemMenuItem;
+      'api::mfa-enrollment.mfa-enrollment': ApiMfaEnrollmentMfaEnrollment;
       'api::page-version.page-version': ApiPageVersionPageVersion;
       'api::poll.poll': ApiPollPoll;
       'api::popup.popup': ApiPopupPopup;

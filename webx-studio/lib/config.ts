@@ -12,6 +12,14 @@ export const ENGINE_COOKIE = process.env.WEBX_ENGINE_COOKIE || "webx_session_eng
 // refresh token (Strapi 5 rotating, single-use) — used to mint fresh access tokens
 export const REFRESH_COOKIE = process.env.WEBX_REFRESH_COOKIE || "webx_refresh";
 export const REFRESH_TTL = Number(process.env.WEBX_REFRESH_TTL || 60 * 60 * 24); // 24h
+// Real per-user MFA (see lib/totp.ts + governance.ts's MFA functions) —
+// after password verification succeeds for an MFA-enrolled account, the
+// real Strapi token is stashed here (short-lived, distinct cookie) instead
+// of going straight into SESSION_COOKIE, until a correct code lands at
+// /api/auth/mfa/verify-login and promotes it. Never reaches client JS,
+// same httpOnly model as the real session cookie.
+export const MFA_PENDING_COOKIE = process.env.WEBX_MFA_PENDING_COOKIE || "webx_mfa_pending";
+export const MFA_PENDING_TTL = Number(process.env.WEBX_MFA_PENDING_TTL || 300); // 5 minutes
 // Shared secret for governance.ts's internal cross-tenant ownership lookup
 // (strapi-cms/src/api/internal) — must match Strapi's WEBX_INTERNAL_SECRET.
 export const STRAPI_INTERNAL_SECRET = process.env.STRAPI_INTERNAL_SECRET || "";

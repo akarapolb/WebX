@@ -39,6 +39,7 @@ import {
   WORDPRESS_SCHEDULER_USERNAME, WORDPRESS_SCHEDULER_APP_PASSWORD,
 } from "../config";
 import { planLimit } from "../plans";
+import { generateSecret, otpauthUri, verifyTOTP, generateRecoveryCodes, hashRecoveryCode } from "../totp";
 
 // The one swap point (Phase 2, made per-session in Phase 6): every
 // `governed.*` content operation goes through whichever adapter THIS
@@ -92,6 +93,7 @@ const TENANT_UID = "api::tenant.tenant";
 const FIELD_POLICY_UID = "api::field-policy.field-policy";
 const AUDIT_UID = "api::audit-log.audit-log";
 const RELEASE_UID = "api::release.release";
+const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
 // Every uid the Users/Field Access/Audit Log/Releases pages read or write —
 // always Strapi-hosted regardless of which engine THIS session authenticated
 // against (Phase 5's module header). Without this, a WordPress-session admin
@@ -278,6 +280,148 @@ export async function selfServeSignup(input: {
     if (!login.ok) throw new CmsError("Account created, but automatic sign-in failed — please log in.", 500);
     return { token: login.token, refresh: login.refresh ?? null };
   });
+}
+
+// ---------- MFA (real, per-user) ----------
+// Unlike strapi-cms's utils/mfa.ts + middlewares/admin-mfa.ts (a single
+// shared demo secret gating only direct browser navigation to Strapi's
+// native /admin UI — see lib/totp.ts's own header comment), this is wired
+// into webx-studio's actual login path with a real secret per admin.
+
+async function findMfaRow(email: string): Promise<any | null> {
+  const token = await schedulerStrapiToken();
+  if (!token) return null;
+  return withServiceToken(token, async () => {
+    const { data } = await strapiAdapter.entries.list<any>(MFA_ENROLLMENT_UID, {
+      filter: [{ field: "adminEmail", op: "eq", value: email.toLowerCase() }], pageSize: 1,
+    });
+    return data[0] ?? null;
+  });
+}
+
+/** Called by the login route BEFORE issuing a session — true only for a
+ * user who has completed enrollment (confirmMfaEnrollment below), so MFA is
+ * opt-in per admin, not a mandatory global gate. */
+export async function isMfaEnabled(email: string): Promise<boolean> {
+  const row = await findMfaRow(email);
+  return Boolean(row?.enabled);
+}
+
+export async function mfaEnrollmentStatus(): Promise<{ enabled: boolean }> {
+  const user = await requireUser();
+  if (!user.email) return { enabled: false };
+  return { enabled: await isMfaEnabled(user.email) };
+}
+
+/** Step 1 — requires an already-authenticated session (you enroll MFA on
+ * your OWN account, not anyone else's). Generates a fresh secret and stores
+ * it un-enabled; nothing about how this user logs in changes until
+ * confirmMfaEnrollment verifies a real code from it. Re-enrolling
+ * overwrites any previous unconfirmed secret. */
+export async function startMfaEnrollment(): Promise<{ secret: string; otpauthUri: string }> {
+  const user = await requireUser();
+  if (!user.email) throw new CmsError("Unauthenticated", 401);
+  const secret = generateSecret();
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("MFA enrollment is temporarily unavailable", 500);
+  await withServiceToken(token, async () => {
+    const existing = await findMfaRow(user.email!);
+    const data = { adminEmail: user.email!.toLowerCase(), secret, enabled: false, recoveryCodesHash: null, recoveryCodesUsed: [] };
+    if (existing) await strapiAdapter.entries.update(MFA_ENROLLMENT_UID, existing.documentId ?? existing.id, data);
+    else await strapiAdapter.entries.create(MFA_ENROLLMENT_UID, data);
+  });
+  return { secret, otpauthUri: otpauthUri(secret, user.email) };
+}
+
+/** Step 2 — verifies a real code from the authenticator app against the
+ * pending secret, and only THEN flips enabled:true. Recovery codes are
+ * generated at this exact moment (not at startMfaEnrollment) so a
+ * half-finished enrollment never has live, unused recovery codes sitting
+ * around. Returns the plaintext codes once — same "show once" convention as
+ * genPassword.ts's temp passwords; only their hashes are ever stored. */
+export async function confirmMfaEnrollment(code: string): Promise<{ recoveryCodes: string[] }> {
+  const user = await requireUser();
+  if (!user.email) throw new CmsError("Unauthenticated", 401);
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("MFA enrollment is temporarily unavailable", 500);
+  return withServiceToken(token, async () => {
+    const row = await findMfaRow(user.email!);
+    if (!row?.secret) throw new CmsError("Start enrollment first", 400);
+    if (!verifyTOTP(row.secret, code)) throw new CmsError("Incorrect code — check your authenticator app and try again", 400);
+    const recoveryCodes = generateRecoveryCodes();
+    await strapiAdapter.entries.update(MFA_ENROLLMENT_UID, row.documentId ?? row.id, {
+      enabled: true, recoveryCodesHash: recoveryCodes.map(hashRecoveryCode), recoveryCodesUsed: [],
+    });
+    await writeAudit("mfa_enable", MFA_ENROLLMENT_UID, row.documentId ?? row.id, user, null);
+    return { recoveryCodes };
+  });
+}
+
+/** Turns MFA back off for the CALLER's own account — requires their current
+ * password as re-proof of identity; an already-open session alone isn't
+ * enough to disable a security control on itself. */
+export async function disableMfa(password: string): Promise<void> {
+  const user = await requireUser();
+  if (!user.email) throw new CmsError("Unauthenticated", 401);
+  const check = await strapiLogin(user.email, password);
+  if (!check.ok) throw new CmsError("Incorrect password", 401);
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("MFA is temporarily unavailable", 500);
+  await withServiceToken(token, async () => {
+    const row = await findMfaRow(user.email!);
+    if (row) await strapiAdapter.entries.remove(MFA_ENROLLMENT_UID, row.documentId ?? row.id);
+  });
+  await writeAudit("mfa_disable", MFA_ENROLLMENT_UID, null, user, null);
+}
+
+// A brute-force TOTP code has only 1,000,000 possibilities and nothing else
+// protects this path — webx-studio has no rate limiter of its own, and
+// Strapi's only guards its native /admin/login, which this never calls
+// (the password step already happened, this only checks the second
+// factor). A simple in-memory per-email counter on a rolling window, same
+// modest scope as strapi-cms's own middlewares/rate-limit.ts.
+const mfaAttempts = new Map<string, { count: number; windowStart: number }>();
+const MFA_MAX_ATTEMPTS = 8;
+const MFA_WINDOW_MS = 10 * 60_000;
+function assertMfaRateLimitOk(email: string): void {
+  const rec = mfaAttempts.get(email);
+  if (rec && Date.now() - rec.windowStart <= MFA_WINDOW_MS && rec.count >= MFA_MAX_ATTEMPTS) {
+    throw new CmsError("Too many attempts — try again later", 429);
+  }
+}
+function recordMfaFailure(email: string): void {
+  const now = Date.now();
+  const rec = mfaAttempts.get(email);
+  if (!rec || now - rec.windowStart > MFA_WINDOW_MS) mfaAttempts.set(email, { count: 1, windowStart: now });
+  else rec.count++;
+}
+
+/** Verifies a login-time MFA code (TOTP or a recovery code) for `email` —
+ * called by /api/auth/mfa/verify-login after the password step already
+ * succeeded. Recovery codes are single-use: a match gets recorded in
+ * recoveryCodesUsed so it can never be replayed. */
+export async function verifyLoginMfaCode(email: string, code: string): Promise<boolean> {
+  const key = email.toLowerCase();
+  assertMfaRateLimitOk(key);
+  const row = await findMfaRow(email);
+  if (!row?.enabled || !row.secret) { recordMfaFailure(key); return false; }
+  if (verifyTOTP(row.secret, code)) { mfaAttempts.delete(key); return true; }
+
+  const hash = hashRecoveryCode(code);
+  const hashes: string[] = row.recoveryCodesHash || [];
+  const used: string[] = row.recoveryCodesUsed || [];
+  if (hashes.includes(hash) && !used.includes(hash)) {
+    const token = await schedulerStrapiToken();
+    if (token) {
+      await withServiceToken(token, () =>
+        strapiAdapter.entries.update(MFA_ENROLLMENT_UID, row.documentId ?? row.id, { recoveryCodesUsed: [...used, hash] })
+      );
+    }
+    mfaAttempts.delete(key);
+    return true;
+  }
+  recordMfaFailure(key);
+  return false;
 }
 
 let policyCache: { at: number; list: any[] } = { at: 0, list: [] };

@@ -113,6 +113,7 @@ export default function Shell({
             <button className={lang === "th" ? "on" : ""} onClick={() => setLang("th")}>ไทย</button>
           </div>
           <div className="demo-pill"><i /> {connected ? (engine === "wordpress" ? (lang === "th" ? "WORDPRESS · เชื่อมต่อแล้ว" : "WORDPRESS · CONNECTED") : t("tb.connected")) : t("tb.offline")}</div>
+          <button className="ic-btn" title="Security" onClick={() => router.push("/account/security")}><Icon name="lock" /></button>
           <button className="ic-btn" title="Sign out" onClick={logout}><Icon name="logout" /></button>
           <div className="avatar" title={user.email}>{initials}</div>
         </header>

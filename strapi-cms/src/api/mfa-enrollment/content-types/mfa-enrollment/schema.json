@@ -1,0 +1,18 @@
+{
+  "kind": "collectionType",
+  "collectionName": "mfa_enrollments",
+  "info": {
+    "singularName": "mfa-enrollment",
+    "pluralName": "mfa-enrollments",
+    "displayName": "MFA Enrollment",
+    "description": "Per-admin TOTP secret + recovery codes for webx-studio's own login MFA (not Strapi's admin-panel-only demo gate)"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "adminEmail": { "type": "string", "required": true, "unique": true },
+    "secret": { "type": "string", "required": true, "private": true },
+    "enabled": { "type": "boolean", "default": false },
+    "recoveryCodesHash": { "type": "json", "private": true },
+    "recoveryCodesUsed": { "type": "json", "private": true }
+  }
+}
