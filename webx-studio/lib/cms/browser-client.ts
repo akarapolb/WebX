@@ -3,7 +3,7 @@
 // server-side into governance.ts + strapi.ts as of Phase 1). This is what
 // components actually get from `cms` in lib/cms/index.ts.
 import type {
-  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser,
+  BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
 
@@ -34,7 +34,7 @@ async function errorFrom(r: Response): Promise<CmsError> {
   return new CmsError(j?.error || (r.status + ""), r.status);
 }
 
-export const browserAdapter: CmsAdapter = {
+export const browserAdapter: BrowserCmsAdapter = {
   schema: {
     async listContentTypes(): Promise<ContentTypeInfo[]> {
       const r = await fetch(BASE + "/schema");
@@ -108,15 +108,22 @@ export const browserAdapter: CmsAdapter = {
       if (!r.ok) return null;
       return await json(r);
     },
-    async listRoles(): Promise<{ id: any; name: string }[]> {
-      const r = await fetch(BASE + "/auth/roles");
+    async listRoles(tenantKey?: string): Promise<{ id: any; name: string }[]> {
+      const r = await fetch(BASE + "/auth/roles" + (tenantKey ? "?tenant=" + encodeURIComponent(tenantKey) : ""));
       if (!r.ok) return [];
       return (await json(r)) || [];
     },
-    async listUsers(): Promise<AdminUser[]> {
-      const r = await fetch(BASE + "/auth/users");
+    async listUsers(tenantKey: string): Promise<AdminUser[]> {
+      const r = await fetch(BASE + "/auth/users?tenant=" + encodeURIComponent(tenantKey));
       if (!r.ok) throw await errorFrom(r);
       return (await json(r)) || [];
+    },
+    async create(tenantKey: string, input: NewUserInput): Promise<{ user: AdminUser; tempPassword: string }> {
+      const r = await fetch(BASE + "/auth/users?tenant=" + encodeURIComponent(tenantKey), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+      });
+      if (!r.ok) throw await errorFrom(r);
+      return await json(r);
     },
   },
 };

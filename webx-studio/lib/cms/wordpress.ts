@@ -17,11 +17,12 @@
 //    normalize "publish" -> "published" + a synthesized publishedAt.
 import "server-only";
 import type {
-  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser,
+  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
 import { sessionToken } from "../strapi";
 import { WORDPRESS_URL } from "../config";
+import { genTempPassword } from "./genPassword";
 
 const BASE = WORDPRESS_URL;
 
@@ -335,6 +336,34 @@ export const wordpressAdapter: CmsAdapter = {
       return (list || []).map((u: any) => ({
         id: u.id, firstname: u.name, lastname: "", email: u.email, isActive: true, roles: u.roles || [],
       }));
+    },
+    // WordPress, unlike Strapi, supports a real single-call "create with
+    // password" — POST /wp/v2/users with a password in the body creates a
+    // login-ready account immediately (wp_insert_user() under the hood;
+    // core sends no email/notification for a REST-created user, confirmed
+    // against the live instance during Phase 10's research). Needs
+    // create_users capability (administrator) on the calling credential.
+    async create(input: NewUserInput): Promise<{ user: AdminUser; tempPassword: string }> {
+      const tempPassword = genTempPassword();
+      const baseUsername = input.email.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "") || "user";
+      const name = [input.firstname, input.lastname].filter(Boolean).join(" ") || baseUsername;
+      let username = baseUsername;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const r = await fetch(BASE + "/wp/v2/users", {
+          method: "POST", headers: await authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ username, email: input.email, password: tempPassword, roles: [input.roleId], name }),
+          cache: "no-store",
+        });
+        if (r.ok) {
+          const u = await json(r);
+          return { user: { id: u.id, firstname: u.name, lastname: "", email: u.email, isActive: true, roles: u.roles || [input.roleId] }, tempPassword };
+        }
+        const body = await json(r);
+        const takenUsername = r.status === 400 && (body?.code === "existing_user_login" || String(body?.message || "").includes("username"));
+        if (!takenUsername || attempt === 2) throw new CmsError(body?.message || "create user failed", r.status);
+        username = baseUsername + (attempt + 2); // baseUsername2, baseUsername3
+      }
+      throw new CmsError("create user failed", 500); // unreachable — satisfies the return-type checker
     },
   },
 };

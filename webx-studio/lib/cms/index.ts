@@ -3,8 +3,8 @@
 // (see lib/cms/governance.ts) — never lib/cms/strapi.ts directly, which is
 // server-only now and has exactly one caller, governance.ts.
 import { browserAdapter } from "./browser-client";
-import type { CmsAdapter } from "./types";
+import type { BrowserCmsAdapter } from "./types";
 
-export const cms: CmsAdapter = browserAdapter;
+export const cms: BrowserCmsAdapter = browserAdapter;
 export { CmsError } from "./types";
-export type { CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser } from "./types";
+export type { CmsAdapter, BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput } from "./types";

@@ -5,11 +5,12 @@
 // see docs/TECHNICAL.md and the Engine Adapter Blueprint for why.
 import "server-only";
 import type {
-  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser,
+  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
 import { sessionToken } from "../strapi";
 import { STRAPI_URL } from "../config";
+import { genTempPassword } from "./genPassword";
 
 const BASE = STRAPI_URL;
 
@@ -177,6 +178,37 @@ export const strapiAdapter: CmsAdapter = {
         id: u.id, firstname: u.firstname, lastname: u.lastname, email: u.email,
         isActive: u.isActive, roles: (u.roles || []).map((x: any) => x.name).filter(Boolean),
       }));
+    },
+    // Strapi has no single-call "create with password" — POST /admin/users
+    // creates an INACTIVE user with no password accepted at all (its own
+    // validation schema rejects one), meant to be completed via an emailed
+    // registration-token link. Since this whole app never configures SMTP,
+    // the account is instead activated in a second call, same admin
+    // session, right after — PUT /admin/users/:id accepts password+isActive
+    // directly (no currentPassword required; that's only enforced on the
+    // self-service profile-update schema). Verified against the live
+    // instance during Phase 10's user-management research, not assumed.
+    async create(input: NewUserInput): Promise<{ user: AdminUser; tempPassword: string }> {
+      const createRes = await fetch(BASE + "/admin/users", {
+        method: "POST", headers: await authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ email: input.email, firstname: input.firstname, lastname: input.lastname, roles: [input.roleId] }),
+        cache: "no-store",
+      });
+      if (!createRes.ok) throw new CmsError("create user failed", createRes.status);
+      const created = (await json(createRes))?.data;
+      const tempPassword = genTempPassword();
+      const activateRes = await fetch(BASE + "/admin/users/" + created.id, {
+        method: "PUT", headers: await authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ password: tempPassword, isActive: true }),
+        cache: "no-store",
+      });
+      if (!activateRes.ok) throw new CmsError("activate user failed", activateRes.status);
+      const activated = (await json(activateRes))?.data ?? created;
+      const user: AdminUser = {
+        id: activated.id, firstname: activated.firstname, lastname: activated.lastname, email: activated.email,
+        isActive: activated.isActive ?? true, roles: (activated.roles || []).map((x: any) => x.name).filter(Boolean),
+      };
+      return { user, tempPassword };
     },
   },
 };

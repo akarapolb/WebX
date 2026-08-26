@@ -29,7 +29,7 @@ import "server-only";
 import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm } from "./wordpress";
 import { CmsError } from "./types";
-import type { CmsAdapter, EntryQuery, EntryList, CurrentUser } from "./types";
+import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput } from "./types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
 import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild } from "../publicSiteBuild";
@@ -99,7 +99,7 @@ const RELEASE_UID = "api::release.release";
 // found live while verifying the first WordPress-engine tenant in Phase 6.
 const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID]);
 
-type Tenant = { key: string; id: any; name?: string; brand?: any; engine?: "strapi" | "wordpress" };
+type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[] };
 
 // Tenant/field-policy/audit bookkeeping lives in Strapi regardless of which
 // engine THIS session is authenticated against (see the module header), and
@@ -121,24 +121,40 @@ async function strapiBookkeeping<T>(fn: () => Promise<T>): Promise<T> {
   return withServiceToken(token, fn);
 }
 
-let tenantCache: { at: number; map: Map<string, Tenant> } = { at: 0, map: new Map() };
-async function refreshTenantCache(): Promise<Map<string, Tenant>> {
+let tenantCache: { at: number; byEmail: Map<string, Tenant>; byKey: Map<string, Tenant> } =
+  { at: 0, byEmail: new Map(), byKey: new Map() };
+async function refreshTenantCache(): Promise<typeof tenantCache> {
   const now = Date.now();
-  if (now - tenantCache.at > 30_000 || tenantCache.map.size === 0) {
+  if (now - tenantCache.at > 30_000 || tenantCache.byKey.size === 0) {
     let data: any[];
     try { ({ data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(TENANT_UID, { pageSize: 500 }))); }
-    catch { return tenantCache.map; }
-    const m = new Map<string, Tenant>();
-    data.forEach((t: any) => (t.adminEmails || []).forEach((e: string) =>
-      m.set(String(e).toLowerCase(), { key: t.key, id: t.id, name: t.name, brand: t.brand, engine: t.engine || "strapi" })));
-    tenantCache = { at: now, map: m };
+    catch { return tenantCache; }
+    const byEmail = new Map<string, Tenant>();
+    const byKey = new Map<string, Tenant>();
+    data.forEach((t: any) => {
+      const adminEmails: string[] = t.adminEmails || [];
+      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails };
+      byKey.set(t.key, tenant);
+      adminEmails.forEach((e: string) => byEmail.set(String(e).toLowerCase(), tenant));
+    });
+    tenantCache = { at: now, byEmail, byKey };
   }
-  return tenantCache.map;
+  return tenantCache;
 }
 async function resolveEffectiveTenant(email?: string): Promise<Tenant | null> {
   if (!email) return null;
-  const map = await refreshTenantCache();
-  return map.get(email.toLowerCase()) || null;
+  const { byEmail } = await refreshTenantCache();
+  return byEmail.get(email.toLowerCase()) || null;
+}
+/** Resolves a tenant by its own `key` (not by admin email) — used wherever a
+ * caller names the WORKSPACE they're acting on directly (e.g. creating a
+ * user for it) rather than being scoped to it by their own membership. */
+async function resolveTenantByKey(key: string): Promise<Tenant | null> {
+  const { byKey } = await refreshTenantCache();
+  return byKey.get(key) || null;
+}
+function invalidateTenantCache(): void {
+  tenantCache.at = 0;
 }
 
 /** The logged-in admin's own tenant (name/brand included) — used by
@@ -256,8 +272,52 @@ export const governed = {
   schema: { listContentTypes: async () => (await activeAdapter()).schema.listContentTypes() },
   auth: {
     me: async () => (await activeAdapter()).auth.me(),
-    listRoles: async () => (await activeAdapter()).auth.listRoles(),
-    listUsers: async () => (await activeAdapter()).auth.listUsers(),
+    // listRoles/listUsers/create all take the target WORKSPACE explicitly —
+    // resolving engine from that tenant, not from this session's own login,
+    // so switching the workspace selector to e.g. a WordPress tenant while
+    // on a Strapi session lists the right backend's users, not the wrong one.
+    async listRoles(tenantKey?: string) {
+      // No tenantKey: pre-existing unscoped behavior, unchanged — Field
+      // Access's role picker wants Strapi's own roles via this session's
+      // engine, not any particular workspace's.
+      if (!tenantKey) return (await activeAdapter()).auth.listRoles();
+      const target = await resolveTenantByKey(tenantKey);
+      if (!target) throw new CmsError("Unknown workspace", 404);
+      return withEngineAdapter(target.engine || "strapi", (a) => a.auth.listRoles());
+    },
+    async listUsers(tenantKey: string) {
+      const caller = await requireUser();
+      const eff = await resolveEffectiveTenant(caller.email);
+      assertCanActOnTenant(eff, tenantKey);
+      const target = await resolveTenantByKey(tenantKey);
+      if (!target) throw new CmsError("Unknown workspace", 404);
+      const all = await withEngineAdapter(target.engine || "strapi", (a) => a.auth.listUsers());
+      // adminEmails is the same per-tenant roster Strapi content RBAC already
+      // uses — reused here as "who belongs to this workspace" regardless of
+      // which backend actually hosts their login.
+      const roster = new Set((target.adminEmails || []).map((e) => e.toLowerCase()));
+      if (!roster.size) return [];
+      return all.filter((u) => roster.has((u.email || "").toLowerCase()));
+    },
+    async create(tenantKey: string, input: NewUserInput) {
+      const caller = await requireUser();
+      const eff = await resolveEffectiveTenant(caller.email);
+      assertCanActOnTenant(eff, tenantKey);
+      const target = await resolveTenantByKey(tenantKey);
+      if (!target) throw new CmsError("Unknown workspace", 404);
+      const result = await withEngineAdapter(target.engine || "strapi", (a) => a.auth.create(input));
+      const current = new Set((target.adminEmails || []).map((e) => e.toLowerCase()));
+      if (!current.has(input.email.toLowerCase())) {
+        const updated = [...(target.adminEmails || []), input.email];
+        await strapiBookkeeping(() =>
+          strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { adminEmails: updated })
+        );
+        invalidateTenantCache();
+      }
+      // Never the password — it exists only in this call's return value.
+      await writeAudit("create_user", "admin::user", result.user.id, caller, tenantKey);
+      return result;
+    },
   },
   media: { upload: async (file: File) => (await activeAdapter()).media.upload(file) },
 
@@ -422,6 +482,34 @@ async function ensureWordpressTenantTerm(key: string): Promise<void> {
     if (!wpToken) return;
     await withServiceToken(wpToken, () => ensureWtenantTerm(key));
   } catch { /* see comment above — non-fatal */ }
+}
+
+/** Runs `fn` against the adapter for a specific ENGINE (not this session's
+ * own, per activeAdapter()) — needed by the auth.* calls below, which act on
+ * a workspace the caller names, not the one they happen to be logged into.
+ * Always goes through that engine's scheduler service credential, same as
+ * strapiBookkeeping/ensureWordpressTenantTerm above, for two reasons: (1)
+ * there's often no ambient session for the OTHER engine at all, and (2) even
+ * when there is one, a workspace-scoped admin's own backend account (a
+ * Strapi Editor role, a WordPress non-admin role) typically lacks the native
+ * admin::users/create_users permission this needs — WebX's own tenant check
+ * in governed.auth below is what actually authorizes the call, not the
+ * backend's native RBAC. */
+async function withEngineAdapter<T>(engine: "strapi" | "wordpress", fn: (adapter: CmsAdapter) => Promise<T>): Promise<T> {
+  if (engine === "wordpress") {
+    const token = await schedulerWpToken();
+    if (!token) throw new CmsError("No WordPress service credential configured", 500);
+    return withServiceToken(token, () => fn(wordpressAdapter));
+  }
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("No Strapi service credential configured", 500);
+  return withServiceToken(token, () => fn(strapiAdapter));
+}
+
+/** Throws 403 if the caller is scoped to a tenant other than the one they're
+ * trying to act on. `eff === null` means unscoped/super-admin — any tenant. */
+function assertCanActOnTenant(eff: Tenant | null, tenantKey: string): void {
+  if (eff && eff.key !== tenantKey) throw new CmsError("Cross-tenant operation not permitted", 403);
 }
 
 /** Publish every release whose scheduledAt has passed — engine-agnostic: each
