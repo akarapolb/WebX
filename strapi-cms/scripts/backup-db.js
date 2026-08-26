@@ -2,6 +2,9 @@
    backup-db.js — สำรองฐานข้อมูล (TOR ข้อ 8.3(5) Backup Data + DR RPO)
    • SQLite: คัดลอกไฟล์ .tmp/data.db → backups/data-YYYYMMDD-HHmmss.db
    • PostgreSQL: เรียก pg_dump (อ่านค่าจาก env DATABASE_*)
+   • ไฟล์อัปโหลด (uploads): ถ้าตั้ง env UPLOADS_SRC ไว้ (docker-compose.yml
+     mount volume strapi-uploads ไว้ที่เส้นทางนี้) จะ tar.gz สำรองไว้ด้วย —
+     ครบตาม DEPLOY.md checklist "Backups: nightly pg_dump + the uploads volume"
    เก็บย้อนหลัง KEEP ชุดล่าสุด (ลบที่เก่ากว่า) — รองรับตั้ง cron รายวัน/ราย ชม.
    ใช้: node scripts/backup-db.js
    ============================================================ */
@@ -15,7 +18,7 @@ const KEEP = Number(process.env.BACKUP_KEEP || 30);
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const now = new Date();
-const stamp = now.toISOString().replace(/[-:T]/g, '').slice(0, 15); // YYYYMMDDHHmmss
+const stamp = now.toISOString().replace(/[-:T.]/g, '').slice(0, 14); // YYYYMMDDHHmmss
 const client = (process.env.DATABASE_CLIENT || 'sqlite').toLowerCase();
 
 try {
@@ -34,9 +37,19 @@ try {
     fs.copyFileSync(db, out);
     console.log('[backup] sqlite →', out, '(' + Math.round(fs.statSync(out).size / 1024) + ' KB)');
   }
-  // หมุนเวียน: เก็บ KEEP ชุดล่าสุด
+  // ไฟล์อัปโหลด (media) — สำรองแยกจากฐานข้อมูล เผื่อ UPLOADS_SRC ถูกตั้งไว้
+  const uploadsSrc = process.env.UPLOADS_SRC;
+  if (uploadsSrc && fs.existsSync(uploadsSrc)) {
+    const uploadsOut = path.join(BACKUP_DIR, `uploads-${stamp}.tar.gz`);
+    execSync(`tar -czf "${uploadsOut}" -C "${path.dirname(uploadsSrc)}" "${path.basename(uploadsSrc)}"`, { stdio: 'inherit' });
+    console.log('[backup] uploads →', uploadsOut, '(' + Math.round(fs.statSync(uploadsOut).size / 1024) + ' KB)');
+  }
+
+  // หมุนเวียน: เก็บ KEEP ชุดล่าสุด (แยกหมุนเวียนของฐานข้อมูลและ uploads)
   const files = fs.readdirSync(BACKUP_DIR).filter((f) => /^(data|pg)-/.test(f)).sort();
   while (files.length > KEEP) { const f = files.shift(); fs.unlinkSync(path.join(BACKUP_DIR, f)); console.log('[backup] ลบเก่า', f); }
+  const uploadFiles = fs.readdirSync(BACKUP_DIR).filter((f) => /^uploads-/.test(f)).sort();
+  while (uploadFiles.length > KEEP) { const f = uploadFiles.shift(); fs.unlinkSync(path.join(BACKUP_DIR, f)); console.log('[backup] ลบเก่า', f); }
 } catch (e) {
   console.error('[backup] ล้มเหลว:', e.message);
   process.exit(1);

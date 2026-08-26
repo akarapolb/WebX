@@ -54,7 +54,7 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
 - [ ] All five Strapi secrets + `DATABASE_PASSWORD` set to strong random values.
 - [ ] HTTPS/TLS terminated in front (reverse proxy / platform).
 - [ ] CORS + trusted proxy configured for the public WebX origin.
-- [ ] Backups: nightly `pg_dump` + the uploads volume.
+- [x] Backups: nightly `pg_dump` + the uploads volume — the `db-backup` service, local disk only (see `BACKUP_KEEP`/`BACKUP_INTERVAL_SECONDS` in `.env.production.example`). Off-site storage is still on you.
 - [ ] Least-privilege Strapi API token for the MCP/CLI (review find/create only
       if those tools are used).
 - [ ] PDPA: submission content types are **not** public-readable (verify roles).

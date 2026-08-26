@@ -38,6 +38,7 @@ import {
   STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD,
   WORDPRESS_SCHEDULER_USERNAME, WORDPRESS_SCHEDULER_APP_PASSWORD,
 } from "../config";
+import { planLimit } from "../plans";
 
 // The one swap point (Phase 2, made per-session in Phase 6): every
 // `governed.*` content operation goes through whichever adapter THIS
@@ -99,7 +100,7 @@ const RELEASE_UID = "api::release.release";
 // found live while verifying the first WordPress-engine tenant in Phase 6.
 const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID]);
 
-type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[] };
+type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string };
 
 // Tenant/field-policy/audit bookkeeping lives in Strapi regardless of which
 // engine THIS session is authenticated against (see the module header), and
@@ -133,7 +134,7 @@ async function refreshTenantCache(): Promise<typeof tenantCache> {
     const byKey = new Map<string, Tenant>();
     data.forEach((t: any) => {
       const adminEmails: string[] = t.adminEmails || [];
-      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails };
+      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan };
       byKey.set(t.key, tenant);
       adminEmails.forEach((e: string) => byEmail.set(String(e).toLowerCase(), tenant));
     });
@@ -295,6 +296,42 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
+/** Mirrors exactly what Billing.tsx/ContentBrowser.tsx already show as
+ * "items used" (Strapi's own /api/analytics/summary contentTotal) —
+ * enforcement has to count the same way it's displayed, or a user would see
+ * e.g. "42/50" in the UI and get blocked at a different number underneath.
+ * Strapi-only: WordPress-engine tenants' content isn't in this count today
+ * — the same pre-existing gap the analytics dashboard itself already has,
+ * not something new here — so WP_SCOPED creates aren't item-limited yet.
+ * Fails open (returns 0, i.e. "not over limit") on any error: a broken
+ * limit check should never be the reason a real content save fails. */
+async function tenantItemCount(tenantKey: string): Promise<number> {
+  try {
+    const token = await schedulerStrapiToken();
+    if (!token) return 0;
+    const r = await fetch(STRAPI_URL + "/api/analytics/summary?tenant=" + encodeURIComponent(tenantKey), {
+      headers: { Authorization: "Bearer " + token }, cache: "no-store",
+    });
+    if (!r.ok) return 0;
+    const j = await r.json();
+    return Number(j?.contentTotal) || 0;
+  } catch { return 0; }
+}
+
+/** governed.create()'s plan-limit gate — only for a scoped tenant (an
+ * unscoped/super-admin create has no tenant to check a limit against, same
+ * as tenantStamp() below already treats that case) and only for SCOPED
+ * (Strapi) uids, matching tenantItemCount()'s own Strapi-only counting. */
+async function enforceItemLimit(eff: Tenant | null, uid: string): Promise<void> {
+  if (!eff || !SCOPED.has(uid)) return;
+  const limit = planLimit(eff.plan).items;
+  if (!Number.isFinite(limit)) return;
+  const used = await tenantItemCount(eff.key);
+  if (used >= limit) {
+    throw new CmsError(`This workspace has reached its ${limit}-item plan limit — upgrade to add more content.`, 403);
+  }
+}
+
 /** Which adapter (and, for bookkeeping uids, which credential) a content
  * operation on `uid` should run against. Bookkeeping uids (tenant,
  * field-policy, audit-log, release — see BOOKKEEPING_UIDS) always resolve to
@@ -344,6 +381,15 @@ export const governed = {
       assertCanActOnTenant(eff, tenantKey);
       const target = await resolveTenantByKey(tenantKey);
       if (!target) throw new CmsError("Unknown workspace", 404);
+      // Seat limit applies to the TARGET tenant regardless of whether the
+      // caller is scoped or an unscoped super admin adding someone on a
+      // tenant's behalf — unlike content items, there's no "no tenant to
+      // check against" case here, since tenantKey always names one.
+      const seatLimit = planLimit(target.plan).seats;
+      const currentSeats = (target.adminEmails || []).length;
+      if (Number.isFinite(seatLimit) && currentSeats >= seatLimit) {
+        throw new CmsError(`This workspace has reached its ${seatLimit}-seat plan limit — upgrade to add more users.`, 403);
+      }
       const result = await withEngineAdapter(target.engine || "strapi", (a) => a.auth.create(input));
       const current = new Set((target.adminEmails || []).map((e) => e.toLowerCase()));
       if (!current.has(input.email.toLowerCase())) {
@@ -426,6 +472,7 @@ export const governed = {
   async create<T = any>(uid: string, data: Record<string, any>): Promise<T> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    await enforceItemLimit(eff, uid);
     let d = await stripPolicyFields(user, uid, data);
     d = { ...d, ...tenantStamp(uid, eff) };
     const result: any = await withContentAdapter(uid, (cms) => cms.entries.create<any>(uid, d));

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "phase-*"]
+  pull_request:
+
+jobs:
+  build-webx-studio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: webx-studio/package-lock.json
+      - working-directory: webx-studio
+        run: npm ci
+      - working-directory: webx-studio
+        run: npx tsc --noEmit
+      - working-directory: webx-studio
+        run: npm run build
+
+  build-strapi-cms:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: strapi-cms/package-lock.json
+      - working-directory: strapi-cms
+        run: npm ci
+      - working-directory: strapi-cms
+        run: npx tsc --noEmit
+      - working-directory: strapi-cms
+        run: npm run build
+
+  typecheck-public-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: public-site/package-lock.json
+      - working-directory: public-site
+        run: npm ci
+      - working-directory: public-site
+        run: npx tsc --noEmit

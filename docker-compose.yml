@@ -101,6 +101,41 @@ services:
           sleep "$$INTERVAL_SECONDS"
         done
 
+  # Nightly Postgres + uploads-volume backup (DEPLOY.md's production
+  # checklist item). Local-only for now — writes into the db-backups volume
+  # on this same host, not off-site; wiring an S3-compatible upload target
+  # is the natural next step once one is chosen. Runs strapi-cms's own
+  # backup-db.js (see that file) rather than duplicating its rotation logic
+  # here in shell.
+  db-backup:
+    build:
+      context: ./strapi-cms
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_CLIENT: postgres
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-strapi}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-strapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD}
+      UPLOADS_SRC: /app/uploads-src
+      BACKUP_KEEP: ${BACKUP_KEEP:-30}
+      INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - db-backups:/app/backups
+      - strapi-uploads:/app/uploads-src:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          node scripts/backup-db.js || echo "[db-backup] backup failed"
+          sleep "$$INTERVAL_SECONDS"
+        done
+
   # WordPress engine — optional (profile "wordpress"): only needed for
   # tenants created with engine:"wordpress" (see webx-studio's
   # NewWorkspace.tsx). Mirrors docker-compose.wordpress.yml's dev setup —
@@ -183,5 +218,6 @@ services:
 volumes:
   db-data:
   strapi-uploads:
+  db-backups:
   wp-db-data:
   wp-content-data:

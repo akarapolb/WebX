@@ -1,0 +1,10 @@
+# Standalone image for the db-backup service (docker-compose.yml) — deliberately
+# NOT the same image as the main Strapi app: backup-db.js has zero npm deps
+# (fs/path/child_process only), so this just needs Node + pg_dump + the one
+# script file, not a full Strapi build. Keeps the backup job's image small and
+# its failure modes independent of the app image.
+FROM node:20-slim
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY scripts/backup-db.js ./scripts/backup-db.js
+CMD ["node", "scripts/backup-db.js"]
