@@ -22,19 +22,39 @@ export default function Compliance() {
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const audit = await fetch("/api/ai/audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenant }) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const [audit, compliance] = await Promise.all([
+        fetch("/api/ai/audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenant }) }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch("/api/cms/compliance?tenant=" + encodeURIComponent(tenant)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
       const findings: any[] = audit?.findings || [];
       const pdpa = findings.filter((f) => String(f.dimension).includes("PDPA")).length;
       const seo = findings.filter((f) => String(f.dimension).includes("SEO")).length;
+      const wcag = findings.filter((f) => String(f.dimension) === "WCAG").length;
       const geo = await Promise.all(["sitemap.xml", "robots.txt", "llms.txt"].map((p) => fetch("/api/strapi/" + p).then((r) => r.ok).catch(() => false)));
       const geoOk = geo.every(Boolean);
       setScanned(audit?.scanned ?? null);
+
+      const contrast = audit?.brandContrast;
+      const wcagDetail = (wcag === 0 ? t("cp.wcagOk") : wcag + " " + t("cp.wcagGaps"))
+        + " · " + (contrast ? (contrast.ok ? t("cp.contrastOk") : t("cp.contrastLow")).replace("{r}", String(contrast.ratio)) : t("cp.wcagE"));
+
+      const sec = compliance?.sec as { totalAdmins: number; mfaEnabledCount: number; mfaAdoptionPct: number } | undefined;
+      const secOk = !sec || sec.mfaAdoptionPct === 100;
+      const secDetail = sec ? t("cp.mfaAdopt").replace("{a}", String(sec.mfaEnabledCount)).replace("{b}", String(sec.totalAdmins)) : t("cp.secE");
+
+      const rel = compliance?.rel as { building: boolean; lastBuiltAt: string | null; lastError: string | null } | undefined;
+      const relOk = !!rel?.lastBuiltAt && !rel.lastError;
+      const relDetail = !rel ? t("cp.relE")
+        : rel.lastError ? t("cp.buildFailed")
+        : !rel.lastBuiltAt ? t("cp.neverBuilt")
+        : t("cp.builtOn").replace("{t}", new Date(rel.lastBuiltAt).toLocaleString());
+
       setDims([
         { key: "pdpa", status: pdpa === 0 ? "pass" : "warn", detail: t("cp.pdpaE") + " · " + (pdpa === 0 ? t("cp.noflag") : pdpa + " " + t("cp.flags")), href: "/content-audit" },
         { key: "seo", status: geoOk && seo === 0 ? "pass" : "warn", detail: (geoOk ? t("cp.geoOk") : t("cp.geoNo")) + " · " + seo + " " + t("cp.metagaps"), href: "/schema" },
-        { key: "wcag", status: "pass", detail: t("cp.wcagE"), href: "/branding" },
-        { key: "sec", status: "pass", detail: t("cp.secE"), href: "/audit" },
-        { key: "rel", status: "pass", detail: t("cp.relE"), href: "/billing" },
+        { key: "wcag", status: wcag === 0 && (!contrast || contrast.ok) ? "pass" : "warn", detail: wcagDetail, href: "/branding" },
+        { key: "sec", status: secOk ? "pass" : "warn", detail: secDetail, href: "/account/security" },
+        { key: "rel", status: relOk ? "pass" : "warn", detail: relDetail, href: "/status" },
       ]);
     } catch { setErr("Cannot reach the backend."); }
     finally { setLoading(false); }

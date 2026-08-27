@@ -313,6 +313,22 @@ export async function mfaEnrollmentStatus(): Promise<{ enabled: boolean }> {
   return { enabled: await isMfaEnabled(user.email) };
 }
 
+/** Compliance dashboard's "Security" dimension — real MFA adoption across a
+ * workspace's admin roster (adminEmails), not a hardcoded pass. Same
+ * scoping rule as every other per-tenant governed call: a workspace admin
+ * can only see their own workspace's number, an unscoped admin can see any. */
+export async function complianceSecuritySignal(tenantKey: string): Promise<{ totalAdmins: number; mfaEnabledCount: number; mfaAdoptionPct: number }> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  const emails = target.adminEmails || [];
+  const flags = await Promise.all(emails.map((e) => isMfaEnabled(e).catch(() => false)));
+  const mfaEnabledCount = flags.filter(Boolean).length;
+  return { totalAdmins: emails.length, mfaEnabledCount, mfaAdoptionPct: emails.length ? Math.round((mfaEnabledCount / emails.length) * 100) : 100 };
+}
+
 /** Step 1 — requires an already-authenticated session (you enroll MFA on
  * your OWN account, not anyone else's). Generates a fresh secret and stores
  * it un-enabled; nothing about how this user logs in changes until
