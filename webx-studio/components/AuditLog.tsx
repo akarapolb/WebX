@@ -8,9 +8,9 @@ type Log = { id: number; action?: string; contentType?: string; entryId?: string
 const AL_UID = "api::audit-log.audit-log";
 const shortType = (c?: string) => (c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
 const badgeOf = (a?: string) =>
-  a === "delete" || a === "remove_user" || a === "mfa_disable" ? "b-warn"
+  a === "delete" || a === "remove_user" || a === "mfa_disable" || a === "delete_api_token" ? "b-warn"
   : a === "publish" || a === "mfa_enable" ? "b-ok"
-  : a === "create" || a === "create_user" || a === "signup" ? "b-acc"
+  : a === "create" || a === "create_user" || a === "signup" || a === "create_api_token" ? "b-acc"
   : "b-mut";
 
 export default function AuditLog() {
@@ -35,7 +35,7 @@ export default function AuditLog() {
   useEffect(() => { load(); }, [load]);
 
   const fmt = (iso?: string) => { if (!iso) return ""; try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; } };
-  const actions = ["create", "update", "publish", "unpublish", "delete", "create_user", "remove_user", "rebuild_public_site", "signup", "mfa_enable", "mfa_disable"];
+  const actions = ["create", "update", "publish", "unpublish", "delete", "create_user", "remove_user", "rebuild_public_site", "signup", "mfa_enable", "mfa_disable", "create_api_token", "delete_api_token"];
   const shown = filter ? logs.filter((l) => l.action === filter) : logs;
 
   return (

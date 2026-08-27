@@ -424,6 +424,107 @@ export async function verifyLoginMfaCode(email: string, code: string): Promise<b
   return false;
 }
 
+// ---------- API tokens (external integrators) ----------
+// Wraps Strapi's own native admin::api-token — real token generation,
+// hashed storage, and per-content-type-action permission scoping already
+// exist there (the same mechanism mcp-webx/cli-webx already use — see
+// docs/TECHNICAL.md's "least-privilege Strapi API token" note); this isn't
+// a new token system, just the UI webx-studio never had for it (the
+// "API & Tokens" nav page was a literal Stub placeholder before this).
+//
+// Deliberately unscoped-admin-only: Strapi's own permission model scopes a
+// token by content-type + action, not by TENANT — a token would read every
+// tenant's articles, not just one, regardless of who created it. Letting
+// every workspace's own admin mint their own globally-reaching tokens would
+// be a real cross-tenant gap, so only an unscoped caller can create or
+// revoke one; resolveEffectiveTenant's existing null-vs-tenant distinction
+// is what's already used for this same judgment call everywhere else.
+
+export type ApiTokenSummary = {
+  id: number; name: string; description?: string;
+  type: "read-only" | "full-access" | "custom";
+  lifespan: number | null; expiresAt: string | null; lastUsedAt: string | null; createdAt: string;
+};
+
+async function requireUnscoped(): Promise<CurrentUser> {
+  const user = await requireUser();
+  const eff = await resolveEffectiveTenant(user.email);
+  if (eff) throw new CmsError("Only an unscoped administrator can manage API tokens — they aren't tenant-scoped, so a single workspace admin minting one would reach every OTHER workspace's content too.", 403);
+  return user;
+}
+
+export async function listApiTokens(): Promise<ApiTokenSummary[]> {
+  await requireUnscoped();
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("Temporarily unavailable", 500);
+  return withServiceToken(token, async () => {
+    const r = await fetch(STRAPI_URL + "/admin/api-tokens", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    if (!r.ok) throw new CmsError("Could not list tokens", r.status);
+    const j = await r.json();
+    return (j?.data || []).map((t: any) => ({
+      id: t.id, name: t.name, description: t.description, type: t.type,
+      lifespan: t.lifespan, expiresAt: t.expiresAt, lastUsedAt: t.lastUsedAt, createdAt: t.createdAt,
+    }));
+  });
+}
+
+/** The full catalog of content-type actions a "custom" token can be scoped
+ * to — straight passthrough of Strapi's own content-api permissions list,
+ * the same data its native admin panel's own custom-token picker uses. */
+export async function listApiTokenPermissionCatalog(): Promise<Record<string, { controllers: Record<string, string[]> }>> {
+  await requireUnscoped();
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("Temporarily unavailable", 500);
+  return withServiceToken(token, async () => {
+    const r = await fetch(STRAPI_URL + "/admin/content-api/permissions", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    if (!r.ok) throw new CmsError("Could not load the permission catalog", r.status);
+    const j = await r.json();
+    return j?.data || {};
+  });
+}
+
+export async function createApiToken(input: {
+  name: string; description?: string; type: "read-only" | "full-access" | "custom";
+  lifespan?: number | null; permissions?: string[];
+}): Promise<{ token: ApiTokenSummary; accessKey: string }> {
+  const user = await requireUnscoped();
+  if (!input.name?.trim()) throw new CmsError("A name is required", 400);
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("Temporarily unavailable", 500);
+  return withServiceToken(token, async () => {
+    const r = await fetch(STRAPI_URL + "/admin/api-tokens", {
+      method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: input.name.trim(), description: input.description || "", type: input.type,
+        lifespan: input.lifespan ?? null,
+        permissions: input.type === "custom" ? (input.permissions || []) : null,
+      }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      throw new CmsError(body?.error?.message || "Could not create the token", r.status);
+    }
+    const j = await r.json();
+    const t = j.data;
+    await writeAudit("create_api_token", "admin::api-token", t.id, user, null);
+    return {
+      token: { id: t.id, name: t.name, description: t.description, type: t.type, lifespan: t.lifespan, expiresAt: t.expiresAt, lastUsedAt: t.lastUsedAt, createdAt: t.createdAt },
+      accessKey: t.accessKey,
+    };
+  });
+}
+
+export async function deleteApiToken(id: number): Promise<void> {
+  const user = await requireUnscoped();
+  const token = await schedulerStrapiToken();
+  if (!token) throw new CmsError("Temporarily unavailable", 500);
+  await withServiceToken(token, async () => {
+    const r = await fetch(STRAPI_URL + "/admin/api-tokens/" + id, { method: "DELETE", headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new CmsError("Could not delete the token", r.status);
+  });
+  await writeAudit("delete_api_token", "admin::api-token", id, user, null);
+}
+
 let policyCache: { at: number; list: any[] } = { at: 0, list: [] };
 async function getFieldPolicies(): Promise<any[]> {
   const now = Date.now();

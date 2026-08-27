@@ -1,2 +1,2 @@
-import Stub from "@/components/Stub";
-export default function Page() { return <Stub id="tokens" icon="code" />; }
+import Tokens from "@/components/Tokens";
+export default function Page() { return <Tokens />; }
