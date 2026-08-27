@@ -2049,6 +2049,43 @@ export interface ApiSitemapNodeSitemapNode extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiSsoCredentialSsoCredential
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'sso_credentials';
+  info: {
+    description: 'Per-user JIT-provisioned Strapi admin shadow password for SSO logins (Strapi CE has no native admin SSO). Encrypted at rest.';
+    displayName: 'SSO Credential';
+    pluralName: 'sso-credentials';
+    singularName: 'sso-credential';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    adminEmail: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::sso-credential.sso-credential'
+    > &
+      Schema.Attribute.Private;
+    passwordEnc: Schema.Attribute.Text &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    strapiUserId: Schema.Attribute.String & Schema.Attribute.Private;
+    tenantKey: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   collectionName: 'tenants';
   info: {
@@ -2092,6 +2129,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     publishedAt: Schema.Attribute.DateTime;
     seats: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
     social: Schema.Attribute.JSON;
+    sso: Schema.Attribute.JSON;
     subscriptionStatus: Schema.Attribute.String &
       Schema.Attribute.DefaultTo<'active'>;
     template: Schema.Attribute.JSON;
@@ -2807,6 +2845,7 @@ declare module '@strapi/strapi' {
       'api::review.review': ApiReviewReview;
       'api::service.service': ApiServiceService;
       'api::sitemap-node.sitemap-node': ApiSitemapNodeSitemapNode;
+      'api::sso-credential.sso-credential': ApiSsoCredentialSsoCredential;
       'api::tenant.tenant': ApiTenantTenant;
       'api::top-graphic.top-graphic': ApiTopGraphicTopGraphic;
       'api::video.video': ApiVideoVideo;

@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Icon from "@/components/Icon";
 
 const ENGINES = [
@@ -8,8 +8,18 @@ const ENGINES = [
   { id: "wordpress" as const, label: "WordPress", sub: "Sign in with your WordPress username and Application Password.", idLabel: "Username", idPlaceholder: "org-editor", idType: "text" as const, pwLabel: "Application Password", pwPlaceholder: "xxxx xxxx xxxx xxxx" },
 ];
 
-export default function Login() {
+const SSO_ERRORS: Record<string, string> = {
+  missing_tenant: "No workspace specified for SSO sign-in.",
+  sso_disabled: "SSO isn't enabled for this workspace.",
+  sso_expired: "Your sign-in attempt expired — please try again.",
+  sso_failed: "SSO sign-in failed — please try again or contact an administrator.",
+};
+
+function Login() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const ssoTenant = searchParams.get("tenant") || "";
+  const nextParam = searchParams.get("next") || "";
   const [engine, setEngine] = useState<"strapi" | "wordpress">("strapi");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,7 +27,23 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [mfaStep, setMfaStep] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
+  const [ssoAvailable, setSsoAvailable] = useState(false);
   const cfg = ENGINES.find((e) => e.id === engine)!;
+
+  useEffect(() => {
+    const errParam = searchParams.get("error");
+    if (errParam) setErr(SSO_ERRORS[errParam] || errParam);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!ssoTenant) { setSsoAvailable(false); return; }
+    fetch("/api/auth/sso/status?tenant=" + encodeURIComponent(ssoTenant))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setSsoAvailable(Boolean(j?.enabled)))
+      .catch(() => setSsoAvailable(false));
+  }, [ssoTenant]);
+
+  const ssoLoginHref = "/api/auth/sso/login?tenant=" + encodeURIComponent(ssoTenant) + (nextParam ? "&next=" + encodeURIComponent(nextParam) : "");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,6 +108,14 @@ export default function Login() {
           <div className="brand-mark">W</div>
           <div><h1>WebX <span className="gw">Studio</span></h1></div>
         </div>
+        {ssoAvailable && (
+          <>
+            <a href={ssoLoginHref} className="btn btn--p" style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+              <Icon name="lock" /> Continue with SSO
+            </a>
+            <div className="sub" style={{ textAlign: "center", marginBottom: 14 }}>or sign in with a password</div>
+          </>
+        )}
         <div role="tablist" aria-label="Backend" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
           {ENGINES.map((e) => (
             <button key={e.id} type="button" role="tab" aria-selected={engine === e.id}
@@ -117,5 +151,13 @@ export default function Login() {
         )}
       </form>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <Login />
+    </Suspense>
   );
 }

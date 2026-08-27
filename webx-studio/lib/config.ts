@@ -20,6 +20,19 @@ export const REFRESH_TTL = Number(process.env.WEBX_REFRESH_TTL || 60 * 60 * 24);
 // same httpOnly model as the real session cookie.
 export const MFA_PENDING_COOKIE = process.env.WEBX_MFA_PENDING_COOKIE || "webx_mfa_pending";
 export const MFA_PENDING_TTL = Number(process.env.WEBX_MFA_PENDING_TTL || 300); // 5 minutes
+// SSO (Keycloak/OIDC) login-in-progress — the PKCE code_verifier + OAuth
+// state get stashed here (short-lived, distinct cookie, httpOnly) between
+// /api/auth/sso/login's redirect to the IdP and /api/auth/sso/callback's
+// return leg. Same shape as MFA_PENDING_COOKIE above; longer TTL since the
+// user authenticates at an external IdP (possibly with its own MFA) in
+// between, not just types a 6-digit code.
+export const SSO_PENDING_COOKIE = process.env.WEBX_SSO_PENDING_COOKIE || "webx_sso_pending";
+export const SSO_PENDING_TTL = Number(process.env.WEBX_SSO_PENDING_TTL || 600); // 10 minutes
+// AES-256-GCM key (32 raw bytes, base64-encoded) for lib/crypto.ts —
+// encrypts per-tenant Keycloak client secrets and JIT-provisioned shadow
+// Strapi passwords at rest (see lib/cms/governance.ts's ssoLogin).
+// Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+export const WEBX_ENCRYPTION_KEY = process.env.WEBX_ENCRYPTION_KEY || "";
 // Shared secret for governance.ts's internal cross-tenant ownership lookup
 // (strapi-cms/src/api/internal) — must match Strapi's WEBX_INTERNAL_SECRET.
 export const STRAPI_INTERNAL_SECRET = process.env.STRAPI_INTERNAL_SECRET || "";

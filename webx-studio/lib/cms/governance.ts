@@ -33,6 +33,8 @@ import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput, Remo
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
 import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
+import { genTempPassword } from "./genPassword";
+import { encrypt, decrypt } from "../crypto";
 import {
   STRAPI_URL, STRAPI_INTERNAL_SECRET,
   STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD,
@@ -94,6 +96,7 @@ const FIELD_POLICY_UID = "api::field-policy.field-policy";
 const AUDIT_UID = "api::audit-log.audit-log";
 const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
+const SSO_CREDENTIAL_UID = "api::sso-credential.sso-credential";
 // Every uid the Users/Field Access/Audit Log/Releases pages read or write —
 // always Strapi-hosted regardless of which engine THIS session authenticated
 // against (Phase 5's module header). Without this, a WordPress-session admin
@@ -102,7 +105,8 @@ const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
 // found live while verifying the first WordPress-engine tenant in Phase 6.
 const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID]);
 
-type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string };
+type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
+type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso };
 
 // Tenant/field-policy/audit bookkeeping lives in Strapi regardless of which
 // engine THIS session is authenticated against (see the module header), and
@@ -136,7 +140,7 @@ async function refreshTenantCache(): Promise<typeof tenantCache> {
     const byKey = new Map<string, Tenant>();
     data.forEach((t: any) => {
       const adminEmails: string[] = t.adminEmails || [];
-      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan };
+      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan, sso: t.sso };
       byKey.set(t.key, tenant);
       adminEmails.forEach((e: string) => byEmail.set(String(e).toLowerCase(), tenant));
     });
@@ -327,6 +331,165 @@ export async function complianceSecuritySignal(tenantKey: string): Promise<{ tot
   const flags = await Promise.all(emails.map((e) => isMfaEnabled(e).catch(() => false)));
   const mfaEnabledCount = flags.filter(Boolean).length;
   return { totalAdmins: emails.length, mfaEnabledCount, mfaAdoptionPct: emails.length ? Math.round((mfaEnabledCount / emails.length) * 100) : 100 };
+}
+
+// ---------- SSO (Keycloak/OIDC) ----------
+// Strapi CE has no native admin SSO (see webx-studio/README.md) — a
+// Keycloak-authenticated identity still needs a real Strapi admin session
+// underneath. Bridged via JIT shadow-credential provisioning: the first SSO
+// login for an email creates a real Strapi admin account (same auth.create()
+// call as selfServeSignup) with a machine-generated password that's
+// encrypted and stored here, so later SSO logins can silently re-authenticate
+// to Strapi without a human ever seeing that password. SSO logins never call
+// isMfaEnabled — the IdP is the trust boundary once SSO is configured.
+
+async function findSsoCredentialRow(email: string): Promise<any | null> {
+  const token = await schedulerStrapiToken();
+  if (!token) return null;
+  return withServiceToken(token, async () => {
+    const { data } = await strapiAdapter.entries.list<any>(SSO_CREDENTIAL_UID, {
+      filter: [{ field: "adminEmail", op: "eq", value: email.toLowerCase() }], pageSize: 1,
+    });
+    return data[0] ?? null;
+  });
+}
+
+/** Settings-page read — never returns the client secret itself, only
+ * whether one is on file. */
+export async function getTenantSsoConfig(tenantKey: string): Promise<{ enabled: boolean; issuerUrl?: string; clientId?: string; realm?: string; hasSecret: boolean }> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  const sso = target.sso || ({} as TenantSso);
+  return { enabled: Boolean(sso.enabled), issuerUrl: sso.issuerUrl, clientId: sso.clientId, realm: sso.realm, hasSecret: Boolean(sso.clientSecretEnc) };
+}
+
+/** Settings-page write. A blank clientSecret means "keep the existing
+ * one" — it's never round-tripped back to the browser to be edited. */
+export async function saveTenantSsoConfig(tenantKey: string, input: {
+  enabled: boolean; issuerUrl?: string; clientId?: string; clientSecret?: string; realm?: string;
+}): Promise<void> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  if (input.enabled) {
+    if (!input.issuerUrl || !input.clientId) throw new CmsError("Issuer URL and Client ID are required to enable SSO", 400);
+    try { new URL(input.issuerUrl); } catch { throw new CmsError("Issuer URL must be a valid URL", 400); }
+    // JIT provisioning only knows how to bridge into a real Strapi admin
+    // session (see ssoLogin) — a WordPress-engine tenant's real content
+    // isn't reachable through that session at all, so enabling SSO for one
+    // would silently produce a broken login rather than a working one.
+    if ((target.engine || "strapi") !== "strapi") {
+      throw new CmsError("SSO isn't supported yet for a WordPress-engine workspace — it currently only bridges into a Strapi admin session.", 400);
+    }
+  }
+  const existing = target.sso || ({} as TenantSso);
+  const sso: TenantSso = {
+    enabled: Boolean(input.enabled),
+    issuerUrl: input.issuerUrl ?? existing.issuerUrl,
+    clientId: input.clientId ?? existing.clientId,
+    realm: input.realm ?? existing.realm,
+    clientSecretEnc: input.clientSecret ? encrypt(input.clientSecret) : existing.clientSecretEnc,
+  };
+  await strapiBookkeeping(() => strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { sso }));
+  invalidateTenantCache();
+  await writeAudit("sso_config_update", TENANT_UID, target.documentId ?? target.id, caller, tenantKey);
+}
+
+/** Server-only variant WITH the decrypted secret — only ever called from
+ * the two SSO routes, never browser-reachable. */
+export async function resolveSsoRuntimeConfig(tenantKey: string): Promise<{ issuerUrl: string; clientId: string; clientSecret: string } | null> {
+  const target = await resolveTenantByKey(tenantKey);
+  const sso = target?.sso;
+  if (!sso?.enabled || !sso.issuerUrl || !sso.clientId || !sso.clientSecretEnc) return null;
+  try { return { issuerUrl: sso.issuerUrl, clientId: sso.clientId, clientSecret: decrypt(sso.clientSecretEnc) }; }
+  catch { return null; }
+}
+
+/** Public pre-login check the login page uses before showing an SSO button
+ * — deliberately leaks nothing beyond "is SSO on" + a display label. */
+export async function ssoLoginAvailable(tenantKey: string): Promise<{ enabled: boolean; label?: string }> {
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target?.sso?.enabled) return { enabled: false };
+  return { enabled: true, label: target.name };
+}
+
+/** JIT-provisioning + login orchestration — the callback route's single
+ * call once the IdP has confirmed the user's email. */
+export async function ssoLogin(tenantKey: string, rawEmail: string): Promise<{ token: string; refresh: string | null }> {
+  const email = rawEmail.trim().toLowerCase();
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target?.sso?.enabled) throw new CmsError("SSO is not enabled for this workspace", 403);
+  // Defense in depth alongside saveTenantSsoConfig's own check — this is
+  // the actual enforcement point, in case sso.enabled ever gets set some
+  // other way (e.g. directly in Strapi's admin panel).
+  if ((target.engine || "strapi") !== "strapi") throw new CmsError("SSO isn't supported yet for this workspace", 403);
+
+  const schedToken = await schedulerStrapiToken();
+  if (!schedToken) throw new CmsError("SSO sign-in is temporarily unavailable", 500);
+
+  return withServiceToken(schedToken, async () => {
+    let row = await findSsoCredentialRow(email);
+
+    if (!row) {
+      // First SSO login for this email — same auth.create() call, same
+      // "Editor" role, same adminEmails roster update as selfServeSignup —
+      // except the password is machine-generated and never shown to a
+      // human; it's encrypted and stored so future SSO logins can mint a
+      // fresh Strapi session without anyone typing it.
+      const roles = await strapiAdapter.auth.listRoles();
+      const editorRole = roles.find((r) => r.name === "Editor") ?? roles[0];
+      if (!editorRole) throw new CmsError("SSO sign-in is temporarily unavailable", 500);
+      const tempPassword = genTempPassword();
+      const created = await strapiAdapter.auth.create({
+        email, firstname: email.split("@")[0] || email, lastname: "(SSO)", roleId: editorRole.id, password: tempPassword,
+      });
+      row = await strapiAdapter.entries.create(SSO_CREDENTIAL_UID, {
+        adminEmail: email, tenantKey, passwordEnc: encrypt(tempPassword), strapiUserId: String(created.user.id),
+      });
+      const actor: CurrentUser = { id: "sso", email, roles: [], isSuperAdmin: false };
+      await writeAudit("sso_jit_provision", TENANT_UID, target.documentId ?? target.id, actor, tenantKey);
+    }
+
+    // Roster membership is per-TARGET-tenant and must be (re-)checked on
+    // every login, not just when the shadow credential is first created —
+    // the same globally-shared shadow account can log into more than one
+    // tenant's SSO (see the "one shadow account per email" note), and each
+    // of those tenants needs this email in its OWN adminEmails, independent
+    // of which tenant happened to trigger the credential's creation.
+    const roster = new Set((target.adminEmails || []).map((e) => e.toLowerCase()));
+    if (!roster.has(email)) {
+      await strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { adminEmails: [...(target.adminEmails || []), email] });
+      invalidateTenantCache();
+    }
+
+    let password: string;
+    try { password = decrypt(row.passwordEnc); }
+    catch { throw new CmsError("SSO credential store is corrupted — contact an administrator", 500); }
+
+    let login = await strapiLogin(email, password);
+    if (!login.ok && row.strapiUserId) {
+      // Shadow password drifted from Strapi's own record (changed by hand
+      // in Strapi's admin panel, or predates a WEBX_ENCRYPTION_KEY
+      // rotation). This password is never used interactively by a human —
+      // re-mint rather than lock the user out.
+      const fresh = genTempPassword();
+      const r = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, {
+        method: "PUT", headers: { Authorization: "Bearer " + schedToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: fresh }),
+      });
+      if (r.ok) {
+        await strapiAdapter.entries.update(SSO_CREDENTIAL_UID, row.documentId ?? row.id, { passwordEnc: encrypt(fresh) });
+        login = await strapiLogin(email, fresh);
+      }
+    }
+    if (!login.ok) throw new CmsError("SSO sign-in could not complete — contact an administrator", 500);
+    return { token: login.token, refresh: login.refresh ?? null };
+  });
 }
 
 /** Step 1 — requires an already-authenticated session (you enroll MFA on
@@ -890,26 +1053,43 @@ const SCHEDULER_ACTOR: CurrentUser = { id: "scheduler", email: "scheduler@webx",
 // this often is what tripped Strapi's own admin-login rate limiter during
 // Phase 6 verification.
 let schedulerStrapiTok: { at: number; token: string | null; refresh: string | null } = { at: 0, token: null, refresh: null };
+// Single-flight guard: without this, two calls landing during the same
+// cache-miss window (e.g. SSO's login-initiation and callback routes, a few
+// hundred ms apart) each independently decide the cache is stale and fire
+// their own /admin/login — found live during SSO verification, where the
+// second one tripped the rate limiter the first had just cleared. Every
+// concurrent caller now awaits the SAME in-flight refresh instead.
+let schedulerStrapiRefreshing: Promise<string | null> | null = null;
 async function schedulerStrapiToken(): Promise<string | null> {
   if (Date.now() - schedulerStrapiTok.at > 25 * 60_000 || !schedulerStrapiTok.token) {
-    // Prefer refreshing the existing session over a fresh /admin/login — the
-    // refresh endpoint isn't behind the same brute-force rate limiter, and
-    // at this call frequency (every BOOKKEEPING_UIDS operation, not just a
-    // scheduler tick) a full re-login every cache expiry tripped it during
-    // Phase 6 verification.
-    if (schedulerStrapiTok.refresh) {
-      const rr = await strapiRefresh(schedulerStrapiTok.refresh);
-      if (rr) {
-        schedulerStrapiTok = { at: Date.now(), token: rr.token, refresh: rr.refresh ?? schedulerStrapiTok.refresh };
-        return schedulerStrapiTok.token;
-      }
+    if (!schedulerStrapiRefreshing) {
+      schedulerStrapiRefreshing = (async () => {
+        try {
+          // Prefer refreshing the existing session over a fresh /admin/login —
+          // the refresh endpoint isn't behind the same brute-force rate
+          // limiter, and at this call frequency (every BOOKKEEPING_UIDS
+          // operation, not just a scheduler tick) a full re-login every cache
+          // expiry tripped it during Phase 6 verification.
+          if (schedulerStrapiTok.refresh) {
+            const rr = await strapiRefresh(schedulerStrapiTok.refresh);
+            if (rr) {
+              schedulerStrapiTok = { at: Date.now(), token: rr.token, refresh: rr.refresh ?? schedulerStrapiTok.refresh };
+              return schedulerStrapiTok.token;
+            }
+          }
+          if (!STRAPI_SCHEDULER_EMAIL || !STRAPI_SCHEDULER_PASSWORD) return null;
+          const r = await strapiLogin(STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD);
+          // Only cache on success — a transient failure (Strapi briefly down,
+          // its login rate-limiter tripped) shouldn't lock bookkeeping out for
+          // the full cache window; retry on the very next call instead.
+          if (r.ok) schedulerStrapiTok = { at: Date.now(), token: r.token, refresh: r.refresh ?? null };
+          return schedulerStrapiTok.token;
+        } finally {
+          schedulerStrapiRefreshing = null;
+        }
+      })();
     }
-    if (!STRAPI_SCHEDULER_EMAIL || !STRAPI_SCHEDULER_PASSWORD) return null;
-    const r = await strapiLogin(STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD);
-    // Only cache on success — a transient failure (Strapi briefly down, its
-    // login rate-limiter tripped) shouldn't lock bookkeeping out for the
-    // full cache window; retry on the very next call instead.
-    if (r.ok) schedulerStrapiTok = { at: Date.now(), token: r.token, refresh: r.refresh ?? null };
+    return schedulerStrapiRefreshing;
   }
   return schedulerStrapiTok.token;
 }

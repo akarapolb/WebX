@@ -80,6 +80,10 @@ services:
       STRAPI_SCHEDULER_PASSWORD: ${STRAPI_SCHEDULER_PASSWORD:?set STRAPI_SCHEDULER_PASSWORD}
       WORDPRESS_SCHEDULER_USERNAME: ${WORDPRESS_SCHEDULER_USERNAME:-}
       WORDPRESS_SCHEDULER_APP_PASSWORD: ${WORDPRESS_SCHEDULER_APP_PASSWORD:-}
+      # SSO (Keycloak) — encrypts each tenant's Keycloak client secret and
+      # JIT-provisioned shadow Strapi passwords at rest. Only required if a
+      # tenant enables SSO in its Single Sign-On settings page.
+      WEBX_ENCRYPTION_KEY: ${WEBX_ENCRYPTION_KEY:-}
     ports:
       - "${WEBX_PORT:-3000}:3000"
 
@@ -220,9 +224,31 @@ services:
     ports:
       - "${LITELLM_PORT:-4000}:4000"
 
+  # Keycloak — optional (profile "keycloak"): SSO/OIDC identity broker for
+  # tenants with SSO configured (see webx-studio's SsoSettings.tsx /
+  # lib/oidc.ts). v1 scope is manual realm/client setup via Keycloak's own
+  # admin console — no automated realm provisioning. Independently runnable
+  # since local dev doesn't otherwise touch Docker:
+  #   docker compose --profile keycloak up -d keycloak
+  # then set a tenant's Issuer URL (in the SSO settings page) to
+  # http://localhost:${KEYCLOAK_PORT:-8082}/realms/<your-realm>.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    profiles: ["keycloak"]
+    command: ["start-dev"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "${KEYCLOAK_PORT:-8082}:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+
 volumes:
   db-data:
   strapi-uploads:
   db-backups:
   wp-db-data:
   wp-content-data:
+  keycloak-data:
