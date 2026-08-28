@@ -1,19 +1,30 @@
 <?php
-// WordPress-side backstop for WebX's custom-role permission builder — the
-// same reasoning wtenant-taxonomy.php gives for tenant scoping applies here:
-// webx-studio's governance.ts already enforces custom-role permissions for
-// every write that goes THROUGH it, but someone with a valid Application
-// Password hitting this REST API directly bypasses that entirely. This
-// plugin closes that gap the same way strapi-cms/src/index.ts's own write
-// hook closes it for direct-to-Strapi access.
+// WordPress-side backstop for two related things webx-studio's governance.ts
+// already enforces for every write that goes THROUGH it, but which someone
+// with a valid Application Password hitting this REST API directly bypasses
+// entirely: (1) custom-role permissions, and (2) plain tenant scoping — a
+// native WP editor/administrator account provisioned for one tenant writing
+// content into ANOTHER tenant's wtenant scope. This plugin closes both the
+// same way strapi-cms/src/index.ts's own write hook closes them for
+// direct-to-Strapi access.
 //
-// Custom roles are a WebX/Strapi-side concept (Tenant.customRoleAssignments
-// + the custom-role content type) — nothing in WordPress's own user/capability
-// system reflects them at all, so this can't be resolved locally. It calls
-// out to Strapi's secret-protected /api/internal/custom-role-permissions
-// endpoint on every governed write, cached for 15s via a transient (not a
-// static PHP variable — PHP's per-request interpreter model means nothing
-// survives between requests except what's actually persisted).
+// Both are WebX/Strapi-side concepts — nothing in WordPress's own
+// user/capability system reflects a "tenant" or a "custom role" at all, so
+// neither can be resolved locally. It calls out to Strapi's secret-protected
+// /api/internal/custom-role-permissions endpoint on every governed write,
+// cached for 15s via a transient (not a static PHP variable — PHP's
+// per-request interpreter model means nothing survives between requests
+// except what's actually persisted). That endpoint's response already
+// carries a bare tenantKey for ANY WebX-provisioned admin (Tenant.adminEmails
+// membership), custom role or not — this plugin previously only read it when
+// hasCustomRole was true; it now uses it unconditionally for the tenant
+// check, and only gates on the finer-grained create/update/delete/publish/
+// hidden/readonly permissions when hasCustomRole is true (a plain editor's
+// native WP capabilities are the only action-level gate they've ever had).
+//
+// Reads are deliberately still untouched (see the method filter below) —
+// WordPress content is fetched unauthenticated by the public site itself;
+// tenant-scoping reads here would break that, not just close a gap.
 //
 // Fails OPEN on a lookup error (Strapi unreachable, bad response): this hook
 // fires for webx-studio's OWN WordPress traffic too (lib/cms/wordpress.ts
@@ -47,9 +58,13 @@ function webx_crp_post_type_uid_map(): array
     ];
 }
 
-/** Fetches (and caches) the acting user's custom-role permissions for one
- * content type from Strapi. Returns null on any failure or "no custom role
- * assigned" — both mean "don't intervene", the caller treats them alike. */
+/** Fetches (and caches) the acting user's tenant + (if any) custom-role
+ * permissions for one content type from Strapi. Returns null only on a
+ * lookup failure (network/HTTP/JSON error) — that and "not a WebX-provisioned
+ * admin of any tenant" (tenantKey === null in a successful response) both
+ * mean "don't intervene", but the caller distinguishes them from "resolved
+ * to a tenant, no custom role" (tenantKey set, hasCustomRole false), which
+ * now still needs the tenant-scoping check applied. */
 function webx_crp_fetch(string $email, string $uid): ?array
 {
     $cache_key = 'webx_crp_' . md5($email . '|' . $uid);
@@ -131,7 +146,10 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
     $email = strtolower($user->user_email);
 
     $perms = webx_crp_fetch($email, $uid);
-    if ($perms === null || empty($perms['hasCustomRole'])) return $response; // no custom role in play, or lookup unavailable — don't intervene
+    if ($perms === null) return $response; // lookup unavailable — fail open, same posture as every other resolver in this system
+    $caller_tenant = $perms['tenantKey'] ?? null;
+    if ($caller_tenant === null) return $response; // not a WebX-provisioned admin of any tenant — nothing to scope against
+    $has_custom_role = !empty($perms['hasCustomRole']);
 
     // Determine the action + target tenant.
     if ($method === 'DELETE') {
@@ -153,12 +171,29 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
         $action = ($incoming_status !== null && ($incoming_status === 'publish') !== $was_published) ? 'publish' : 'update';
     }
 
+    // Tenant scoping applies to EVERY WebX-provisioned admin, custom role or
+    // not — this is the general backstop, closing the gap where a plain
+    // per-tenant editor account could otherwise write into another tenant's
+    // content by hitting this REST API directly instead of going through
+    // webx-studio. Requiring a tenant on create (rather than only rejecting
+    // an explicit mismatch) matters here specifically: without it, a
+    // tenant-less create followed by a later update would never trip the
+    // mismatch check at all (an update's target_tenant comes from the
+    // existing post's OWN term, which would still be null).
     if ($action === 'create' && $target_tenant === null) {
         return new WP_Error('webx_forbidden', 'A tenant scope is required for this content type.', ['status' => 403]);
     }
-    if ($target_tenant !== null && $target_tenant !== $perms['tenantKey']) {
+    if ($target_tenant !== null && $target_tenant !== $caller_tenant) {
         return new WP_Error('webx_forbidden', 'Cross-tenant operation not permitted', ['status' => 403]);
     }
+
+    // Everything past this point is custom-role-specific — a plain
+    // editor/administrator's native WP capabilities are the only
+    // action-level gate they've ever had, and $perms carries no
+    // create/update/delete/publish/hidden/readonly keys at all when
+    // hasCustomRole is false.
+    if (!$has_custom_role) return $response;
+
     if (empty($perms[$action])) {
         return new WP_Error('webx_forbidden', 'This custom role does not permit this action on this content type.', ['status' => 403]);
     }

@@ -74,7 +74,7 @@ export default function NewWorkspace({ userEmail, onClose }: { userEmail: string
         </div>
         {engine === "wordpress" && (
           <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 16 }}>
-            The matching wtenant tag in WordPress is created automatically — a WordPress user account for this org still needs to be provisioned separately (Users → Profile → Application Passwords), and today any existing WordPress user can already reach every WordPress-backed workspace.
+            The matching wtenant tag in WordPress is created automatically — a WordPress user account for this org still needs to be provisioned separately (Users → Profile → Application Passwords). Once added under Users &amp; Roles here, that account is tenant-scoped even for direct WordPress REST API access; an account never added to any workspace's roster (e.g. WordPress's own bootstrap admin) isn't scoped to one.
           </p>
         )}
         {engine === "strapi" && <div style={{ marginBottom: 16 }} />}
