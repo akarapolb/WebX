@@ -97,16 +97,19 @@ const AUDIT_UID = "api::audit-log.audit-log";
 const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
 const SSO_CREDENTIAL_UID = "api::sso-credential.sso-credential";
+const CUSTOM_ROLE_UID = "api::custom-role.custom-role";
 // Every uid the Users/Field Access/Audit Log/Releases pages read or write —
 // always Strapi-hosted regardless of which engine THIS session authenticated
 // against (Phase 5's module header). Without this, a WordPress-session admin
 // hitting governed.list("api::audit-log.audit-log", ...) would route through
 // the WordPress adapter (which only knows wp:post) and get a hard error —
 // found live while verifying the first WordPress-engine tenant in Phase 6.
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID]);
+// custom-role is included so a WordPress-session admin's own custom-role
+// enforcement lookups also work (custom roles are engine-agnostic).
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
-type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso };
+type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string> };
 
 // Tenant/field-policy/audit bookkeeping lives in Strapi regardless of which
 // engine THIS session is authenticated against (see the module header), and
@@ -140,7 +143,7 @@ async function refreshTenantCache(): Promise<typeof tenantCache> {
     const byKey = new Map<string, Tenant>();
     data.forEach((t: any) => {
       const adminEmails: string[] = t.adminEmails || [];
-      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan, sso: t.sso };
+      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan, sso: t.sso, customRoleAssignments: t.customRoleAssignments };
       byKey.set(t.key, tenant);
       adminEmails.forEach((e: string) => byEmail.set(String(e).toLowerCase(), tenant));
     });
@@ -490,6 +493,166 @@ export async function ssoLogin(tenantKey: string, rawEmail: string): Promise<{ t
     if (!login.ok) throw new CmsError("SSO sign-in could not complete — contact an administrator", 500);
     return { token: login.token, refresh: login.refresh ?? null };
   });
+}
+
+// ---------- Custom roles (WebX-owned RBAC layer) ----------
+// Strapi's own admin roles are fixed and instance-global, with no tenant
+// boundary, and don't exist at all for WordPress-engine tenants — so a
+// tenant admin can't define their own "Content Reviewer: can edit but not
+// delete or publish" role using Strapi's native role system. This is the
+// same shape as field-policy above (WebX-owned, dual-enforced — governed
+// here AND backstopped in strapi-cms/src/index.ts's own write hook), just
+// broadened from field-only to whole-action + field permissions, and
+// genuinely tenant-scoped (field-policy's role-name matching never was).
+
+export type CustomRolePermission = {
+  view?: boolean; create?: boolean; update?: boolean; delete?: boolean; publish?: boolean;
+  hidden?: string[]; readonly?: string[];
+};
+export type CustomRoleInput = { roleKey?: string; name: string; permissions: Record<string, CustomRolePermission> };
+
+let customRoleCache: { at: number; list: any[] } = { at: 0, list: [] };
+async function getCustomRoles(): Promise<any[]> {
+  const now = Date.now();
+  if (now - customRoleCache.at > 15_000) {
+    try {
+      const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(CUSTOM_ROLE_UID, { pageSize: 500 }));
+      customRoleCache = { at: now, list: data };
+    } catch { customRoleCache = { at: now, list: [] }; }
+  }
+  return customRoleCache.list;
+}
+function invalidateCustomRoleCache(): void { customRoleCache.at = 0; }
+
+export async function listCustomRoles(tenantKey: string): Promise<any[]> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  return (await getCustomRoles()).filter((r) => r.tenantKey === tenantKey);
+}
+
+/** The content types a custom role can actually govern — SCOPED for a
+ * Strapi-engine tenant, WP_SCOPED for a WordPress one. Keeps the role
+ * builder's permission matrix from showing checkboxes for content types
+ * enforcement can never act on. */
+export async function listGovernableContentTypes(tenantKey: string): Promise<{ uid: string; label: string }[]> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  const uids = target.engine === "wordpress" ? WP_SCOPED : SCOPED;
+  const all = await withEngineAdapter(target.engine || "strapi", (a) => a.schema.listContentTypes());
+  return all.filter((ct) => uids.has(ct.uid)).map((ct) => ({ uid: ct.uid, label: ct.name || ct.uid }));
+}
+
+export async function saveCustomRole(tenantKey: string, input: CustomRoleInput): Promise<any> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  if (!input.name?.trim()) throw new CmsError("A role name is required", 400);
+
+  const forTenant = (await getCustomRoles()).filter((r) => r.tenantKey === tenantKey);
+
+  if (input.roleKey) {
+    const existing = forTenant.find((r) => r.roleKey === input.roleKey);
+    if (!existing) throw new CmsError("Unknown role", 404);
+    const result = await strapiBookkeeping(() =>
+      strapiAdapter.entries.update(CUSTOM_ROLE_UID, existing.documentId ?? existing.id, { name: input.name.trim(), permissions: input.permissions || {} }));
+    invalidateCustomRoleCache();
+    await writeAudit("custom_role_update", CUSTOM_ROLE_UID, existing.documentId ?? existing.id, caller, tenantKey);
+    return result;
+  }
+
+  const roleKey = slugifyOrgKey(input.name);
+  if (!roleKey) throw new CmsError("A role name is required", 400);
+  if (forTenant.some((r) => r.roleKey === roleKey)) throw new CmsError("A role with that name already exists in this workspace", 409);
+  const result = await strapiBookkeeping(() =>
+    strapiAdapter.entries.create(CUSTOM_ROLE_UID, { tenantKey, roleKey, name: input.name.trim(), permissions: input.permissions || {} }));
+  invalidateCustomRoleCache();
+  await writeAudit("custom_role_create", CUSTOM_ROLE_UID, result?.documentId ?? result?.id ?? null, caller, tenantKey);
+  return result;
+}
+
+export async function deleteCustomRole(tenantKey: string, roleKey: string): Promise<void> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const existing = (await getCustomRoles()).find((r) => r.tenantKey === tenantKey && r.roleKey === roleKey);
+  if (!existing) throw new CmsError("Unknown role", 404);
+  await strapiBookkeeping(() => strapiAdapter.entries.remove(CUSTOM_ROLE_UID, existing.documentId ?? existing.id));
+  invalidateCustomRoleCache();
+
+  // Scrub dangling assignments so a stale roleKey doesn't quietly become a
+  // deny-all for whoever still points at it — resolveCustomRolePermissions
+  // fails open (falls back to pre-custom-role behavior) when the assigned
+  // role no longer exists, but cleaning up here keeps that a rare/transient
+  // state rather than the steady state.
+  const target = await resolveTenantByKey(tenantKey);
+  if (target) {
+    const assignments = { ...(target.customRoleAssignments || {}) };
+    const touched = Object.entries(assignments).filter(([, rk]) => rk === roleKey);
+    if (touched.length) {
+      touched.forEach(([email]) => delete assignments[email]);
+      await strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { customRoleAssignments: assignments });
+      invalidateTenantCache();
+    }
+  }
+  await writeAudit("custom_role_delete", CUSTOM_ROLE_UID, existing.documentId ?? existing.id, caller, tenantKey);
+}
+
+/** null = unassign. */
+export async function assignCustomRole(tenantKey: string, email: string, roleKey: string | null): Promise<void> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  const map = { ...(target.customRoleAssignments || {}) };
+  const key = email.toLowerCase();
+  if (roleKey) map[key] = roleKey; else delete map[key];
+  await strapiBookkeeping(() => strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { customRoleAssignments: map }));
+  invalidateTenantCache();
+  await writeAudit(roleKey ? "custom_role_assign" : "custom_role_unassign", TENANT_UID, target.documentId ?? target.id, caller, tenantKey);
+}
+
+type ResolvedCustomRolePerms = {
+  view: boolean; create: boolean; update: boolean; delete: boolean; publish: boolean; hidden: string[]; readonly: string[];
+};
+
+/** null = no custom role in play — caller falls back to today's unchanged
+ * Strapi-role + field-policy behavior. Bypassed for a super admin, for
+ * anyone with no resolved tenant, and for any uid outside SCOPED/WP_SCOPED —
+ * a custom role only ever governs tenant-owned content. */
+async function resolveCustomRolePermissions(user: CurrentUser, eff: Tenant | null, uid: string): Promise<ResolvedCustomRolePerms | null> {
+  if (!eff || !user.email || user.isSuperAdmin) return null;
+  if (!SCOPED.has(uid) && !WP_SCOPED.has(uid)) return null;
+  const roleKey = (eff.customRoleAssignments || {})[user.email.toLowerCase()];
+  if (!roleKey) return null;
+  const role = (await getCustomRoles()).find((r) => r.tenantKey === eff.key && r.roleKey === roleKey);
+  if (!role) return null; // assigned role since deleted — fail open, see deleteCustomRole's own cleanup above
+  const perm: CustomRolePermission = (role.permissions || {})[uid] || {};
+  return {
+    view: Boolean(perm.view), create: Boolean(perm.create), update: Boolean(perm.update),
+    delete: Boolean(perm.delete), publish: Boolean(perm.publish),
+    hidden: Array.isArray(perm.hidden) ? perm.hidden : [],
+    readonly: Array.isArray(perm.readonly) ? perm.readonly : [],
+  };
+}
+
+/** Sibling to stripPolicyFields below, not merged into it — stripPolicyFields
+ * has no tenant concept (matches by Strapi role name only, instance-wide)
+ * and stays untouched; the two compose at each call site, giving a free
+ * most-restrictive-wins union (a field hidden by either stays hidden). */
+function stripCustomRoleFields(crp: ResolvedCustomRolePerms | null, data: Record<string, any>): Record<string, any> {
+  if (!crp || !data || typeof data !== "object") return data;
+  const forbidden = new Set<string>([...crp.hidden, ...crp.readonly]);
+  if (!forbidden.size) return data;
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(data)) if (!forbidden.has(k)) out[k] = data[k];
+  return out;
 }
 
 /** Step 1 — requires an already-authenticated session (you enroll MFA on
@@ -886,7 +1049,20 @@ export const governed = {
       if (Number.isFinite(seatLimit) && currentSeats >= seatLimit) {
         throw new CmsError(`This workspace has reached its ${seatLimit}-seat plan limit — upgrade to add more users.`, 403);
       }
-      const result = await withEngineAdapter(target.engine || "strapi", (a) => a.auth.create(input));
+      // A custom role isn't a real Strapi/WordPress role — it's a WebX
+      // governance overlay. The underlying account still needs some real,
+      // login-capable base role, same default selfServeSignup/ssoLogin
+      // already use, with the custom role assigned on top afterward.
+      let engineInput = input;
+      let customRoleKey: string | null = null;
+      if (typeof input.roleId === "string" && input.roleId.startsWith("custom:")) {
+        customRoleKey = input.roleId.slice("custom:".length);
+        const roles = await withEngineAdapter(target.engine || "strapi", (a) => a.auth.listRoles());
+        const base = roles.find((r) => r.name === "Editor") ?? roles[0];
+        if (!base) throw new CmsError("Could not provision the account's base role", 500);
+        engineInput = { ...input, roleId: base.id };
+      }
+      const result = await withEngineAdapter(target.engine || "strapi", (a) => a.auth.create(engineInput));
       const current = new Set((target.adminEmails || []).map((e) => e.toLowerCase()));
       if (!current.has(input.email.toLowerCase())) {
         const updated = [...(target.adminEmails || []), input.email];
@@ -895,6 +1071,7 @@ export const governed = {
         );
         invalidateTenantCache();
       }
+      if (customRoleKey) await assignCustomRole(tenantKey, input.email, customRoleKey);
       // Never the password — it exists only in this call's return value.
       await writeAudit("create_user", "admin::user", result.user.id, caller, tenantKey);
       return result;
@@ -969,7 +1146,10 @@ export const governed = {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
     await enforceItemLimit(eff, uid);
+    const crp = await resolveCustomRolePermissions(user, eff, uid);
+    if (crp && !crp.create) throw new CmsError("Your role does not permit creating this content", 403);
     let d = await stripPolicyFields(user, uid, data);
+    d = stripCustomRoleFields(crp, d);
     d = { ...d, ...tenantStamp(uid, eff) };
     const result: any = await withContentAdapter(uid, (cms) => cms.entries.create<any>(uid, d));
     await writeAudit("create", uid, result?.documentId ?? result?.id ?? null, user, eff?.key ?? null);
@@ -981,7 +1161,10 @@ export const governed = {
   async update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    const crp = await resolveCustomRolePermissions(user, eff, uid);
+    if (crp && !crp.update) throw new CmsError("Your role does not permit updating this content", 403);
     let d = await stripPolicyFields(user, uid, data);
+    d = stripCustomRoleFields(crp, d);
     d = { ...d, ...tenantStamp(uid, eff) };
     const result = await withContentAdapter(uid, async (cms) => {
       await tenantGuard(uid, id, eff, cms);
@@ -993,6 +1176,8 @@ export const governed = {
   async remove(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    const crp = await resolveCustomRolePermissions(user, eff, uid);
+    if (crp && !crp.delete) throw new CmsError("Your role does not permit deleting this content", 403);
     await withContentAdapter(uid, async (cms) => {
       await tenantGuard(uid, id, eff, cms);
       await cms.entries.remove(uid, id, opts);
@@ -1006,6 +1191,10 @@ export const governed = {
   async unpublish(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    const crp = await resolveCustomRolePermissions(user, eff, uid);
+    // No separate "unpublish" flag in the permission matrix — publish and
+    // unpublish share the one checkbox.
+    if (crp && !crp.publish) throw new CmsError("Your role does not permit unpublishing this content", 403);
     await withContentAdapter(uid, async (cms) => {
       await tenantGuard(uid, id, eff, cms);
       await cms.publish.unpublish(uid, id, opts);
@@ -1027,6 +1216,8 @@ export const governed = {
 async function doPublish(uid: string, id: string, actor: CurrentUser, opts?: { locale?: string }, adapter?: CmsAdapter): Promise<void> {
   const ad = adapter ?? (await activeAdapter());
   const eff = await resolveEffectiveTenant(actor.email);
+  const crp = await resolveCustomRolePermissions(actor, eff, uid);
+  if (crp && !crp.publish) throw new CmsError("Your role does not permit publishing this content", 403);
   await tenantGuard(uid, id, eff, ad);
   await ad.publish.publish(uid, id, opts);
   await writeAudit("publish", uid, id, actor, eff?.key ?? null);

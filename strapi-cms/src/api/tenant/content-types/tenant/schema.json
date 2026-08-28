@@ -98,6 +98,10 @@
     "sso": {
       "type": "json",
       "description": "{ enabled, issuerUrl, clientId, clientSecretEnc, realm } — Keycloak/OIDC config for this tenant. clientSecretEnc is AES-256-GCM ciphertext (see webx-studio/lib/crypto.ts), never plaintext."
+    },
+    "customRoleAssignments": {
+      "type": "json",
+      "description": "{ [email]: roleKey } — per-user custom-role assignment for this tenant (see api::custom-role.custom-role)."
     }
   }
 }

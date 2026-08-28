@@ -130,6 +130,7 @@ export default function UsersTable() {
 function AddUserModal({ tenantKey, onClose, onCreated }: { tenantKey: string; onClose: () => void; onCreated: () => void }) {
   const { t } = useLang();
   const [roles, setRoles] = useState<{ id: any; name: string }[]>([]);
+  const [customRoles, setCustomRoles] = useState<{ roleKey: string; name: string }[]>([]);
   const [firstname, setFirstname] = useState("");
   const [lastname, setLastname] = useState("");
   const [email, setEmail] = useState("");
@@ -141,6 +142,7 @@ function AddUserModal({ tenantKey, onClose, onCreated }: { tenantKey: string; on
 
   useEffect(() => {
     cms.auth.listRoles(tenantKey).then(setRoles).catch(() => {});
+    fetch("/api/cms/roles?tenant=" + encodeURIComponent(tenantKey)).then((r) => (r.ok ? r.json() : [])).then((list) => setCustomRoles(Array.isArray(list) ? list : [])).catch(() => {});
   }, [tenantKey]);
 
   async function submit() {
@@ -186,7 +188,14 @@ function AddUserModal({ tenantKey, onClose, onCreated }: { tenantKey: string; on
             <label style={lbl}>{t("u.role")}</label>
             <select data-testid="new-user-role" className="vb-sel" style={{ width: "100%" }} value={roleId} onChange={(e) => setRoleId(e.target.value)}>
               <option value="">{t("u.pickrole")}</option>
-              {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              <optgroup label={t("u.role")}>
+                {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </optgroup>
+              {customRoles.length > 0 && (
+                <optgroup label={t("nav.roles")}>
+                  {customRoles.map((r) => <option key={r.roleKey} value={"custom:" + r.roleKey}>{r.name}</option>)}
+                </optgroup>
+              )}
             </select>
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>

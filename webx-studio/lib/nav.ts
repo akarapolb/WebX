@@ -27,4 +27,5 @@ export const NAV: NavItem[] = [
   { id: "status", label: "Status & Observability", icon: "activity", k: 19, group: "admin" },
   { id: "tokens", label: "API & Tokens", icon: "code", k: 13, group: "admin" },
   { id: "sso", label: "Single Sign-On", icon: "lock", k: 20, group: "admin" },
+  { id: "roles", label: "Custom Roles", icon: "lock", k: 21, group: "admin" },
 ];

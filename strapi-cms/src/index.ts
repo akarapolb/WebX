@@ -25,16 +25,43 @@ const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
 const WRITE_ACTIONS = new Set(['create', 'update', 'delete', 'publish', 'unpublish']);
 
 /** แคช email(admin/editor) → tenant สำหรับ per-tenant RBAC หลังบ้าน */
-let adminCache: { at: number; map: Map<string, { key: string; id: number }> } = { at: 0, map: new Map() };
+let adminCache: { at: number; map: Map<string, { key: string; id: number; customRoleAssignments: Record<string, string> }> } = { at: 0, map: new Map() };
 async function adminTenantFor(strapi: any, email: string) {
   const now = Date.now();
   if (now - adminCache.at > 30000 || adminCache.map.size === 0) {
-    const list = await strapi.db.query('api::tenant.tenant').findMany({ select: ['id', 'key', 'adminEmails'], limit: 500 });
-    const m = new Map<string, { key: string; id: number }>();
-    list.forEach((t: any) => (t.adminEmails || []).forEach((e: string) => m.set(String(e).toLowerCase(), { key: t.key, id: t.id })));
+    const list = await strapi.db.query('api::tenant.tenant').findMany({ select: ['id', 'key', 'adminEmails', 'customRoleAssignments'], limit: 500 });
+    const m = new Map<string, { key: string; id: number; customRoleAssignments: Record<string, string> }>();
+    list.forEach((t: any) => (t.adminEmails || []).forEach((e: string) => m.set(String(e).toLowerCase(), { key: t.key, id: t.id, customRoleAssignments: t.customRoleAssignments || {} })));
     adminCache = { at: now, map: m };
   }
   return adminCache.map.get(String(email).toLowerCase()) || null;
+}
+
+/** Custom-role enforcement backstop — mirrors webx-studio's own
+ * resolveCustomRolePermissions()/stripCustomRoleFields(), so a write that
+ * reaches Strapi directly (bypassing webx-studio entirely) is governed the
+ * same way, same reasoning as field-policy's own dual enforcement below. */
+let customRoleCache: { at: number; list: any[] } = { at: 0, list: [] };
+async function getCustomRoles(strapi: any) {
+  const now = Date.now();
+  if (now - customRoleCache.at > 15000) {
+    try { customRoleCache = { at: now, list: await strapi.db.query('api::custom-role.custom-role').findMany({ limit: 500 }) }; }
+    catch { customRoleCache = { at: now, list: [] }; }
+  }
+  return customRoleCache.list;
+}
+async function resolveCustomRolePerms(strapi: any, eff: any, adminEmail: string | undefined, uid: string) {
+  if (!eff || !adminEmail) return null;
+  const roleKey = (eff.customRoleAssignments || {})[String(adminEmail).toLowerCase()];
+  if (!roleKey) return null;
+  const roles = await getCustomRoles(strapi);
+  const role = roles.find((r: any) => r.tenantKey === eff.key && r.roleKey === roleKey);
+  if (!role) return null; // assigned role since deleted — fail open, same as governance.ts's own resolver
+  const perm = (role.permissions || {})[uid] || {};
+  return {
+    create: Boolean(perm.create), update: Boolean(perm.update), delete: Boolean(perm.delete), publish: Boolean(perm.publish),
+    hidden: Array.isArray(perm.hidden) ? perm.hidden : [], readonly: Array.isArray(perm.readonly) ? perm.readonly : [],
+  };
 }
 
 /** Field-level RBAC — policy cache + strip ฟิลด์ที่ role ปัจจุบันไม่มีสิทธิ์เขียน (hidden/readonly) */
@@ -129,6 +156,17 @@ export default {
       const eff = await effectiveTenant(strapi);
       context.params = context.params || {};
 
+      // Custom-role action gate — deny before anything else runs. Super
+      // admins never carry a customRoleAssignments entry to begin with
+      // (they're not in any tenant's adminEmails), so this is naturally a
+      // no-op for them without needing its own isSuperAdmin check.
+      const crp = await resolveCustomRolePerms(strapi, eff, adminEmail, context.uid);
+      if (crp) {
+        const need = action === 'create' ? 'create' : action === 'update' ? 'update' : action === 'delete' ? 'delete'
+          : (action === 'publish' || action === 'unpublish') ? 'publish' : null;
+        if (need && !(crp as any)[need]) throw new errors.ForbiddenError('This custom role does not permit this action on this content type.');
+      }
+
       if (eff) {
         if (READS.has(action)) {
           const tf = { tenant: { key: eff.key } };
@@ -152,6 +190,12 @@ export default {
       // Field-level RBAC — strip ฟิลด์ที่ role นี้ห้ามเขียน ก่อนบันทึกจริง
       if ((action === 'create' || action === 'update') && adminEmail && context.params?.data) {
         try { context.params.data = await stripPolicyFields(strapi, reqCtx?.state?.user, context.uid, context.params.data); } catch (e) { /* fail-open */ }
+        if (crp && (crp.hidden.length || crp.readonly.length)) {
+          const forbidden = new Set<string>([...crp.hidden, ...crp.readonly]);
+          const out: any = {};
+          for (const k of Object.keys(context.params.data)) if (!forbidden.has(k)) out[k] = context.params.data[k];
+          context.params.data = out;
+        }
       }
 
       const result = await next();

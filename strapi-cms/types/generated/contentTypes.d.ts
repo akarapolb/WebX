@@ -1073,6 +1073,38 @@ export interface ApiContactMessageContactMessage
   };
 }
 
+export interface ApiCustomRoleCustomRole extends Struct.CollectionTypeSchema {
+  collectionName: 'custom_roles';
+  info: {
+    description: 'WebX-owned, tenant-scoped custom role \u2014 per-content-type action + field permissions. Not a real Strapi admin::role.';
+    displayName: 'Custom Role';
+    pluralName: 'custom-roles';
+    singularName: 'custom-role';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::custom-role.custom-role'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    permissions: Schema.Attribute.JSON;
+    publishedAt: Schema.Attribute.DateTime;
+    roleKey: Schema.Attribute.String & Schema.Attribute.Required;
+    tenantKey: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiDocEmbeddingDocEmbedding
   extends Struct.CollectionTypeSchema {
   collectionName: 'doc_embeddings';
@@ -2106,6 +2138,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    customRoleAssignments: Schema.Attribute.JSON;
     domains: Schema.Attribute.JSON;
     engine: Schema.Attribute.Enumeration<['strapi', 'wordpress']> &
       Schema.Attribute.DefaultTo<'strapi'>;
@@ -2824,6 +2857,7 @@ declare module '@strapi/strapi' {
       'api::complaint.complaint': ApiComplaintComplaint;
       'api::consent-log.consent-log': ApiConsentLogConsentLog;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
+      'api::custom-role.custom-role': ApiCustomRoleCustomRole;
       'api::doc-embedding.doc-embedding': ApiDocEmbeddingDocEmbedding;
       'api::download.download': ApiDownloadDownload;
       'api::ebook.ebook': ApiEbookEbook;
