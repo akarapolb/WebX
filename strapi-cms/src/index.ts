@@ -6,6 +6,7 @@ import {
   ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB, seedCmsCore,
   seedScheduler, ensureEditorPublishPermissions,
 } from './seed/seed';
+import { adminTenantFor, resolveCustomRolePerms } from './utils/custom-role';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) */
 const SCOPED = new Set([
@@ -23,46 +24,6 @@ const SCOPED = new Set([
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
 const WRITE_ACTIONS = new Set(['create', 'update', 'delete', 'publish', 'unpublish']);
-
-/** แคช email(admin/editor) → tenant สำหรับ per-tenant RBAC หลังบ้าน */
-let adminCache: { at: number; map: Map<string, { key: string; id: number; customRoleAssignments: Record<string, string> }> } = { at: 0, map: new Map() };
-async function adminTenantFor(strapi: any, email: string) {
-  const now = Date.now();
-  if (now - adminCache.at > 30000 || adminCache.map.size === 0) {
-    const list = await strapi.db.query('api::tenant.tenant').findMany({ select: ['id', 'key', 'adminEmails', 'customRoleAssignments'], limit: 500 });
-    const m = new Map<string, { key: string; id: number; customRoleAssignments: Record<string, string> }>();
-    list.forEach((t: any) => (t.adminEmails || []).forEach((e: string) => m.set(String(e).toLowerCase(), { key: t.key, id: t.id, customRoleAssignments: t.customRoleAssignments || {} })));
-    adminCache = { at: now, map: m };
-  }
-  return adminCache.map.get(String(email).toLowerCase()) || null;
-}
-
-/** Custom-role enforcement backstop — mirrors webx-studio's own
- * resolveCustomRolePermissions()/stripCustomRoleFields(), so a write that
- * reaches Strapi directly (bypassing webx-studio entirely) is governed the
- * same way, same reasoning as field-policy's own dual enforcement below. */
-let customRoleCache: { at: number; list: any[] } = { at: 0, list: [] };
-async function getCustomRoles(strapi: any) {
-  const now = Date.now();
-  if (now - customRoleCache.at > 15000) {
-    try { customRoleCache = { at: now, list: await strapi.db.query('api::custom-role.custom-role').findMany({ limit: 500 }) }; }
-    catch { customRoleCache = { at: now, list: [] }; }
-  }
-  return customRoleCache.list;
-}
-async function resolveCustomRolePerms(strapi: any, eff: any, adminEmail: string | undefined, uid: string) {
-  if (!eff || !adminEmail) return null;
-  const roleKey = (eff.customRoleAssignments || {})[String(adminEmail).toLowerCase()];
-  if (!roleKey) return null;
-  const roles = await getCustomRoles(strapi);
-  const role = roles.find((r: any) => r.tenantKey === eff.key && r.roleKey === roleKey);
-  if (!role) return null; // assigned role since deleted — fail open, same as governance.ts's own resolver
-  const perm = (role.permissions || {})[uid] || {};
-  return {
-    create: Boolean(perm.create), update: Boolean(perm.update), delete: Boolean(perm.delete), publish: Boolean(perm.publish),
-    hidden: Array.isArray(perm.hidden) ? perm.hidden : [], readonly: Array.isArray(perm.readonly) ? perm.readonly : [],
-  };
-}
 
 /** Field-level RBAC — policy cache + strip ฟิลด์ที่ role ปัจจุบันไม่มีสิทธิ์เขียน (hidden/readonly) */
 let policyCache: { at: number; list: any[] } = { at: 0, list: [] };

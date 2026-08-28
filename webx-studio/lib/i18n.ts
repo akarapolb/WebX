@@ -416,6 +416,8 @@ export const DICT: Record<string, Entry> = {
   "al.a_delete_api_token": { en: "delete API token", th: "ลบ API token" },
   "al.a_sso_config_update": { en: "update SSO settings", th: "แก้ไขการตั้งค่า SSO" },
   "al.a_sso_jit_provision": { en: "SSO account provisioned", th: "สร้างบัญชีผ่าน SSO" },
+  "al.a_sso_deprovisioned": { en: "SSO account deactivated (removed from Keycloak)", th: "ปิดใช้งานบัญชี SSO (ถูกลบออกจาก Keycloak)" },
+  "al.a_sso_reprovisioned": { en: "SSO account reactivated", th: "เปิดใช้งานบัญชี SSO อีกครั้ง" },
   "al.a_custom_role_create": { en: "create custom role", th: "สร้างบทบาทกำหนดเอง" },
   "al.a_custom_role_update": { en: "update custom role", th: "แก้ไขบทบาทกำหนดเอง" },
   "al.a_custom_role_delete": { en: "delete custom role", th: "ลบบทบาทกำหนดเอง" },

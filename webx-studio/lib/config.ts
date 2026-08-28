@@ -49,3 +49,13 @@ export const WORDPRESS_SCHEDULER_APP_PASSWORD = process.env.WORDPRESS_SCHEDULER_
 // header) — the reverse direction of STRAPI_INTERNAL_SECRET above: something
 // external calling INTO webx-studio, not webx-studio calling into Strapi.
 export const WEBX_SCHEDULER_SECRET = process.env.WEBX_SCHEDULER_SECRET || "";
+
+// SSO deprovisioning sync (lib/keycloakAdmin.ts, governance.ts's
+// reconcileSsoDeprovisioning) — a Keycloak MASTER-REALM admin credential
+// (the same one used to set up realms/clients by hand), not a per-tenant
+// OIDC client secret, which grants no admin-API access. Global/broad by
+// design for v1 — see the plan's own tradeoff note against a per-tenant
+// scoped service account.
+export const KEYCLOAK_URL = process.env.KEYCLOAK_URL || "";
+export const KEYCLOAK_ADMIN = process.env.KEYCLOAK_ADMIN || "";
+export const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || "";

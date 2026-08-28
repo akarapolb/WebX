@@ -42,6 +42,7 @@ import {
 } from "../config";
 import { planLimit } from "../plans";
 import { generateSecret, otpauthUri, verifyTOTP, generateRecoveryCodes, hashRecoveryCode } from "../totp";
+import { keycloakAdminToken, listEnabledKeycloakEmails, realmFromIssuerUrl } from "../keycloakAdmin";
 
 // The one swap point (Phase 2, made per-session in Phase 6): every
 // `governed.*` content operation goes through whichever adapter THIS
@@ -253,7 +254,7 @@ export async function selfServeSignup(input: {
 
   return withServiceToken(token, async () => {
     const roles = await strapiAdapter.auth.listRoles();
-    const editorRole = roles.find((r) => r.name === "Editor") ?? roles[0];
+    const editorRole = roles.find((r) => r.name.toLowerCase() === "editor") ?? roles[0];
     if (!editorRole) throw new CmsError("Signup is temporarily unavailable", 500);
 
     let tenant: any;
@@ -445,7 +446,7 @@ export async function ssoLogin(tenantKey: string, rawEmail: string): Promise<{ t
       // human; it's encrypted and stored so future SSO logins can mint a
       // fresh Strapi session without anyone typing it.
       const roles = await strapiAdapter.auth.listRoles();
-      const editorRole = roles.find((r) => r.name === "Editor") ?? roles[0];
+      const editorRole = roles.find((r) => r.name.toLowerCase() === "editor") ?? roles[0];
       if (!editorRole) throw new CmsError("SSO sign-in is temporarily unavailable", 500);
       const tempPassword = genTempPassword();
       const created = await strapiAdapter.auth.create({
@@ -492,6 +493,83 @@ export async function ssoLogin(tenantKey: string, rawEmail: string): Promise<{ t
     }
     if (!login.ok) throw new CmsError("SSO sign-in could not complete — contact an administrator", 500);
     return { token: login.token, refresh: login.refresh ?? null };
+  });
+}
+
+/** Periodic reconciliation, triggered externally the same way
+ * processDueReleases() is (see app/api/internal/sso/reconcile/route.ts +
+ * the sso-reconcile-scheduler compose service) — not an in-process timer,
+ * same multi-replica reasoning as the release scheduler.
+ *
+ * Removing someone from Keycloak does nothing to their WebX access on its
+ * own — this closes that gap by deactivating (not deleting) any
+ * SSO-provisioned admin who's no longer enabled in their tenant's realm,
+ * and symmetrically reactivates one who reappears. Deactivate rather than
+ * remove: reversible, keeps the tenant roster/audit history intact —
+ * matters for something running unattended on a timer (already confirmed
+ * with you, not re-litigated here).
+ *
+ * "SSO-provisioned admin of this tenant" is anyone in the tenant's own
+ * adminEmails who ALSO has an sso-credential row — checked by the email
+ * existing in that table at all, not filtered by the row's own tenantKey,
+ * since the same shadow account can be SSO-assigned across more than one
+ * tenant and the row only records which tenant first created it (see
+ * ssoLogin's own roster-update comment). */
+export async function reconcileSsoDeprovisioning(): Promise<{ tenantsChecked: number; deactivated: number; reactivated: number; errors: string[] }> {
+  const summary = { tenantsChecked: 0, deactivated: 0, reactivated: 0, errors: [] as string[] };
+  const schedToken = await schedulerStrapiToken();
+  if (!schedToken) { summary.errors.push("Strapi service credential unavailable"); return summary; }
+
+  return withServiceToken(schedToken, async () => {
+    const { data: credRows } = await strapiAdapter.entries.list<any>(SSO_CREDENTIAL_UID, { pageSize: 500 });
+    const credByEmail = new Map<string, any>(credRows.map((r: any) => [String(r.adminEmail).toLowerCase(), r]));
+    if (!credByEmail.size) return summary; // nobody's ever signed in via SSO — nothing to reconcile
+
+    const { byKey } = await refreshTenantCache();
+    const ssoTenants = [...byKey.values()].filter((t) => t.sso?.enabled);
+
+    for (const tenant of ssoTenants) {
+      const realm = realmFromIssuerUrl(tenant.sso?.issuerUrl);
+      if (!realm) { summary.errors.push(`${tenant.key}: no realm resolvable from issuerUrl`); continue; }
+      const ssoAdmins = (tenant.adminEmails || []).filter((e) => credByEmail.has(e.toLowerCase()));
+      if (!ssoAdmins.length) { summary.tenantsChecked++; continue; }
+
+      try {
+        const adminToken = await keycloakAdminToken();
+        if (!adminToken) throw new Error("Keycloak admin credential unavailable/misconfigured");
+        const enabledEmails = await listEnabledKeycloakEmails(adminToken, realm);
+
+        for (const email of ssoAdmins) {
+          const row = credByEmail.get(email.toLowerCase());
+          if (!row?.strapiUserId) continue;
+          const stillEnabled = enabledEmails.has(email.toLowerCase());
+          const actor: CurrentUser = { id: "sso-reconcile", email, roles: [], isSuperAdmin: false };
+
+          const r = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, { headers: { Authorization: "Bearer " + schedToken } });
+          if (!r.ok) continue;
+          const current = await r.json();
+          const isActive = Boolean(current?.data?.isActive);
+
+          if (!stillEnabled && isActive) {
+            const upd = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, {
+              method: "PUT", headers: { Authorization: "Bearer " + schedToken, "Content-Type": "application/json" },
+              body: JSON.stringify({ isActive: false }),
+            });
+            if (upd.ok) { summary.deactivated++; await writeAudit("sso_deprovisioned", TENANT_UID, tenant.documentId ?? tenant.id, actor, tenant.key); }
+          } else if (stillEnabled && !isActive) {
+            const upd = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, {
+              method: "PUT", headers: { Authorization: "Bearer " + schedToken, "Content-Type": "application/json" },
+              body: JSON.stringify({ isActive: true }),
+            });
+            if (upd.ok) { summary.reactivated++; await writeAudit("sso_reprovisioned", TENANT_UID, tenant.documentId ?? tenant.id, actor, tenant.key); }
+          }
+        }
+        summary.tenantsChecked++;
+      } catch (e: any) {
+        summary.errors.push(`${tenant.key}: ${e?.message || "reconciliation failed"}`);
+      }
+    }
+    return summary;
   });
 }
 
@@ -1058,7 +1136,15 @@ export const governed = {
       if (typeof input.roleId === "string" && input.roleId.startsWith("custom:")) {
         customRoleKey = input.roleId.slice("custom:".length);
         const roles = await withEngineAdapter(target.engine || "strapi", (a) => a.auth.listRoles());
-        const base = roles.find((r) => r.name === "Editor") ?? roles[0];
+        // Case-insensitive: WordPress's own listRoles() returns lowercase
+        // native slugs ("editor"), not Strapi's capitalized "Editor" — an
+        // exact-case match here used to silently fall through to roles[0],
+        // which for WordPress is "administrator". That meant every
+        // custom-role WordPress account was provisioned as a full native
+        // admin regardless of what the custom role's permissions said,
+        // since nothing in WP's own capability system reflects a custom
+        // role at all — found live while building the WordPress backstop.
+        const base = roles.find((r) => r.name.toLowerCase() === "editor") ?? roles[0];
         if (!base) throw new CmsError("Could not provision the account's base role", 500);
         engineInput = { ...input, roleId: base.id };
       }

@@ -5,5 +5,6 @@
 export default {
   routes: [
     { method: 'GET', path: '/internal/tenant-of', handler: 'internal.tenantOf', config: { auth: false } },
+    { method: 'GET', path: '/internal/custom-role-permissions', handler: 'internal.customRolePermissions', config: { auth: false } },
   ],
 };

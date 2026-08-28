@@ -59,6 +59,19 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
       if those tools are used).
 - [ ] PDPA: submission content types are **not** public-readable (verify roles).
 - [ ] Cookie TTLs match Strapi `auth.sessions.*` lifespans.
+- [ ] WordPress engine, if used: after adding or changing a file under
+      `wordpress/mu-plugins/`, an image rebuild alone does **not** update an
+      already-running deployment — the official WordPress entrypoint only
+      seeds mu-plugins into the bind-mounted volume on a genuinely empty
+      volume (first boot). On a running deployment, copy the changed file in
+      directly and restart:
+        ```
+        docker compose cp wordpress/mu-plugins/custom-role-enforcement.php \
+          wordpress:/var/www/html/wp-content/mu-plugins/
+        docker compose restart wordpress
+        ```
+      (A fresh volume — e.g. a new environment — picks it up automatically
+      via the Dockerfile's `COPY mu-plugins/` line, no manual step needed there.)
 
 ## DGA / government on-prem notes
 

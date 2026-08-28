@@ -8,8 +8,8 @@ type Log = { id: number; action?: string; contentType?: string; entryId?: string
 const AL_UID = "api::audit-log.audit-log";
 const shortType = (c?: string) => (c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
 const badgeOf = (a?: string) =>
-  a === "delete" || a === "remove_user" || a === "mfa_disable" || a === "delete_api_token" || a === "custom_role_delete" || a === "custom_role_unassign" ? "b-warn"
-  : a === "publish" || a === "mfa_enable" ? "b-ok"
+  a === "delete" || a === "remove_user" || a === "mfa_disable" || a === "delete_api_token" || a === "custom_role_delete" || a === "custom_role_unassign" || a === "sso_deprovisioned" ? "b-warn"
+  : a === "publish" || a === "mfa_enable" || a === "sso_reprovisioned" ? "b-ok"
   : a === "create" || a === "create_user" || a === "signup" || a === "create_api_token" || a === "sso_jit_provision" || a === "custom_role_create" || a === "custom_role_assign" ? "b-acc"
   : "b-mut";
 
@@ -35,7 +35,7 @@ export default function AuditLog() {
   useEffect(() => { load(); }, [load]);
 
   const fmt = (iso?: string) => { if (!iso) return ""; try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; } };
-  const actions = ["create", "update", "publish", "unpublish", "delete", "create_user", "remove_user", "rebuild_public_site", "signup", "mfa_enable", "mfa_disable", "create_api_token", "delete_api_token", "sso_config_update", "sso_jit_provision", "custom_role_create", "custom_role_update", "custom_role_delete", "custom_role_assign", "custom_role_unassign"];
+  const actions = ["create", "update", "publish", "unpublish", "delete", "create_user", "remove_user", "rebuild_public_site", "signup", "mfa_enable", "mfa_disable", "create_api_token", "delete_api_token", "sso_config_update", "sso_jit_provision", "sso_deprovisioned", "sso_reprovisioned", "custom_role_create", "custom_role_update", "custom_role_delete", "custom_role_assign", "custom_role_unassign"];
   const shown = filter ? logs.filter((l) => l.action === filter) : logs;
 
   return (

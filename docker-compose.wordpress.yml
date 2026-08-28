@@ -42,6 +42,19 @@ services:
       # see mu-plugins/auth-header-fix.php's own comment for why this is
       # opt-in and unset in production.
       WP_ALLOW_HTTP_APP_PASSWORDS: "1"
+      # Custom-role enforcement backstop (mu-plugins/custom-role-enforcement.php).
+      # This container is NOT on the same Compose project/network as
+      # docker-compose.yml's strapi service (they're started via two separate
+      # `docker compose up` invocations — see e2e/README.md) — and in this
+      # repo's own local dev, strapi-cms usually runs natively via
+      # `npm run develop` on the host, not in Docker at all. Either way,
+      # host.docker.internal reaches the host's own port 1337, which works
+      # reliably under Docker Desktop (this repo's dev platform).
+      STRAPI_INTERNAL_URL: http://host.docker.internal:1337
+      # Must match whatever strapi-cms/.env has as WEBX_INTERNAL_SECRET —
+      # two separate local env files in dev, unlike docker-compose.yml's
+      # single shared .env.
+      WEBX_INTERNAL_SECRET: ${STRAPI_INTERNAL_SECRET:-dev-internal-secret}
     volumes:
       - wp-content-data:/var/www/html
     ports:

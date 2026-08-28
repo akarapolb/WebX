@@ -32,4 +32,8 @@ RUN set -eux; \
 # volume's first boot, same as it does for WordPress core itself — matches
 # how this image is meant to be used, and doesn't clobber an existing
 # deployment's volume on a later image rebuild.
+#
+# Deploying a NEW or CHANGED mu-plugin file to an EXISTING deployment's
+# volume needs a manual step beyond rebuilding this image — see DEPLOY.md's
+# production checklist.
 COPY mu-plugins/ /usr/src/wordpress/wp-content/mu-plugins/

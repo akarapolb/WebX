@@ -48,6 +48,12 @@ services:
       # seedScheduler) — must match what's set on `webx` and `release-scheduler`
       # below, since all three just reference the same .env value.
       STRAPI_SCHEDULER_PASSWORD: ${STRAPI_SCHEDULER_PASSWORD:?set STRAPI_SCHEDULER_PASSWORD}
+      # Shared secret for the /api/internal/* routes (tenant-of,
+      # custom-role-permissions) — must match webx's own STRAPI_INTERNAL_SECRET
+      # and wordpress's WEBX_INTERNAL_SECRET below (same .env value, three
+      # env-var names on three services, intentional — see internal.ts's
+      # own comment).
+      WEBX_INTERNAL_SECRET: ${STRAPI_INTERNAL_SECRET:?set STRAPI_INTERNAL_SECRET}
     volumes:
       - strapi-uploads:/app/public/uploads
     ports:
@@ -61,6 +67,10 @@ services:
     environment:
       NODE_ENV: production
       STRAPI_URL: http://strapi:1337
+      # Shared secret for governance.ts's internal cross-tenant/custom-role
+      # lookups (GET /api/internal/tenant-of, /custom-role-permissions) —
+      # must match strapi's own WEBX_INTERNAL_SECRET above.
+      STRAPI_INTERNAL_SECRET: ${STRAPI_INTERNAL_SECRET:?set STRAPI_INTERNAL_SECRET}
       # AI (optional): point at the litellm service or any OpenAI-compatible gateway
       LITELLM_URL: ${LITELLM_URL:-}
       LITELLM_KEY: ${LITELLM_KEY:-}
@@ -84,6 +94,14 @@ services:
       # JIT-provisioned shadow Strapi passwords at rest. Only required if a
       # tenant enables SSO in its Single Sign-On settings page.
       WEBX_ENCRYPTION_KEY: ${WEBX_ENCRYPTION_KEY:-}
+      # SSO deprovisioning sync (see sso-reconcile-scheduler below) — a
+      # Keycloak MASTER-REALM admin credential, same one used to set up
+      # realms/clients by hand (same values as the keycloak service's own
+      # KEYCLOAK_ADMIN/KEYCLOAK_ADMIN_PASSWORD below, reused not duplicated).
+      # Only required if any tenant has SSO enabled.
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
     ports:
       - "${WEBX_PORT:-3000}:3000"
 
@@ -107,6 +125,29 @@ services:
         while true; do
           curl -sf -X POST -H "X-Internal-Secret: $$WEBX_SCHEDULER_SECRET" http://webx:3000/api/internal/releases/process-due \
             || echo "[release-scheduler] tick failed"
+          sleep "$$INTERVAL_SECONDS"
+        done
+
+  # Ticks POST /api/internal/sso/reconcile so removing someone from Keycloak
+  # actually revokes (deactivates) their WebX access instead of leaving a
+  # JIT-provisioned account active forever — see governance.ts's
+  # reconcileSsoDeprovisioning. Same not-an-in-process-timer reasoning as
+  # release-scheduler above. Longer default interval: deprovisioning doesn't
+  # need release-scheduler's 60s promptness.
+  sso-reconcile-scheduler:
+    image: curlimages/curl:8.10.1
+    restart: unless-stopped
+    depends_on:
+      - webx
+    environment:
+      WEBX_SCHEDULER_SECRET: ${WEBX_SCHEDULER_SECRET:?set WEBX_SCHEDULER_SECRET}
+      INTERVAL_SECONDS: ${SSO_RECONCILE_INTERVAL_SECONDS:-900}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -sf -X POST -H "X-Internal-Secret: $$WEBX_SCHEDULER_SECRET" http://webx:3000/api/internal/sso/reconcile \
+            || echo "[sso-reconcile-scheduler] tick failed"
           sleep "$$INTERVAL_SECONDS"
         done
 
@@ -181,6 +222,12 @@ services:
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?set WORDPRESS_DB_PASSWORD}
+      # Custom-role enforcement backstop (mu-plugins/custom-role-enforcement.php)
+      # — outbound call to Strapi's internal API. Same Docker network as
+      # strapi (both in this compose file, no explicit `networks:` block —
+      # Compose's implicit default bridge already resolves service names).
+      STRAPI_INTERNAL_URL: http://strapi:1337
+      WEBX_INTERNAL_SECRET: ${STRAPI_INTERNAL_SECRET:?set STRAPI_INTERNAL_SECRET}
     volumes:
       - wp-content-data:/var/www/html
     ports:
