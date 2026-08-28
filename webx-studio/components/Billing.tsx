@@ -30,7 +30,9 @@ export default function Billing() {
       const tn = data[0] || null;
       setTenant(tn);
       const seats = Array.isArray(tn?.adminEmails) ? tn.adminEmails.length : 0;
-      const a = await fetch("/api/strapi/api/analytics/summary" + (key ? "?tenant=" + encodeURIComponent(key) : "")).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+      // content-usage (not the raw Strapi proxy) so a WordPress-engine
+      // workspace's usage reflects its own content, not just Strapi's.
+      const a = await fetch("/api/cms/content-usage" + (key ? "?tenant=" + encodeURIComponent(key) : "")).then((x) => (x.ok ? x.json() : null)).catch(() => null);
       setUsage({ content: a?.contentTotal ?? 0, seats });
     } catch (e) {
       if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));

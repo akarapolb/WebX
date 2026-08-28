@@ -498,7 +498,7 @@ export const DICT: Record<string, Entry> = {
   "cr.save": { en: "Save role", th: "บันทึกบทบาท" },
   "cr.saving": { en: "Saving…", th: "กำลังบันทึก…" },
   "cr.saved": { en: "Role saved.", th: "บันทึกบทบาทแล้ว" },
-  "cr.note": { en: "Enforced server-side — a content type left unchecked is denied by default, whether or not it has field restrictions too. \"View\" is a UI hint only, not yet a real security boundary.", th: "บังคับที่ฝั่งเซิร์ฟเวอร์ — ชนิดเนื้อหาที่ไม่ได้เลือกจะถูกปฏิเสธโดยค่าเริ่มต้น ไม่ว่าจะมีข้อจำกัดฟิลด์ด้วยหรือไม่ \"View\" เป็นเพียงคำแนะนำ UI ยังไม่ใช่การควบคุมความปลอดภัยจริง" },
+  "cr.note": { en: "Enforced server-side — a content type left unchecked is denied by default, whether or not it has field restrictions too. \"View\" is enforced the same way: leave it unchecked and reads of that content type are denied via the API.", th: "บังคับที่ฝั่งเซิร์ฟเวอร์ — ชนิดเนื้อหาที่ไม่ได้เลือกจะถูกปฏิเสธโดยค่าเริ่มต้น ไม่ว่าจะมีข้อจำกัดฟิลด์ด้วยหรือไม่ \"View\" ก็ถูกบังคับเช่นเดียวกัน — หากไม่ติ๊กไว้ การอ่านข้อมูลของชนิดเนื้อหานั้นจะถูกปฏิเสธผ่าน API" },
   "e.locked": { en: "read-only", th: "อ่านอย่างเดียว" },
   "a11y.moveup": { en: "Move up", th: "เลื่อนขึ้น" },
   "a11y.movedown": { en: "Move down", th: "เลื่อนลง" },

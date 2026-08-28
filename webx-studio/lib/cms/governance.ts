@@ -1033,13 +1033,13 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
-/** Mirrors exactly what Billing.tsx/ContentBrowser.tsx already show as
- * "items used" (Strapi's own /api/analytics/summary contentTotal) —
- * enforcement has to count the same way it's displayed, or a user would see
- * e.g. "42/50" in the UI and get blocked at a different number underneath.
- * Strapi-only: WordPress-engine tenants' content isn't in this count today
- * — the same pre-existing gap the analytics dashboard itself already has,
- * not something new here — so WP_SCOPED creates aren't item-limited yet.
+/** Strapi half of what Billing.tsx / contentUsageFor() below show as "items
+ * used" (Strapi's own /api/analytics/summary contentTotal) — enforcement has
+ * to count the same way it's displayed, or a user would see e.g. "42/50" in
+ * the UI and get blocked at a different number underneath. Strapi-engine
+ * tenants only; see tenantItemCountWordpress() below for the WordPress half
+ * (Analytics.tsx's own content-type breakdown is a separate, still Strapi-
+ * only, pre-existing gap — left alone here, see its own file for why).
  * Fails open (returns 0, i.e. "not over limit") on any error: a broken
  * limit check should never be the reason a real content save fails. */
 async function tenantItemCount(tenantKey: string): Promise<number> {
@@ -1055,15 +1055,57 @@ async function tenantItemCount(tenantKey: string): Promise<number> {
   } catch { return 0; }
 }
 
+/** WordPress counterpart — Strapi has no visibility into WordPress content at
+ * all (its own /api/analytics/summary above is a set of local DB queries,
+ * nothing more), so this counts the same way ContentBrowser's own list calls
+ * already do: WP_SCOPED's REST totals (X-WP-Total), filtered by this
+ * tenant's wtenant term, summed across every WP_SCOPED type. "Published
+ * only" matches tenantItemCount()'s own semantics above (Strapi's summary
+ * counts publishedAt:$notNull, not drafts). Authenticates with the
+ * scheduler's own WordPress credential — same as ensureWordpressTenantTerm()/
+ * processDueReleases() already do — so the count is authoritative regardless
+ * of the calling user's own read scope, not just what pageSize:1 happens to
+ * return for them specifically. Fails open to 0, same contract as above. */
+async function tenantItemCountWordpress(tenantKey: string): Promise<number> {
+  try {
+    const wpToken = await schedulerWpToken();
+    if (!wpToken) return 0;
+    return await withServiceToken(wpToken, async () => {
+      const counts = await Promise.all(
+        [...WP_SCOPED].map((uid) =>
+          wordpressAdapter.entries
+            .list(uid, { pageSize: 1, status: "published", filter: [{ field: "tenant.key", op: "eq", value: tenantKey }] })
+            .then((r) => r.total)
+            .catch(() => 0)
+        )
+      );
+      return counts.reduce((a, b) => a + b, 0);
+    });
+  } catch { return 0; }
+}
+
+/** Backs the /api/cms/content-usage route — the same number Billing.tsx
+ * displays as "used", computed the same way enforceItemLimit() below checks
+ * it, so a tenant never sees a usage figure that disagrees with what's
+ * actually gating their next create. */
+export async function contentUsageFor(tenantKey: string): Promise<{ contentTotal: number }> {
+  const tenant = await resolveTenantByKey(tenantKey);
+  const total = tenant?.engine === "wordpress" ? await tenantItemCountWordpress(tenantKey) : await tenantItemCount(tenantKey);
+  return { contentTotal: total };
+}
+
 /** governed.create()'s plan-limit gate — only for a scoped tenant (an
  * unscoped/super-admin create has no tenant to check a limit against, same
- * as tenantStamp() below already treats that case) and only for SCOPED
- * (Strapi) uids, matching tenantItemCount()'s own Strapi-only counting. */
+ * as tenantStamp() below already treats that case) and only for a SCOPED or
+ * WP_SCOPED uid; anything else (tenant, audit-log, custom-role, ...) has no
+ * per-item plan limit at all. */
 async function enforceItemLimit(eff: Tenant | null, uid: string): Promise<void> {
-  if (!eff || !SCOPED.has(uid)) return;
+  if (!eff) return;
+  const wp = WP_SCOPED.has(uid);
+  if (!SCOPED.has(uid) && !wp) return;
   const limit = planLimit(eff.plan).items;
   if (!Number.isFinite(limit)) return;
-  const used = await tenantItemCount(eff.key);
+  const used = wp ? await tenantItemCountWordpress(eff.key) : await tenantItemCount(eff.key);
   if (used >= limit) {
     throw new CmsError(`This workspace has reached its ${limit}-item plan limit — upgrade to add more content.`, 403);
   }
@@ -1204,26 +1246,39 @@ export const governed = {
 
   async list<T = any>(uid: string, query?: EntryQuery): Promise<EntryList<T>> {
     return withContentAdapter(uid, async (cms) => {
-      if (WP_SCOPED.has(uid)) {
-        const user = await cms.auth.me();
-        const eff = user ? await resolveEffectiveTenant(user.email) : null;
-        if (eff) {
-          const filter = [...(query?.filter || []), { field: "tenant.key", op: "eq" as const, value: eff.key }];
-          return cms.entries.list<T>(uid, { ...query, filter });
-        }
+      // Custom roles' own "view" flag used to be a UI hint only (CustomRoles.tsx
+      // still hides the nav item) with no server-side check behind it — a
+      // view:false user could still read the content type straight through
+      // the API. Resolving user/eff here (previously only done inside the
+      // WP_SCOPED branch below) costs an extra auth.me() round-trip for every
+      // list call, same tradeoff governed.create/update/remove already accept
+      // for their own resolveCustomRolePermissions() call.
+      const user = await cms.auth.me();
+      const eff = user ? await resolveEffectiveTenant(user.email) : null;
+      if (user) {
+        const crp = await resolveCustomRolePermissions(user, eff, uid);
+        if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
+      }
+      if (WP_SCOPED.has(uid) && eff) {
+        const filter = [...(query?.filter || []), { field: "tenant.key", op: "eq" as const, value: eff.key }];
+        return cms.entries.list<T>(uid, { ...query, filter });
       }
       return cms.entries.list<T>(uid, query);
     });
   },
   async get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null> {
     return withContentAdapter(uid, async (cms) => {
+      const user = await cms.auth.me();
+      const eff = user ? await resolveEffectiveTenant(user.email) : null;
+      if (user) {
+        const crp = await resolveCustomRolePermissions(user, eff, uid);
+        // Checked before the fetch below — a denied caller shouldn't pay for
+        // (or receive the response of) a read they're not allowed to make.
+        if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
+      }
       const result: any = await cms.entries.get<T>(uid, id, opts);
-      if (WP_SCOPED.has(uid) && result) {
-        const user = await cms.auth.me();
-        const eff = user ? await resolveEffectiveTenant(user.email) : null;
-        if (eff && result.tenantKey && result.tenantKey !== eff.key) {
-          throw new CmsError("Cross-tenant operation not permitted", 403);
-        }
+      if (WP_SCOPED.has(uid) && result && eff && result.tenantKey && result.tenantKey !== eff.key) {
+        throw new CmsError("Cross-tenant operation not permitted", 403);
       }
       return result;
     });
