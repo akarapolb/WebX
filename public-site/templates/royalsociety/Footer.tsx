@@ -33,9 +33,11 @@
 // exists in this port yet):
 //   - The newsletter `<form>` (email input + submit button).
 //
-// This is a plain, static Server Component — no client-side state is needed
-// anywhere in the footer (unlike Header.tsx's mobile-drawer toggle).
+// This is a plain, static Server Component — the one bit of interactivity
+// (the newsletter form's real submit handling) is isolated in its own small
+// Client Component, same reasoning as Header.tsx's mobile-drawer toggle.
 import type { Tenant } from "@/lib/cms";
+import NewsletterForm from "./NewsletterForm";
 
 const SITE = {
   name: "ราชบัณฑิตยสภา",
@@ -169,10 +171,7 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
         <div>
           <h4>{NEWSLETTER.heading}</h4>
           <p>{NEWSLETTER.desc}</p>
-          <form className="newsletter">
-            <input type="email" placeholder={NEWSLETTER.placeholder} aria-label={NEWSLETTER.placeholder} />
-            <button type="submit" aria-label="สมัครรับข่าวสาร">→</button>
-          </form>
+          <NewsletterForm placeholder={NEWSLETTER.placeholder} />
         </div>
       </div>
 

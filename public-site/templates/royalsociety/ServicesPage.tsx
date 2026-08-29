@@ -59,10 +59,10 @@ export default function ServicesPage({
                 <article className="rs-card rs-card--flat" key={s.slug || i}>
                   <div className="rs-card__body">
                     <h3 className="rs-card__title">
-                      <a href={`/royalsociety/services/${s.slug}`}>{s.title}</a>
+                      <a href="/royalsociety/services">{s.title}</a>
                     </h3>
                     <p className="rs-card__excerpt">{s.excerpt}</p>
-                    <a className="rs-card__link" href={`/royalsociety/services/${s.slug}`}>
+                    <a className="rs-card__link" href="/royalsociety/services">
                       ดูรายละเอียด →
                     </a>
                   </div>

@@ -249,7 +249,7 @@ export default function KnowledgePage() {
                   <div className="meta">
                     <span>บทความวิชาการ</span>
                     <span>ภาษาไทย</span>
-                    <span>15 มกราคม 2568</span>
+                    <span>บทความแนะนำ</span>
                   </div>
                   <h2>พจนานุกรมฉบับราชบัณฑิตยสภา: การปรับปรุงคำศัพท์ยุคใหม่</h2>
                   <p>บทความเกี่ยวกับการปรับปรุงพจนานุกรมให้ทันต่อเทคโนโลยี วิทยาศาสตร์ และสังคมร่วมสมัย พร้อมแนวทางการใช้คำที่ถูกต้อง</p>
@@ -282,16 +282,16 @@ export default function KnowledgePage() {
                   <h3>การพัฒนาการใช้ภาษาไทยในยุคดิจิทัล</h3>
                   <p>ศึกษาแนวโน้มการใช้ภาษาไทยในสื่อดิจิทัล และข้อเสนอเพื่อรักษามาตรฐานภาษาในสภาพแวดล้อมใหม่</p>
                   <div className="card-foot">
-                    <span>โดย ศ.ดร.สมศรี วิทยาการ</span>
+                    <span>บทความวิชาการ</span>
                     <a className="read-link" href="#">อ่านบทความ →</a>
                   </div>
                 </article>
                 <article className="knowledge-card">
                   <div className="card-top">
                     <span className="type-tag">เอกสาร</span>
-                    <small>PDF 2.5 MB</small>
+                    <small>เอกสาร PDF</small>
                   </div>
-                  <h3>แนวทางการใช้ภาษาไทยในเอกสารราชการ พ.ศ. 2567</h3>
+                  <h3>แนวทางการใช้ภาษาไทยในเอกสารราชการ</h3>
                   <p>เอกสารแนวทางการเขียนเอกสารราชการภาษาไทย ฉบับปรับปรุงใหม่ พร้อมตัวอย่างการใช้งาน</p>
                   <div className="card-foot">
                     <span>เอกสารเผยแพร่</span>

@@ -1,15 +1,21 @@
 
-// Ported from RoyalSociety/pages/contact.html, fully static — no CMS prop on
-// this page. The source itself documents the form as not wired to a backend:
-//
-//   TODO (ทีมพัฒนา): ฟอร์มนี้ยังไม่ได้ต่อกับระบบหลังบ้าน
-//   ต้องกำหนด action/method และเพิ่มการตรวจสอบข้อมูลฝั่งเซิร์ฟเวอร์
-//   รวมถึงมาตรการกันสแปม (CAPTCHA หรือเทียบเท่า)
-//
-// so the markup is rendered faithfully with no onSubmit/action — wiring it up
-// (endpoint, server-side validation, spam protection) is out of scope here,
-// same as it was in the source.
-export default function ContactPage() {
+// Ported from RoyalSociety/pages/contact.html. The form used to have no
+// onSubmit/action at all (the source's own TODO said as much) — a real
+// submit fell back to a GET against the current URL, leaking name/email/
+// phone/message into the address bar, browser history, and the server
+// access log. Now delegates to ContactInteractive.tsx's real, captcha-
+// guarded submit. The office address/phone/email below used to be a second,
+// independent hardcoded copy that could silently drift from Footer.tsx's
+// real CMS-sourced one — this now takes the SAME `tenant` prop the route
+// already fetches for Footer, so the two can't disagree.
+import type { Tenant } from "@/lib/cms";
+import ContactForm from "./ContactInteractive";
+
+export default function ContactPage({ tenant }: { tenant: Tenant | null }) {
+  const contact = tenant?.contact;
+  const phone = contact?.phone || "0 2481 0347";
+  const email = contact?.email || "saraban@royalsociety.go.th";
+  const address = contact?.address?.th || "สนามเสือป่า เขตดุสิต กรุงเทพมหานคร";
   return (
       <main id="main-content">
         <section className="page-hero">
@@ -39,61 +45,17 @@ export default function ContactPage() {
                   <p>ช่องที่มีเครื่องหมาย * จำเป็นต้องกรอก</p>
                 </div>
 
-                {/* Not wired to a backend — see file header comment. */}
-                <form className="rs-panel">
-                  <div className="rs-grid rs-grid--2">
-                    <div className="rs-field">
-                      <label htmlFor="ct-name">ชื่อ-นามสกุล *</label>
-                      <input id="ct-name" name="name" type="text" required placeholder="กรอกชื่อและนามสกุล" />
-                    </div>
-                    <div className="rs-field">
-                      <label htmlFor="ct-email">อีเมล *</label>
-                      <input id="ct-email" name="email" type="email" required placeholder="name@example.com" />
-                    </div>
-                    <div className="rs-field">
-                      <label htmlFor="ct-phone">โทรศัพท์</label>
-                      <input id="ct-phone" name="phone" type="tel" placeholder="0X-XXX-XXXX" />
-                    </div>
-                    <div className="rs-field">
-                      <label htmlFor="ct-topic">ประเภทเรื่อง *</label>
-                      <select id="ct-topic" name="topic" required>
-                        <option value="">เลือกประเภทเรื่อง</option>
-                        <option value="academic">สอบถามข้อมูลทางวิชาการ</option>
-                        <option value="permission">ขออนุญาตใช้เนื้อหา</option>
-                        <option value="speaker">ขอวิทยากรบรรยาย</option>
-                        <option value="feedback">ข้อเสนอแนะ</option>
-                        <option value="complaint">ข้อร้องเรียน</option>
-                        <option value="other">อื่น ๆ</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="rs-field" style={{ marginTop: 14 }}>
-                    <label htmlFor="ct-subject">หัวข้อเรื่อง *</label>
-                    <input id="ct-subject" name="subject" type="text" required placeholder="สรุปเรื่องที่ต้องการติดต่อในหนึ่งบรรทัด" />
-                  </div>
-
-                  <div className="rs-field" style={{ marginTop: 14 }}>
-                    <label htmlFor="ct-message">รายละเอียด *</label>
-                    <textarea id="ct-message" name="message" required placeholder="อธิบายรายละเอียดของเรื่องที่ต้องการติดต่อ" />
-                    <small className="rs-field__hint">หากเป็นคำถามเรื่องภาษา โปรดระบุคำหรือประโยคที่สงสัยให้ชัดเจน</small>
-                  </div>
-
-                  <div className="rs-btn-row" style={{ marginTop: 20 }}>
-                    <button className="rs-btn rs-btn--primary" type="submit">ส่งเรื่อง</button>
-                    <button className="rs-btn" type="reset">ล้างข้อมูล</button>
-                  </div>
-                </form>
+                <ContactForm tenant="royalsociety" />
               </div>
 
               <aside>
                 <div className="rs-panel rs-panel--deep">
                   <h3 style={{ marginTop: 0 }}>สำนักงานราชบัณฑิตยสภา</h3>
-                  <p>สนามเสือป่า เขตดุสิต กรุงเทพมหานคร</p>
+                  <p>{address}</p>
                   <p>
-                    โทรศัพท์ <strong>0 2481 0347</strong>
+                    โทรศัพท์ <strong>{phone}</strong>
                     <br />
-                    อีเมล <strong>saraban@royalsociety.go.th</strong>
+                    อีเมล <strong>{email}</strong>
                   </p>
                 </div>
 

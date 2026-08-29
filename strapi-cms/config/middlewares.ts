@@ -26,11 +26,14 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Middlewar
   },
   'strapi::poweredBy',
   'global::traffic-log',
-  'global::rate-limit',
   'global::admin-mfa',
   'global::seo',
   'strapi::query',
   'strapi::body',
+  // Moved to run AFTER strapi::body (was before it) — the /admin/login
+  // branch below now keys per-email, which needs ctx.request.body.email
+  // parsed, and that isn't populated yet any earlier in the chain.
+  'global::rate-limit',
   'global::tenant',
   'global::captcha-guard',
   'strapi::session',

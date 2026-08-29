@@ -48,7 +48,18 @@ export async function POST(req: Request) {
   // actual session cookie yet: it's stashed in a short-lived, distinct
   // cookie until a correct code lands at /api/auth/mfa/verify-login. Still
   // httpOnly throughout — the token never reaches client JS either way.
-  if (await isMfaEnabled(email).catch(() => false)) {
+  let mfaOn: boolean;
+  try {
+    mfaOn = await isMfaEnabled(email);
+  } catch {
+    // A lookup failure here used to be swallowed into "not enrolled,"
+    // silently letting an MFA-enrolled admin in on password alone — see
+    // findMfaRow's own comment. Refuse the login instead; the same
+    // condition (a transient Strapi/scheduler-credential blip) is retried
+    // by the client on the next attempt.
+    return NextResponse.json({ error: "Sign-in is temporarily unavailable — please try again shortly." }, { status: 503 });
+  }
+  if (mfaOn) {
     jar.set(MFA_PENDING_COOKIE, JSON.stringify({ token: res.token, refresh: res.refresh ?? null, email }), {
       ...base, maxAge: MFA_PENDING_TTL,
     });

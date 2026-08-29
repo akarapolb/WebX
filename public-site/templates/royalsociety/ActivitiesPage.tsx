@@ -76,7 +76,7 @@ export default function ActivitiesPage({
                         </span>
                         <div className="rs-list-item__body">
                           <h3>
-                            <a href={`/royalsociety/activities/${a.slug}`}>{a.title}</a>
+                            <a href="/royalsociety/activities">{a.title}</a>
                           </h3>
                           <p>{a.excerpt}</p>
                         </div>

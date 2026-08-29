@@ -33,7 +33,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <IconSprite />
-        <a className="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+        {/* Shared across every tenant, so it can't depend on any one
+           tenant's own CSS being loaded — a scoped <style> tag instead of a
+           .skip-link class. Previously targeted #main, which doesn't exist
+           anywhere; every tenant's actual content wrapper uses
+           id="main-content" (ORST/RoyalSociety/gov-portal all agree on
+           that), so this silently did nothing on every page, not just the
+           one tenant (RoyalSociety) whose CSS happened to leave it visibly
+           unstyled instead of just inert. Plain CSS :focus, not an
+           onFocus/onBlur handler — this file is a Server Component and a
+           handler would force it (and everything under it) client-side. */}
+        <style>{`
+          .webx-skip-link{position:absolute!important;left:8px!important;top:-48px!important;z-index:2147483647!important;
+            background:#111!important;color:#fff!important;padding:10px 16px!important;border-radius:6px!important;
+            font-size:14px!important;font-weight:600!important;text-decoration:none!important;transition:top .15s ease!important}
+          .webx-skip-link:focus{top:8px!important}
+        `}</style>
+        <a href="#main-content" className="webx-skip-link">ข้ามไปยังเนื้อหาหลัก</a>
         {children}
         <CookieConsent />
       </body>

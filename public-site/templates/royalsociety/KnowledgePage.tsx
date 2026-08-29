@@ -103,10 +103,10 @@ export default function KnowledgePage({
                 <article className="rs-card rs-card--flat" key={r.slug || i}>
                   <div className="rs-card__body">
                     <h3 className="rs-card__title">
-                      <a href={`/royalsociety/knowledge/${r.slug}`}>{r.title}</a>
+                      <a href="/royalsociety/knowledge">{r.title}</a>
                     </h3>
                     <p className="rs-card__excerpt">{r.excerpt}</p>
-                    <a className="rs-card__link" href={`/royalsociety/knowledge/${r.slug}`}>
+                    <a className="rs-card__link" href="/royalsociety/knowledge">
                       เข้าใช้งาน →
                     </a>
                   </div>

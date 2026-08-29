@@ -1,4 +1,11 @@
+"use client";
+// ContactForm (a Client Component) needs a render-prop children function to
+// place the captcha field where this page wants it in the form layout — a
+// function can't cross the Server→Client boundary as a prop (only a
+// serializable React element can), so this page has to be client-rendered
+// too. Costs nothing: it already took zero server props (100% static JSX).
 import { CopyButton, ContactForm } from "./ContactInteractive";
+import { useTenantContact } from "@/lib/useTenantContact";
 
 /* =============================================================================
    ContactPage.tsx — React port of the ORST static site's contact.html
@@ -30,6 +37,13 @@ import { CopyButton, ContactForm } from "./ContactInteractive";
 */
 
 export default function ContactPage() {
+  // Same source Footer.tsx already renders — see useTenantContact's own
+  // comment for why this page used to disagree with its own footer.
+  const contact = useTenantContact("orst");
+  const phone = contact?.phone || "0 2141 1728";
+  const email = contact?.email || "saraban@orst.go.th";
+  const address = contact?.address?.th || "ศูนย์ราชการเฉลิมพระเกียรติฯ อาคารซี ถนนแจ้งวัฒนะ เขตหลักสี่ กรุงเทพมหานคร 10210";
+  const telHref = "tel:" + phone.replace(/[^0-9]/g, "");
   return (
     <main id="main-content">
       <section className="contact-hero" aria-labelledby="page-title">
@@ -60,21 +74,21 @@ export default function ContactPage() {
               <span></span> เปิดทำการ จันทร์ - ศุกร์ 08:30 - 16:30 น.
             </div>
             <div className="hero-info-list">
-              <a href="tel:022800021">
+              <a href={telHref}>
                 <svg className="icon">
                   <use href="#i-phone" />
                 </svg>
                 <span>
-                  0-2280-0021
-                  <small>ต่อ 120 ฝ่ายสอบถาม</small>
+                  {phone}
+                  <small>ฝ่ายสอบถาม</small>
                 </span>
               </a>
-              <a href="mailto:info@royin.go.th">
+              <a href={"mailto:" + email}>
                 <svg className="icon">
                   <use href="#i-mail" />
                 </svg>
                 <span>
-                  info@royin.go.th
+                  {email}
                   <small>อีเมลกลางสำหรับติดต่อสำนักงาน</small>
                 </span>
               </a>
@@ -83,7 +97,7 @@ export default function ContactPage() {
                   <use href="#i-map" />
                 </svg>
                 <span>
-                  2 ถนนเทเวศร์ แขวงศรีอยุธยา เขตดุสิต กรุงเทพมหานคร 10300
+                  {address}
                   <small>ที่ตั้งสำนักงาน</small>
                 </span>
               </div>
@@ -108,11 +122,11 @@ export default function ContactPage() {
                     <h3>ที่อยู่</h3>
                     <p>
                       สำนักงานราชบัณฑิตยสภา
-                      <br />2 ถนนเทเวศร์ แขวงศรีอยุธยา เขตดุสิต กรุงเทพมหานคร 10300
+                      <br />{address}
                     </p>
                     <div className="contact-actions">
                       <CopyButton
-                        text="สำนักงานราชบัณฑิตยสภา 2 ถนนเทเวศร์ แขวงศรีอยุธยา เขตดุสิต กรุงเทพมหานคร 10300"
+                        text={"สำนักงานราชบัณฑิตยสภา " + address}
                         label="คัดลอกที่อยู่"
                       />
                     </div>
@@ -127,14 +141,10 @@ export default function ContactPage() {
                   </span>
                   <div>
                     <h3>โทรศัพท์</h3>
-                    <p>
-                      0-2280-0021
-                      <br />
-                      <small>ต่อ 120 ฝ่ายสอบถาม</small>
-                    </p>
+                    <p>{phone}</p>
                     <div className="contact-actions">
-                      <a className="mini-action" href="tel:022800021">โทรเลย</a>
-                      <CopyButton text="0-2280-0021" label="คัดลอกเบอร์" />
+                      <a className="mini-action" href={telHref}>โทรเลย</a>
+                      <CopyButton text={phone} label="คัดลอกเบอร์" />
                     </div>
                   </div>
                 </article>
@@ -147,14 +157,10 @@ export default function ContactPage() {
                   </span>
                   <div>
                     <h3>อีเมล</h3>
-                    <p>
-                      info@royin.go.th
-                      <br />
-                      <small>inquiry@royin.go.th สำหรับสอบถามข้อมูล</small>
-                    </p>
+                    <p>{email}</p>
                     <div className="contact-actions">
-                      <a className="mini-action" href="mailto:info@royin.go.th">ส่งอีเมล</a>
-                      <CopyButton text="info@royin.go.th" label="คัดลอกอีเมล" />
+                      <a className="mini-action" href={"mailto:" + email}>ส่งอีเมล</a>
+                      <CopyButton text={email} label="คัดลอกอีเมล" />
                     </div>
                   </div>
                 </article>
@@ -204,7 +210,9 @@ export default function ContactPage() {
             <h2 id="form-title">ส่งข้อความถึงเรา</h2>
             <div className="form-intro">กรอกข้อมูลให้ครบถ้วน เจ้าหน้าที่จะพิจารณาและติดต่อกลับตามช่องทางที่ท่านระบุ</div>
 
-            <ContactForm>
+            <ContactForm tenant="orst">
+              {(captchaField) => (
+              <>
               <div className="form-grid">
                 <div className="field">
                   <label htmlFor="name">
@@ -257,6 +265,8 @@ export default function ContactPage() {
                 </div>
               </div>
 
+              {captchaField}
+
               <label className="privacy-check">
                 <input type="checkbox" required />
                 <span>
@@ -274,6 +284,8 @@ export default function ContactPage() {
                   ส่งข้อความ
                 </button>
               </div>
+              </>
+              )}
             </ContactForm>
           </section>
         </div>

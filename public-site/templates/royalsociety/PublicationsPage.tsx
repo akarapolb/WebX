@@ -83,16 +83,16 @@ export default function PublicationsPage({
               {publications.map((p, i) => (
                 <article className="rs-card" key={p.slug || i}>
                   {p.imageUrl && (
-                    <a className="rs-card__media" href={`/royalsociety/publications/${p.slug}`}>
+                    <a className="rs-card__media" href="/royalsociety/publications">
                       <img src={p.imageUrl} alt="" loading="lazy" />
                     </a>
                   )}
                   <div className="rs-card__body">
                     <h3 className="rs-card__title">
-                      <a href={`/royalsociety/publications/${p.slug}`}>{p.title}</a>
+                      <a href="/royalsociety/publications">{p.title}</a>
                     </h3>
                     <p className="rs-card__excerpt">{p.excerpt}</p>
-                    <a className="rs-card__link" href={`/royalsociety/publications/${p.slug}`}>
+                    <a className="rs-card__link" href="/royalsociety/publications">
                       รายละเอียด →
                     </a>
                   </div>

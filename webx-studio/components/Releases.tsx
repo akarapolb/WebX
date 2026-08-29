@@ -14,6 +14,7 @@ export default function Releases() {
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [actionMsg, setActionMsg] = useState("");
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
   const [sched, setSched] = useState<Record<number, string>>({});
@@ -44,13 +45,24 @@ export default function Releases() {
     } catch {}
   }
   async function publishNow(r: Release) {
-    setBusy(r.id);
+    setBusy(r.id); setActionMsg("");
     try {
+      // Used to swallow every per-item failure and always mark the release
+      // "done" regardless — a release where nothing actually published
+      // looked identical in this UI to one that fully succeeded. Now
+      // tracked per item, same fix as the scheduler's own processDueReleases.
+      const failedItems: string[] = [];
       for (const it of r.items || []) {
         if (!it.contentType || !it.documentRef) continue;
-        await cms.publish.publish(it.contentType, it.documentRef).catch(() => {});
+        try { await cms.publish.publish(it.contentType, it.documentRef); }
+        catch (e: any) { failedItems.push((it.title || it.documentRef) + (e instanceof CmsError ? `: ${e.message}` : "")); }
       }
-      await put(r, { state: "done", publishedAt: new Date().toISOString() });
+      if (failedItems.length) {
+        await put(r, { state: "failed", note: `${failedItems.length} item(s) failed to publish:\n${failedItems.join("\n")}` });
+        setActionMsg(`${failedItems.length} of ${(r.items || []).length} item(s) failed to publish — see the release's note.`);
+      } else {
+        await put(r, { state: "done", publishedAt: new Date().toISOString() });
+      }
       await load();
     } catch {} finally { setBusy(null); }
   }
@@ -64,7 +76,7 @@ export default function Releases() {
   async function del(r: Release) { setBusy(r.id); try { await cms.entries.remove(RL_UID, idOf(r)); await load(); } catch {} finally { setBusy(null); } }
 
   const fmt = (iso?: string) => { if (!iso) return ""; try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; } };
-  const stBadge = (s: string) => (s === "done" ? "b-ok" : s === "scheduled" ? "b-acc" : "b-mut");
+  const stBadge = (s: string) => (s === "done" ? "b-ok" : s === "failed" ? "b-warn" : s === "scheduled" ? "b-acc" : "b-mut");
 
   return (
     <>
@@ -77,6 +89,7 @@ export default function Releases() {
       </div>
 
       {err && <div className="panel"><span className="badge b-warn"><span className="dot" />!</span><span className="muted" style={{ marginLeft: 10 }}>{err}</span></div>}
+      {!err && actionMsg && <div className="panel"><span className="badge b-warn"><span className="dot" />!</span><span className="muted" style={{ marginLeft: 10 }}>{actionMsg}</span></div>}
 
       {!err && (
         <div className="rl-list">

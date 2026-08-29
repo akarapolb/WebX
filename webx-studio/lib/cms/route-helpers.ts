@@ -10,6 +10,17 @@ export async function handle(fn: () => Promise<any>): Promise<NextResponse> {
     return NextResponse.json(data === undefined ? { ok: true } : data);
   } catch (e: any) {
     if (e instanceof CmsError) return NextResponse.json({ error: e.message }, { status: e.status || 500 });
+    // A CmsError is an EXPECTED failure (a real permission/validation/not-
+    // found condition, already given a clean message above) — this branch
+    // is everything else: a genuine bug, a network error talking to Strapi/
+    // WordPress, an unhandled exception. That used to vanish completely —
+    // no console output, no Sentry/OTel/any logging dependency anywhere in
+    // this app — leaving "Unexpected error" as the only trace, both to the
+    // caller AND to whoever operates this in production. Logging it here
+    // doesn't build real observability (see DEPLOY.md/status page's own
+    // gaps), but it's the difference between a production 500 leaving zero
+    // evidence anywhere and it at least showing up in the server's own log.
+    console.error("[cms] unhandled error:", e);
     return NextResponse.json({ error: "Unexpected error" }, { status: 500 });
   }
 }

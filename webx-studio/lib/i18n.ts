@@ -455,6 +455,7 @@ export const DICT: Record<string, Entry> = {
   "rl.s_draft": { en: "Draft", th: "ร่าง" },
   "rl.s_scheduled": { en: "Scheduled", th: "ตั้งเวลาแล้ว" },
   "rl.s_done": { en: "Published", th: "เผยแพร่แล้ว" },
+  "rl.s_failed": { en: "Failed", th: "ล้มเหลว" },
   "rl.addto": { en: "Add to release…", th: "เพิ่มเข้ารอบเผยแพร่…" },
   "rl.added": { en: "Added to release.", th: "เพิ่มเข้ารอบแล้ว" },
   "nav.field-access": { en: "Field Access", th: "สิทธิ์ระดับฟิลด์" },

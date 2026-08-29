@@ -137,7 +137,7 @@ export default function HomePage({ articles, hero }: { articles: Article[]; hero
             <div className="latest-news-only-layout reveal">
               {featured && (
                 <article className="latest-main-news">
-                  <a href={`/royalsociety/activities/${featured.slug}`} className="latest-main-news__image">
+                  <a href="/royalsociety/activities" className="latest-main-news__image">
                     <img src={NEWS_IMAGES[0]} alt="" loading="lazy" />
                     <span className="latest-main-news__badge">ข่าวล่าสุด</span>
                   </a>
@@ -148,12 +148,12 @@ export default function HomePage({ articles, hero }: { articles: Article[]; hero
                     </div>
 
                     <h3>
-                      <a href={`/royalsociety/activities/${featured.slug}`}>{featured.title}</a>
+                      <a href="/royalsociety/activities">{featured.title}</a>
                     </h3>
 
                     <p>{featured.excerpt}</p>
                     <div style={{ textAlign: "end" }}>
-                      <a className="latest-main-news__link is-compact" href={`/royalsociety/activities/${featured.slug}`}>
+                      <a className="latest-main-news__link is-compact" href="/royalsociety/activities">
                         อ่านต่อ
                         <span>→</span>
                       </a>
@@ -165,7 +165,7 @@ export default function HomePage({ articles, hero }: { articles: Article[]; hero
               <div className="latest-small-news-grid">
                 {rest.map((article, i) => (
                   <article className="latest-small-news" key={article.slug}>
-                    <a href={`/royalsociety/activities/${article.slug}`} className="latest-small-news__image">
+                    <a href="/royalsociety/activities" className="latest-small-news__image">
                       <img src={NEWS_IMAGES[(i + 1) % NEWS_IMAGES.length]} alt="" loading="lazy" />
                     </a>
 
@@ -175,12 +175,12 @@ export default function HomePage({ articles, hero }: { articles: Article[]; hero
                       </div>
 
                       <h3>
-                        <a href={`/royalsociety/activities/${article.slug}`}>{article.title}</a>
+                        <a href="/royalsociety/activities">{article.title}</a>
                       </h3>
 
                       <p>{article.excerpt}</p>
                       <div style={{ textAlign: "end" }}>
-                        <a className="latest-main-news__link is-compact" href={`/royalsociety/activities/${article.slug}`}>
+                        <a className="latest-main-news__link is-compact" href="/royalsociety/activities">
                           อ่านต่อ
                           <span>→</span>
                         </a>

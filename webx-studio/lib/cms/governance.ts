@@ -296,9 +296,18 @@ export async function selfServeSignup(input: {
 // native /admin UI — see lib/totp.ts's own header comment), this is wired
 // into webx-studio's actual login path with a real secret per admin.
 
+/** Throws (never returns null-for-failure) when the lookup itself couldn't
+ * be performed — scheduler credential unavailable, or the Strapi call
+ * erroring — so a caller can tell "genuinely not enrolled" (null result)
+ * apart from "couldn't check." That distinction used to be collapsed: a
+ * transient failure here (Strapi briefly down, or the same admin-login
+ * rate limiter this session hit repeatedly) silently read as "not
+ * enrolled," which meant isMfaEnabled() below returned false and
+ * /api/auth/login let a fully MFA-enrolled admin straight in on password
+ * alone, with nothing logged. */
 async function findMfaRow(email: string): Promise<any | null> {
   const token = await schedulerStrapiToken();
-  if (!token) return null;
+  if (!token) throw new CmsError("MFA lookup temporarily unavailable", 503);
   return withServiceToken(token, async () => {
     const { data } = await strapiAdapter.entries.list<any>(MFA_ENROLLMENT_UID, {
       filter: [{ field: "adminEmail", op: "eq", value: email.toLowerCase() }], pageSize: 1,
@@ -309,7 +318,9 @@ async function findMfaRow(email: string): Promise<any | null> {
 
 /** Called by the login route BEFORE issuing a session — true only for a
  * user who has completed enrollment (confirmMfaEnrollment below), so MFA is
- * opt-in per admin, not a mandatory global gate. */
+ * opt-in per admin, not a mandatory global gate. Throws (doesn't swallow)
+ * when the enrollment lookup itself fails — see findMfaRow's own comment;
+ * the login route must treat that as "refuse to sign in," not "no MFA." */
 export async function isMfaEnabled(email: string): Promise<boolean> {
   const row = await findMfaRow(email);
   return Boolean(row?.enabled);
@@ -596,7 +607,15 @@ async function getCustomRoles(): Promise<any[]> {
     try {
       const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(CUSTOM_ROLE_UID, { pageSize: 500 }));
       customRoleCache = { at: now, list: data };
-    } catch { customRoleCache = { at: now, list: [] }; }
+    } catch {
+      // Deliberately does NOT advance `.at` or clear `.list` on failure —
+      // resolveCustomRolePermissions() treats an EMPTY list the same as
+      // "no custom role assigned" (fails open, by design), so caching an
+      // empty result used to mean a single transient Strapi blip silently
+      // lifted every custom-role restriction in this system for the FULL
+      // 15s TTL. Keeping the last-known-good list and leaving `.at` stale
+      // makes the very next call retry immediately instead.
+    }
   }
   return customRoleCache.list;
 }
@@ -952,7 +971,13 @@ async function getFieldPolicies(): Promise<any[]> {
     try {
       const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(FIELD_POLICY_UID, { pageSize: 500 }));
       policyCache = { at: now, list: data };
-    } catch { policyCache = { at: now, list: [] }; }
+    } catch {
+      // See getCustomRoles()'s own comment just above — same fix, same
+      // reasoning: an empty policy list reads as "nothing hidden/readonly"
+      // (stripPolicyFields' own fail-open), so a transient error used to
+      // lift every field-visibility restriction for the full TTL instead
+      // of just retrying on the next call.
+    }
   }
   return policyCache.list;
 }
@@ -1007,6 +1032,45 @@ async function tenantGuard(uid: string, id: string, eff: Tenant | null, adapter:
   if (!SCOPED.has(uid)) return;
   const owner = await trueOwnerOf(uid, id);
   if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+}
+
+/** BOOKKEEPING_UIDS (governance.ts:110) writes always execute under the
+ * scheduler's Super Admin credential (see withContentAdapter below), and
+ * none of these five uids are in SCOPED/WP_SCOPED — so resolveCustomRolePermissions,
+ * tenantStamp, and tenantGuard above all no-op for them by construction.
+ * Found live-auditing this session: that combination meant ANY authenticated
+ * caller could PUT/DELETE any OTHER tenant's own record (or any audit-log/
+ * custom-role/field-policy row) via the generic /api/cms/entries/[uid]/[id]
+ * route, executed with Super Admin rights regardless of the caller's own
+ * permissions. This is the dedicated backstop for that gap.
+ *
+ * custom-role and field-policy already have their own properly-scoped
+ * functions (saveCustomRole/deleteCustomRole/assignCustomRole; FieldAccess's
+ * own save path) — nothing in the UI writes them through the generic path,
+ * so it's blocked outright rather than half-guarded. audit-log must never be
+ * client-writable at all: writeAudit() below writes it directly via
+ * strapiBookkeeping, bypassing this function entirely, so blocking the
+ * generic path here has no legitimate caller to break.
+ *
+ * tenant and release DO have legitimate generic-path callers (NewWorkspace.tsx
+ * creating a new workspace; EntryEditor.tsx appending an item to a release) —
+ * for those, allow an unscoped caller freely (matches every other unscoped
+ * exemption in this file), and otherwise require the target row's own tenant
+ * to match the caller's. */
+async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff: Tenant | null): Promise<void> {
+  if (!BOOKKEEPING_UIDS.has(uid)) return;
+  if (uid === CUSTOM_ROLE_UID || uid === FIELD_POLICY_UID || uid === AUDIT_UID) {
+    throw new CmsError("This content type must be managed through its own screen, not written directly.", 403);
+  }
+  if (!eff) return; // unscoped super admin — allowed, same exemption as everywhere else in this file
+  if (uid === TENANT_UID) {
+    if (id && id !== String(eff.documentId ?? eff.id)) throw new CmsError("Cross-tenant operation not permitted", 403);
+    return;
+  }
+  if (uid === RELEASE_UID && id) {
+    const owner = await trueOwnerOf(uid, id);
+    if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  }
 }
 
 /** Engine-appropriate tenant stamp for a create/update body — Strapi wants a
@@ -1286,6 +1350,7 @@ export const governed = {
   async create<T = any>(uid: string, data: Record<string, any>): Promise<T> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    await assertBookkeepingWriteAllowed(uid, null, eff);
     await enforceItemLimit(eff, uid);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.create) throw new CmsError("Your role does not permit creating this content", 403);
@@ -1302,6 +1367,7 @@ export const governed = {
   async update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    await assertBookkeepingWriteAllowed(uid, id, eff);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.update) throw new CmsError("Your role does not permit updating this content", 403);
     let d = await stripPolicyFields(user, uid, data);
@@ -1317,6 +1383,7 @@ export const governed = {
   async remove(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    await assertBookkeepingWriteAllowed(uid, id, eff);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.delete) throw new CmsError("Your role does not permit deleting this content", 403);
     await withContentAdapter(uid, async (cms) => {
@@ -1425,13 +1492,22 @@ async function schedulerStrapiToken(): Promise<string | null> {
   }
   return schedulerStrapiTok.token;
 }
-let schedulerWpTok: string | null | undefined;
+let schedulerWpTok: string | null = null;
 async function schedulerWpToken(): Promise<string | null> {
-  if (schedulerWpTok === undefined) {
-    if (!WORDPRESS_SCHEDULER_USERNAME || !WORDPRESS_SCHEDULER_APP_PASSWORD) { schedulerWpTok = null; return null; }
-    const r = await wordpressLogin(WORDPRESS_SCHEDULER_USERNAME, WORDPRESS_SCHEDULER_APP_PASSWORD);
-    schedulerWpTok = r.ok ? r.token : null; // Application Passwords don't expire — safe to cache for the process lifetime
-  }
+  // Only cache on SUCCESS — same fix as schedulerStrapiToken's own comment
+  // above already explains for the Strapi side. This used to cache `null`
+  // itself on a single failed login (WordPress briefly down, credentials
+  // not yet configured at boot) using `undefined` as the only "unset"
+  // sentinel — after that one failure, every WordPress-engine operation
+  // (user management, release publishing, plan-limit counting, tenant-term
+  // creation) silently failed or returned 0 for the rest of the process's
+  // life, since nothing ever retried. Application Passwords genuinely don't
+  // expire, so caching a real token for the process lifetime is still
+  // correct — it's caching the ABSENCE of one that was the bug.
+  if (schedulerWpTok) return schedulerWpTok;
+  if (!WORDPRESS_SCHEDULER_USERNAME || !WORDPRESS_SCHEDULER_APP_PASSWORD) return null;
+  const r = await wordpressLogin(WORDPRESS_SCHEDULER_USERNAME, WORDPRESS_SCHEDULER_APP_PASSWORD);
+  if (r.ok) schedulerWpTok = r.token;
   return schedulerWpTok;
 }
 
@@ -1487,9 +1563,20 @@ function assertCanActOnTenant(eff: Tenant | null, tenantKey: string): void {
  * tenant/field-policy/audit (see the module header) — this ports the logic
  * that used to live in strapi-cms's own processDueReleases()
  * (strapi-cms/src/index.ts), which could only ever publish Strapi content. */
-export async function processDueReleases(): Promise<{ processed: number }> {
+/** Used to unconditionally mark a release "done" even when every one of its
+ * items failed to publish — a release that published nothing was
+ * indistinguishable in the UI from one that fully succeeded, since the
+ * per-item catch below only ever skipped and moved on. Now failures are
+ * counted per item and, if any occurred, the release is marked "failed"
+ * (with a note listing which items) instead of "done" — and the credential-
+ * missing early return below now throws instead of quietly reporting
+ * {processed:0} with a 200, which used to mean the release-scheduler's own
+ * `curl -sf ... || echo tick failed` never caught it: nothing failed as far
+ * as curl was concerned, so a broken scheduler credential silently stopped
+ * all scheduled publishing with nothing observable anywhere. */
+export async function processDueReleases(): Promise<{ processed: number; failed: number }> {
   const strapiToken = await schedulerStrapiToken();
-  if (!strapiToken) return { processed: 0 };
+  if (!strapiToken) throw new CmsError("Strapi service credential unavailable", 503);
   return withServiceToken(strapiToken, async () => {
     const now = Date.now();
     const { data: due } = await strapiAdapter.entries.list<any>(RELEASE_UID, {
@@ -1497,26 +1584,39 @@ export async function processDueReleases(): Promise<{ processed: number }> {
       pageSize: 50,
     });
     let processed = 0;
+    let failed = 0;
     for (const rel of due || []) {
       if (!rel.scheduledAt || new Date(rel.scheduledAt).getTime() > now) continue;
       const items = Array.isArray(rel.items) ? rel.items : [];
+      const failedItems: string[] = [];
       for (const it of items) {
         if (!it?.contentType || !it?.documentRef) continue;
         const adapter = adapterFor(it.contentType);
         try {
           if (adapter === wordpressAdapter) {
             const wpToken = await schedulerWpToken();
-            if (wpToken) await withServiceToken(wpToken, () => doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter));
+            if (!wpToken) throw new Error("WordPress service credential unavailable");
+            await withServiceToken(wpToken, () => doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter));
           } else {
             await doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter);
           }
-        } catch { /* skip items that fail to publish */ }
+        } catch (e: any) {
+          failedItems.push(`${it.contentType}/${it.documentRef}: ${e?.message || "publish failed"}`);
+        }
       }
       try {
-        await strapiAdapter.entries.update(RELEASE_UID, rel.documentId ?? rel.id, { state: "done", publishedAt: new Date().toISOString() });
-        processed++;
-      } catch { /* noop */ }
+        if (failedItems.length) {
+          const note = `[${new Date().toISOString()}] ${failedItems.length}/${items.length} item(s) failed to publish:\n${failedItems.join("\n")}`;
+          await strapiAdapter.entries.update(RELEASE_UID, rel.documentId ?? rel.id, {
+            state: "failed", note: rel.note ? `${rel.note}\n\n${note}` : note,
+          });
+          failed++;
+        } else {
+          await strapiAdapter.entries.update(RELEASE_UID, rel.documentId ?? rel.id, { state: "done", publishedAt: new Date().toISOString() });
+          processed++;
+        }
+      } catch { /* the release row itself failed to update — nothing more this loop can do about it */ }
     }
-    return { processed };
+    return { processed, failed };
   });
 }

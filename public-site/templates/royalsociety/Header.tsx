@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import MobileMenuToggle from "./MobileMenuToggle";
+import MobileSearchForm from "./MobileSearchForm";
 import { RsIcon } from "./icons";
 
 // Ported from RoyalSociety source's assets/js/01-config.js (window.RS_CONFIG:
@@ -300,10 +301,7 @@ export default function Header({ active }: { active?: string }) {
               <RsIcon id="i-x" />
             </button>
           </div>
-          <form className="rs-mobile-search" role="search">
-            <RsIcon id="i-search" />
-            <input type="search" placeholder="ค้นหาในเว็บไซต์..." aria-label="ค้นหาในเว็บไซต์" />
-          </form>
+          <MobileSearchForm />
           <div className="rs-mobile-acc">
             {NAV.map((item) => {
               const data = MEGA[item.key];

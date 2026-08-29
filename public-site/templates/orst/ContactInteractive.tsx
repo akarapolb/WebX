@@ -1,24 +1,19 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
+import { useCaptcha, STRAPI } from "@/lib/useCaptcha";
 
 /* =============================================================================
    ContactInteractive.tsx — the genuinely-JS-dependent slivers of ContactPage.tsx
    -----------------------------------------------------------------------------
-   Ported from ORST Website/assets/js/pages/contact.js:
-     - initCopy(): `[data-copy]` buttons -> navigator.clipboard.writeText(),
-       feedback via a single shared `#toast` element + showToast().
-     - initForm(): `#message-form` submit -> preventDefault(), native
-       checkValidity()/reportValidity(), a success message, form.reset().
-       HANDOFF.md 6.1 documents there is no backend for this form at all
-       ("ฟอร์มติดต่อ... ตรวจค่าฝั่งหน้าเว็บอย่างเดียว ไม่ส่งไปที่ไหน") — the
-       source's own handler never sends the data anywhere either.
-
-   Reimplemented with local component state instead of the source's shared
-   `#toast` singleton: each CopyButton flips its own label briefly instead of
-   writing into one global toast node, and ContactForm shows its thank-you
-   message inline under the form instead of in a toast. Same user-visible
-   confirmation, no shared DOM node to wire up. */
+   ContactForm used to be a pure UI mock — preventDefault(), a canned "sent"
+   message, form.reset() — with nothing sent anywhere (ported faithfully from
+   a source that documented the same gap in its own HANDOFF.md). Strapi
+   already has a full public write path for exactly this
+   (api::contact-message.contact-message, seeded with Public create
+   permission — strapi-cms/src/seed/seed.ts) plus a captcha guard in front of
+   it (src/middlewares/captcha-guard.ts) that neither this form nor
+   RoyalSociety's ever called. This now does both for real. */
 
 export function CopyButton({ text, label, copiedLabel = "คัดลอกแล้ว", className = "mini-action" }: {
   text: string;
@@ -46,28 +41,88 @@ export function CopyButton({ text, label, copiedLabel = "คัดลอกแ�
   );
 }
 
-export function ContactForm({ children }: { children: ReactNode }) {
-  const [sent, setSent] = useState(false);
+type Status = "idle" | "sending" | "sent" | "error";
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+/** children is a render function so ContactPage.tsx controls exactly where
+ * the captcha field lands in its own layout (right before the privacy
+ * checkbox), while this component owns the captcha lifecycle and the
+ * actual submit. */
+export function ContactForm({ tenant, children }: { tenant: string; children: (captchaField: ReactNode) => ReactNode }) {
+  const { captcha, refreshCaptcha } = useCaptcha();
+  const [status, setStatus] = useState<Status>("idle");
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
     if (!form.checkValidity()) {
       form.reportValidity();
       return;
     }
-    setSent(true);
-    form.reset();
-    setTimeout(() => setSent(false), 5000);
+    if (!captcha) {
+      setStatus("error");
+      setError("กำลังเตรียมแบบยืนยันตัวตน กรุณาลองใหม่อีกครั้งในอีกสักครู่");
+      return;
+    }
+    const fd = new FormData(form);
+    setStatus("sending");
+    setError("");
+    try {
+      const r = await fetch(`${STRAPI}/api/contact-messages?tenant=${encodeURIComponent(tenant)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: {
+            name: fd.get("name"),
+            email: fd.get("email"),
+            phone: fd.get("phone") || undefined,
+            subject: fd.get("subject"),
+            message: fd.get("message"),
+          },
+          captchaId: captcha.id,
+          captchaAnswer: fd.get("captchaAnswer"),
+        }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        const wrongCaptcha = body?.error?.name === "CaptchaError";
+        setStatus("error");
+        setError(wrongCaptcha
+          ? "คำตอบยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่"
+          : "ไม่สามารถส่งข้อความได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง หรือติดต่อทางโทรศัพท์");
+        void refreshCaptcha(); // single-use — a fresh one is needed for the retry either way
+        return;
+      }
+      setStatus("sent");
+      form.reset();
+      void refreshCaptcha();
+    } catch {
+      setStatus("error");
+      setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง หรือติดต่อทางโทรศัพท์");
+      void refreshCaptcha();
+    }
   }
+
+  const captchaField = (
+    <div className="field">
+      <label htmlFor="captcha-answer">
+        แบบยืนยันตัวตน: {captcha ? captcha.question : "กำลังโหลด…"} <span className="required">*</span>
+      </label>
+      <input id="captcha-answer" name="captchaAnswer" type="text" inputMode="numeric" autoComplete="off" required disabled={!captcha} />
+    </div>
+  );
 
   return (
     <form id="message-form" onSubmit={handleSubmit} noValidate={false}>
-      {children}
-      {sent ? (
+      {children(captchaField)}
+      {status === "sending" ? (
+        <p className="form-note" role="status" aria-live="polite" style={{ marginTop: 12 }}>กำลังส่งข้อความ…</p>
+      ) : status === "sent" ? (
         <p className="form-note" role="status" aria-live="polite" style={{ marginTop: 12 }}>
           ✓ ส่งข้อความเรียบร้อยแล้ว ขอบคุณที่ติดต่อสำนักงานราชบัณฑิตยสภา เจ้าหน้าที่จะติดต่อกลับตามช่องทางที่ท่านระบุ
         </p>
+      ) : status === "error" ? (
+        <p className="form-note" role="alert" aria-live="assertive" style={{ marginTop: 12, color: "#c0392b" }}>⚠ {error}</p>
       ) : null}
     </form>
   );

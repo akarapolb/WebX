@@ -52,7 +52,7 @@ export default async function Page({ params }: { params: Promise<{ page: string 
       )}
       {page === "publications" && <PublicationsPage publications={await getWpPublications("royalsociety")} />}
       {page === "activities" && <ActivitiesPage activities={await getWpNews("royalsociety")} />}
-      {page === "contact" && <ContactPage />}
+      {page === "contact" && <ContactPage tenant={tenant} />}
       <Footer tenant={tenant} />
     </>
   );
