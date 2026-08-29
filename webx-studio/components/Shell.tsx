@@ -64,7 +64,7 @@ export default function Shell({
                 {tenants.map((tn) => (
                   <button key={tn.key} className="ten-item" onClick={() => { setCurrentKey(tn.key); setTenOpen(false); }}>
                     <span className="ten-dot">{tn.name[0]?.toUpperCase()}</span>
-                    <b>{tn.name}</b><span>{tn.key === currentKey ? "●" : ""}</span>
+                    <b>{tn.name}</b><span className="ten-check">{tn.key === currentKey ? "●" : ""}</span>
                   </button>
                 ))}
                 <button className="ten-item" style={{ borderTop: "1px solid var(--line)", color: "var(--acc, #EE5020)" }} onClick={() => { setNwOpen(true); setTenOpen(false); }}>
