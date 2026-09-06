@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORST/RoyalSociety System Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --ink: #16221f;
+    --ink-soft: #4b5754;
+    --ink-faint: #7c8781;
+    --primary: #0a3f38;
+    --primary-dark: #052a25;
+    --primary-soft: #0f5c50;
+    --gold: #b98d3e;
+    --gold-dark: #8f6a23;
+    --ground: #faf7f0;
+    --surface: #ffffff;
+    --surface-sunk: #f3efe4;
+    --line: #e3ddce;
+    --line-strong: #d3cab3;
+    --code-bg: #f3efe4;
+    --code-ink: #4a3f2a;
+    --diagram-bg: #ffffff;
+    --shadow: 0 1px 2px rgba(10,63,56,.06), 0 8px 24px rgba(10,63,56,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1ef; --ink-soft: #b9c2be; --ink-faint: #8b9691;
+      --primary: #3fa08e; --primary-dark: #2a7d6d; --primary-soft: #4bb5a1;
+      --gold: #d6ab5c; --gold-dark: #e8c284;
+      --ground: #0e1614; --surface: #16211e; --surface-sunk: #1c2925;
+      --line: #2a3a35; --line-strong: #3a4d47;
+      --code-bg: #1c2925; --code-ink: #d8c9a3;
+      --diagram-bg: #16211e;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1ef; --ink-soft: #b9c2be; --ink-faint: #8b9691;
+    --primary: #3fa08e; --primary-dark: #2a7d6d; --primary-soft: #4bb5a1;
+    --gold: #d6ab5c; --gold-dark: #e8c284;
+    --ground: #0e1614; --surface: #16211e; --surface-sunk: #1c2925;
+    --line: #2a3a35; --line-strong: #3a4d47;
+    --code-bg: #1c2925; --code-ink: #d8c9a3;
+    --diagram-bg: #16211e;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans Thai', 'IBM Plex Sans', -apple-system, sans-serif;
+    line-height: 1.65;
+    font-size: 15.5px;
+  }
+  h1, h2, h3, h4 { font-family: 'Noto Serif Thai', 'Noto Serif', serif; text-wrap: balance; color: var(--primary-dark); }
+  :root[data-theme="dark"] h1, :root[data-theme="dark"] h2, :root[data-theme="dark"] h3, :root[data-theme="dark"] h4 { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h1, :root:not([data-theme="light"]) h2, :root:not([data-theme="light"]) h3, :root:not([data-theme="light"]) h4 { color: var(--gold); } }
+  code, .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  a { color: var(--primary); }
+  :root[data-theme="dark"] a { color: var(--primary-soft); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) a { color: var(--primary-soft); } }
+  p { max-width: 72ch; }
+
+  /* ---------- layout shell ---------- */
+  .shell { display: grid; grid-template-columns: 260px minmax(0,1fr); gap: 0; max-width: 1360px; margin: 0 auto; }
+  .toc-col { padding: 28px 20px 60px; }
+  .main-col { padding: 28px 40px 100px; min-width: 0; border-left: 1px solid var(--line); }
+  @media (max-width: 980px) {
+    .shell { grid-template-columns: 1fr; }
+    .toc-col { display: none; }
+    .main-col { border-left: none; padding: 20px 20px 80px; }
+  }
+
+  .toc { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    text-decoration: none; color: var(--ink-soft); font-size: 13.2px; padding: 6px 10px; border-radius: 8px;
+    display: block; line-height: 1.35;
+  }
+  .toc a:hover { background: var(--surface-sunk); color: var(--primary); }
+  .toc .toc-part { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--gold-dark); margin: 18px 10px 6px; }
+  :root[data-theme="dark"] .toc .toc-part { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .toc .toc-part { color: var(--gold); } }
+  .toc .toc-part:first-child { margin-top: 4px; }
+
+  /* ---------- cover ---------- */
+  header.cover {
+    background: linear-gradient(155deg, var(--primary-soft) 0%, var(--primary) 46%, var(--primary-dark) 100%);
+    color: #fdfaf3;
+    padding: 52px 40px 40px;
+  }
+  .cover-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: #f3e5c4; font-weight: 600; margin-bottom: 14px;
+  }
+  .cover-eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); display: inline-block; }
+  header.cover h1 { color: #fdfaf3; font-size: clamp(26px, 3.4vw, 38px); margin: 0 0 10px; line-height: 1.15; }
+  header.cover .sub { font-size: 15.5px; color: rgba(253,250,243,.82); margin: 0 0 22px; max-width: 70ch; }
+  .cover-meta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .audience-chip {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
+    padding: 6px 14px; border-radius: 999px; background: rgba(253,250,243,.12); border: 1px solid rgba(253,250,243,.26);
+    color: #fdfaf3;
+  }
+  .audience-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+
+  /* ---------- content typography ---------- */
+  .main-col h2 { font-size: 25px; margin: 0 0 6px; scroll-margin-top: 24px; padding-top: 8px; }
+  .main-col h2 .num { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--ink-faint); font-weight: 400; margin-right: 10px; }
+  .main-col h3 { font-size: 18.5px; margin: 32px 0 8px; scroll-margin-top: 24px; }
+  .section-lede { color: var(--ink-soft); font-size: 15px; margin: 0 0 22px; max-width: 68ch; }
+  .part-divider {
+    margin: 56px 0 30px; padding-top: 30px; border-top: 2px solid var(--line-strong);
+  }
+  .part-label {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .1em; font-weight: 700; color: var(--gold-dark); background: var(--surface-sunk);
+    padding: 6px 14px; border-radius: 999px; margin-bottom: 12px;
+  }
+  :root[data-theme="dark"] .part-label { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .part-label { color: var(--gold); } }
+  .part-title { font-size: 28px; margin: 0 0 8px; }
+  .part-sub { color: var(--ink-soft); font-size: 15px; max-width: 68ch; margin: 0; }
+
+  section.spec { margin-top: 44px; }
+
+  /* ---------- callouts ---------- */
+  .callout { border-radius: 14px; padding: 16px 20px; margin: 16px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+  .callout .clbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+  .callout .clbl::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+  .callout p, .callout ul { font-size: 14px; color: var(--ink-soft); margin: 0; }
+  .callout p + p { margin-top: 8px; }
+  .callout.why { border-left: 3px solid var(--gold); }
+  .callout.why .clbl { color: var(--gold-dark); }
+  :root[data-theme="dark"] .callout.why .clbl { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .callout.why .clbl { color: var(--gold); } }
+  .callout.why .clbl::before { background: var(--gold); }
+  .callout.note { border-left: 3px solid var(--primary-soft); }
+  .callout.note .clbl { color: var(--primary); }
+  .callout.note .clbl::before { background: var(--primary-soft); }
+
+  /* ---------- diagrams ---------- */
+  .diagram-wrap {
+    background: var(--diagram-bg); border: 1px solid var(--line); border-radius: 14px; padding: 18px;
+    margin: 18px 0; box-shadow: var(--shadow); overflow-x: auto;
+  }
+  .diagram-cap { font-size: 12.5px; color: var(--ink-faint); margin-top: 10px; text-align: center; }
+
+  /* ---------- tables ---------- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.6px; min-width: 560px; }
+  table th {
+    text-align: left; padding: 10px 14px; background: var(--surface-sunk); color: var(--ink-soft);
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600;
+    border-bottom: 1px solid var(--line);
+  }
+  table td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table tr:last-child td { border-bottom: none; }
+  table td code { font-size: 12.5px; }
+
+  /* ---------- code / file refs ---------- */
+  code {
+    background: var(--code-bg); color: var(--code-ink); border-radius: 5px; padding: 1px 6px; font-size: 13px;
+  }
+  pre.code-block {
+    background: var(--code-bg); color: var(--code-ink); border-radius: 12px; padding: 16px 18px;
+    overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 14px 0; border: 1px solid var(--line);
+  }
+  pre.code-block code { background: none; padding: 0; }
+  .file-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .file-list code { font-size: 12px; }
+
+  /* ---------- misc ---------- */
+  ul.plain { padding-left: 20px; margin: 8px 0; }
+  ul.plain li { margin-bottom: 6px; color: var(--ink-soft); font-size: 14.5px; }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .tag {
+    font-size: 12px; font-weight: 600; padding: 3px 11px; border-radius: 999px;
+    background: var(--surface-sunk); color: var(--ink-soft); border: 1px solid var(--line);
+  }
+  .tag.orst { border-color: var(--gold); color: var(--gold-dark); }
+  :root[data-theme="dark"] .tag.orst { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.orst { color: var(--gold); } }
+  .tag.rs { border-color: var(--primary-soft); color: var(--primary); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+
+  footer.report-foot {
+    margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
+    color: var(--ink-faint); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .theme-toggle {
+    position: fixed; bottom: 20px; right: 20px; z-index: 40;
+    width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--ink); box-shadow: var(--shadow); cursor: pointer; font-size: 18px;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: "base", themeVariables: { primaryColor: "#f3efe4", primaryTextColor: "#16221f", primaryBorderColor: "#d3cab3", lineColor: "#8f6a23", fontFamily: "IBM Plex Sans Thai, sans-serif", fontSize: "13px" } });</script>
+</head>
+<body>
+<header class="cover">
+  <div class="cover-eyebrow">System Design &amp; Specification</div>
+  <h1>ORST &amp; RoyalSociety Websites — Platform Architecture</h1>
+  <p class="sub">สำนักงานราชบัณฑิตยสภา (www.orst.go.th) และราชบัณฑิตยสภา (www.royalsociety.go.th) — a shared, multi-tenant content platform built for both. This document has two audiences in one place: a plain-language overview for stakeholders, followed by a detailed technical specification for engineers picking up the codebase.</p>
+  <div class="cover-meta">
+    <span class="audience-chip"><span class="dot"></span>For the customer — Part A</span>
+    <span class="audience-chip"><span class="dot"></span>For engineering — Part B</span>
+    <span class="audience-chip"><span class="dot"></span>Companion to the TOR Compliance Dossier</span>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="toc-col">
+    <nav class="toc" id="toc"></nav>
+  </aside>
+
+  <main class="main-col">
+
+    <div class="part-divider" style="margin-top:0;border-top:none;padding-top:0;">
+      <span class="part-label">Part A · Overview</span>
+      <h2 class="part-title" style="margin-top:0;">What this system is</h2>
+      <p class="part-sub">Written for anyone following the project, not just engineers. No code in this part.</p>
+    </div>
+
+    <section class="spec" id="a1">
+      <h2><span class="num">A.1</span>Two websites, one platform</h2>
+      <p class="section-lede">ORST and RoyalSociety are two separate, real government websites — but they are not two separate codebases. They share one content platform (<strong>WebX</strong>), the same admin tool, the same hosting stack, and the same design language, deliberately differentiated in look so the two sister institutions each feel distinct.</p>
+      <div class="badge-row">
+        <span class="tag orst">ORST — สำนักงานราชบัณฑิตยสภา — www.orst.go.th</span>
+        <span class="tag rs">RoyalSociety — ราชบัณฑิตยสภา — www.royalsociety.go.th</span>
+      </div>
+      <p>Both are configured inside WebX as <strong>WordPress-engine tenants</strong> — one of two supported content-storage engines the platform can run a tenant on (the other is Strapi, used by other, unrelated customers on the same platform). Editors for both sites log into the same admin tool and never need to know which engine their content actually lives in.</p>
+    </section>
+
+    <section class="spec" id="a2">
+      <h2><span class="num">A.2</span>How a page reaches a visitor</h2>
+      <p class="section-lede">The two public websites are not generated on the fly for every visitor. They are built once, ahead of time, into plain static files — the fastest and most robust way to serve a government site with predictable, infrequent content changes.</p>
+      <div class="diagram-wrap">
+        <pre class="mermaid">
+flowchart LR
+  editor["Content editor"] -->|"logs in, edits a page"| studio["WebX Studio\n(admin app)"]
+  studio -->|"saves content"| wp[("WordPress\n(content store)")]
+  studio -->|"Rebuild now / auto after a debounce"| build["Static site build\n(Next.js)"]
+  build -->|"reads content at build time"| wp
+  build -->|"produces plain HTML/CSS/JS"| files["Static files"]
+  visitor["Public visitor"] -->|"https://"| files
+        </pre>
+        <p class="diagram-cap">A visitor never talks to WordPress or the admin app directly — only to pre-built static files, which is why the public site stays fast and resilient even if the admin side is slow or down.</p>
+      </div>
+      <p>When an editor publishes a change, WebX Studio either triggers a rebuild immediately or after a short debounce window (so ten quick edits in a row don't trigger ten separate rebuilds). One exception: the <em>breaking-news banner</em> is fetched live by the visitor's own browser every 30 seconds, specifically so an urgent notice can go out without waiting for a full site rebuild.</p>
+    </section>
+
+    <section class="spec" id="a3">
+      <h2><span class="num">A.3</span>What an editor actually does</h2>
+      <p class="section-lede">Every page on both sites is built from reusable content blocks — a hero banner, a card grid, a table, an event calendar — rather than free-form HTML. An editor assembles a page by choosing blocks and filling in their fields, the same mental model as PowerPoint slides.</p>
+      <ul class="plain">
+        <li><strong>Visual Builder</strong> — a live, click-to-edit preview of the actual page, for straightforward text/image changes.</li>
+        <li><strong>Structured forms</strong> — for content with real fields (a job posting's title/department/deadline, an event's date/time/location), so data stays consistent and searchable rather than living inside a paragraph of text.</li>
+        <li><strong>Review workflow</strong> — content can be routed through Draft → Pending → Published, with a real approval gate before anything goes live.</li>
+      </ul>
+    </section>
+
+    <section class="spec" id="a4">
+      <h2><span class="num">A.4</span>What's covered elsewhere</h2>
+      <p class="section-lede">Two companion documents cover ground this one doesn't repeat in full:</p>
+      <div class="two-col">
+        <div class="callout note">
+          <div class="clbl">TOR Compliance Dossier</div>
+          <p>Item-by-item verification against the procurement Terms of Reference — 40 requirements, each with its exact TOR clause, page, and verbatim wording, plus how it was tested. <code>docs/tor-compliance.html</code></p>
+        </div>
+        <div class="callout note">
+          <div class="clbl">DEPLOY.md &amp; DR-Plan.md</div>
+          <p>Hosting/deployment runbook and disaster-recovery plan — environment variables, Docker Compose profiles, backup/restore steps. <code>DEPLOY.md</code>, <code>strapi-cms/docs/DR-Plan.md</code></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <div class="part-divider">
+      <span class="part-label">Part B · Technical specification</span>
+      <h2 class="part-title" style="margin-top:0;">Architecture, for engineers</h2>
+      <p class="part-sub">File paths throughout point at the real, current codebase — not illustrative pseudo-paths. Read this alongside the code, not instead of it.</p>
+    </div>
+
+    <section class="spec" id="b1">
+      <h2><span class="num">B.1</span>Platform topology</h2>
+      <p class="section-lede">WebX is a monorepo with four independently-deployable applications, plus supporting infrastructure services.</p>
+      <div class="diagram-wrap">
+        <pre class="mermaid">
+flowchart TB
+  subgraph pub["public-site — Next.js, output: export"]
+    orst_html["/orst, /royalsociety\nstatic HTML/CSS/JS"]
+  end
+  subgraph studio["webx-studio — Next.js, SSR"]
+    ui["Admin UI"]
+    bff["/api/cms/* BFF routes\n(governance.ts)"]
+  end
+  subgraph engines["Content engines"]
+    strapi["Strapi\n(strapi-cms)"]
+    wp["WordPress\n(wordpress/)"]
+  end
+  subgraph data["Data stores"]
+    pg[("Postgres 16\n+ pgvector")]
+    mysql[("MySQL 8")]
+  end
+  ui --> bff
+  bff -->|"CmsAdapter"| strapi
+  bff -->|"CmsAdapter"| wp
+  strapi --> pg
+  wp --> mysql
+  orst_html -.->|"build-time content fetch"| wp
+  bff -->|"trigger rebuild"| pub
+        </pre>
+        <p class="diagram-cap">Four apps: <code>public-site</code> (the two public websites), <code>webx-studio</code> (the shared admin), <code>strapi-cms</code> and the <code>wordpress/</code> engine config (the two interchangeable content stores).</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>App</th><th>Runtime</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><code>public-site</code></td><td>Next.js, <code>output:"export"</code></td><td>The two real websites. No server at request time — pure static files behind any web server or CDN.</td></tr>
+            <tr><td><code>webx-studio</code></td><td>Next.js, server-rendered</td><td>The one admin app every tenant's editors log into, regardless of which engine their content lives in.</td></tr>
+            <tr><td><code>strapi-cms</code></td><td>Strapi (Node)</td><td>One of two supported content engines. Also the single source of truth for tenant records, users/roles, and platform-wide content types (polls, breaking news, job postings, etc.) even for WordPress-engine tenants.</td></tr>
+            <tr><td><code>wordpress/</code></td><td>WordPress + custom mu-plugins</td><td>The other supported content engine — what ORST and RoyalSociety actually run on. Headless: no theme renders visitor-facing pages (see B.7).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="spec" id="b2">
+      <h2><span class="num">B.2</span>Multi-tenant &amp; dual-engine model</h2>
+      <p class="section-lede">A <em>tenant</em> is one customer's website (ORST, RoyalSociety, and others unrelated to this delivery). Every tenant record lives in Strapi regardless of where its content lives — that record just carries an <code>engine</code> field saying which store to read from.</p>
+      <pre class="code-block"><code>// strapi-cms/src/api/tenant/content-types/tenant/schema.json
+"engine": {
+  "type": "enumeration",
+  "enum": ["strapi", "wordpress"],
+  "default": "strapi",
+  "description": "Which CmsAdapter this tenant's own content lives in. The tenant record itself always lives in Strapi regardless."
+}</code></pre>
+      <p>Both ORST and RoyalSociety are configured with <code>engine: "wordpress"</code>. Tenant isolation inside WordPress — which has no native multi-tenancy — is enforced with a custom <code>wtenant</code> taxonomy applied to every content post type, checked by a general-purpose scoping guard rather than one-off checks per post type:</p>
+      <div class="file-list">
+        <code>wordpress/mu-plugins/wtenant-taxonomy.php</code>
+        <code>wordpress/mu-plugins/custom-role-enforcement.php</code>
+      </div>
+      <div class="callout why">
+        <div class="clbl">Why two engines, not one</div>
+        <p>Strapi-engine tenants were the platform's original design. ORST/RoyalSociety's TOR requires WordPress-family content authoring conventions and a custom WordPress theme (see B.7) — rather than fork the admin app per engine, a single <code>CmsAdapter</code> abstraction (B.3) lets one admin UI, one governance layer, and one set of platform-wide features (polls, breaking news, analytics) work unmodified against either engine.</p>
+      </div>
+    </section>
+
+    <section class="spec" id="b3">
+      <h2><span class="num">B.3</span>The CmsAdapter abstraction</h2>
+      <p class="section-lede">Every admin operation goes through one interface, implemented once per engine. Nothing in the admin UI or its API routes branches on which engine is active — that decision is made once, at the adapter boundary.</p>
+      <pre class="code-block"><code>// webx-studio/lib/cms/types.ts
+export interface CmsAdapter {
+  schema:  { listContentTypes(): Promise&lt;ContentTypeInfo[]&gt; };
+  entries: { list, get, create, update, remove };
+  publish: { publish, unpublish };
+  media:   { upload, list, update, remove };   // tenantKey required for WordPress,
+                                                 // a no-op for Strapi (self-resolved)
+  auth:    { me(), listRoles(), ... };
+}</code></pre>
+      <div class="file-list">
+        <code>webx-studio/lib/cms/types.ts</code>
+        <code>webx-studio/lib/cms/strapi.ts</code>
+        <code>webx-studio/lib/cms/wordpress.ts</code>
+        <code>webx-studio/lib/cms/governance.ts</code>
+      </div>
+      <p><code>governance.ts</code> sits in front of both adapters: it resolves the caller's effective tenant, enforces field-level RBAC and custom-role permissions, stamps the tenant relation on create, and routes a handful of platform-wide content types (breaking news, polls, menu items) to Strapi <em>even for a WordPress-engine tenant's own session</em> — those types are bookkeeping data the platform itself owns, not tenant content.</p>
+      <div class="callout why">
+        <div class="clbl">Why this needed its own registries</div>
+        <p>A new platform-wide content type must be added to <em>three</em> places to actually work end-to-end for a WordPress-engine tenant: <code>strapi-cms/src/index.ts</code>'s <code>SCOPED</code> set (or the tenant-scoping hook silently ignores it), the seed script's public-permissions map (or its public read 403s), and <code>governance.ts</code>'s own <code>SCOPED</code>/<code>BOOKKEEPING_UIDS</code> sets (or a WordPress-engine admin session sees an empty, uneditable panel). Found live, more than once, while building breaking-news and the nav manager.</p>
+      </div>
+    </section>
+
+    <section class="spec" id="b4">
+      <h2><span class="num">B.4</span>Content architecture — how a page resolves</h2>
+      <p class="section-lede">A page's content can come from three layers, resolved in a fixed order every time <code>public-site</code> builds. Understanding this order is the single most important thing for anyone editing content on these two sites.</p>
+      <div class="diagram-wrap">
+        <pre class="mermaid">
+flowchart TB
+  A["Static JSON fallback\ntemplates/&lt;tenant&gt;/content/*.json"] --> D{"WordPress page has\nits own migrated blocks?"}
+  D -->|"no"| E["Use the static JSON's blocks"]
+  D -->|"yes — wpPage.blocks.length > 0"| F["Use WordPress's blocks\n— WHOLESALE override, not a merge"]
+  E --> G["resolveSources()\nbind any block's live-data source"]
+  F --> G
+  G --> H["Page-specific field overrides\n(e.g. About's derived stat counts)"]
+  H --> I["Rendered static page"]
+        </pre>
+        <p class="diagram-cap"><code>app/orst/[page]/page.tsx</code> line ~89 — <code>let blocks = wpPage?.blocks?.length ? wpPage.blocks : data.blocks;</code></p>
+      </div>
+      <div class="callout why">
+        <div class="clbl">The one rule that catches people every time</div>
+        <p>Once a page has been edited even once through the Visual Builder, WordPress's stored <code>blocks</code> field <strong>completely replaces</strong> the static JSON — not a per-block merge. Editing <code>templates/orst/content/about.json</code> directly has <strong>zero effect</strong> on a migrated page. This was hit repeatedly this project — a content fix landing in the repo's JSON but not on the live site — and the fix is always the same: write the correction to WordPress directly (REST API or an idempotent <code>wordpress/seed-*.mjs</code> script), never assume the JSON file is authoritative once a page is live.</p>
+      </div>
+      <h3>Live-data binding: <code>resolveSources()</code></h3>
+      <p>Separately from the override above, an individual block can declare a <code>source</code> binding that pulls live WordPress data into its <code>items</code> array at build time — the mechanism behind event calendars, member directories, and news feeds. Ten source shapes exist (<code>card</code>, <code>link</code>, <code>faq</code>, <code>mission</code>, <code>orgunit</code>, <code>document</code>, <code>timeline</code>, <code>dated</code>, <code>calendar</code>, <code>directory</code>), each with its own mapper function:</p>
+      <pre class="code-block"><code>// public-site/lib/blockSource.ts
+export type BlockSource = { kind: "wp"; postType: SourcePostType; map: SourceMap; ... };
+
+const MAPPERS: Record&lt;SourceMap, (entries, src) =&gt; any[]&gt; = {
+  card: toCardItems, link: toLinkItems, faq: toFaqItems,
+  calendar: toCalendarItems, directory: toMemberItems, /* ... */
+};</code></pre>
+      <div class="callout why">
+        <div class="clbl">A real bug this pattern already caught</div>
+        <p><code>toDatedItems()</code> (RoyalSociety's activities/knowledge list rows) was the only mapper of its siblings that forgot to call <code>fmtDateTh()</code> on its date field — every other mapper did. The result was a raw ISO timestamp rendered straight to visitors. Fixed by matching the sibling mappers' own pattern. The lesson generalized: when one mapper in a set does something the others don't, that's usually a bug, not a design choice.</p>
+      </div>
+    </section>
+
+    <section class="spec" id="b5">
+      <h2><span class="num">B.5</span>Frontend design system</h2>
+      <p class="section-lede">Both tenants share the same architecture (tokens → base → blocks → components → pages, loaded in that order) but deliberately different values, so the two sister sites read as related, not identical.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th></th><th>ORST</th><th>RoyalSociety</th></tr></thead>
+          <tbody>
+            <tr><td>Register</td><td>Softer, service-forward</td><td>More formal / ceremonial</td></tr>
+            <tr><td>Component language</td><td>Pill / heavily rounded</td><td>Rectilinear, thin gold rules</td></tr>
+            <tr><td>Token file</td><td><code>public/assets/orst/css/tokens.css</code></td><td><code>public/assets/royalsociety/css/01-tokens.css</code></td></tr>
+            <tr><td>Icon system</td><td>Inline SVG <code>&lt;symbol&gt;</code> sprite (<code>&lt;use&gt;</code>)</td><td>Direct path rendering — deliberately <em>not</em> a sprite, to avoid id collisions with the shared gov-portal sprite</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Token-driven theming, including dark mode</h3>
+      <p>Every color, radius, shadow and type size is a CSS custom property — no component file contains a literal hex value. This is what makes a full dark theme possible as a pure token swap rather than a component-by-component reskin:</p>
+      <div class="diagram-wrap">
+        <pre class="mermaid">
+flowchart LR
+  boot["THEME_BOOT script\n(app/layout.tsx)\nruns before first paint"] -->|"reads localStorage\nfalls back to OS preference"| attr["html[data-theme]"]
+  attr -->|"light"| lightTokens[":root { --heading: teal; ... }"]
+  attr -->|"dark"| darkTokens[":root[data-theme=dark] { --heading: mint; ... }"]
+  lightTokens --> components["Every component references\nthe token, never a literal color"]
+  darkTokens --> components
+        </pre>
+      </div>
+      <div class="callout why">
+        <div class="clbl">Why <code>--heading</code> is a separate token from <code>--primary</code></div>
+        <p><code>--orst-primary</code>/<code>--rs-primary</code> serve two genuinely different roles: filling always-dark surfaces (hero bands, solid CTA buttons — which must stay the same deep teal in <em>either</em> theme) and coloring heading text sitting on the page's own ground (which must flip to a light tone in dark mode). Reusing one token for both would have made dark mode's headings the same near-invisible dark teal as light mode's. Splitting the second role into <code>--heading</code> — a mechanical migration of ~120 plain <code>color:</code> declarations, leaving every <code>background:</code>/paired <code>border-color:</code> fill untouched — is what let dark mode ship as token redefinitions only, no component rewrites.</p>
+      </div>
+
+      <h3>Scroll-reveal motion</h3>
+      <p>A shared observer (<code>public-site/components/ScrollReveal.tsx</code>, mounted once for every tenant) reveals section headings and card grids as they scroll into view — with a hard safety constraint: content renders at full opacity by default regardless of whether the observer's JavaScript ever runs. Only <code>html.js-reveal</code> — a class added synchronously in <code>&lt;head&gt;</code>, before paint, and never at all under <code>prefers-reduced-motion</code> — enables the hidden-then-reveal state at all.</p>
+
+      <h3>Cascade layers</h3>
+      <p>Each tenant's stylesheets are wrapped in <code>@layer tokens, base, blocks, components, pages</code> (ORST) / <code>@layer tokens, base, layout, components, accessibility, pages</code> (RoyalSociety), matching the existing <code>&lt;link&gt;</code> load order exactly — a declared-not-implicit cascade order, verified as a zero-behavior-change refactor via before/after contrast-scan comparison.</p>
+    </section>
+
+    <section class="spec" id="b6">
+      <h2><span class="num">B.6</span>Admin platform (webx-studio)</h2>
+      <p class="section-lede">One admin app for every tenant on the platform, regardless of engine. Notable subsystems relevant to ORST/RoyalSociety specifically:</p>
+      <ul class="plain">
+        <li><strong>Nav Manager</strong> — recursive mega-menu editor. <code>megaMenu</code> is a plain Strapi <code>json</code> field, so unlimited nesting depth needed no schema change, only a recursive editor/renderer.</li>
+        <li><strong>Media Library</strong> — search/tag/reuse/caption across both engines, with real per-tenant isolation (a genuine cross-tenant leak was found and fixed during this build — see the TOR dossier, item cms-04).</li>
+        <li><strong>Breaking News</strong> — the one content path that bypasses the static-rebuild pipeline entirely: the public page polls Strapi directly from the browser every 30s, the same direct-fetch pattern the live poll-vote UI uses.</li>
+        <li><strong>Analytics</strong> — first-party stats always; a real GA4 Data API pull layered on top when a tenant has service-account credentials configured.</li>
+        <li><strong>Responsive shell</strong> — a real hamburger/drawer below 720px, replacing what used to be a bare <code>display:none</code> that left a phone-width admin with no navigation at all.</li>
+      </ul>
+    </section>
+
+    <section class="spec" id="b7">
+      <h2><span class="num">B.7</span>WordPress engine specifics</h2>
+      <p class="section-lede">WordPress here is a pure content/REST backend — genuinely headless. <code>wordpress/theme/webx-theme/</code> is real and active (satisfying the TOR's custom-theme requirement and giving wp-admin's Gutenberg editor real styling), but it renders nothing a visitor ever sees; <code>public-site</code> is the only rendering path.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>mu-plugin</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>wtenant-taxonomy.php</code></td><td>Tenant isolation taxonomy, applied to every real post type</td></tr>
+            <tr><td><code>custom-post-types.php</code></td><td>Registers <code>event</code>, <code>member</code>, and every other ORST/RoyalSociety content type</td></tr>
+            <tr><td><code>acf-fields.php</code></td><td>ACF field groups, including <code>group_i18n_en</code> (bilingual fields)</td></tr>
+            <tr><td><code>custom-role-enforcement.php</code></td><td>General tenant-scoping guard, not per-post-type special cases</td></tr>
+            <tr><td><code>hardening.php</code></td><td>XML-RPC disabled, version/generator disclosure stripped, optional login gate</td></tr>
+            <tr><td><code>access-log.php</code></td><td>WordPress's own access log with retention purge (none existed before)</td></tr>
+            <tr><td><code>document-search.php</code></td><td>Extends native search into PDF/DOCX/XLSX file contents, not just title/excerpt</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="spec" id="b8">
+      <h2><span class="num">B.8</span>Infrastructure &amp; deployment topology</h2>
+      <div class="diagram-wrap">
+        <pre class="mermaid">
+flowchart TB
+  subgraph core["Always on"]
+    db[("db — Postgres 16\n+pgvector")]
+    strapi["strapi"]
+    webx["webx (studio)"]
+  end
+  subgraph sched["Schedulers"]
+    rel["release-scheduler\nticks due releases"]
+    sso["sso-reconcile-scheduler\nrevokes deprovisioned SSO users"]
+  end
+  subgraph wpprofile["profile: wordpress"]
+    wpmysql[("wp-mysql")]
+    wordpress["wordpress"]
+    wpcli["wp-cli\n(one-shot bootstrap, then idles)"]
+  end
+  subgraph backups["Backup services"]
+    dbbackup["db-backup\nnightly, Strapi DB + uploads"]
+    wpbackup["wp-db-backup\nnightly, WordPress DB + wp-content"]
+  end
+  subgraph optprofile["optional profiles"]
+    litellm["litellm — AI gateway"]
+    keycloak["keycloak — SSO/OIDC"]
+  end
+  strapi --> db
+  wordpress --> wpmysql
+  dbbackup --> db
+  wpbackup --> wpmysql
+        </pre>
+        <p class="diagram-cap">The WordPress engine, its backups, and Keycloak all run under Compose <em>profiles</em> — opt-in, not started by a bare <code>docker compose up</code>, since not every deployment of the platform needs them.</p>
+      </div>
+      <div class="callout why">
+        <div class="clbl">Backups were a real, closed gap</div>
+        <p>Until this delivery, <code>db-backup</code> covered only Strapi's own database — the two tenants this whole contract is about had <strong>zero backup coverage</strong>, since their real content lives in <code>wp-mysql</code>/<code>wp-content-data</code>, not Strapi's Postgres. <code>wp-db-backup</code> closes that with the same script, rotation convention, and restore-test tooling (<code>strapi-cms/scripts/restore-test.js</code>) already proven against the Strapi side.</p>
+      </div>
+      <p>Full environment variables, per-service setup, and the production checklist live in <a href="#">DEPLOY.md</a> — not duplicated here since that file is the maintained source of truth for deployment steps.</p>
+    </section>
+
+    <section class="spec" id="b9">
+      <h2><span class="num">B.9</span>Security &amp; compliance summary</h2>
+      <p class="section-lede">Full item-by-item verification against the TOR lives in the compliance dossier; the load-bearing measures specific to this platform's architecture:</p>
+      <ul class="plain">
+        <li><strong>PII encryption at rest</strong> — AES-256-GCM on citizen-submitted data (<code>contact-message</code>, <code>registration</code>), a dedicated key separate from Strapi's own core secrets and from webx-studio's.</li>
+        <li><strong>Tenant isolation</strong> — enforced at the adapter boundary (<code>governance.ts</code>) for Strapi-stored data, and via the <code>wtenant</code> taxonomy + a general scoping guard for WordPress-stored data — not per-content-type special cases in either engine.</li>
+        <li><strong>Rate limiting</strong> — a sliding-window limiter on webx-studio's own BFF routes: a tight bucket on <code>/api/auth/*</code>, a general one on the rest of <code>/api/*</code>.</li>
+        <li><strong>WordPress hardening</strong> — XML-RPC disabled, version disclosure stripped, access logging with retention purge, all added where none existed before.</li>
+      </ul>
+    </section>
+
+    <section class="spec" id="b10">
+      <h2><span class="num">B.10</span>Key architectural decisions</h2>
+      <div class="callout why">
+        <div class="clbl">Static export over server rendering</div>
+        <p>A government site with infrequent content changes and a hard requirement for speed/resilience doesn't need a server rendering pages per request. <code>output:"export"</code> means the two live sites are files behind any web server — no runtime dependency on Node, the database, or either CMS engine being up.</p>
+      </div>
+      <div class="callout why">
+        <div class="clbl">One CmsAdapter interface, not one admin app per engine</div>
+        <p>Forking the admin app per engine would have meant building and maintaining governance, RBAC, and every platform-wide feature (polls, breaking news, analytics) twice. The adapter boundary keeps that logic single-sourced; only the two adapter implementations know their engine's actual API shape.</p>
+      </div>
+      <div class="callout why">
+        <div class="clbl">WordPress's own blocks override static JSON wholesale, not per-field</div>
+        <p>A per-field merge would need to define, for every one of ~27 block types per tenant, exactly which fields WordPress is allowed to own versus which fall back to the static file — a large surface for subtle bugs. A page is either fully static-authored or fully migrated to live editing; there is no in-between state to reason about.</p>
+      </div>
+      <div class="callout why">
+        <div class="clbl">Design tokens with zero literal colors in component files</div>
+        <p>This is what made a full dark theme achievable as a token-only change once the premium redesign already existed — the alternative (auditing and rewriting every component's own color declarations) would have been an order of magnitude more work and risk.</p>
+      </div>
+    </section>
+
+    <section class="spec" id="b11">
+      <h2><span class="num">B.11</span>Where to find things</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Looking for…</th><th>Start here</th></tr></thead>
+          <tbody>
+            <tr><td>A page's block renderers</td><td><code>public-site/templates/{orst,royalsociety}/Blocks.tsx</code></td></tr>
+            <tr><td>Live-data block bindings</td><td><code>public-site/lib/blockSource.ts</code></td></tr>
+            <tr><td>Design tokens (incl. dark theme)</td><td><code>public-site/public/assets/{orst,royalsociety}/css/*tokens.css</code></td></tr>
+            <tr><td>The CmsAdapter contract</td><td><code>webx-studio/lib/cms/types.ts</code></td></tr>
+            <tr><td>Tenant scoping / governance</td><td><code>webx-studio/lib/cms/governance.ts</code></td></tr>
+            <tr><td>WordPress custom fields/CPTs</td><td><code>wordpress/mu-plugins/{acf-fields,custom-post-types}.php</code></td></tr>
+            <tr><td>Docker Compose topology</td><td><code>docker-compose.yml</code>, <code>docker-compose.wordpress.yml</code></td></tr>
+            <tr><td>Deployment steps &amp; env vars</td><td><code>DEPLOY.md</code></td></tr>
+            <tr><td>TOR-by-TOR compliance evidence</td><td><code>docs/tor-compliance.html</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="report-foot">
+      <span>Reflects the codebase as delivered — file paths and behavior described here were read from the real, current source, not from memory or a separate design doc.</span>
+      <span>WebX platform · ORST &amp; RoyalSociety delivery</span>
+    </footer>
+
+  </main>
+</div>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle dark theme" onclick="toggleTheme()">◐</button>
+
+<script>
+  // Mermaid diagrams (<pre class="mermaid">) are rendered natively by the
+  // artifact host — no library load or mermaid.initialize() call needed or
+  // wanted here (a second instance would only risk conflicting with it).
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const cur = html.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem('sysdesign-theme', next); } catch(e) {}
+  }
+  (function() {
+    try {
+      const saved = localStorage.getItem('sysdesign-theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    } catch(e) {}
+  })();
+
+  // Build the TOC from the actual headings.
+  (function() {
+    const toc = document.getElementById('toc');
+    const nodes = document.querySelectorAll('.main-col h2, .part-divider .part-title');
+    let html = '';
+    nodes.forEach(function(n) {
+      if (n.classList.contains('part-title')) {
+        const label = n.parentElement.querySelector('.part-label');
+        html += '<div class="toc-part">' + (label ? label.textContent : '') + '</div>';
+      } else {
+        const id = n.closest('section').id;
+        const numEl = n.querySelector('.num');
+        const num = numEl ? numEl.textContent : '';
+        const text = n.textContent.replace(num, '').trim();
+        html += '<a href="#' + id + '">' + num + ' ' + text + '</a>';
+      }
+    });
+    toc.innerHTML = html;
+  })();
+</script>
+</body>
+</html>
