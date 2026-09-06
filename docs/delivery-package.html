@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORST Delivery Package</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --ink: #16221f; --ink-soft: #4b5754; --ink-faint: #7c8781;
+    --primary: #0a3f38; --primary-dark: #052a25; --primary-soft: #0f5c50;
+    --gold: #b98d3e; --gold-dark: #8f6a23;
+    --ground: #faf7f0; --surface: #ffffff; --surface-sunk: #f3efe4;
+    --line: #e3ddce; --line-strong: #d3cab3;
+    --ok: #1a7a4c; --ok-bg: #e8f5ee;
+    --amber: #93650f; --amber-bg: #fbf1de;
+    --pending: #55606a; --pending-bg: #eef0f2;
+    --ext: #46586b; --ext-bg: #eaeff4;
+    --shadow: 0 1px 2px rgba(10,63,56,.06), 0 8px 24px rgba(10,63,56,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1ef; --ink-soft: #b9c2be; --ink-faint: #8b9691;
+      --primary: #3fa08e; --primary-dark: #2a7d6d; --primary-soft: #4bb5a1;
+      --gold: #d6ab5c; --gold-dark: #e8c284;
+      --ground: #0e1614; --surface: #16211e; --surface-sunk: #1c2925;
+      --line: #2a3a35; --line-strong: #3a4d47;
+      --ok: #6fd39c; --ok-bg: #143024;
+      --amber: #e8c079; --amber-bg: #33280f;
+      --pending: #aab3ba; --pending-bg: #232b2f;
+      --ext: #9fb3c8; --ext-bg: #1d2732;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1ef; --ink-soft: #b9c2be; --ink-faint: #8b9691;
+    --primary: #3fa08e; --primary-dark: #2a7d6d; --primary-soft: #4bb5a1;
+    --gold: #d6ab5c; --gold-dark: #e8c284;
+    --ground: #0e1614; --surface: #16211e; --surface-sunk: #1c2925;
+    --line: #2a3a35; --line-strong: #3a4d47;
+    --ok: #6fd39c; --ok-bg: #143024;
+    --amber: #e8c079; --amber-bg: #33280f;
+    --pending: #aab3ba; --pending-bg: #232b2f;
+    --ext: #9fb3c8; --ext-bg: #1d2732;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font-family: 'IBM Plex Sans Thai','IBM Plex Sans',-apple-system,sans-serif; line-height: 1.65; font-size: 15.5px; }
+  h1, h2, h3 { font-family: 'Noto Serif Thai','Noto Serif',serif; text-wrap: balance; color: var(--primary-dark); }
+  :root[data-theme="dark"] h1, :root[data-theme="dark"] h2, :root[data-theme="dark"] h3 { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h1, :root:not([data-theme="light"]) h2, :root:not([data-theme="light"]) h3 { color: var(--gold); } }
+  code { font-family: 'IBM Plex Mono', ui-monospace, monospace; background: var(--surface-sunk); color: var(--ink-soft); border-radius: 5px; padding: 1px 6px; font-size: 13px; }
+  a { color: var(--primary); }
+  :root[data-theme="dark"] a { color: var(--primary-soft); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) a { color: var(--primary-soft); } }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.cover { background: linear-gradient(155deg, var(--primary-soft) 0%, var(--primary) 46%, var(--primary-dark) 100%); color: #fdfaf3; padding: 52px 28px 36px; }
+  header.cover .wrap { padding-bottom: 0; }
+  .cover-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .cover-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; color: #f3e5c4; font-weight: 600; margin-bottom: 14px; }
+  .cover-eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); display: inline-block; }
+  header.cover h1 { color: #fdfaf3; font-size: clamp(24px, 3.2vw, 34px); margin: 0 0 8px; line-height: 1.2; }
+  header.cover .thai { font-size: 15px; color: rgba(253,250,243,.85); margin: 0 0 6px; }
+  header.cover .sub { font-size: 13.5px; color: rgba(253,250,243,.68); margin: 0 0 24px; }
+  .lang-toggle { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; background: rgba(253,250,243,.14); border: 1px solid rgba(253,250,243,.28); border-radius: 999px; padding: 6px; margin-top: 2px; }
+  .lang-toggle button { font: inherit; font-family: 'IBM Plex Sans Thai', sans-serif; font-weight: 600; font-size: 13px; border: none; border-radius: 999px; padding: 7px 16px; cursor: pointer; background: transparent; color: rgba(253,250,243,.75); }
+  .lang-toggle button.active { background: #fdfaf3; color: var(--primary-dark); }
+  .cover-meta-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 1px; background: rgba(253,250,243,.14); border-radius: 14px; overflow: hidden; border: 1px solid rgba(253,250,243,.16); }
+  .cover-meta-item { background: rgba(5,42,37,.35); padding: 14px 18px; }
+  .cover-meta-item .l { font-size: 11.5px; color: rgba(253,250,243,.7); margin-bottom: 3px; }
+  .cover-meta-item .v { font-size: 14.5px; font-weight: 600; color: #fff; }
+
+  section.block { margin-top: 44px; }
+  section.block h2 { font-size: 22px; margin: 0 0 6px; }
+  .block-lede { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 18px; max-width: 68ch; }
+
+  .pkg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 16px; }
+  .pkg-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+  .pkg-card .pkg-num { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--gold-dark); font-weight: 700; }
+  :root[data-theme="dark"] .pkg-card .pkg-num { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pkg-card .pkg-num { color: var(--gold); } }
+  .pkg-card h3 { font-size: 16.5px; margin: 0; }
+  .pkg-card p { font-size: 13.5px; color: var(--ink-soft); margin: 0; flex: 1; }
+  .pkg-card a.pkg-link { font-size: 13px; font-weight: 700; text-decoration: none; margin-top: 4px; }
+  .pkg-card a.pkg-link:hover { text-decoration: underline; }
+
+  .score-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 14px; }
+  .score-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .score-card .big { font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .score-card .lbl { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .score-card.ok .big { color: var(--ok); }
+  .score-card.amber .big { color: var(--gold-dark); }
+  :root[data-theme="dark"] .score-card.amber .big { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .score-card.amber .big { color: var(--gold); } }
+  .score-card.pending .big { color: var(--pending); }
+  .score-card.ext .big { color: var(--ext); }
+
+  .action-list { display: flex; flex-direction: column; gap: 12px; }
+  .action-item { background: var(--surface); border-radius: 14px; padding: 16px 20px; box-shadow: var(--shadow); border-left: 3px solid var(--pending); }
+  .action-item.ext { border-left-color: var(--ext); }
+  .action-item .a-title { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+  .action-item .a-pill { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; padding: 2px 9px; border-radius: 999px; margin-bottom: 8px; }
+  .action-item .a-pill.pending { background: var(--pending-bg); color: var(--pending); }
+  .action-item .a-pill.ext { background: var(--ext-bg); color: var(--ext); }
+  .action-item p { font-size: 13.8px; color: var(--ink-soft); margin: 0; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.6px; min-width: 480px; }
+  table th { text-align: left; padding: 10px 14px; background: var(--surface-sunk); color: var(--ink-soft); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; border-bottom: 1px solid var(--line); }
+  table td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table tr:last-child td { border-bottom: none; }
+
+  .signoff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 8px; }
+  @media (max-width: 620px) { .signoff-grid { grid-template-columns: 1fr; } }
+  .signoff-col { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; box-shadow: var(--shadow); }
+  .signoff-col h3 { font-size: 15px; margin: 0 0 4px; }
+  .signoff-col .role-th { font-size: 12.5px; color: var(--ink-faint); margin-bottom: 18px; }
+  .sign-field { margin-bottom: 16px; }
+  .sign-field .fl { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-faint); margin-bottom: 6px; }
+  .sign-line { border-bottom: 1px dashed var(--line-strong); height: 26px; }
+  .placeholder-note { font-size: 12px; color: var(--gold-dark); background: var(--gold-soft, var(--amber-bg)); border-radius: 8px; padding: 8px 12px; margin-top: 14px; }
+  :root[data-theme="dark"] .placeholder-note { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .placeholder-note { color: var(--gold); } }
+
+  footer.report-foot { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .theme-toggle { position: fixed; bottom: 20px; right: 20px; z-index: 40; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); cursor: pointer; font-size: 18px; }
+  [data-th] { display: none; }
+  html[lang="th"] [data-th] { display: initial; }
+  html[lang="th"] [data-en] { display: none; }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <div class="cover-top">
+      <div>
+        <div class="cover-eyebrow" id="s-eyebrow">Project Delivery Package</div>
+        <h1 id="s-h1">ORST &amp; RoyalSociety Websites</h1>
+      </div>
+      <div class="lang-toggle" role="group" aria-label="Language">
+        <button type="button" id="btn-lang-en" class="active" onclick="setLang('en')">English</button>
+        <button type="button" id="btn-lang-th" onclick="setLang('th')">ภาษาไทย</button>
+      </div>
+    </div>
+    <p class="thai">ร่าง TOR: โครงการจ้างจัดทำเว็บไซต์สำนักงานราชบัณฑิตยสภา (26 พฤษภาคม 2569) — www.orst.go.th · www.royalsociety.go.th</p>
+    <p class="sub" id="s-subnote">Prepared for formal submission and customer acceptance review — a cover summary plus the two supporting documents it references.</p>
+    <div class="cover-meta-row">
+      <div class="cover-meta-item"><div class="l" id="s-m1">Contract value</div><div class="v">1,732,000 THB</div></div>
+      <div class="cover-meta-item"><div class="l" id="s-m2">Timeline / milestones</div><div class="v" id="s-m2v">240 days · 4 milestones</div></div>
+      <div class="cover-meta-item"><div class="l" id="s-m3">Requirements audited</div><div class="v">40 / 40</div></div>
+      <div class="cover-meta-item"><div class="l" id="s-m4">Fully compliant, verified live</div><div class="v">31 / 40</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="block">
+    <h2 id="s-h2-contents">Package contents</h2>
+    <p class="block-lede" id="s-lede-contents">Three documents make up this delivery package. This page is the first of them — a summary and index; the other two are referenced directly below and carry the full detail.</p>
+    <div class="pkg-grid">
+      <div class="pkg-card">
+        <span class="pkg-num">01</span>
+        <h3 id="s-pkg1-title">This delivery summary</h3>
+        <p id="s-pkg1-body">Compliance scorecard, what still needs a decision from your side, what's outside this delivery's scope (hosting/ops), and the formal acceptance section.</p>
+      </div>
+      <div class="pkg-card">
+        <span class="pkg-num">02</span>
+        <h3 id="s-pkg2-title">TOR Compliance Dossier</h3>
+        <p id="s-pkg2-body">Every one of the TOR's 40 requirements, verified individually — each with its exact clause number, page, and verbatim wording from the TOR, plus how it was tested.</p>
+        <a class="pkg-link" href="tor-compliance.html" id="s-pkg2-link">Open docs/tor-compliance.html →</a>
+      </div>
+      <div class="pkg-card">
+        <span class="pkg-num">03</span>
+        <h3 id="s-pkg3-title">System Design &amp; Specification</h3>
+        <p id="s-pkg3-body">How the platform is built — for your engineering team, or anyone maintaining this after handover: architecture, content model, and the reasoning behind key decisions.</p>
+        <a class="pkg-link" href="system-design.html" id="s-pkg3-link">Open docs/system-design.html →</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 id="s-h2-score">Compliance scorecard</h2>
+    <p class="block-lede" id="s-lede-score">Full detail and evidence for every line item is in the Compliance Dossier (document 02). This is the roll-up.</p>
+    <div class="score-row">
+      <div class="score-card ok"><div class="big">31</div><div class="lbl" id="s-sc1">Fully compliant, verified live</div></div>
+      <div class="score-card amber"><div class="big">2</div><div class="lbl" id="s-sc2">Code complete — hosting or measurement caveat</div></div>
+      <div class="score-card pending"><div class="big">2</div><div class="lbl" id="s-sc3">Awaiting a decision from your side</div></div>
+      <div class="score-card ext"><div class="big">5</div><div class="lbl" id="s-sc4">Outside this delivery — hosting / registrar / certified assessor</div></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 id="s-h2-action">Needs a decision from your side</h2>
+    <p class="block-lede" id="s-lede-action">These two items are the only ones in the whole TOR that are blocked on information only you can provide — not on remaining engineering work.</p>
+    <div class="action-list">
+      <div class="action-item">
+        <span class="a-pill pending" id="s-a1-pill">Awaiting decision</span>
+        <div class="a-title" id="s-a1-title">E-journal viewer (embedded PDF reader)</div>
+        <p id="s-a1-body">The viewer itself is ready to build, but it needs a real journal PDF to display. We deliberately did not substitute a placeholder file — please share the actual publication (or confirm which one) and this closes out.</p>
+      </div>
+      <div class="action-item">
+        <span class="a-pill pending" id="s-a2-pill">Awaiting decision</span>
+        <div class="a-title" id="s-a2-title">Public-facing multi-turn chatbot</div>
+        <p id="s-a2-body">This needs your choice of LLM/API provider before it can be scoped and built — an ongoing cost and data-handling decision that should be yours to make, not assumed on your behalf.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 id="s-h2-ext">Outside this delivery's scope</h2>
+    <p class="block-lede" id="s-lede-ext">Five TOR requirements are genuinely hosting/operations/registrar matters, not application code — they depend on where and how the sites are finally hosted, which is a decision for whoever operates production infrastructure for these two domains.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th id="s-th-item">Requirement</th><th id="s-th-why">Why it's outside this delivery</th></tr></thead>
+        <tbody id="ext-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 id="s-h2-signoff">Acceptance</h2>
+    <p class="block-lede" id="s-lede-signoff">For signature once reviewed. Names, positions and dates are left blank in this document for the two parties to complete — nothing here is filled in on anyone's behalf.</p>
+    <div class="signoff-grid">
+      <div class="signoff-col">
+        <h3 id="s-so1-h">Delivered by</h3>
+        <div class="role-th" id="s-so1-role">ผู้ส่งมอบงาน</div>
+        <div class="sign-field"><div class="fl" id="s-f-name">Name</div><div class="sign-line"></div></div>
+        <div class="sign-field"><div class="fl" id="s-f-pos">Position</div><div class="sign-line"></div></div>
+        <div class="sign-field"><div class="fl" id="s-f-sig">Signature</div><div class="sign-line"></div></div>
+        <div class="sign-field"><div class="fl" id="s-f-date">Date</div><div class="sign-line"></div></div>
+      </div>
+      <div class="signoff-col">
+        <h3 id="s-so2-h">Accepted by</h3>
+        <div class="role-th" id="s-so2-role">ผู้ตรวจรับงาน</div>
+        <div class="sign-field"><div class="fl" id="s-f-name2">Name</div><div class="sign-line"></div></div>
+        <div class="sign-field"><div class="fl" id="s-f-pos2">Position</div><div class="sign-line"></div></div>
+        <div class="sign-field"><div class="fl" id="s-f-sig2">Signature</div><div class="sign-line"></div></div>
+        <div class="sign-field"><div class="fl" id="s-f-date2">Date</div><div class="sign-line"></div></div>
+      </div>
+    </div>
+    <p class="placeholder-note" id="s-placeholder-note">⚠ This document does not name a contracting company, signer, or milestone number — those weren't available to fill in accurately, so the fields above are left blank rather than guessed. Please complete them against your actual contract records before formal submission.</p>
+  </section>
+
+  <footer class="report-foot">
+    <span id="s-foot1">Every "compliant" item referenced here was verified against a live, running instance of the system — see the Compliance Dossier for exactly how.</span>
+    <span id="s-foot2">Delivery package · ORST &amp; RoyalSociety</span>
+  </footer>
+
+</div>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle dark theme" onclick="toggleTheme()">◐</button>
+
+<script>
+  function toggleTheme() {
+    const html = document.documentElement;
+    const cur = html.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem('delivery-theme', next); } catch(e) {}
+  }
+  (function() {
+    try { const saved = localStorage.getItem('delivery-theme'); if (saved) document.documentElement.setAttribute('data-theme', saved); } catch(e) {}
+  })();
+
+  const EXT_ITEMS = [
+    { en: ['WAF / Intrusion Prevention System', 'A network-layer appliance/service in front of the hosting environment — not something application code provides.'],
+      th: ['ระบบป้องกันการบุกรุกเครือข่าย (WAF / IPS)', 'เป็นอุปกรณ์/บริการระดับเครือข่ายหน้าสภาพแวดล้อมโฮสติ้ง ไม่ใช่สิ่งที่โค้ดแอปพลิเคชันจัดหาให้ได้'] },
+    { en: ['Penetration test &amp; Vulnerability Assessment', 'Requires a certified third-party assessor and a live production target — cannot be self-certified.'],
+      th: ['การทดสอบเจาะระบบและประเมินช่องโหว่ (Pentest/VA)', 'ต้องใช้ผู้ประเมินภายนอกที่ได้รับการรับรอง และต้องทดสอบกับระบบใช้งานจริง ไม่สามารถรับรองเองได้'] },
+    { en: ['TLS certificate provisioning', 'Depends on the real production domain and hosting provider, decided at deployment time.'],
+      th: ['การจัดหาใบรับรอง TLS', 'ขึ้นกับโดเมนใช้งานจริงและผู้ให้บริการโฮสติ้ง ซึ่งตัดสินใจในขั้นตอนการติดตั้งใช้งานจริง'] },
+    { en: ['Staging vs. production environment separation', 'An operations/hosting-config decision once real infrastructure is chosen.'],
+      th: ['การแยกสภาพแวดล้อม staging และ production', 'เป็นการตัดสินใจด้านปฏิบัติการ/การตั้งค่าโฮสติ้งเมื่อมีโครงสร้างพื้นฐานจริงแล้ว'] },
+    { en: ['DNS provisioning for both domains', 'A domain-registrar action for www.orst.go.th / www.royalsociety.go.th, outside application delivery.'],
+      th: ['การตั้งค่า DNS สำหรับทั้งสองโดเมน', 'เป็นการดำเนินการที่ผู้รับจดทะเบียนโดเมนของ www.orst.go.th / www.royalsociety.go.th ต้องทำ อยู่นอกเหนือการส่งมอบซอฟต์แวร์'] },
+  ];
+
+  const STRINGS = {
+    en: {
+      eyebrow: 'Project Delivery Package', h1: 'ORST &amp; RoyalSociety Websites',
+      subnote: 'Prepared for formal submission and customer acceptance review — a cover summary plus the two supporting documents it references.',
+      m1: 'Contract value', m2: 'Timeline / milestones', m2v: '240 days · 4 milestones', m3: 'Requirements audited', m4: 'Fully compliant, verified live',
+      h2contents: 'Package contents', ledecontents: 'Three documents make up this delivery package. This page is the first of them — a summary and index; the other two are referenced directly below and carry the full detail.',
+      pkg1t: 'This delivery summary', pkg1b: 'Compliance scorecard, what still needs a decision from your side, what’s outside this delivery’s scope (hosting/ops), and the formal acceptance section.',
+      pkg2t: 'TOR Compliance Dossier', pkg2b: 'Every one of the TOR’s 40 requirements, verified individually — each with its exact clause number, page, and verbatim wording from the TOR, plus how it was tested.', pkg2link: 'Open docs/tor-compliance.html →',
+      pkg3t: 'System Design &amp; Specification', pkg3b: 'How the platform is built — for your engineering team, or anyone maintaining this after handover: architecture, content model, and the reasoning behind key decisions.', pkg3link: 'Open docs/system-design.html →',
+      h2score: 'Compliance scorecard', ledescore: 'Full detail and evidence for every line item is in the Compliance Dossier (document 02). This is the roll-up.',
+      sc1: 'Fully compliant, verified live', sc2: 'Code complete — hosting or measurement caveat', sc3: 'Awaiting a decision from your side', sc4: 'Outside this delivery — hosting / registrar / certified assessor',
+      h2action: 'Needs a decision from your side', ledeaction: 'These two items are the only ones in the whole TOR that are blocked on information only you can provide — not on remaining engineering work.',
+      a1pill: 'Awaiting decision', a1title: 'E-journal viewer (embedded PDF reader)', a1body: 'The viewer itself is ready to build, but it needs a real journal PDF to display. We deliberately did not substitute a placeholder file — please share the actual publication (or confirm which one) and this closes out.',
+      a2pill: 'Awaiting decision', a2title: 'Public-facing multi-turn chatbot', a2body: 'This needs your choice of LLM/API provider before it can be scoped and built — an ongoing cost and data-handling decision that should be yours to make, not assumed on your behalf.',
+      h2ext: "Outside this delivery's scope", ledeext: "Five TOR requirements are genuinely hosting/operations/registrar matters, not application code — they depend on where and how the sites are finally hosted, which is a decision for whoever operates production infrastructure for these two domains.",
+      thitem: 'Requirement', thwhy: "Why it's outside this delivery",
+      h2signoff: 'Acceptance', ledesignoff: 'For signature once reviewed. Names, positions and dates are left blank in this document for the two parties to complete — nothing here is filled in on anyone’s behalf.',
+      so1h: 'Delivered by', so1role: 'ผู้ส่งมอบงาน', so2h: 'Accepted by', so2role: 'ผู้ตรวจรับงาน',
+      fname: 'Name', fpos: 'Position', fsig: 'Signature', fdate: 'Date',
+      placeholder: '⚠ This document does not name a contracting company, signer, or milestone number — those weren’t available to fill in accurately, so the fields above are left blank rather than guessed. Please complete them against your actual contract records before formal submission.',
+      foot1: 'Every "compliant" item referenced here was verified against a live, running instance of the system — see the Compliance Dossier for exactly how.',
+      foot2: 'Delivery package · ORST &amp; RoyalSociety',
+    },
+    th: {
+      eyebrow: 'เอกสารส่งมอบงานโครงการ', h1: 'เว็บไซต์สำนักงานราชบัณฑิตยสภา และราชบัณฑิตยสภา',
+      subnote: 'จัดทำเพื่อการนำส่งอย่างเป็นทางการและการตรวจรับงานโดยผู้ว่าจ้าง — เอกสารสรุปนำส่งฉบับนี้ พร้อมเอกสารประกอบอีก 2 ฉบับที่อ้างอิงถึง',
+      m1: 'มูลค่าสัญญา', m2: 'ระยะเวลา / งวดงาน', m2v: '240 วัน · 4 งวดงาน', m3: 'ข้อกำหนดที่ตรวจสอบแล้ว', m4: 'ปฏิบัติตามครบถ้วน ยืนยันจากระบบจริง',
+      h2contents: 'รายการเอกสารในชุดส่งมอบ', ledecontents: 'ชุดส่งมอบนี้ประกอบด้วยเอกสาร 3 ฉบับ หน้านี้คือฉบับแรก — สรุปและดัชนีเอกสาร ส่วนอีก 2 ฉบับอ้างอิงไว้ด้านล่างพร้อมรายละเอียดฉบับเต็ม',
+      pkg1t: 'เอกสารสรุปการส่งมอบฉบับนี้', pkg1b: 'ตารางสรุปผลการปฏิบัติตาม TOR รายการที่ต้องรอการตัดสินใจจากผู้ว่าจ้าง รายการที่อยู่นอกขอบเขตการส่งมอบนี้ (โฮสติ้ง/ปฏิบัติการ) และส่วนตรวจรับงานอย่างเป็นทางการ',
+      pkg2t: 'เอกสารรายงานผลการปฏิบัติตาม TOR', pkg2b: 'ข้อกำหนดทั้ง 40 ข้อของ TOR ได้รับการตรวจสอบเป็นรายข้อ พร้อมเลขข้อ หน้า และข้อความต้นฉบับจาก TOR รวมถึงวิธีการตรวจสอบ', pkg2link: 'เปิด docs/tor-compliance.html →',
+      pkg3t: 'เอกสารออกแบบและข้อกำหนดระบบ', pkg3b: 'สถาปัตยกรรมของระบบ สำหรับทีมวิศวกรรมของผู้ว่าจ้าง หรือผู้ที่จะดูแลระบบต่อหลังส่งมอบ — โครงสร้างระบบ รูปแบบเนื้อหา และเหตุผลเบื้องหลังการตัดสินใจด้านสถาปัตยกรรมที่สำคัญ', pkg3link: 'เปิด docs/system-design.html →',
+      h2score: 'ตารางสรุปผลการปฏิบัติตาม TOR', ledescore: 'รายละเอียดและหลักฐานของทุกรายการอยู่ในเอกสารรายงานผลการปฏิบัติตาม TOR (เอกสารที่ 02) นี่คือภาพรวมสรุป',
+      sc1: 'ปฏิบัติตามครบถ้วน ยืนยันจากระบบจริง', sc2: 'พัฒนาเสร็จสมบูรณ์ — มีเงื่อนไขด้านโฮสติ้งหรือการวัดผล', sc3: 'รอการตัดสินใจจากผู้ว่าจ้าง', sc4: 'อยู่นอกขอบเขตการส่งมอบนี้ — โฮสติ้ง / นายทะเบียนโดเมน / ผู้ประเมินที่ได้รับการรับรอง',
+      h2action: 'รายการที่ต้องรอการตัดสินใจจากผู้ว่าจ้าง', ledeaction: 'สองรายการนี้เป็นรายการเดียวใน TOR ทั้งหมดที่ติดขัดเพียงเพราะต้องรอข้อมูลที่มีเฉพาะผู้ว่าจ้างเท่านั้นที่ให้ได้ ไม่ใช่งานวิศวกรรมที่ยังค้างอยู่',
+      a1pill: 'รอการตัดสินใจ', a1title: 'ระบบอ่านวารสารอิเล็กทรอนิกส์ (E-journal viewer)', a1body: 'ตัวระบบอ่านพร้อมพัฒนาได้ทันที แต่ต้องมีไฟล์วารสารจริงเพื่อแสดงผล ทีมงานตั้งใจไม่ใส่ไฟล์ตัวอย่างแทน — กรุณาจัดส่งไฟล์วารสารจริง (หรือยืนยันว่าใช้ฉบับใด) เพื่อปิดรายการนี้',
+      a2pill: 'รอการตัดสินใจ', a2title: 'ระบบแชทบอทสำหรับประชาชน (หลายรอบการสนทนา)', a2body: 'ต้องรอการเลือกผู้ให้บริการ LLM/API จากผู้ว่าจ้างก่อนจึงจะกำหนดขอบเขตและพัฒนาได้ — เป็นการตัดสินใจด้านค่าใช้จ่ายต่อเนื่องและการจัดการข้อมูลที่ควรเป็นสิทธิ์ของผู้ว่าจ้าง ไม่ควรสันนิษฐานแทน',
+      h2ext: 'รายการที่อยู่นอกขอบเขตการส่งมอบนี้', ledeext: 'ข้อกำหนด TOR จำนวน 5 ข้อ เป็นเรื่องโฮสติ้ง/ปฏิบัติการ/นายทะเบียนโดเมนอย่างแท้จริง ไม่ใช่โค้ดแอปพลิเคชัน — ขึ้นอยู่กับว่าเว็บไซต์จะถูกโฮสต์ที่ใดและอย่างไรในที่สุด ซึ่งเป็นการตัดสินใจของผู้ดูแลโครงสร้างพื้นฐานจริงของทั้งสองโดเมน',
+      thitem: 'ข้อกำหนด', thwhy: 'เหตุผลที่อยู่นอกขอบเขตการส่งมอบนี้',
+      h2signoff: 'การตรวจรับงาน', ledesignoff: 'สำหรับลงนามเมื่อตรวจสอบแล้ว ชื่อ ตำแหน่ง และวันที่ เว้นว่างไว้ในเอกสารนี้ให้ทั้งสองฝ่ายกรอกเอง — ไม่มีการกรอกข้อมูลแทนผู้ใดในเอกสารนี้',
+      so1h: 'ผู้ส่งมอบงาน', so1role: 'Delivered by', so2h: 'ผู้ตรวจรับงาน', so2role: 'Accepted by',
+      fname: 'ชื่อ-นามสกุล', fpos: 'ตำแหน่ง', fsig: 'ลายมือชื่อ', fdate: 'วันที่',
+      placeholder: '⚠ เอกสารฉบับนี้ไม่ได้ระบุชื่อบริษัทคู่สัญญา ผู้ลงนาม หรือเลขที่งวดงาน เนื่องจากไม่มีข้อมูลที่ถูกต้องให้กรอก จึงเว้นช่องด้านบนไว้แทนการเดา กรุณากรอกให้ตรงตามข้อมูลสัญญาจริงก่อนนำส่งอย่างเป็นทางการ',
+      foot1: 'ทุกรายการ "ปฏิบัติตาม" ที่อ้างอิงในเอกสารนี้ได้รับการตรวจสอบกับระบบที่ใช้งานจริง — ดูวิธีการตรวจสอบโดยละเอียดในเอกสารรายงานผลการปฏิบัติตาม TOR',
+      foot2: 'ชุดเอกสารส่งมอบ · สำนักงานราชบัณฑิตยสภา และราชบัณฑิตยสภา',
+    }
+  };
+
+  function renderExt(lang) {
+    const tbody = document.getElementById('ext-tbody');
+    tbody.innerHTML = EXT_ITEMS.map(function(it) {
+      const row = lang === 'th' ? it.th : it.en;
+      return '<tr><td><strong>' + row[0] + '</strong></td><td>' + row[1] + '</td></tr>';
+    }).join('');
+  }
+
+  function setLang(lang) {
+    document.documentElement.lang = lang;
+    document.getElementById('btn-lang-en').classList.toggle('active', lang === 'en');
+    document.getElementById('btn-lang-th').classList.toggle('active', lang === 'th');
+    const s = STRINGS[lang];
+    const map = {
+      's-eyebrow':'eyebrow','s-h1':'h1','s-subnote':'subnote','s-m1':'m1','s-m2':'m2','s-m2v':'m2v','s-m3':'m3','s-m4':'m4',
+      's-h2-contents':'h2contents','s-lede-contents':'ledecontents',
+      's-pkg1-title':'pkg1t','s-pkg1-body':'pkg1b',
+      's-pkg2-title':'pkg2t','s-pkg2-body':'pkg2b','s-pkg2-link':'pkg2link',
+      's-pkg3-title':'pkg3t','s-pkg3-body':'pkg3b','s-pkg3-link':'pkg3link',
+      's-h2-score':'h2score','s-lede-score':'ledescore','s-sc1':'sc1','s-sc2':'sc2','s-sc3':'sc3','s-sc4':'sc4',
+      's-h2-action':'h2action','s-lede-action':'ledeaction',
+      's-a1-pill':'a1pill','s-a1-title':'a1title','s-a1-body':'a1body',
+      's-a2-pill':'a2pill','s-a2-title':'a2title','s-a2-body':'a2body',
+      's-h2-ext':'h2ext','s-lede-ext':'ledeext','s-th-item':'thitem','s-th-why':'thwhy',
+      's-h2-signoff':'h2signoff','s-lede-signoff':'ledesignoff',
+      's-so1-h':'so1h','s-so1-role':'so1role','s-so2-h':'so2h','s-so2-role':'so2role',
+      's-f-name':'fname','s-f-pos':'fpos','s-f-sig':'fsig','s-f-date':'fdate',
+      's-f-name2':'fname','s-f-pos2':'fpos','s-f-sig2':'fsig','s-f-date2':'fdate',
+      's-placeholder-note':'placeholder','s-foot1':'foot1','s-foot2':'foot2',
+    };
+    Object.keys(map).forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = s[map[id]];
+    });
+    renderExt(lang);
+  }
+
+  setLang('en');
+</script>
+</body>
+</html>
