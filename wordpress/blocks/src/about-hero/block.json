@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/about-hero",
+  "title": "WebX: About hero (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "cover-image",
+  "description": "RoyalSociety about page's hero with an image and 2 action links. Synced into page.acf.blocks as an \"about-hero\" block. founded/currentLaw/bureauCount are a bespoke server-side merge, not exposed here — same precedent as ORST's about page \"at-a-glance\" stats.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "subtitle": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "action1Label": { "type": "string", "default": "" },
+    "action1Href": { "type": "string", "default": "" },
+    "action2Label": { "type": "string", "default": "" },
+    "action2Href": { "type": "string", "default": "" },
+    "image": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/list-panel-item",
+  "title": "WebX: List row (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "list-view",
+  "description": "One row inside a WebX: List panel (RoyalSociety) block.",
+  "parent": [
+    "webx/list-panel"
+  ],
+  "attributes": {
+    "date": {
+      "type": "string",
+      "default": ""
+    },
+    "tag": {
+      "type": "string",
+      "default": ""
+    },
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "body": {
+      "type": "string",
+      "default": ""
+    },
+    "href": {
+      "type": "string",
+      "default": "#"
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

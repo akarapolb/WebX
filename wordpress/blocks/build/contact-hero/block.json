@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/contact-hero",
+  "title": "WebX: Contact hero",
+  "category": "webx-blocks",
+  "icon": "phone",
+  "description": "The ORST contact page's hero with an at-a-glance info card. Synced into page.acf.blocks as a \"contact-hero\" block.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "lead": {
+      "type": "string",
+      "default": ""
+    },
+    "cta1Label": {
+      "type": "string",
+      "default": ""
+    },
+    "cta1Url": {
+      "type": "string",
+      "default": ""
+    },
+    "cta2Label": {
+      "type": "string",
+      "default": ""
+    },
+    "cta2Url": {
+      "type": "string",
+      "default": ""
+    },
+    "officeHours": {
+      "type": "string",
+      "default": ""
+    },
+    "phone": {
+      "type": "string",
+      "default": ""
+    },
+    "email": {
+      "type": "string",
+      "default": ""
+    },
+    "address": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

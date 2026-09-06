@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/card-grid-item",
+  "title": "WebX: Card",
+  "category": "webx-blocks",
+  "icon": "index-card",
+  "description": "One card inside a WebX: Card grid block.",
+  "parent": ["webx/card-grid"],
+  "attributes": {
+    "icon": { "type": "string", "default": "" },
+    "tag": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "body": { "type": "string", "default": "" },
+    "meta": { "type": "string", "default": "" },
+    "href": { "type": "string", "default": "#" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

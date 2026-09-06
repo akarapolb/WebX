@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/two-column-paragraph",
+  "title": "WebX: Two column paragraph",
+  "category": "webx-blocks",
+  "icon": "columns",
+  "description": "One paragraph of body text inside a WebX: Two column (ORST) block's text side.",
+  "parent": [
+    "webx/two-column"
+  ],
+  "attributes": {
+    "text": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

@@ -37,6 +37,9 @@ fi
 echo "[wp-bootstrap] activating ACF..."
 $WP plugin activate advanced-custom-fields
 
+echo "[wp-bootstrap] activating the custom theme (TOR gap audit)..."
+$WP theme activate webx-theme
+
 echo "[wp-bootstrap] setting pretty permalinks..."
 $WP rewrite structure '/%postname%/'
 $WP rewrite flush

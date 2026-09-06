@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/trust-strip-item",
+  "title": "WebX: Trust item",
+  "category": "webx-blocks",
+  "icon": "shield",
+  "description": "One icon+title item inside a WebX: Trust strip block.",
+  "parent": [
+    "webx/trust-strip"
+  ],
+  "attributes": {
+    "icon": {
+      "type": "string",
+      "default": ""
+    },
+    "title": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

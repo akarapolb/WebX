@@ -4,12 +4,17 @@
   "info": { "singularName": "menu-item", "pluralName": "menu-items", "displayName": "Menu Item", "description": "รายการเมนูหลัก (mega-menu) จัดการผ่าน CMS (TOR ข้อ 4.1)" },
   "options": { "draftAndPublish": true },
   "attributes": {
-    "menu": { "type": "enumeration", "enum": ["service", "news", "eservice", "about"], "required": true, "description": "เมนูบนสุด: บริการ/ข่าวสาร/บริการออนไลน์/เกี่ยวกับ" },
-    "column": { "type": "string", "description": "หัวคอลัมน์ในเมนู เช่น สำหรับประชาชน" },
+    "menu": { "type": "enumeration", "enum": ["service", "news", "eservice", "about"], "description": "เมนูบนสุด: บริการ/ข่าวสาร/บริการออนไลน์/เกี่ยวกับ (เฉพาะ mega-menu แบบเก่า)" },
+    "column": { "type": "string", "description": "หัวคอลัมน์ในเมนู เช่น สำหรับประชาชน — เว้นว่างไว้ = รายการเมนูบนสุดแบบใหม่ (flat top-nav)" },
     "label": { "type": "string", "required": true },
+    "labelEn": { "type": "string", "description": "Bilingual EN (TOR gap) — optional English nav label. Falls back to `label` (Thai) when blank." },
     "url": { "type": "string", "default": "#" },
     "order": { "type": "integer", "default": 0 },
     "openNewTab": { "type": "boolean", "default": false },
-    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "megaMenu": {
+      "type": "json",
+      "description": "Optional rich dropdown for a flat top-nav item (column blank) — icon/eyebrow/title/description/featured link + grouped sub-links. Shape: {icon, eyebrow, title, description, featuredLabel, featuredUrl, groups: [{heading, links: [{text, url, desc}]}]}. Managed by webx-studio's Nav Manager (Branding > Navigation). Null/absent = a plain link, no dropdown."
+    }
   }
 }

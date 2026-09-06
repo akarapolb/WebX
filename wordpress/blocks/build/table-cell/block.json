@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/table-cell",
+  "title": "WebX: Table cell",
+  "category": "webx-blocks",
+  "icon": "editor-table",
+  "description": "One cell inside a WebX: Table row. On ORST, the first cell in each row renders as that row's header.",
+  "parent": [
+    "webx/table-row"
+  ],
+  "attributes": {
+    "value": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

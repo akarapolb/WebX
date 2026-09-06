@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/steps-item",
+  "title": "WebX: Step",
+  "category": "webx-blocks",
+  "icon": "arrow-right-alt",
+  "description": "One step inside a WebX: Steps block. Numbered automatically by position, same as the JSON renderer.",
+  "parent": [
+    "webx/steps"
+  ],
+  "attributes": {
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "body": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

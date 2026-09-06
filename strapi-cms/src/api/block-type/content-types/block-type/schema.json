@@ -31,6 +31,10 @@
       "type": "text",
       "description": "เทมเพลต HTML ใช้ {{key}} แทนค่าฟิลด์"
     },
+    "visualElements": {
+      "type": "json",
+      "description": "รายการ element ที่ใช้ประกอบ template แบบ drag-and-drop (Visual mode ของ BlockTypeEditor) — metadata สำหรับแก้ไขเท่านั้น ไม่มีผลต่อการ render (renderer อ่านแค่ fieldsSchema/template)"
+    },
     "tenant": {
       "type": "relation",
       "relation": "manyToOne",

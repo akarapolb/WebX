@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/card-grid",
+  "title": "WebX: Card grid",
+  "category": "webx-blocks",
+  "icon": "grid-view",
+  "description": "A grid of cards, optionally bound to a live WordPress content feed. Synced into page.acf.blocks as a \"card-grid\" block — see wordpress/mu-plugins/webx-blocks-sync.php.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "variant": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "columns": { "type": "string", "default": "3" },
+    "sourceEnabled": { "type": "boolean", "default": false },
+    "sourcePostType": { "type": "string", "default": "service" },
+    "sourceMap": { "type": "string", "default": "card" },
+    "sourceIcon": { "type": "string", "default": "" },
+    "sourceTag": { "type": "string", "default": "" },
+    "sourceLimit": { "type": "number", "default": 0 },
+    "sourceOffset": { "type": "number", "default": 0 }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

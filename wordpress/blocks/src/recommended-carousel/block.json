@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/recommended-carousel",
+  "title": "WebX: Recommended carousel (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "images-alt2",
+  "description": "A horizontally-scrolling row of recommended content cards. Synced into page.acf.blocks as a \"recommended-carousel\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "viewAllLabel": { "type": "string", "default": "" },
+    "viewAllUrl": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

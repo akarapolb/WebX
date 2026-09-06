@@ -1,0 +1,15 @@
+{
+  "collectionName": "components_block_comparison_columns",
+  "info": { "displayName": "Block: Comparison column", "icon": "grid", "description": "หนึ่งตัวเลือก/แพ็กเกจในตารางเปรียบเทียบ" },
+  "options": {},
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "price": { "type": "string", "description": "เช่น \"ฟรี\" หรือ \"1,000 บาท/ปี\" — เว้นว่างได้ถ้าไม่ใช่ตารางราคา" },
+    "period": { "type": "string" },
+    "description": { "type": "text" },
+    "highlight": { "type": "boolean", "default": false },
+    "features": { "type": "json" },
+    "ctaLabel": { "type": "string" },
+    "ctaUrl": { "type": "string" }
+  }
+}

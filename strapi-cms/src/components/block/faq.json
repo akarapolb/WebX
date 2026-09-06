@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_faqs",
+  "info": { "displayName": "Block: FAQ", "icon": "question", "description": "อคอร์เดียนคำถามที่พบบ่อย (ดึงจากคอลเลกชัน faqs ของ tenant นี้แบบ live)" },
+  "options": {},
+  "attributes": {
+    "eyebrow": { "type": "string", "default": "ถาม–ตอบ" },
+    "title": { "type": "string", "default": "คำถามที่พบบ่อย" }
+  }
+}

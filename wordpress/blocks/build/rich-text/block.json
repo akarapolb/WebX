@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/rich-text",
+  "title": "WebX: Rich text",
+  "category": "webx-blocks",
+  "icon": "text",
+  "description": "A block of narrative paragraphs. Synced into page.acf.blocks as a \"rich-text\" block. Deliberately exposes only escaped `paragraphs`, never the raw-HTML `html` field this type also supports server-side — same reasoning as this template's own established rule against ever exposing a raw-HTML field to editors (see governance.ts's hasEmbedBlock gate).",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "lead": {
+      "type": "string",
+      "default": ""
+    },
+    "full": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

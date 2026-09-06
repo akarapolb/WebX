@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/news-tabs-side-item",
+  "title": "WebX: News tab side item",
+  "category": "webx-blocks",
+  "icon": "screenoptions",
+  "description": "One side-list card inside a WebX: News tab block.",
+  "parent": ["webx/news-tabs-tab"],
+  "attributes": {
+    "image": { "type": "string", "default": "" },
+    "type": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "body": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

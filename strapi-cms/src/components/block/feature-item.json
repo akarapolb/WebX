@@ -3,8 +3,10 @@
   "info": { "displayName": "Block: Feature item", "icon": "bulletList", "description": "รายการคุณสมบัติ" },
   "options": {},
   "attributes": {
-    "icon": { "type": "enumeration", "enum": ["i-id", "i-grid", "i-data", "i-build", "i-doc", "i-book", "i-shield", "i-users", "i-check", "i-chat"], "default": "i-check" },
+    "icon": { "type": "string", "default": "i-check" },
     "title": { "type": "string" },
-    "text": { "type": "text" }
+    "text": { "type": "text" },
+    "url": { "type": "string" },
+    "colorTheme": { "type": "enumeration", "enum": ["orange", "blue", "green", "amber", "purple", "teal"], "default": "blue" }
   }
 }

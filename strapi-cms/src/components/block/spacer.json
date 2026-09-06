@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_spacers",
+  "info": { "displayName": "Block: Spacer / Divider", "icon": "layout", "description": "ช่องว่างหรือเส้นคั่นระหว่างส่วนต่าง ๆ ของหน้า" },
+  "options": {},
+  "attributes": {
+    "style": { "type": "enumeration", "enum": ["space", "line"], "default": "space" },
+    "size": { "type": "enumeration", "enum": ["sm", "md", "lg"], "default": "md" }
+  }
+}

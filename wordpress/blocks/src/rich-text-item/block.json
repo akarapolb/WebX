@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/rich-text-item",
+  "title": "WebX: Paragraph",
+  "category": "webx-blocks",
+  "icon": "editor-paragraph",
+  "description": "One plain-text paragraph inside a WebX: Rich text block — escaped text only, not raw HTML.",
+  "parent": ["webx/rich-text"],
+  "attributes": {
+    "text": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

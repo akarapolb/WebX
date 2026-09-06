@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/org-structure",
+  "title": "WebX: Org structure (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "networking",
+  "description": "Council/office framing cards plus a grid of academic bureaus, optionally bound to a live WordPress feed. Synced into page.acf.blocks as an \"org-structure\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "image": { "type": "string", "default": "" },
+    "councilLabel": { "type": "string", "default": "" },
+    "councilTitle": { "type": "string", "default": "" },
+    "councilBody": { "type": "string", "default": "" },
+    "officeLabel": { "type": "string", "default": "" },
+    "officeTitle": { "type": "string", "default": "" },
+    "officeBody": { "type": "string", "default": "" },
+    "schoolsHeading": { "type": "string", "default": "" },
+    "schoolsLead": { "type": "string", "default": "" },
+    "sourceEnabled": { "type": "boolean", "default": false },
+    "sourcePostType": { "type": "string", "default": "org-unit" },
+    "sourceMap": { "type": "string", "default": "orgunit" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

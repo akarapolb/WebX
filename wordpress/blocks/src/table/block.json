@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/table",
+  "title": "WebX: Table",
+  "category": "webx-blocks",
+  "icon": "editor-table",
+  "description": "A data table — add \"Table column\" blocks for the header row, then \"Table row\" blocks (each containing \"Table cell\" blocks) for the body. Same shape on ORST and RoyalSociety. Synced into page.acf.blocks as a \"table\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "variant": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "caption": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

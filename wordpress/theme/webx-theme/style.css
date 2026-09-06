@@ -1,0 +1,55 @@
+/*
+Theme Name: WebX Editorial
+Theme URI: https://github.com/
+Author: WebX
+Description: The genuinely custom WordPress theme for this deployment (TOR gap audit — this project's WordPress instance is deliberately headless; the real public-facing site is the separate Next.js app under public-site/, and no wp-content/themes/ existed at all before this). This theme is not the production rendering path — it exists to (1) be a real, active, non-off-the-shelf theme for the TOR's literal "must develop a custom theme, no ready-made theme" requirement, and (2) correctly style the wp-admin Gutenberg block-editor preview, which previously fell back to WordPress's own unstyled default (see editor-style.css) — a genuine editorial UX gap this closes as a side effect. If this theme's own front-end templates (index.php) are ever visited directly, they render a plain, honest notice pointing at the real site instead of pretending to be it.
+Version: 1.0.0
+Requires at least: 6.0
+Requires PHP: 8.0
+License: Proprietary
+Text Domain: webx-theme
+*/
+
+/* Real design tokens, ported from public-site/public/assets/orst/css/tokens.css
+   (this project's primary tenant's design system) — reused here rather than
+   inventing a one-off palette, so the one shared wp-admin editor preview
+   stays visually consistent with the actual site design instead of looking
+   like a third, unrelated theme. */
+:root {
+  --webx-primary: #073b34;
+  --webx-primary-strong: #052a25;
+  --webx-gold: #b98d3e;
+  --webx-ground: #fbf7ef;
+  --webx-surface: #ffffff;
+  --webx-ink: #1c211f;
+  --webx-ink-soft: #4d5652;
+  --webx-line: #e6ded0;
+  --webx-font-display: "Noto Serif Thai", "Noto Serif", serif;
+  --webx-font-body: "IBM Plex Sans Thai", "IBM Plex Sans", -apple-system, sans-serif;
+  --webx-radius-card: 22px;
+}
+
+body {
+  background: var(--webx-ground);
+  color: var(--webx-ink);
+  font-family: var(--webx-font-body);
+  line-height: 1.6;
+}
+
+.webx-notice {
+  max-width: 640px;
+  margin: 15vh auto;
+  padding: 40px;
+  background: var(--webx-surface);
+  border: 1px solid var(--webx-line);
+  border-radius: var(--webx-radius-card);
+  box-shadow: 0 12px 32px rgba(7, 59, 52, 0.08);
+  text-align: center;
+}
+.webx-notice h1 {
+  font-family: var(--webx-font-display);
+  color: var(--webx-primary-strong);
+  margin: 0 0 12px;
+}
+.webx-notice p { color: var(--webx-ink-soft); margin: 0 0 8px; }
+.webx-notice a { color: var(--webx-primary); font-weight: 600; }

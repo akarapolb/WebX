@@ -15,6 +15,10 @@
     "contentType": { "type": "string" },
     "label": { "type": "string" },
     "author": { "type": "string" },
-    "data": { "type": "json" }
+    "data": { "type": "json" },
+    "tenantKey": {
+      "type": "string",
+      "description": "Set by webx-studio's Visual Builder (see VisualBuilder.tsx's saveVersion/loadHistory) so a WordPress-hosted page's small, non-globally-unique numeric id (e.g. WP page id 42) can't return another tenant's version history on a documentRef collision — Strapi's own page/landing document ids are effectively unique already, but this field is filtered on for every read regardless of contentType so the same code path is safe for both."
+    }
   }
 }

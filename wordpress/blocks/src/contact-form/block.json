@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/contact-form",
+  "title": "WebX: Contact form",
+  "category": "webx-blocks",
+  "icon": "email",
+  "description": "Framing text above the ORST contact form (the form's own fields are fixed, not editable — they're tied to the backend schema). Synced into page.acf.blocks as a \"contact-form\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "kicker": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "intro": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

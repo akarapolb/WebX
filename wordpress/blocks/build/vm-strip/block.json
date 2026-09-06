@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/vm-strip",
+  "title": "WebX: Vision/mission strip",
+  "category": "webx-blocks",
+  "icon": "editor-quote",
+  "description": "A row of vision/mission statement labels — a plain string array in the JSON, not objects. Synced into page.acf.blocks as a \"vm-strip\" block.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

@@ -36,6 +36,15 @@
     },
     "videoUrl": {
       "type": "string",
+      "description": "ลิงก์วิดีโอภายนอก (YouTube/Vimeo ฯลฯ) — ใช้อย่างใดอย่างหนึ่งกับ videoFile",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "videoFile": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["videos"],
+      "description": "ไฟล์วิดีโอที่อัปโหลดโดยตรง — ใช้อย่างใดอย่างหนึ่งกับ videoUrl",
       "pluginOptions": { "i18n": { "localized": false } }
     },
     "duration": {

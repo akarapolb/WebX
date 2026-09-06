@@ -58,6 +58,15 @@ function webx_crp_post_type_uid_map(): array
     ];
 }
 
+/** Same governed set as webx_crp_post_type_uid_map(), but keyed by the WP
+ * post_type slug rather than the REST rest_base — the two differ for
+ * 'post'/'posts' and 'page'/'pages'; every other type's post_type and
+ * rest_base are identical strings. */
+function webx_crp_governed_post_types(): array
+{
+    return ['post', 'page', 'service', 'publication', 'faq', 'resource', 'timeline-event', 'mission-item', 'org-unit', 'document'];
+}
+
 /** Fetches (and caches) the acting user's tenant + (if any) custom-role
  * permissions for one content type from Strapi. Returns null only on a
  * lookup failure (network/HTTP/JSON error) — that and "not a WebX-provisioned
@@ -217,3 +226,54 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
 
     return $response; // unchanged (null) — proceed to the route's own callback
 }, 10, 3);
+
+// --- wp-admin list-screen tenant scoping --------------------------------
+// The REST write-side check above deliberately leaves reads untouched (see
+// its own header comment): the public site fetches PUBLISHED content
+// unauthenticated, and tenant-scoping that would just break it. wp-admin's
+// list screens are a different audience, though — they also surface
+// draft/pending posts, which the public site never sees at all. Without
+// this, any WebX-provisioned tenant editor who logs into wp-admin directly
+// sees every OTHER tenant's unpublished drafts mixed into every governed
+// post type's list table (Posts, Pages, Services, Publications, …) — a real
+// pre-publication confidentiality gap, not just a tidiness one. Writes to
+// that foreign content already 403 via the filter above; this closes the
+// matching read side, scoped to wp-admin screens only (is_admin() is false
+// for REST requests, so the public site and webx-studio's own REST reads
+// are both untouched).
+add_action('pre_get_posts', function (WP_Query $query) {
+    if (!is_admin() || !$query->is_main_query()) return;
+
+    $post_type = $query->get('post_type');
+    if (is_array($post_type)) return; // multi-type queries (e.g. admin-wide search) — leave alone
+    if ($post_type === '' || $post_type === false) $post_type = 'post'; // edit.php's own default
+    if (!in_array($post_type, webx_crp_governed_post_types(), true)) return;
+
+    $user = wp_get_current_user();
+    if (!$user || !$user->exists() || empty($user->user_email)) return;
+    $email = strtolower($user->user_email);
+
+    // The uid only selects which content type's custom-role PERMISSIONS come
+    // back (create/update/hidden/…), which this read-side check doesn't use
+    // — tenantKey itself is resolved from the admin's email alone
+    // (Tenant.adminEmails), the same regardless of uid. 'wp:page' is just a
+    // fixed, always-registered choice to satisfy the function's signature.
+    $perms = webx_crp_fetch($email, 'wp:page');
+    if ($perms === null) return; // lookup unavailable — fail open, same posture as the write-side check
+    $tenant_key = $perms['tenantKey'] ?? null;
+    if ($tenant_key === null) return; // not a WebX-provisioned admin (e.g. a genuine WP super-admin) — nothing to scope
+
+    $term = get_term_by('slug', $tenant_key, 'wtenant');
+    if (!$term || is_wp_error($term)) {
+        // Tenant resolved but its wtenant term doesn't exist — a
+        // data-integrity state, not a transient lookup outage, so this one
+        // fails CLOSED (show nothing) rather than open (show everything).
+        $query->set('post__in', [0]);
+        return;
+    }
+
+    $tax_query = $query->get('tax_query');
+    $tax_query = is_array($tax_query) ? $tax_query : [];
+    $tax_query[] = ['taxonomy' => 'wtenant', 'field' => 'term_id', 'terms' => [$term->term_id]];
+    $query->set('tax_query', $tax_query);
+}, 20);

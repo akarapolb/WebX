@@ -1,0 +1,10 @@
+{
+  "collectionName": "components_block_logo_items",
+  "info": { "displayName": "Block: Logo item", "icon": "grid", "description": "โลโก้หนึ่งรายการ" },
+  "options": {},
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "logo": { "type": "media", "multiple": false, "allowedTypes": ["images"], "required": true },
+    "url": { "type": "string" }
+  }
+}

@@ -872,6 +872,7 @@ export interface ApiBlockTypeBlockType extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    visualElements: Schema.Attribute.JSON;
   };
 }
 
@@ -914,6 +915,43 @@ export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     views: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
+export interface ApiBreakingNewsBreakingNews
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'breaking_news_alerts';
+  info: {
+    description: '\u0E1B\u0E23\u0E30\u0E01\u0E32\u0E28\u0E14\u0E48\u0E27\u0E19 (TOR \u2014 a fast-publish path that skips the public-site static rebuild entirely: the banner is fetched live by the browser, not baked into build output, so toggling it live is a normal Strapi publish, not a 20s-debounced multi-minute site rebuild). At most one row per tenant by convention, enforced by the editor UI, not the schema.';
+    displayName: 'Breaking News Alert';
+    pluralName: 'breaking-news-alerts';
+    singularName: 'breaking-news';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    linkLabel: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'\u0E2D\u0E48\u0E32\u0E19\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E40\u0E15\u0E34\u0E21'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::breaking-news.breaking-news'
+    > &
+      Schema.Attribute.Private;
+    message: Schema.Attribute.Text & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    severity: Schema.Attribute.Enumeration<['info', 'warning', 'critical']> &
+      Schema.Attribute.DefaultTo<'warning'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    url: Schema.Attribute.String;
   };
 }
 
@@ -1450,6 +1488,37 @@ export interface ApiHomePageHomePage extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiIconIcon extends Struct.CollectionTypeSchema {
+  collectionName: 'icons';
+  info: {
+    description: '\u0E44\u0E2D\u0E04\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E40\u0E2D\u0E07 (no-code) \u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A Feature grid / Stat row \u0E43\u0E19 Visual Builder';
+    displayName: 'Icon';
+    pluralName: 'icons';
+    singularName: 'icon';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    image: Schema.Attribute.Media<'images'> & Schema.Attribute.Required;
+    key: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::icon.icon'> &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiJobJob extends Struct.CollectionTypeSchema {
   collectionName: 'jobs';
   info: {
@@ -1609,6 +1678,16 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
         'block.cta-banner',
         'block.feature-grid',
         'block.custom',
+        'block.embed',
+        'block.collection-list',
+        'block.form',
+        'block.testimonials',
+        'block.logo-cloud',
+        'block.spacer',
+        'block.blockquote',
+        'block.team-grid',
+        'block.tabs',
+        'block.comparison',
       ]
     >;
     createdAt: Schema.Attribute.DateTime;
@@ -1689,16 +1768,17 @@ export interface ApiMenuItemMenuItem extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     label: Schema.Attribute.String & Schema.Attribute.Required;
+    labelEn: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::menu-item.menu-item'
     > &
       Schema.Attribute.Private;
+    megaMenu: Schema.Attribute.JSON;
     menu: Schema.Attribute.Enumeration<
       ['service', 'news', 'eservice', 'about']
-    > &
-      Schema.Attribute.Required;
+    >;
     openNewTab: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     publishedAt: Schema.Attribute.DateTime;
@@ -1748,6 +1828,43 @@ export interface ApiMfaEnrollmentMfaEnrollment
   };
 }
 
+export interface ApiPageTemplatePageTemplate
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'page_templates';
+  info: {
+    description: '\u0E0A\u0E38\u0E14\u0E1A\u0E25\u0E47\u0E2D\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E19\u0E49\u0E32\u0E17\u0E35\u0E48\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E44\u0E27\u0E49\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E19\u0E33\u0E44\u0E1B\u0E43\u0E0A\u0E49\u0E0B\u0E49\u0E33 (Save as template \u0E43\u0E19 Visual Builder)';
+    displayName: 'Page Template';
+    pluralName: 'page-templates';
+    singularName: 'page-template';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    blocks: Schema.Attribute.JSON;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    dialect: Schema.Attribute.String & Schema.Attribute.DefaultTo<'gov-portal'>;
+    key: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::page-template.page-template'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    tenantKey: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPageVersionPageVersion extends Struct.CollectionTypeSchema {
   collectionName: 'page_versions';
   info: {
@@ -1775,6 +1892,63 @@ export interface ApiPageVersionPageVersion extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     publishedAt: Schema.Attribute.DateTime;
+    tenantKey: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiPagePage extends Struct.CollectionTypeSchema {
+  collectionName: 'pages';
+  info: {
+    description: '\u0E2B\u0E19\u0E49\u0E32\u0E40\u0E27\u0E47\u0E1A\u0E17\u0E31\u0E48\u0E27\u0E44\u0E1B\u0E17\u0E35\u0E48\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E41\u0E1A\u0E1A no-code \u0E14\u0E49\u0E27\u0E22\u0E01\u0E32\u0E23\u0E27\u0E32\u0E07\u0E1A\u0E25\u0E47\u0E2D\u0E01 (Dynamic Zone)';
+    displayName: 'Page';
+    pluralName: 'pages';
+    singularName: 'page';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    blocks: Schema.Attribute.DynamicZone<
+      [
+        'block.hero',
+        'block.richtext',
+        'block.image',
+        'block.cta-banner',
+        'block.feature-grid',
+        'block.custom',
+        'block.highlights',
+        'block.stat-row',
+        'block.news-panel',
+        'block.video-channel',
+        'block.awards',
+        'block.faq',
+        'block.featured-promo',
+        'block.embed',
+        'block.collection-list',
+        'block.form',
+        'block.testimonials',
+        'block.logo-cloud',
+        'block.spacer',
+        'block.blockquote',
+        'block.team-grid',
+        'block.tabs',
+        'block.comparison',
+      ]
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::page.page'> &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    seoDescription: Schema.Attribute.Text;
+    slug: Schema.Attribute.String & Schema.Attribute.Required;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2280,6 +2454,12 @@ export interface ApiVideoVideo extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    videoFile: Schema.Attribute.Media<'videos'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
     videoUrl: Schema.Attribute.String &
       Schema.Attribute.SetPluginOptions<{
         i18n: {
@@ -2623,6 +2803,8 @@ export interface PluginUploadFile extends Struct.CollectionTypeSchema {
     publishedAt: Schema.Attribute.DateTime;
     related: Schema.Attribute.Relation<'morphToMany'>;
     size: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    tags: Schema.Attribute.String;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2853,6 +3035,7 @@ declare module '@strapi/strapi' {
       'api::banner.banner': ApiBannerBanner;
       'api::block-type.block-type': ApiBlockTypeBlockType;
       'api::blog.blog': ApiBlogBlog;
+      'api::breaking-news.breaking-news': ApiBreakingNewsBreakingNews;
       'api::catalog.catalog': ApiCatalogCatalog;
       'api::complaint.complaint': ApiComplaintComplaint;
       'api::consent-log.consent-log': ApiConsentLogConsentLog;
@@ -2866,12 +3049,15 @@ declare module '@strapi/strapi' {
       'api::field-policy.field-policy': ApiFieldPolicyFieldPolicy;
       'api::gallery.gallery': ApiGalleryGallery;
       'api::home-page.home-page': ApiHomePageHomePage;
+      'api::icon.icon': ApiIconIcon;
       'api::job.job': ApiJobJob;
       'api::landing.landing': ApiLandingLanding;
       'api::location.location': ApiLocationLocation;
       'api::menu-item.menu-item': ApiMenuItemMenuItem;
       'api::mfa-enrollment.mfa-enrollment': ApiMfaEnrollmentMfaEnrollment;
+      'api::page-template.page-template': ApiPageTemplatePageTemplate;
       'api::page-version.page-version': ApiPageVersionPageVersion;
+      'api::page.page': ApiPagePage;
       'api::poll.poll': ApiPollPoll;
       'api::popup.popup': ApiPopupPopup;
       'api::registration.registration': ApiRegistrationRegistration;

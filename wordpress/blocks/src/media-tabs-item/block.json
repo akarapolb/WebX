@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/media-tabs-item",
+  "title": "WebX: Media tab item",
+  "category": "webx-blocks",
+  "icon": "screenoptions",
+  "description": "One card inside a WebX: Media tab. Use image+caption for a photo card, or tag+title+caption for a text card.",
+  "parent": ["webx/media-tabs-tab"],
+  "attributes": {
+    "image": { "type": "string", "default": "" },
+    "caption": { "type": "string", "default": "" },
+    "tag": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

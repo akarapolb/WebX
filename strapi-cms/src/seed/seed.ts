@@ -62,7 +62,9 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::popup.popup": ["find", "findOne"],
     "api::poll.poll": ["find", "findOne"],
     "api::landing.landing": ["find", "findOne"],
+    "api::page.page": ["find", "findOne"],
     "api::block-type.block-type": ["find", "findOne"],
+    "api::icon.icon": ["find", "findOne"],
     "api::ab-event.ab-event": ["create"],
     "api::blog.blog": ["find", "findOne"],
     "api::catalog.catalog": ["find", "findOne"],
@@ -72,6 +74,11 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::location.location": ["find", "findOne"],
     "api::sitemap-node.sitemap-node": ["find", "findOne"],
     "api::menu-item.menu-item": ["find", "findOne"],
+    // Breaking-news banner — fetched live by the browser (not baked into
+    // static build output), so this is the ONE thing on the public site
+    // that needs no build/rebuild to go live; see components/
+    // BreakingNewsBanner.tsx.
+    "api::breaking-news.breaking-news": ["find", "findOne"],
   };
 
   for (const [uid, actions] of Object.entries(map)) {
@@ -475,6 +482,14 @@ export async function seedCmsCore(strapi: any) {
   if (si) strapi.log.info(`[seed] slugs backfilled on ${si} articles`);
   if (ti) strapi.log.info(`[seed] tags added to ${ti} articles`);
 
+  // same gap as articles had (seedGroupA's blogs never got an explicit
+  // slug either) — surfaced by Collection Page needing a real, non-null
+  // identifier to link a blog card to its own detail page.
+  const blogsNoSlug = await strapi.db.query("api::blog.blog")
+    .findMany({ where: { tenant: dgaId, publishedAt: { $notNull: true }, slug: null }, select: ["id", "title"], limit: 100 });
+  for (const b of blogsNoSlug) await strapi.db.query("api::blog.blog").update({ where: { id: b.id }, data: { slug: slugify(b.title, b.id) } });
+  if (blogsNoSlug.length) strapi.log.info(`[seed] slugs backfilled on ${blogsNoSlug.length} blogs`);
+
   if (arts.length >= 3) {
     const first = await strapi.db.query("api::article.article").findOne({ where: { id: arts[0].id }, populate: { related: true } });
     if (!first?.related || !first.related.length) {
@@ -709,6 +724,81 @@ export async function ensureEditorPublishPermissions(strapi: any) {
   }
 }
 
+/** ปิดช่องโหว่อีกจุด: api::page.page และ api::landing.landing (หน้า Visual
+ * Builder no-code) ไม่เคยได้รับสิทธิ์ Editor เลยสักตัว (create/read/update/
+ * delete/publish) — ต่างจาก api::home-page.home-page ที่มีสิทธิ์เต็มมาตั้งแต่
+ * seed แรก. คาดว่าเป็นเพราะสองตัวนี้ถูกเพิ่มเข้ามาทีหลัง หลัง Strapi sync
+ * default permission ให้ role Editor ไปแล้วครั้งเดียวตอน bootstrap แรกสุด —
+ * content type ใหม่ที่เพิ่มมาทีหลังไม่ได้ sync ย้อนหลังให้อัตโนมัติ. พบตอน
+ * ทดสอบ dga-editor สร้างหน้าใหม่ใน Visual Builder ไม่ได้เลย (403 ตั้งแต่ create). */
+export async function ensurePageBuilderEditorPermissions(strapi: any) {
+  // api::page-template.page-template joins this list for exactly the same
+  // reason the two above are here: it was added long after the one-time
+  // bootstrap sync, so an Editor would get a silent 403 the first time they
+  // opened the Builder's Templates tab or hit "Save as template". Authors
+  // are deliberately NOT granted — templates are a page-building action, and
+  // widening this function's role coverage would also silently hand authors
+  // page/landing rights they don't have today.
+  // api::icon.icon is here for the same reason, found by stress-testing the
+  // Builder as a seeded Editor: the Icon Manager's own content-manager fetch
+  // (webx-studio's loadIcons) returned 403 for every non-super-admin, so the
+  // icon picker silently showed nothing. api::icon.icon HAD been granted to
+  // the PUBLIC role (ensurePublicPermissions' find/findOne, for the public
+  // REST API) — but never to the admin Editor role, which is what the
+  // content-manager endpoint actually checks.
+  const SUBJECTS = ["api::page.page", "api::landing.landing", "api::page-template.page-template", "api::icon.icon"];
+  const ACTIONS = ["create", "read", "update", "delete", "publish"];
+  const role = await strapi.db.query("admin::role").findOne({ where: { code: "strapi-editor" } });
+  if (!role) return;
+  const existing = await strapi.db.query("admin::permission").findMany({ where: { role: role.id } });
+  const have = new Set(existing.map((p: any) => p.action + "|" + p.subject));
+  let created = 0;
+  for (const subject of SUBJECTS) {
+    for (const action of ACTIONS) {
+      const key = `plugin::content-manager.explorer.${action}|${subject}`;
+      if (have.has(key)) continue;
+      await strapi.db.query("admin::permission").create({
+        data: { action: `plugin::content-manager.explorer.${action}`, actionParameters: {}, subject, properties: {}, conditions: [], role: role.id },
+      });
+      created++;
+    }
+  }
+  if (created) strapi.log.info(`[seed] granted ${created} missing page-builder perms (page/landing) to role ${role.code}`);
+}
+
+/** ปิดช่องโหว่อีกจุด: create/read/update ของ api::block-type.block-type สำหรับ
+ * role Editor/Author ถูก seed ไว้ตั้งแต่แรกด้วย properties.fields แบบ allowlist
+ * ตายตัว (["key","name","icon","fieldsSchema","template","tenant"]) — เมื่อเพิ่ม
+ * attribute ใหม่ (visualElements, ใช้กับ Visual-mode composer ของ
+ * BlockTypeEditor.tsx) เข้าไปใน schema.json แล้ว role strapi-super-admin เอง
+ * sync fields list ให้อัตโนมัติทุกครั้งที่ Strapi boot (ผ่าน content-manager
+ * plugin's syncConfigurations) แต่ role ที่กำหนด properties.fields เองแบบนี้
+ * (Editor/Author) ไม่ถูก sync ตามไปด้วย — เขียน/อ่านฟิลด์ใหม่ผ่าน role เหล่านี้
+ * จึงถูก Strapi เงียบ ๆ ตัดทิ้งทั้งขาเขียนและขาอ่าน (ไม่ error, แค่หายไป) พบตอน
+ * ทดสอบบันทึก block type ที่สร้างด้วย Visual-mode composer — fieldsSchema/
+ * template บันทึกได้ปกติ (อยู่ใน allowlist เดิม) แต่ visualElements หายทุกครั้ง
+ * ไม่ว่าจะ restart Strapi กี่รอบก็ตาม เพราะ allowlist ไม่เคยถูกอัปเดต ไม่ใช่
+ * ปัญหา cache/timing */
+export async function ensureBlockTypeFieldPermissions(strapi: any) {
+  const SUBJECT = "api::block-type.block-type";
+  const ACTIONS = new Set(["plugin::content-manager.explorer.create", "plugin::content-manager.explorer.read", "plugin::content-manager.explorer.update"]);
+  const ADD_FIELD = "visualElements";
+  const roles = await strapi.db.query("admin::role").findMany({ where: { code: { $in: ["strapi-editor", "strapi-author"] } } });
+  for (const role of roles) {
+    const perms = await strapi.db.query("admin::permission").findMany({ where: { role: role.id, subject: SUBJECT } });
+    let changed = 0;
+    for (const p of perms) {
+      if (!ACTIONS.has(p.action)) continue;
+      const props = p.properties || {};
+      const cur: string[] = Array.isArray(props.fields) ? props.fields : [];
+      if (cur.includes(ADD_FIELD)) continue;
+      await strapi.db.query("admin::permission").update({ where: { id: p.id }, data: { properties: { ...props, fields: [...cur, ADD_FIELD] } } });
+      changed++;
+    }
+    if (changed) strapi.log.info(`[seed] added ${ADD_FIELD} to ${changed} block-type field allowlists for role ${role.code}`);
+  }
+}
+
 /* ---------- Admin editors ผูกกับ tenant (per-tenant RBAC) ---------- */
 export async function seedEditors(strapi: any) {
   const role = await strapi.db.query("admin::role").findOne({ where: { code: "strapi-editor" } });
@@ -801,6 +891,44 @@ export async function seedJobs(strapi: any) {
     await strapi.documents("api::job.job").update({ documentId: doc.documentId, locale: "en", ...P, data: loc("en") });
   }
   strapi.log.info(`[seed] seeded ${jobs.length} jobs (th+en) ✔`);
+}
+
+/* ---------- ตำแหน่งงานว่าง ORST/RoyalSociety (TOR gap audit — "e-forms
+   สำหรับสมัครงาน" ไม่เคยมีอยู่จริงสำหรับสอง tenant นี้เลย ทั้งที่ backend
+   api::job.job / api::application.application มีอยู่แล้วและเปิด public
+   create ให้ application อยู่แล้ว — แค่ไม่มีตำแหน่งงานจริงผูกกับ tenant นี้
+   ไว้เลย). ตำแหน่งงานเป็นหมวดทั่วไปตามภารกิจจริงของหน่วยงาน ไม่ใช่ชื่อ
+   บุคคลจริง จึงไม่มีความเสี่ยงแบบราชบัณฑิต/ภาคีสมาชิกที่เจอในฟีเจอร์ทำเนียบ
+   สมาชิกก่อนหน้านี้. แยก idempotency check ต่อ tenant (ไม่ใช้เงื่อนไข "มี
+   job อยู่แล้วข้ามทั้งหมด" แบบ seedJobs เดิม เพราะ DGA jobs ที่ seed ไปก่อน
+   จะทำให้ฟังก์ชันนี้ไม่ทำงานเลยถ้าใช้เงื่อนไขเดียวกัน). */
+export async function seedOrstRoyalSocietyJobs(strapi: any) {
+  const P = { status: "published" as const };
+  const TENANTS: { key: string; jobs: any[] }[] = [
+    {
+      key: "orst",
+      jobs: [
+        { jobId: "orst-thai-lang-officer", deptKey: "corporate", typeKey: "fulltime", openings: 1, title: "นักวิชาการภาษาไทย", dept: "สำนักงานราชบัณฑิตยสภา", type: "พนักงานราชการ", location: "กรุงเทพมหานคร", salary: "18,000–25,000 บาท/เดือน", deadline: "30 ก.ย. 2569", summary: "ปฏิบัติงานด้านการบัญญัติศัพท์ ตรวจสอบและจัดทำพจนานุกรม และสนับสนุนงานวิชาการด้านภาษาไทย", responsibilities: ["จัดทำและปรับปรุงพจนานุกรมและศัพท์บัญญัติ", "ตอบข้อซักถามด้านภาษาไทยจากประชาชนและหน่วยงาน", "สนับสนุนงานประชุมวิชาการของราชบัณฑิตยสภา"], qualifications: ["ปริญญาตรีสาขาภาษาไทยหรือที่เกี่ยวข้อง", "มีความรู้ด้านหลักภาษาไทยเป็นอย่างดี", "สามารถทำงานเอกสารวิชาการได้"], benefits: ["สิทธิประกันสังคม", "ค่าตอบแทนพิเศษตามระเบียบราชการ", "วันลาตามสิทธิราชการ"] },
+        { jobId: "orst-it-officer", deptKey: "tech", typeKey: "fulltime", openings: 1, title: "นักวิชาการคอมพิวเตอร์", dept: "ฝ่ายเทคโนโลยีสารสนเทศ", type: "พนักงานราชการ", location: "กรุงเทพมหานคร", salary: "19,500–27,000 บาท/เดือน", deadline: "30 ก.ย. 2569", summary: "ดูแลระบบสารสนเทศและเว็บไซต์ของสำนักงาน สนับสนุนการให้บริการดิจิทัลแก่ประชาชน", responsibilities: ["ดูแลและพัฒนาระบบสารสนเทศของสำนักงาน", "สนับสนุนการให้บริการออนไลน์แก่ประชาชน", "ประสานงานด้านความมั่นคงปลอดภัยไซเบอร์"], qualifications: ["ปริญญาตรีด้านคอมพิวเตอร์หรือที่เกี่ยวข้อง", "มีความรู้ด้านเว็บและฐานข้อมูล", "สามารถทำงานเป็นทีมได้"], benefits: ["สิทธิประกันสังคม", "ค่าตอบแทนพิเศษตามระเบียบราชการ", "วันลาตามสิทธิราชการ"] },
+      ],
+    },
+    {
+      key: "royalsociety",
+      jobs: [
+        { jobId: "rs-editorial-officer", deptKey: "corporate", typeKey: "fulltime", openings: 1, title: "เจ้าหน้าที่บรรณาธิการ", dept: "ฝ่ายเผยแพร่และสิ่งพิมพ์", type: "พนักงานราชการ", location: "กรุงเทพมหานคร", salary: "18,000–25,000 บาท/เดือน", deadline: "30 ก.ย. 2569", summary: "ตรวจทาน เรียบเรียง และจัดทำต้นฉบับสิ่งพิมพ์และวารสารวิชาการของราชบัณฑิตยสภา", responsibilities: ["ตรวจทานและเรียบเรียงต้นฉบับก่อนเผยแพร่", "ประสานงานกับผู้ทรงคุณวุฒิด้านเนื้อหา", "จัดทำสิ่งพิมพ์และวารสารตามกำหนดการ"], qualifications: ["ปริญญาตรีทุกสาขา", "มีทักษะการเขียนและตรวจทานภาษาไทยที่ดี", "ละเอียดรอบคอบ"], benefits: ["สิทธิประกันสังคม", "ค่าตอบแทนพิเศษตามระเบียบราชการ", "วันลาตามสิทธิราชการ"] },
+        { jobId: "rs-research-assistant", deptKey: "corporate", typeKey: "contract", openings: 2, title: "ผู้ช่วยนักวิจัย", dept: "สำนักวิชาการ", type: "จ้างเหมาบริการ", location: "กรุงเทพมหานคร", salary: "16,000–20,000 บาท/เดือน", deadline: "30 ก.ย. 2569", summary: "สนับสนุนงานค้นคว้าและรวบรวมข้อมูลวิชาการให้แก่ราชบัณฑิตและภาคีสมาชิก", responsibilities: ["สืบค้นและรวบรวมข้อมูลวิชาการ", "จัดเตรียมเอกสารประกอบการประชุมวิชาการ", "สนับสนุนงานธุรการของสำนักวิชาการ"], qualifications: ["ปริญญาตรีทุกสาขา", "สามารถค้นคว้าข้อมูลอย่างเป็นระบบ", "ใช้โปรแกรมสำนักงานได้ดี"], benefits: ["สิทธิประกันสังคม", "ค่าตอบแทนตามสัญญาจ้าง"] },
+      ],
+    },
+  ];
+
+  for (const { key, jobs } of TENANTS) {
+    const tenant = (await strapi.documents("api::tenant.tenant").findMany({ filters: { key }, fields: ["key"], limit: 1 }))[0];
+    if (!tenant) { strapi.log.warn(`[seed] tenant "${key}" not found — skipping its job postings`); continue; }
+    const existing = await strapi.db.query("api::job.job").findMany({ where: { tenant: tenant.id }, select: ["id"], limit: 1 });
+    if (existing.length) { strapi.log.info(`[seed] ${key} job postings already present — skipping`); continue; }
+    for (const j of jobs) await strapi.documents("api::job.job").create({ locale: "th", ...P, data: { ...j, tenant: tenant.id } });
+    strapi.log.info(`[seed] seeded ${jobs.length} job posting(s) for ${key} ✔`);
+  }
 }
 
 /* ---------- รายการสาธิตสำหรับหน้า "ติดตามสถานะ" (ให้ปุ่มตัวอย่างทำงานกับ API) ---------- */
@@ -936,6 +1064,33 @@ export async function ensureTenantLiveChat(strapi: any) {
     if (t.liveChat == null && demo[t.key]) {
       await strapi.db.query("api::tenant.tenant").update({ where: { id: t.id }, data: { liveChat: demo[t.key] } });
       strapi.log.info(`[seed] set live-chat channels for tenant ${t.key}`);
+    }
+  }
+}
+
+/* ---------- Flat top-nav items ต่อ tenant (idempotent) ----------
+ * api::menu-item.menu-item ถูกสร้างไว้แต่เดิมสำหรับ mega-menu ของเว็บ static
+ * เก่า (แถวที่มี `column`) ตอนนี้ Header.tsx ของ public-site ใหม่อ่านแถวที่
+ * `column` ว่าง (= flat top-nav) แทน — ทุก tenant ที่มีอยู่ตอนนี้มีแต่แถว
+ * แบบ column-set เท่านั้น จึงต้อง seed แถว flat ให้ก่อน ไม่งั้นเมนูบนสุดจะ
+ * ว่างเปล่าทันทีที่ Header.tsx เปลี่ยนมาอ่านจาก CMS. เนื้อหาเดียวกับ NAV
+ * array เดิมใน Header.tsx ทุก tenant (เป็น safety net ไม่ใช่คำตอบที่ถูกต้อง
+ * ต่อ tenant — จุดประสงค์ของฟีเจอร์นี้คือให้แอดมินแก้เองทีหลังได้) */
+export async function seedFlatNavItems(strapi: any) {
+  const P = { status: "published" as const };
+  const NAV = [
+    { label: "หน้าแรก", url: "/", order: 1 },
+    { label: "บริการ", url: "#services", order: 2 },
+    { label: "ข่าวสาร", url: "#news", order: 3 },
+    { label: "บริการออนไลน์", url: "/complaint.html", order: 4 },
+    { label: "เกี่ยวกับ สพร.", url: "/map.html", order: 5 },
+  ];
+  const tenants = await strapi.db.query("api::tenant.tenant").findMany({ select: ["id", "key"], limit: 500 });
+  for (const t of tenants) {
+    const flatCount = await strapi.db.query("api::menu-item.menu-item").count({ where: { tenant: t.id, column: null } });
+    if (flatCount === 0) {
+      for (const it of NAV) await strapi.documents("api::menu-item.menu-item").create({ ...P, data: { ...it, openNewTab: false, tenant: t.id } });
+      strapi.log.info(`[seed] flat nav items created for tenant ${t.key} (${NAV.length})`);
     }
   }
 }

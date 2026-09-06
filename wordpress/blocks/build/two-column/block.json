@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/two-column",
+  "title": "WebX: Two column (ORST)",
+  "category": "webx-blocks",
+  "icon": "columns",
+  "description": "A text column (subheading, paragraphs, buttons) next to an image. Add \"Two column paragraph\" blocks for the body text and \"Two column action\" blocks for the buttons (mix them in any order). Synced into page.acf.blocks as a \"two-column\" block.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "variant": {
+      "type": "string",
+      "default": ""
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "lead": {
+      "type": "string",
+      "default": ""
+    },
+    "actionLabel": {
+      "type": "string",
+      "default": ""
+    },
+    "actionUrl": {
+      "type": "string",
+      "default": ""
+    },
+    "subheading": {
+      "type": "string",
+      "default": ""
+    },
+    "image": {
+      "type": "string",
+      "default": ""
+    },
+    "imageAlt": {
+      "type": "string",
+      "default": ""
+    },
+    "imageSide": {
+      "type": "string",
+      "default": "right"
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

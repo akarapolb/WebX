@@ -1,0 +1,61 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pages",
+  "info": {
+    "singularName": "page",
+    "pluralName": "pages",
+    "displayName": "Page",
+    "description": "หน้าเว็บทั่วไปที่สร้างแบบ no-code ด้วยการวางบล็อก (Dynamic Zone)"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "string",
+      "required": true,
+      "description": "ตั้งใจใช้ string ธรรมดา ไม่ใช้ uid — Strapi บังคับ uid ให้ unique ข้าม tenant ทั้งระบบ (ไม่ scope ตาม tenant), ซึ่งชนกันจริงเมื่อหลาย tenant ต้องการ slug เดียวกัน เช่น home-blocks ของแต่ละหน่วยงาน"
+    },
+    "seoDescription": {
+      "type": "text"
+    },
+    "blocks": {
+      "type": "dynamiczone",
+      "components": [
+        "block.hero",
+        "block.richtext",
+        "block.image",
+        "block.cta-banner",
+        "block.feature-grid",
+        "block.custom",
+        "block.highlights",
+        "block.stat-row",
+        "block.news-panel",
+        "block.video-channel",
+        "block.awards",
+        "block.faq",
+        "block.featured-promo",
+        "block.embed",
+        "block.collection-list",
+        "block.form",
+        "block.testimonials",
+        "block.logo-cloud",
+        "block.spacer",
+        "block.blockquote",
+        "block.team-grid",
+        "block.tabs",
+        "block.comparison"
+      ]
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    }
+  }
+}

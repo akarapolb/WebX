@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/intro-feature",
+  "title": "WebX: Intro feature (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "text",
+  "description": "RoyalSociety about page's narrative intro with story cards. Synced into page.acf.blocks as an \"intro-feature\" block. Deliberately does not expose the `html` field this type also supports — that's a bespoke server-side merge from the page's own native content, the same raw-HTML sink rich-text's own comment explains, and stays outside Builder reach on purpose.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "highlightLabel": {
+      "type": "string",
+      "default": ""
+    },
+    "highlightText": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

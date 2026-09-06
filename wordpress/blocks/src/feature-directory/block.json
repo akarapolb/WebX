@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/feature-directory",
+  "title": "WebX: Feature directory (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "grid-view",
+  "description": "A feature card plus a grid of small link cards. Two layout variants (\"services\", \"knowledge\") share the same items shape — the \"knowledge\" variant also shows a separate feature-card block above the grid. Synced into page.acf.blocks as a \"feature-directory\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "variant": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "linkLabel": { "type": "string", "default": "" },
+    "featureLabel": { "type": "string", "default": "" },
+    "featureTitle": { "type": "string", "default": "" },
+    "featureBody": { "type": "string", "default": "" },
+    "featureLinkLabel": { "type": "string", "default": "" },
+    "featureLinkUrl": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

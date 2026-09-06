@@ -1,0 +1,46 @@
+/* Gutenberg block-editor preview styling (see functions.php's add_editor_style
+   call) — WordPress wraps the actual editable canvas in .editor-styles-wrapper
+   whenever a theme declares editor-style support, so real rules need that
+   prefix to reach it (the classic-editor screens ACF still uses for most of
+   this project's custom-fields UI are unaffected either way — the ACF field
+   forms sit outside this wrapper). Same tokens as style.css, kept in sync by
+   hand since editor CSS can't itself pull in a separate :root without WP
+   double-loading it. */
+.editor-styles-wrapper {
+  --webx-primary: #073b34;
+  --webx-primary-strong: #052a25;
+  --webx-gold: #b98d3e;
+  --webx-ink: #1c211f;
+  --webx-ink-soft: #4d5652;
+  font-family: "IBM Plex Sans Thai", "IBM Plex Sans", -apple-system, sans-serif;
+  color: var(--webx-ink);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.editor-styles-wrapper h1,
+.editor-styles-wrapper h2,
+.editor-styles-wrapper h3,
+.editor-styles-wrapper h4 {
+  font-family: "Noto Serif Thai", "Noto Serif", serif;
+  color: var(--webx-primary-strong);
+  font-weight: 700;
+}
+
+.editor-styles-wrapper a {
+  color: var(--webx-primary);
+  text-decoration-color: var(--webx-gold);
+}
+
+.editor-styles-wrapper blockquote {
+  border-left: 3px solid var(--webx-gold);
+  padding-left: 16px;
+  color: var(--webx-ink-soft);
+  font-style: normal;
+}
+
+.editor-styles-wrapper code,
+.editor-styles-wrapper pre {
+  background: #f4efe3;
+  border-radius: 6px;
+}

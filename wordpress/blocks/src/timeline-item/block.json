@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/timeline-item",
+  "title": "WebX: Timeline event",
+  "category": "webx-blocks",
+  "icon": "clock",
+  "description": "One event inside a WebX: Timeline block.",
+  "parent": ["webx/timeline"],
+  "attributes": {
+    "year": { "type": "string", "default": "" },
+    "statusLabel": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "body": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

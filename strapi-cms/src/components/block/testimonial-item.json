@@ -1,0 +1,11 @@
+{
+  "collectionName": "components_block_testimonial_items",
+  "info": { "displayName": "Block: Testimonial item", "icon": "msg", "description": "คำรับรองหนึ่งรายการ" },
+  "options": {},
+  "attributes": {
+    "quote": { "type": "text", "required": true },
+    "author": { "type": "string" },
+    "role": { "type": "string" },
+    "avatar": { "type": "media", "multiple": false, "allowedTypes": ["images"] }
+  }
+}

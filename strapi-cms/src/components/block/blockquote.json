@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_blockquotes",
+  "info": { "displayName": "Block: Pull quote", "icon": "msg", "description": "คำคมหรือข้อความเด่นแบบเดี่ยว พร้อมแหล่งที่มา (ถ้ามี)" },
+  "options": {},
+  "attributes": {
+    "quote": { "type": "text", "required": true },
+    "attribution": { "type": "string" }
+  }
+}

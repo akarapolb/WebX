@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/service-hub",
+  "title": "WebX: Service hub (ORST)",
+  "category": "webx-blocks",
+  "icon": "screenoptions",
+  "description": "A digital-service directory — an intro panel with numbered steps, plus a list of service cards. Add \"Service hub step\" blocks for the steps and \"Service hub item\" blocks for the cards (mix them in any order). Synced into page.acf.blocks as a \"service-hub\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "viewAllLabel": { "type": "string", "default": "" },
+    "viewAllUrl": { "type": "string", "default": "" },
+    "introLabel": { "type": "string", "default": "" },
+    "introHeading": { "type": "string", "default": "" },
+    "introLead": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

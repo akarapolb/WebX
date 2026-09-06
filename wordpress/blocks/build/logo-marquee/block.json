@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/logo-marquee",
+  "title": "WebX: Logo marquee",
+  "category": "webx-blocks",
+  "icon": "images-alt2",
+  "description": "A scrolling logo strip. Shared between ORST and RoyalSociety (identical field/items shape). Synced into page.acf.blocks as a \"logo-marquee\" block.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "lead": {
+      "type": "string",
+      "default": ""
+    },
+    "viewAllLabel": {
+      "type": "string",
+      "default": ""
+    },
+    "viewAllUrl": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

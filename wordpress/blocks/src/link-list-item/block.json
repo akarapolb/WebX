@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/link-list-item",
+  "title": "WebX: Link row",
+  "category": "webx-blocks",
+  "icon": "admin-links",
+  "description": "One row inside a WebX: Link list block.",
+  "parent": ["webx/link-list"],
+  "attributes": {
+    "icon": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "desc": { "type": "string", "default": "" },
+    "tag": { "type": "string", "default": "" },
+    "meta": { "type": "string", "default": "" },
+    "href": { "type": "string", "default": "#" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

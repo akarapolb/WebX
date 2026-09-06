@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "page_templates",
+  "info": {
+    "singularName": "page-template",
+    "pluralName": "page-templates",
+    "displayName": "Page Template",
+    "description": "ชุดบล็อกทั้งหน้าที่บันทึกไว้เพื่อนำไปใช้ซ้ำ (Save as template ใน Visual Builder)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "key": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "dialect": {
+      "type": "string",
+      "default": "gov-portal",
+      "description": "เทมเพลตเว็บไซต์ที่บล็อกชุดนี้เขียนไว้ (gov-portal | orst | royalsociety) — Builder จะแสดงเฉพาะที่ตรงกับ publicTemplate ของ tenant"
+    },
+    "blocks": {
+      "type": "json",
+      "description": "บล็อกทั้งหมดของหน้า เก็บในรูปแบบเดียวกับ Visual Builder (dialect ตามฟิลด์ด้านบน)"
+    },
+    "tenantKey": {
+      "type": "string",
+      "description": "workspace ที่เป็นเจ้าของเทมเพลตนี้ — ว่าง = แชร์ให้ทุก workspace. เป็น string ตรง ๆ ไม่ใช่ relation ด้วยเหตุผลเดียวกับ api::page-version.page-version: Visual Builder อ่าน/เขียนผ่าน bookkeeping credential (governance.ts's BOOKKEEPING_UIDS) ซึ่งใช้ได้ทั้ง tenant ที่เป็น Strapi และ WordPress และ filter แบบ flat ของ CmsAdapter กรองด้วย string ได้โดยไม่ต้อง populate relation"
+    }
+  }
+}

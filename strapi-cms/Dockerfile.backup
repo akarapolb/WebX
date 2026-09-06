@@ -1,10 +1,14 @@
-# Standalone image for the db-backup service (docker-compose.yml) — deliberately
-# NOT the same image as the main Strapi app: backup-db.js has zero npm deps
-# (fs/path/child_process only), so this just needs Node + pg_dump + the one
-# script file, not a full Strapi build. Keeps the backup job's image small and
-# its failure modes independent of the app image.
+# Standalone image for the db-backup AND wp-db-backup services
+# (docker-compose.yml) — deliberately NOT the same image as the main Strapi
+# app: backup-db.js has zero npm deps (fs/path/child_process only), so this
+# just needs Node + pg_dump/mysqldump + the one script file, not a full
+# Strapi build. Keeps the backup job's image small and its failure modes
+# independent of the app image. default-mysql-client added alongside
+# postgresql-client so this one image covers both DATABASE_CLIENT values —
+# wp-db-backup (TOR gap audit: WordPress's own database previously had zero
+# backup coverage) reuses this exact image rather than building a second one.
 FROM node:20-slim
-RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client default-mysql-client && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY scripts/backup-db.js ./scripts/backup-db.js
 CMD ["node", "scripts/backup-db.js"]

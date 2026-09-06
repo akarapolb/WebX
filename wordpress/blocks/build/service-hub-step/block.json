@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/service-hub-step",
+  "title": "WebX: Service hub step",
+  "category": "webx-blocks",
+  "icon": "screenoptions",
+  "description": "One numbered step in a WebX: Service hub (ORST) block's intro panel.",
+  "parent": [
+    "webx/service-hub"
+  ],
+  "attributes": {
+    "label": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/news-feed-item",
+  "title": "WebX: News item",
+  "category": "webx-blocks",
+  "icon": "megaphone",
+  "description": "One item inside a WebX: News feed (RoyalSociety) block. The first item in the list renders as the large featured card.",
+  "parent": [
+    "webx/news-feed"
+  ],
+  "attributes": {
+    "date": {
+      "type": "string",
+      "default": ""
+    },
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "body": {
+      "type": "string",
+      "default": ""
+    },
+    "href": {
+      "type": "string",
+      "default": "#"
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

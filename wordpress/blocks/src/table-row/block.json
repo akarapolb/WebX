@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/table-row",
+  "title": "WebX: Table row",
+  "category": "webx-blocks",
+  "icon": "editor-table",
+  "description": "One row inside a WebX: Table block — add \"Table cell\" blocks inside it, one per column, in order.",
+  "parent": ["webx/table"],
+  "attributes": {},
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

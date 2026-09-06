@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/media-tabs-tab",
+  "title": "WebX: Media tab",
+  "category": "webx-blocks",
+  "icon": "screenoptions",
+  "description": "One tab inside a WebX: Media tabs (ORST) block — add \"Media tab item\" blocks inside it.",
+  "parent": [
+    "webx/media-tabs"
+  ],
+  "attributes": {
+    "tabId": {
+      "type": "string",
+      "default": ""
+    },
+    "label": {
+      "type": "string",
+      "default": ""
+    },
+    "kind": {
+      "type": "string",
+      "default": "pub"
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

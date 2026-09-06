@@ -1,0 +1,9 @@
+<?php
+// See notice/render.php's comment — never seen by a real visitor.
+?>
+<div <?php echo get_block_wrapper_attributes(['class' => 'webx-block webx-block--cta-band']); ?>>
+    <?php if (!empty($attributes['eyebrow'])) : ?><span class="webx-eyebrow"><?php echo esc_html($attributes['eyebrow']); ?></span><?php endif; ?>
+    <?php if (!empty($attributes['heading'])) : ?><h2><?php echo esc_html($attributes['heading']); ?></h2><?php endif; ?>
+    <?php if (!empty($attributes['body'])) : ?><p><?php echo esc_html($attributes['body']); ?></p><?php endif; ?>
+    <?php echo $content; ?>
+</div>

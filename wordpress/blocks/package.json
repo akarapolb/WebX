@@ -1,0 +1,13 @@
+{
+  "name": "webx-wp-blocks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native Gutenberg blocks for WordPress-tenant page layout (ORST/RoyalSociety), synced into the same page.acf.blocks JSON the Visual Builder and public-site already read — see wordpress/mu-plugins/webx-blocks-sync.php.",
+  "scripts": {
+    "build": "wp-scripts build",
+    "start": "wp-scripts start"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^30.0.0"
+  }
+}

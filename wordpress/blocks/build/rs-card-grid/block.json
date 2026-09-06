@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/rs-card-grid",
+  "title": "WebX: Card grid (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "grid-view",
+  "description": "RoyalSociety's card grid (image-led cards). Synced into page.acf.blocks as a \"card-grid\" block — see wordpress/mu-plugins/webx-blocks-sync.php. Shape differs from ORST's WebX: Card grid (image instead of icon/tag/meta), so it's a separate block, not a shared one — see acf-fields.php and blocks/src/card-grid for the ORST sibling.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "lead": {
+      "type": "string",
+      "default": ""
+    },
+    "columns": {
+      "type": "string",
+      "default": "3"
+    },
+    "flat": {
+      "type": "boolean",
+      "default": false
+    },
+    "linkLabel": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

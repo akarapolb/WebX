@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/media-grid-item",
+  "title": "WebX: Media card",
+  "category": "webx-blocks",
+  "icon": "format-image",
+  "description": "One card inside a WebX: Media grid block.",
+  "parent": ["webx/media-grid"],
+  "attributes": {
+    "image": { "type": "string", "default": "" },
+    "alt": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "desc": { "type": "string", "default": "" },
+    "tag": { "type": "string", "default": "" },
+    "href": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

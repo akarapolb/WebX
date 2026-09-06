@@ -15,7 +15,15 @@
 # you later, and still needs `wp plugin activate` once WordPress itself is
 # installed (see ../wordpress/bootstrap.sh — a normal plugin, unlike an
 # mu-plugin, needs that explicit activation).
-FROM wordpress:latest
+#
+# Server hardening (TOR gap audit) — `:latest` silently changes what ships on
+# every rebuild (a new WordPress core version, a new PHP version, or a base
+# OS security update, all at once, with no diff to review); pinned to the
+# exact tag this environment was already running (confirmed live via
+# `wp-includes/version.php` + `php -v` in the running container) so a rebuild
+# reproduces the same, already-tested WordPress/PHP/OS combination until
+# someone deliberately bumps this string.
+FROM wordpress:7.1-php8.3-apache
 
 ARG ACF_VERSION=6.8.8
 RUN set -eux; \
@@ -35,5 +43,15 @@ RUN set -eux; \
 #
 # Deploying a NEW or CHANGED mu-plugin file to an EXISTING deployment's
 # volume needs a manual step beyond rebuilding this image — see DEPLOY.md's
-# production checklist.
+# production checklist. The same applies to blocks/build/ below: it's built
+# OUTSIDE this image (see blocks/package.json — `npm run build` there,
+# before `docker build` here) and just copied in, same as mu-plugins/ itself.
 COPY mu-plugins/ /usr/src/wordpress/wp-content/mu-plugins/
+COPY blocks/build/ /usr/src/wordpress/wp-content/mu-plugins/webx-blocks/
+
+# A genuinely custom theme (TOR gap audit — the TOR's §4.4 literally
+# requires "a new custom theme... no ready-made theme," and no
+# wp-content/themes/ existed at all in this headless deployment before this
+# — see theme/webx-theme/style.css's own header comment for what it's
+# actually for). Copied in and activated by bootstrap.sh, same as ACF above.
+COPY theme/webx-theme/ /usr/src/wordpress/wp-content/themes/webx-theme/

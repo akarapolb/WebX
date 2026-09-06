@@ -1,0 +1,16 @@
+{
+  "collectionName": "components_block_featured_promos",
+  "info": { "displayName": "Block: Featured promo", "icon": "bulletList", "description": "แผงโปรโมทเด่นพร้อมเช็คลิสต์และปุ่ม CTA" },
+  "options": {},
+  "attributes": {
+    "eyebrow": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "text" },
+    "items": { "type": "json" },
+    "image": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "primaryLabel": { "type": "string" },
+    "primaryUrl": { "type": "string", "default": "#" },
+    "secondaryLabel": { "type": "string" },
+    "secondaryUrl": { "type": "string", "default": "#" }
+  }
+}

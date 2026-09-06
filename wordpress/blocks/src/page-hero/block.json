@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/page-hero",
+  "title": "WebX: Page hero",
+  "category": "webx-blocks",
+  "icon": "cover-image",
+  "description": "The top hero section of an ORST inner page. Synced into page.acf.blocks as a \"page-hero\" block. Breadcrumb is not exposed here — it isn't editable in the existing Visual Builder either, same parity.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

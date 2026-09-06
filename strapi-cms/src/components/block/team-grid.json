@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_team_grids",
+  "info": { "displayName": "Block: Team grid", "icon": "users", "description": "กริดทีมงาน/บุคลากร (รูป+ชื่อ+ตำแหน่ง)" },
+  "options": {},
+  "attributes": {
+    "heading": { "type": "string" },
+    "items": { "type": "component", "repeatable": true, "component": "block.team-item" }
+  }
+}

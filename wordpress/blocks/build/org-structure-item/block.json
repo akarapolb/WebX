@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/org-structure-item",
+  "title": "WebX: Org structure item",
+  "category": "webx-blocks",
+  "icon": "networking",
+  "description": "One bureau card inside a WebX: Org structure (RoyalSociety) block. Ignored while the block's live feed is turned on.",
+  "parent": [
+    "webx/org-structure"
+  ],
+  "attributes": {
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "body": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

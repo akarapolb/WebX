@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/intro-feature-item",
+  "title": "WebX: Story card",
+  "category": "webx-blocks",
+  "icon": "index-card",
+  "description": "One story card inside a WebX: Intro feature (RoyalSociety) block.",
+  "parent": ["webx/intro-feature"],
+  "attributes": {
+    "label": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "body": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

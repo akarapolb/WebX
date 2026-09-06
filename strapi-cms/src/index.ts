@@ -1,11 +1,13 @@
 import type { Core } from '@strapi/strapi';
 import { errors } from '@strapi/utils';
 import {
-  ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedDemos,
+  ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedOrstRoyalSocietyJobs, seedDemos,
   seedTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
   ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB, seedCmsCore,
-  seedScheduler, ensureEditorPublishPermissions,
+  seedScheduler, ensureEditorPublishPermissions, seedFlatNavItems, ensurePageBuilderEditorPermissions, ensureBlockTypeFieldPermissions,
 } from './seed/seed';
+import { seedCollectionPages } from './seed/seedCollectionPages';
+import { seedFormPages } from './seed/seedFormPages';
 import { adminTenantFor, resolveCustomRolePerms } from './utils/custom-role';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) */
@@ -16,10 +18,21 @@ const SCOPED = new Set([
   'api::complaint.complaint', 'api::application.application', 'api::registration.registration',
   'api::consent-log.consent-log',
   'api::download.download', 'api::ebook.ebook', 'api::gallery.gallery', 'api::popup.popup', 'api::poll.poll',
-  'api::landing.landing',
+  'api::landing.landing', 'api::page.page',
   'api::blog.blog', 'api::catalog.catalog', 'api::weblink.weblink', 'api::top-graphic.top-graphic',
   'api::event.event', 'api::location.location', 'api::sitemap-node.sitemap-node',
   'api::menu-item.menu-item', 'api::contact-message.contact-message',
+  'api::breaking-news.breaking-news',
+  // Deliberately NOT 'plugin::upload.file' here (media library gap, TOR —
+  // search/tag/reuse/crop/caption): confirmed live that NEITHER path this
+  // middleware could otherwise ride on actually reaches it — the upload
+  // plugin's own /upload/* routes call strapi.db.query(FILE_MODEL_UID)
+  // directly (never strapi.documents(uid), per its dist source), and
+  // content-manager's generic collection-types route 403s on it too (the
+  // plugin marks it `content-manager: { visible: false }`). Tenant scoping
+  // for media instead lives entirely in its own purpose-built API —
+  // src/api/media-meta — which does the same filter/stamp/guard job this
+  // middleware does for everything else, just explicitly.
 ]);
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
@@ -191,6 +204,7 @@ export default {
       await seedTenants(strapi);
       await seedContent(strapi);
       await seedJobs(strapi);
+      await seedOrstRoyalSocietyJobs(strapi);
       await seedDemos(strapi);
       await backfillTenant(strapi);
       await seedLanding(strapi);
@@ -198,7 +212,10 @@ export default {
       await enrichGroupB(strapi);
       await seedCmsCore(strapi);
       await seedTenantBContent(strapi);
+      await seedFlatNavItems(strapi);
       await seedModules(strapi);
+      await seedCollectionPages(strapi);
+      await seedFormPages(strapi);
       await seedFulltextDemo(strapi);
       await ensureTenantAnalytics(strapi);
       await ensureTenantLiveChat(strapi);
@@ -206,6 +223,8 @@ export default {
       await seedScheduler(strapi);
       await grantLocalesToEditorRoles(strapi);
       await ensureEditorPublishPermissions(strapi);
+      await ensurePageBuilderEditorPermissions(strapi);
+      await ensureBlockTypeFieldPermissions(strapi);
       await ensurePublicPermissions(strapi);
     } catch (err) {
       strapi.log.error('[bootstrap] seed/setup failed: ' + (err as Error).stack);

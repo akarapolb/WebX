@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/service-gateway",
+  "title": "WebX: Service gateway (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "screenoptions",
+  "description": "A main-service link plus a list of service cards and a numbered process strip. Add \"Service gateway item\" blocks for the cards and \"Service gateway step\" blocks for the process strip (mix them in any order). Synced into page.acf.blocks as a \"service-gateway\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "viewAllLabel": { "type": "string", "default": "" },
+    "viewAllUrl": { "type": "string", "default": "" },
+    "mainLabel": { "type": "string", "default": "" },
+    "mainTitle": { "type": "string", "default": "" },
+    "mainBody": { "type": "string", "default": "" },
+    "mainActionLabel": { "type": "string", "default": "" },
+    "mainHref": { "type": "string", "default": "" },
+    "processLabel": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

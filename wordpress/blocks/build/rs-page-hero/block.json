@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/rs-page-hero",
+  "title": "WebX: Page hero (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "cover-image",
+  "description": "The top hero section of a RoyalSociety inner page. Synced into page.acf.blocks as a \"page-hero\" block — separate from ORST's WebX: Page hero since RS's shape has no action buttons but does have a deep-style variant.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "deep": {
+      "type": "boolean",
+      "default": false
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "lead": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

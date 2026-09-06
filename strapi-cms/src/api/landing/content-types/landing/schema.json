@@ -52,7 +52,17 @@
         "block.image",
         "block.cta-banner",
         "block.feature-grid",
-        "block.custom"
+        "block.custom",
+        "block.embed",
+        "block.collection-list",
+        "block.form",
+        "block.testimonials",
+        "block.logo-cloud",
+        "block.spacer",
+        "block.blockquote",
+        "block.team-grid",
+        "block.tabs",
+        "block.comparison"
       ]
     },
     "abEnabled": {

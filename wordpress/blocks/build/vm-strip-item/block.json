@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/vm-strip-item",
+  "title": "WebX: Statement",
+  "category": "webx-blocks",
+  "icon": "editor-quote",
+  "description": "One statement inside a WebX: Vision/mission strip block — this whole family maps to a plain string array in the JSON, not an object array.",
+  "parent": [
+    "webx/vm-strip"
+  ],
+  "attributes": {
+    "label": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

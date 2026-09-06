@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/mission-grid",
+  "title": "WebX: Mission grid (RoyalSociety)",
+  "category": "webx-blocks",
+  "icon": "star-filled",
+  "description": "An icon + title + body mission/value grid, optionally bound to a live WordPress content feed. Synced into page.acf.blocks as a \"mission-grid\" block.",
+  "attributes": {
+    "blockId": {
+      "type": "string",
+      "default": ""
+    },
+    "eyebrow": {
+      "type": "string",
+      "default": ""
+    },
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "lead": {
+      "type": "string",
+      "default": ""
+    },
+    "linkLabel": {
+      "type": "string",
+      "default": ""
+    },
+    "linkHref": {
+      "type": "string",
+      "default": ""
+    },
+    "sourceEnabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "sourcePostType": {
+      "type": "string",
+      "default": "mission"
+    },
+    "sourceMap": {
+      "type": "string",
+      "default": "mission"
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/mission-grid-item",
+  "title": "WebX: Mission item",
+  "category": "webx-blocks",
+  "icon": "star-filled",
+  "description": "One item inside a WebX: Mission grid (RoyalSociety) block.",
+  "parent": ["webx/mission-grid"],
+  "attributes": {
+    "icon": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "body": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

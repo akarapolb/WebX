@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/news-tabs-tab",
+  "title": "WebX: News tab",
+  "category": "webx-blocks",
+  "icon": "screenoptions",
+  "description": "One tab inside a WebX: News tabs (ORST) block — one featured story plus a row of \"News tab side item\" blocks.",
+  "parent": [
+    "webx/news-tabs"
+  ],
+  "attributes": {
+    "tabId": {
+      "type": "string",
+      "default": ""
+    },
+    "label": {
+      "type": "string",
+      "default": ""
+    },
+    "featuredImage": {
+      "type": "string",
+      "default": ""
+    },
+    "featuredBadge": {
+      "type": "string",
+      "default": ""
+    },
+    "featuredDate": {
+      "type": "string",
+      "default": ""
+    },
+    "featuredCategory": {
+      "type": "string",
+      "default": ""
+    },
+    "featuredTitle": {
+      "type": "string",
+      "default": ""
+    },
+    "featuredBody": {
+      "type": "string",
+      "default": ""
+    },
+    "featuredCtaLabel": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "multiple": true,
+    "reusable": false
+  },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

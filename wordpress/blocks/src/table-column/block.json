@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/table-column",
+  "title": "WebX: Table column",
+  "category": "webx-blocks",
+  "icon": "editor-table",
+  "description": "One header/column label inside a WebX: Table block.",
+  "parent": ["webx/table"],
+  "attributes": {
+    "label": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

@@ -12,5 +12,11 @@ export default {
       handler: 'analytics.summary',
       config: { auth: false, policies: ['global::admin-only'] },
     },
+    {
+      method: 'GET',
+      path: '/analytics/report',
+      handler: 'analytics.report',
+      config: { auth: false, policies: ['global::admin-only'] },
+    },
   ],
 };

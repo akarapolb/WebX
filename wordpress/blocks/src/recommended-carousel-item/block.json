@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/recommended-carousel-item",
+  "title": "WebX: Recommended card",
+  "category": "webx-blocks",
+  "icon": "index-card",
+  "description": "One card inside a WebX: Recommended carousel (RoyalSociety) block.",
+  "parent": ["webx/recommended-carousel"],
+  "attributes": {
+    "image": { "type": "string", "default": "" },
+    "type": { "type": "string", "default": "" },
+    "category": { "type": "string", "default": "" },
+    "title": { "type": "string", "default": "" },
+    "body": { "type": "string", "default": "" },
+    "href": { "type": "string", "default": "#" },
+    "linkLabel": { "type": "string", "default": "" }
+  },
+  "supports": { "html": false, "multiple": true, "reusable": false },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

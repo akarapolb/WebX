@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "webx/link-list",
+  "title": "WebX: Link list",
+  "category": "webx-blocks",
+  "icon": "list-view",
+  "description": "A list of icon+title+description link rows, optionally bound to a live WordPress content feed. Synced into page.acf.blocks as a \"link-list\" block.",
+  "attributes": {
+    "blockId": { "type": "string", "default": "" },
+    "eyebrow": { "type": "string", "default": "" },
+    "heading": { "type": "string", "default": "" },
+    "lead": { "type": "string", "default": "" },
+    "actionLabel": { "type": "string", "default": "" },
+    "actionUrl": { "type": "string", "default": "" },
+    "sourceEnabled": { "type": "boolean", "default": false },
+    "sourcePostType": { "type": "string", "default": "publication" },
+    "sourceMap": { "type": "string", "default": "link" }
+  },
+  "supports": { "html": false, "multiple": true },
+  "textdomain": "webx-blocks",
+  "editorScript": "file:./index.js",
+  "render": "file:./render.php"
+}

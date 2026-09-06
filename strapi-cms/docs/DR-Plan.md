@@ -31,7 +31,9 @@
   - Linux: `0 * * * * cd /app && node scripts/backup-db.js`
   - Windows Task Scheduler: รัน `node scripts/backup-db.js` ทุกชั่วโมง
 - เก็บสำเนา backup ไว้นอก Primary site (object storage/region อื่น) — กัน single point of failure
-- ทดสอบ **restore** อย่างน้อยไตรมาสละครั้ง (DR drill)
+- ทดสอบ **restore** อย่างน้อยไตรมาสละครั้ง (DR drill) — เดิมมีแต่ข้อความนโยบายในเอกสารนี้ ไม่มีการทดสอบจริงเลย (TOR gap audit) จนกระทั่งมี `scripts/restore-test.js`: กู้คืน backup ล่าสุดลงฐานข้อมูล scratch แยกต่างหาก (ไม่แตะฐานข้อมูลจริง) แล้วตรวจสอบจริง (SQLite: `PRAGMA integrity_check` + ตาราง `admin_users` มีข้อมูล · MySQL/Postgres: โหลด dump ลง `<DATABASE_NAME>_restore_test` แล้วตรวจนับตาราง/แถว) จบด้วยการลบฐานข้อมูล scratch ทิ้ง — คืนค่า exit code ไม่เป็นศูนย์เมื่อพัง ตั้ง cron/Task Scheduler รายไตรมาสแบบเดียวกับ `backup-db.js`:
+  - Linux: `0 3 1 */3 * cd /app && node scripts/restore-test.js`
+  - Windows Task Scheduler: รัน `node scripts/restore-test.js` ทุกไตรมาส
 
 ## 4. ขั้นตอนกู้คืน (Restore)
 1. ประเมินเหตุ + ประกาศ DR (ผู้มีอำนาจ)
@@ -51,5 +53,5 @@
 |---|---|
 | Backup DB | รายชั่วโมง |
 | Backup ไฟล์อัปโหลด | รายวัน |
-| ทดสอบ restore (DR drill) | รายไตรมาส |
+| ทดสอบ restore (DR drill) — อัตโนมัติผ่าน `scripts/restore-test.js` | รายไตรมาส |
 | ทบทวนแผน DR | รายปี |

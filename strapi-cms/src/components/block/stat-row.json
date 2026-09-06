@@ -1,0 +1,8 @@
+{
+  "collectionName": "components_block_stat_rows",
+  "info": { "displayName": "Block: Stat row", "icon": "chartBubble", "description": "แถบตัวเลขสถิติ" },
+  "options": {},
+  "attributes": {
+    "items": { "type": "component", "repeatable": true, "component": "block.stat-row-item" }
+  }
+}

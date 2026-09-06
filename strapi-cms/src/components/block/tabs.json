@@ -1,0 +1,10 @@
+{
+  "collectionName": "components_block_tabs",
+  "info": { "displayName": "Block: Tabs / Accordion", "icon": "layout", "description": "แท็บหรือแอคคอร์เดียนสำหรับจัดกลุ่มเนื้อหา — สลับรูปแบบได้ทั้งสองแบบจากข้อมูลชุดเดียว" },
+  "options": {},
+  "attributes": {
+    "heading": { "type": "string" },
+    "layout": { "type": "enumeration", "enum": ["tabs", "accordion"], "default": "tabs" },
+    "items": { "type": "component", "repeatable": true, "component": "block.tab-item" }
+  }
+}

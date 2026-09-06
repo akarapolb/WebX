@@ -49,7 +49,7 @@
     },
     "analytics": {
       "type": "json",
-      "description": "{ ga4: 'G-XXXX', clarity: 'xxxx', enabled: true } — โหลดเมื่อผู้ใช้ยินยอมคุกกี้วิเคราะห์"
+      "description": "{ ga4: 'G-XXXX', clarity: 'xxxx', enabled: true, ga4PropertyId: '123456789' } — ga4/clarity โหลดเมื่อผู้ใช้ยินยอมคุกกี้วิเคราะห์ (สำหรับ gtag.js บนหน้าเว็บ). ga4PropertyId คือ GA4 Property ID ตัวเลข (Admin > Property details — คนละอย่างกับ ga4 measurement id ข้างต้น) ใช้ให้ analytics.summary ดึงตัวเลขจริงจาก GA4 Data API กลับมาแสดงในแดชบอร์ด (ต้องตั้ง GA4_SERVICE_ACCOUNT_EMAIL/GA4_SERVICE_ACCOUNT_KEY ในสภาพแวดล้อมด้วย — ดู utils/ga4.ts)"
     },
     "liveChat": {
       "type": "json",
