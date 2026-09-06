@@ -152,6 +152,15 @@
   --rs-z-mega: 950;
   --rs-z-overlay: 980;
   --rs-z-drawer: 990;
+
+  /* Sticky header's translucent "glass" backdrop — was a literal rgba()
+     baked to this exact light-mode value (03-layout.css's .site-header)
+     until the dark-theme audit caught it: every other themed surface in
+     this file flips via a token, but the header never did, so it stayed
+     cream-on-dark-page after switching themes. Same rs-ground value as
+     before, just promoted to a token so the dark override below can
+     redefine it too. */
+  --rs-header-glass: rgba(251, 247, 239, 0.96);
 }
 
 /* ============================================================================
@@ -201,5 +210,9 @@
   --rs-error-ink: #f597a0;
   --rs-info-bg: rgba(96, 165, 250, 0.14);
   --rs-info-ink: #93c5fd;
+
+  /* Same rs-ground value as this theme's own --rs-ground (#0d1614), just
+     translucent for the header's backdrop-blur glass effect. */
+  --rs-header-glass: rgba(13, 22, 20, 0.94);
 }
 }

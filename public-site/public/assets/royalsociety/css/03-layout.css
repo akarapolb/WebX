@@ -116,7 +116,7 @@
  * ========================================================================== */
 
 .site-header {
-  background: rgba(251, 247, 239, 0.96);
+  background: var(--rs-header-glass);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   /* The rule weight, not the border tint — the header edge is the first
