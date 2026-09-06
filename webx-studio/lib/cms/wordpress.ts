@@ -17,7 +17,7 @@
 //    normalize "publish" -> "published" + a synthesized publishedAt.
 import "server-only";
 import type {
-  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput,
+  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, MediaAssetList, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
 import { sessionToken } from "../strapi";
@@ -71,6 +71,7 @@ const ACF_FIELDS: Record<string, string[]> = {
   "wp:publication": ["icon"],
   "wp:resource": ["icon"],
   "wp:faq": ["icon"],
+  "wp:page": ["blocks"],
 };
 function splitAcfFields(uid: string, data: Record<string, any>): Record<string, any> {
   const acfKeys = ACF_FIELDS[uid];
@@ -84,6 +85,41 @@ function splitAcfFields(uid: string, data: Record<string, any>): Record<string, 
   return Object.keys(acf).length ? { ...rest, acf } : rest;
 }
 
+// ACF free has no Repeater/Flexible Content field, so the Visual Builder's
+// WordPress-backed page layout (wp:page's "blocks" ACF field, see
+// acf-fields.php's group_page_layout) rides on the wire as a JSON-encoded
+// string in a plain textarea, but is an ARRAY everywhere else in this app —
+// VisualBuilder.open() reads data.blocks expecting the same array shape a
+// Strapi dynamic zone returns. Encode/decode right at this boundary so
+// nothing above this module (or public-site's parseBlocks, its own mirror
+// of this same string<->array boundary) ever sees the wire format.
+const ACF_JSON_FIELDS: Record<string, string[]> = { "wp:page": ["blocks"] };
+
+function encodeJsonFields(uid: string, data: Record<string, any>): Record<string, any> {
+  const keys = ACF_JSON_FIELDS[uid];
+  if (!keys) return data;
+  const out = { ...data };
+  for (const k of keys) {
+    // A key absent from `data` means this write doesn't touch it (e.g.
+    // EntryEditor saving just a title) — leave it alone. Encoding it anyway
+    // would inject `blocks: "[]"` into every unrelated save and silently
+    // wipe the page's layout the next time someone e.g. renames the title.
+    if (!(k in out)) continue;
+    out[k] = out[k] == null ? "" : JSON.stringify(out[k]);
+  }
+  return out;
+}
+function decodeJsonFields(uid: string, entry: any): any {
+  const keys = ACF_JSON_FIELDS[uid];
+  if (!keys || !entry) return entry;
+  for (const k of keys) {
+    const v = entry[k];
+    if (typeof v !== "string") continue; // already decoded, or genuinely absent
+    try { entry[k] = v.trim() ? JSON.parse(v) : []; } catch { entry[k] = []; }
+  }
+  return entry;
+}
+
 async function authHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
   const token = await sessionToken(); // the Basic-auth string itself, see lib/wordpress.ts
   if (!token) throw new CmsError("Unauthenticated", 401);
@@ -94,6 +130,20 @@ function richText(field: any): string {
   if (field == null) return "";
   if (typeof field === "string") return field;
   return field.raw ?? field.rendered ?? "";
+}
+
+/** WordPress's /wp/v2/media shape -> MediaAsset. `media_details.sizes` only
+ * exists for images WP could generate thumbnails for (never for PDFs, etc)
+ * — falls back to the file's own url, same as the Strapi adapter's
+ * toMediaAsset. Caption/alt/tags all come back through richText/acf exactly
+ * like every other WP field this file already normalizes. */
+function toMediaAsset(m: any): MediaAsset {
+  return {
+    id: m.id, url: m.source_url, mime: m.mime_type, name: m.slug,
+    thumbnailUrl: m.media_details?.sizes?.thumbnail?.source_url || m.source_url,
+    width: m.media_details?.width, height: m.media_details?.height,
+    caption: richText(m.caption) || undefined, alt: m.alt_text || undefined, tags: m.acf?.tags || undefined,
+  };
 }
 
 // Phase 5 multi-tenancy — WordPress has no native tenant concept, so a
@@ -145,10 +195,10 @@ export async function ensureWtenantTerm(key: string): Promise<void> {
   wtenantCache = { at: 0, byKey: new Map(), byId: new Map() }; // invalidate so the new term is visible on the very next lookup
 }
 
-function normalizePost(p: any, terms?: typeof wtenantCache): any {
+function normalizePost(p: any, terms?: typeof wtenantCache, uid?: string): any {
   const published = p.status === "publish";
   const wtenantId: number | undefined = Array.isArray(p.wtenant) ? p.wtenant[0] : undefined;
-  return {
+  return decodeJsonFields(uid || "", {
     // Phase 10 — spread ACF values in first so the fixed fields below always
     // win on key collision, and so EntryEditor's plain value-shape heuristic
     // (lib/cms/wordpress.ts callers never see "acf" as a nested object) can
@@ -166,7 +216,7 @@ function normalizePost(p: any, terms?: typeof wtenantCache): any {
     updatedAt: p.modified,
     slug: p.slug,
     tenantKey: wtenantId != null ? terms?.byId.get(wtenantId) ?? null : null,
-  };
+  });
 }
 
 // governance.ts's tenantStamp() sends {tenant: "<key>"} (a plain string, its
@@ -210,7 +260,7 @@ export const wordpressAdapter: CmsAdapter = {
       // anything WP-specific) can supply a title — WP's REST API rejects a
       // completely empty post create. One entry per registered type.
       return Object.entries(POST_TYPES).map(([uid, t]) => ({
-        uid, name: t.name, api: t.restBase, attributes: { title: { type: "string", required: true } },
+        uid, name: t.name, api: t.restBase, pluralName: t.restBase, attributes: { title: { type: "string", required: true } },
       }));
     },
   },
@@ -239,7 +289,7 @@ export const wordpressAdapter: CmsAdapter = {
       const rows = await json(r);
       const total = Number(r.headers.get("X-WP-Total") ?? (rows?.length || 0));
       const pageCount = Number(r.headers.get("X-WP-TotalPages") ?? 1);
-      return { data: (rows || []).map((p: any) => normalizePost(p, terms)) as T[], total, pageCount };
+      return { data: (rows || []).map((p: any) => normalizePost(p, terms, uid)) as T[], total, pageCount };
     },
     async get<T = any>(uid: string, id: string): Promise<T | null> {
       const { restBase } = resolvePostType(uid);
@@ -248,29 +298,29 @@ export const wordpressAdapter: CmsAdapter = {
         wtenantTerms(),
       ]);
       if (!r.ok) throw new CmsError("get failed", r.status);
-      return normalizePost(await json(r), terms) as T;
+      return normalizePost(await json(r), terms, uid) as T;
     },
     async create<T = any>(uid: string, data: Record<string, any>): Promise<T> {
       const { restBase } = resolvePostType(uid);
       const terms = await wtenantTerms();
-      const body = splitAcfFields(uid, tenantKeyToWtenant(data, terms));
+      const body = splitAcfFields(uid, encodeJsonFields(uid, tenantKeyToWtenant(data, terms)));
       const r = await fetch(BASE + "/wp/v2/" + restBase, {
         method: "POST", headers: await authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status: "draft", ...body }), cache: "no-store",
       });
       if (!r.ok) throw new CmsError("create failed", r.status);
-      return normalizePost(await json(r), terms) as T;
+      return normalizePost(await json(r), terms, uid) as T;
     },
     async update<T = any>(uid: string, id: string, data: Record<string, any>): Promise<T> {
       const { restBase } = resolvePostType(uid);
       const terms = await wtenantTerms();
-      const body = splitAcfFields(uid, tenantKeyToWtenant(data, terms));
+      const body = splitAcfFields(uid, encodeJsonFields(uid, tenantKeyToWtenant(data, terms)));
       const r = await fetch(BASE + "/wp/v2/" + restBase + "/" + encodeURIComponent(id), {
         method: "POST", headers: await authHeaders({ "Content-Type": "application/json" }), // WP REST uses POST for partial updates
         body: JSON.stringify(body), cache: "no-store",
       });
       if (!r.ok) throw new CmsError("update failed", r.status);
-      return normalizePost(await json(r), terms) as T;
+      return normalizePost(await json(r), terms, uid) as T;
     },
     async remove(uid: string, id: string): Promise<void> {
       const { restBase } = resolvePostType(uid);
@@ -299,7 +349,14 @@ export const wordpressAdapter: CmsAdapter = {
   },
 
   media: {
-    async upload(file: File): Promise<MediaAsset> {
+    // Media library gap (TOR — search/tag/reuse/crop/caption) — media had
+    // no tenant scoping at all before this (governance.ts's media.upload
+    // wrapper called straight through, no tenant involved); now stamped
+    // with the SAME wtenant taxonomy every other WP-hosted type here uses.
+    // `tenantKey` is required here (unlike the Strapi adapter, WordPress
+    // has no admin-session-to-tenant resolution of its own) — governance.ts
+    // resolves it once via resolveEffectiveTenant and passes it through.
+    async upload(file: File, tenantKey?: string): Promise<MediaAsset> {
       const buf = await file.arrayBuffer();
       const r = await fetch(BASE + "/wp/v2/media", {
         method: "POST",
@@ -311,7 +368,45 @@ export const wordpressAdapter: CmsAdapter = {
       });
       if (!r.ok) throw new CmsError("upload failed", r.status);
       const m = await json(r);
-      return { id: m.id, url: m.source_url, mime: m.mime_type, name: m.slug };
+      if (tenantKey) {
+        const terms = await wtenantTerms();
+        const id = terms.byKey.get(tenantKey);
+        if (id != null) {
+          try {
+            await fetch(BASE + "/wp/v2/media/" + m.id, {
+              method: "POST", headers: await authHeaders({ "Content-Type": "application/json" }),
+              body: JSON.stringify({ wtenant: [id] }), cache: "no-store",
+            });
+          } catch { /* upload itself already succeeded; a failed tag just means it won't show in the library until claimed there */ }
+        }
+      }
+      return toMediaAsset(m);
+    },
+    async list(opts): Promise<MediaAssetList> {
+      const terms = await wtenantTerms();
+      const id = opts?.tenantKey ? terms.byKey.get(opts.tenantKey) : undefined;
+      const params = new URLSearchParams({ wtenant: String(id ?? -1), per_page: String(opts?.pageSize || 30), page: String(opts?.page || 1), context: "edit" });
+      if (opts?.search) params.set("search", opts.search);
+      const r = await fetch(BASE + "/wp/v2/media?" + params.toString(), { headers: await authHeaders(), cache: "no-store" });
+      if (!r.ok) throw new CmsError("media list failed", r.status);
+      const rows = (await json(r)) || [];
+      const total = Number(r.headers.get("X-WP-Total") || rows.length);
+      return { data: rows.map(toMediaAsset), total, page: opts?.page || 1, pageSize: opts?.pageSize || 30 };
+    },
+    async update(id, patch): Promise<MediaAsset> {
+      const body: Record<string, any> = {};
+      if (patch.caption !== undefined) body.caption = patch.caption ?? "";
+      if (patch.alt !== undefined) body.alt_text = patch.alt ?? "";
+      if (patch.tags !== undefined) body.acf = { tags: patch.tags ?? "" };
+      const r = await fetch(BASE + "/wp/v2/media/" + id + "?context=edit", {
+        method: "POST", headers: await authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body), cache: "no-store",
+      });
+      if (!r.ok) throw new CmsError("media update failed", r.status);
+      return toMediaAsset(await json(r));
+    },
+    async remove(id): Promise<void> {
+      const r = await fetch(BASE + "/wp/v2/media/" + id + "?force=true", { method: "DELETE", headers: await authHeaders(), cache: "no-store" });
+      if (!r.ok) throw new CmsError("media remove failed", r.status);
     },
   },
 

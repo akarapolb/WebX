@@ -29,7 +29,7 @@ import "server-only";
 import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm } from "./wordpress";
 import { CmsError } from "./types";
-import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult } from "./types";
+import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList } from "./types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
 import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
@@ -76,10 +76,11 @@ const SCOPED = new Set([
   "api::complaint.complaint", "api::application.application", "api::registration.registration",
   "api::consent-log.consent-log",
   "api::download.download", "api::ebook.ebook", "api::gallery.gallery", "api::popup.popup", "api::poll.poll",
-  "api::landing.landing",
+  "api::landing.landing", "api::page.page",
   "api::blog.blog", "api::catalog.catalog", "api::weblink.weblink", "api::top-graphic.top-graphic",
   "api::event.event", "api::location.location", "api::sitemap-node.sitemap-node",
   "api::menu-item.menu-item", "api::contact-message.contact-message",
+  "api::breaking-news.breaking-news",
 ]);
 
 // Phase 5 — WordPress-hosted content types that carry tenant scoping (via the
@@ -99,6 +100,14 @@ const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
 const SSO_CREDENTIAL_UID = "api::sso-credential.sso-credential";
 const CUSTOM_ROLE_UID = "api::custom-role.custom-role";
+const MENU_ITEM_UID = "api::menu-item.menu-item";
+// Breaking-news banner — same reasoning as MENU_ITEM_UID directly above:
+// site-chrome content that always lives in Strapi regardless of a tenant's
+// content engine, so a WordPress-session admin (ORST/RoyalSociety) can
+// still manage it. See BreakingNewsManager.tsx.
+const BREAKING_NEWS_UID = "api::breaking-news.breaking-news";
+const PAGE_VERSION_UID = "api::page-version.page-version";
+const PAGE_TEMPLATE_UID = "api::page-template.page-template";
 // Every uid the Users/Field Access/Audit Log/Releases pages read or write —
 // always Strapi-hosted regardless of which engine THIS session authenticated
 // against (Phase 5's module header). Without this, a WordPress-session admin
@@ -106,8 +115,26 @@ const CUSTOM_ROLE_UID = "api::custom-role.custom-role";
 // the WordPress adapter (which only knows wp:post) and get a hard error —
 // found live while verifying the first WordPress-engine tenant in Phase 6.
 // custom-role is included so a WordPress-session admin's own custom-role
-// enforcement lookups also work (custom roles are engine-agnostic).
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID]);
+// enforcement lookups also work (custom roles are engine-agnostic). menu-item
+// is included so the Nav Manager works the same way — site-chrome nav items
+// always live in Strapi's tenant table regardless of a tenant's content
+// engine, same as brand/contact/footerColumns already do. page-version is
+// the Visual Builder's undo-safety-net (History panel) for the same reason —
+// a WordPress-hosted page (wp:page) still snapshots into Strapi, matching
+// every other engine-agnostic bookkeeping type here; see VisualBuilder.tsx's
+// saveVersion/loadHistory for the tenantKey filter this requires (WordPress
+// post ids are small integers that can collide across tenants, unlike
+// Strapi's own document ids). NOTE: api::ab-event.ab-event is deliberately
+// NOT included — A/B testing stays Strapi/landing.landing-only; the
+// Builder's A/B panel is gated behind isLanding, which is never true for a
+// wp:page, so it has nothing to fix here.
+// page-template joins for the identical reason page-version did: the
+// Builder's saved whole-page block sets are authoring metadata, not site
+// content, and a WordPress-session admin has to be able to save and apply
+// them too — WordPress has nowhere to keep one, so they live in Strapi for
+// every engine. Its own tenantKey string field (not a relation, same shape
+// as page-version's) is what scopes them per workspace; see Toolbox.tsx.
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, BREAKING_NEWS_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
 type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string> };
@@ -596,8 +623,42 @@ export async function reconcileSsoDeprovisioning(): Promise<{ tenantsChecked: nu
 
 export type CustomRolePermission = {
   view?: boolean; create?: boolean; update?: boolean; delete?: boolean; publish?: boolean;
+  // Deny-by-default like every other flag here — a scoped role must be
+  // explicitly granted this to save a page/home-page containing a
+  // block.embed (raw HTML/CSS/JS, runs on the live site for every visitor).
+  // See PAGE_LIKE_UIDS/hasEmbedBlock below for where this is enforced.
+  embedCode?: boolean;
   hidden?: string[]; readonly?: string[];
 };
+
+// The SCOPED uids whose `blocks` field can contain block.embed — the Custom
+// Code block's server-side permission gate (embedCode above) only needs to
+// inspect writes to these. NOTE: api::home-page.home-page has no `blocks`
+// field at all (fixed hero/stats/featuredPromo components) and is unused by
+// the current Visual Builder — the actual page-builder content types are
+// page.page (general pages, and DGA's own homepage via its "home-blocks"
+// slug — see HomePage.tsx), landing.landing (the splash/enter-site page, a
+// smaller block set), and wp:page (WordPress-backed ORST/RoyalSociety
+// pages — see wordpress.ts's ACF_JSON_FIELDS and blockDialect.ts).
+const PAGE_LIKE_UIDS = new Set(["api::page.page", "api::landing.landing", "wp:page"]);
+function hasEmbedBlock(data: Record<string, any>): boolean {
+  let blocks = data?.blocks;
+  // This runs on the raw request body BEFORE it reaches wordpress.ts's own
+  // JSON encode/decode boundary, so a Builder-originated write always has
+  // `blocks` as a real array here regardless of uid — the string case below
+  // only exists to defend a direct API caller who posts the wp:page wire
+  // format straight through. Unparseable fails CLOSED, deliberately unlike
+  // every other check in this file: the cost of a false negative here is
+  // raw JS running in every visitor's browser.
+  if (typeof blocks === "string") {
+    try { blocks = JSON.parse(blocks); } catch { return true; }
+  }
+  // `__component` is the Strapi dynamic-zone discriminator (page.page /
+  // landing.landing); `type` is the wire shape ORST/RoyalSociety pages use
+  // instead (see blockDialect.ts) — check both so this gate covers every
+  // PAGE_LIKE_UIDS entry with one function.
+  return Array.isArray(blocks) && blocks.some((b) => b?.__component === "block.embed" || b?.type === "embed");
+}
 export type CustomRoleInput = { roleKey?: string; name: string; permissions: Record<string, CustomRolePermission> };
 
 let customRoleCache: { at: number; list: any[] } = { at: 0, list: [] };
@@ -716,7 +777,7 @@ export async function assignCustomRole(tenantKey: string, email: string, roleKey
 }
 
 type ResolvedCustomRolePerms = {
-  view: boolean; create: boolean; update: boolean; delete: boolean; publish: boolean; hidden: string[]; readonly: string[];
+  view: boolean; create: boolean; update: boolean; delete: boolean; publish: boolean; embedCode: boolean; hidden: string[]; readonly: string[];
 };
 
 /** null = no custom role in play — caller falls back to today's unchanged
@@ -733,7 +794,7 @@ async function resolveCustomRolePermissions(user: CurrentUser, eff: Tenant | nul
   const perm: CustomRolePermission = (role.permissions || {})[uid] || {};
   return {
     view: Boolean(perm.view), create: Boolean(perm.create), update: Boolean(perm.update),
-    delete: Boolean(perm.delete), publish: Boolean(perm.publish),
+    delete: Boolean(perm.delete), publish: Boolean(perm.publish), embedCode: Boolean(perm.embedCode),
     hidden: Array.isArray(perm.hidden) ? perm.hidden : [],
     readonly: Array.isArray(perm.readonly) ? perm.readonly : [],
   };
@@ -1071,6 +1132,26 @@ async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff
     const owner = await trueOwnerOf(uid, id);
     if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
   }
+  if (uid === MENU_ITEM_UID && id) {
+    const owner = await trueOwnerOf(uid, id);
+    if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  }
+  if (uid === BREAKING_NEWS_UID && id) {
+    const owner = await trueOwnerOf(uid, id);
+    if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  }
+  if (uid === PAGE_TEMPLATE_UID && id) {
+    // trueOwnerOf can't answer for this uid — its internal endpoint reads a
+    // tenant RELATION and page-template scopes by a plain tenantKey string,
+    // so it would return null and wave the write through. Read the row with
+    // the same bookkeeping credential the write itself would use instead.
+    // A globally-shared template (empty tenantKey) is deliberately NOT
+    // editable here: `eff` is non-null, so this caller is workspace-scoped
+    // and must own the row outright — sharing one globally is a one-way
+    // door only an unscoped super admin can re-open.
+    const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(PAGE_TEMPLATE_UID, id)).catch(() => null);
+    if ((row?.tenantKey || "") !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  }
 }
 
 /** Engine-appropriate tenant stamp for a create/update body — Strapi wants a
@@ -1078,6 +1159,14 @@ async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff
  * a wtenant term id itself, since it owns that cache). */
 function tenantStamp(uid: string, eff: Tenant | null): Record<string, any> {
   if (!eff) return {};
+  // page-template scopes by a plain tenantKey STRING, not a relation (see
+  // its schema.json for why), so it can't ride SCOPED's relation stamp
+  // below — but it still has to be stamped rather than trusted from the
+  // client, or a scoped caller could POST a template carrying another
+  // workspace's key. An unscoped super admin (eff === null, returned above)
+  // keeps whatever the client sent, which is what lets them save a
+  // key-less template shared with every workspace.
+  if (uid === PAGE_TEMPLATE_UID) return { tenantKey: eff.key };
   if (uid.startsWith("wp:")) return WP_SCOPED.has(uid) ? { tenant: eff.key } : {};
   return SCOPED.has(uid) ? { tenant: eff.id } : {};
 }
@@ -1306,7 +1395,33 @@ export const governed = {
       return { removed: true, accountDeleted };
     },
   },
-  media: { upload: async (file: File) => (await activeAdapter()).media.upload(file) },
+  media: {
+    // Media library gap (TOR — search/tag/reuse/crop/caption). `tenantKey`
+    // only matters to the WordPress adapter (Strapi resolves its own
+    // caller-tenant server-side via the admin bearer token — see
+    // strapi-cms/src/api/media-meta) but resolving it once here, uniformly,
+    // is simpler than duplicating resolveEffectiveTenant per call site.
+    async upload(file: File): Promise<MediaAsset> {
+      const user = await requireUser();
+      const eff = await resolveEffectiveTenant(user.email);
+      return (await activeAdapter()).media.upload(file, eff?.key);
+    },
+    async list(opts?: { search?: string; page?: number; pageSize?: number }): Promise<MediaAssetList> {
+      const user = await requireUser();
+      const eff = await resolveEffectiveTenant(user.email);
+      return (await activeAdapter()).media.list({ ...opts, tenantKey: eff?.key });
+    },
+    async update(id: string, patch: { caption?: string | null; alt?: string | null; tags?: string | null }): Promise<MediaAsset> {
+      const user = await requireUser();
+      const eff = await resolveEffectiveTenant(user.email);
+      return (await activeAdapter()).media.update(id, patch, eff?.key);
+    },
+    async remove(id: string): Promise<void> {
+      const user = await requireUser();
+      const eff = await resolveEffectiveTenant(user.email);
+      return (await activeAdapter()).media.remove(id, eff?.key);
+    },
+  },
 
   async list<T = any>(uid: string, query?: EntryQuery): Promise<EntryList<T>> {
     return withContentAdapter(uid, async (cms) => {
@@ -1354,6 +1469,9 @@ export const governed = {
     await enforceItemLimit(eff, uid);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.create) throw new CmsError("Your role does not permit creating this content", 403);
+    if (crp && !crp.embedCode && PAGE_LIKE_UIDS.has(uid) && hasEmbedBlock(data)) {
+      throw new CmsError("Your role does not permit adding custom code blocks", 403);
+    }
     let d = await stripPolicyFields(user, uid, data);
     d = stripCustomRoleFields(crp, d);
     d = { ...d, ...tenantStamp(uid, eff) };
@@ -1370,6 +1488,9 @@ export const governed = {
     await assertBookkeepingWriteAllowed(uid, id, eff);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.update) throw new CmsError("Your role does not permit updating this content", 403);
+    if (crp && !crp.embedCode && PAGE_LIKE_UIDS.has(uid) && hasEmbedBlock(data)) {
+      throw new CmsError("Your role does not permit adding custom code blocks", 403);
+    }
     let d = await stripPolicyFields(user, uid, data);
     d = stripCustomRoleFields(crp, d);
     d = { ...d, ...tenantStamp(uid, eff) };
@@ -1414,6 +1535,43 @@ export const governed = {
   },
 };
 
+// ReviewBoard.tsx's "Publish" action only appears once a review reaches
+// `approved`, but that was UI-only — doPublish() itself never checked, so
+// any publish-permitted user could hit Save/Publish directly and skip an
+// in-progress review entirely, ignoring an "in_review"/"changes" state a
+// reviewer explicitly hasn't cleared yet (found during the ORST/RoyalSociety
+// TOR gap audit). Review rows are opt-in (created by EntryEditor.tsx's
+// "submit for review" action, not for every entry — see api::review.review's
+// own schema comment), so the fix must only gate content that actually HAS
+// an engaged review, not require one for every publish everywhere.
+// strapiBookkeeping (not activeAdapter/withContentAdapter) is deliberate:
+// Review is Strapi-hosted data regardless of which engine the CALLING
+// session is on — same reasoning as page-version/page-template — and the
+// existing client-side `cms.entries.list("api::review.review", ...)` call in
+// EntryEditor.tsx routes through the session's own activeAdapter() instead,
+// which would silently break for a WordPress-engine session; this check
+// deliberately doesn't inherit that gap. Fails OPEN on a lookup error (e.g.
+// the scheduler token being briefly unavailable) — blocking every publish
+// because a status check itself failed would be a far worse regression than
+// the bypass this closes.
+async function assertReviewApprovedIfEngaged(uid: string, id: string): Promise<void> {
+  try {
+    const { data } = await strapiBookkeeping(() =>
+      strapiAdapter.entries.list<any>("api::review.review", {
+        pageSize: 1, sort: "updatedAt:DESC",
+        filter: [{ field: "documentRef", op: "eq", value: id }, { field: "contentType", op: "eq", value: uid }],
+      })
+    );
+    const rv = data[0];
+    if (rv && rv.stage !== "approved" && rv.stage !== "published") {
+      throw new CmsError(`This entry has an in-progress review (${rv.stage}) — resolve it in Reviews before publishing`, 409);
+    }
+  } catch (e) {
+    if (e instanceof CmsError) throw e;
+    // Lookup itself failed (network/credential hiccup) — fail open.
+  }
+}
+
 // Shared by the public publish() above and processDueReleases() below — the
 // scheduler has no admin session, so it calls this directly with a synthetic
 // system actor instead of going through requireUser(). `adapter` defaults to
@@ -1422,12 +1580,21 @@ export const governed = {
 // one release can mix engines regardless of which one this session (if any)
 // is authenticated against — see adapterFor above.
 async function doPublish(uid: string, id: string, actor: CurrentUser, opts?: { locale?: string }, adapter?: CmsAdapter): Promise<void> {
-  const ad = adapter ?? (await activeAdapter());
   const eff = await resolveEffectiveTenant(actor.email);
   const crp = await resolveCustomRolePermissions(actor, eff, uid);
   if (crp && !crp.publish) throw new CmsError("Your role does not permit publishing this content", 403);
-  await tenantGuard(uid, id, eff, ad);
-  await ad.publish.publish(uid, id, opts);
+  await assertReviewApprovedIfEngaged(uid, id);
+  const run = async (ad: CmsAdapter) => { await tenantGuard(uid, id, eff, ad); await ad.publish.publish(uid, id, opts); };
+  // Mirrors withContentAdapter's own routing (see that function's header
+  // comment) — without this, a bookkeeping uid (e.g. menu-item) published
+  // under a WordPress-engine session's activeAdapter() would route through
+  // the WordPress adapter, which doesn't know that uid, and fail. unpublish
+  // (below) already does this correctly via withContentAdapter; this brings
+  // publish() to parity, including the service-token credential elevation
+  // (not just swapping which adapter object is used).
+  if (adapter) await run(adapter);
+  else if (BOOKKEEPING_UIDS.has(uid)) await strapiBookkeeping(() => run(strapiAdapter));
+  else await run(await activeAdapter());
   await writeAudit("publish", uid, id, actor, eff?.key ?? null);
   // Covers both the direct publish() path and every item the release
   // scheduler publishes (Phase 7) — one debounced rebuild either way, not

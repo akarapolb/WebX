@@ -3,7 +3,7 @@
 // server-side into governance.ts + strapi.ts as of Phase 1). This is what
 // components actually get from `cms` in lib/cms/index.ts.
 import type {
-  BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput, RemoveUserResult,
+  BrowserCmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, MediaAssetList, CurrentUser, AdminUser, NewUserInput, RemoveUserResult,
 } from "./types";
 import { CmsError } from "./types";
 
@@ -86,19 +86,41 @@ export const browserAdapter: BrowserCmsAdapter = {
   },
 
   media: {
-    // Uploads were never tenant/RBAC/audit-governed (plugin::upload.file
-    // isn't in Strapi's SCOPED set), so this keeps going straight through
-    // the existing byte-preserving pass-through rather than a new governed
-    // route — nothing for governance.ts to add here.
+    // Media library gap (TOR — search/tag/reuse/crop/caption) — routes
+    // through governed.media.* (via /api/cms/media) for BOTH engines now,
+    // not the old Strapi-only /api/strapi/upload byte-pass-through: that
+    // bypassed governance entirely (uploads had no tenant scoping at all),
+    // which the media library specifically needed fixed — see
+    // governance.ts's media wrapper and strapi-cms/src/api/media-meta.
     async upload(file: File): Promise<MediaAsset> {
       const fd = new FormData();
       fd.append("files", file);
-      const r = await fetch("/api/strapi/upload", { method: "POST", body: fd });
+      const r = await fetch(BASE + "/media", { method: "POST", body: fd });
       if (!r.ok) throw new CmsError("upload failed", r.status);
       const j = await json(r);
-      const f = Array.isArray(j) ? j[0] : j;
-      if (!f?.id) throw new Error("upload response missing id");
-      return { id: f.id, url: f.url, mime: f.mime, name: f.name };
+      if (!j?.id) throw new Error("upload response missing id");
+      return j;
+    },
+    async list(opts): Promise<MediaAssetList> {
+      const params = new URLSearchParams();
+      if (opts?.search) params.set("search", opts.search);
+      if (opts?.page) params.set("page", String(opts.page));
+      if (opts?.pageSize) params.set("pageSize", String(opts.pageSize));
+      const qs = params.toString();
+      const r = await fetch(BASE + "/media" + (qs ? "?" + qs : ""));
+      if (!r.ok) throw new CmsError("media list failed", r.status);
+      return (await json(r)) || { data: [], total: 0, page: 1, pageSize: 30 };
+    },
+    async update(id, patch): Promise<MediaAsset> {
+      const r = await fetch(BASE + "/media/" + encodeURIComponent(id), {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+      });
+      if (!r.ok) throw new CmsError("media update failed", r.status);
+      return json(r);
+    },
+    async remove(id): Promise<void> {
+      const r = await fetch(BASE + "/media/" + encodeURIComponent(id), { method: "DELETE" });
+      if (!r.ok) throw new CmsError("media remove failed", r.status);
     },
   },
 

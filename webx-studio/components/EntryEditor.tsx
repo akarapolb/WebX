@@ -4,6 +4,8 @@ import Icon from "./Icon";
 import RichText from "./RichText";
 import { useLang } from "./LangProvider";
 import { cms, CmsError } from "@/lib/cms";
+import type { MediaAsset } from "@/lib/cms";
+import MediaLibrary from "./MediaLibrary";
 
 type Kind = "input" | "textarea" | "rich";
 type Field = { key: string; value: string; initial: string; kind: Kind };
@@ -46,9 +48,10 @@ export default function EntryEditor({
   const [busy, setBusy] = useState<"" | "save" | "publish">("");
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const [assisting, setAssisting] = useState(false);
-  const [media, setMedia] = useState<{ key: string; url: string; mime?: string; name?: string; newId?: number } | null>(null);
+  const [media, setMedia] = useState<{ key: string; url: string; mime?: string; name?: string; newId?: number }[]>([]);
   const [rels, setRels] = useState<{ key: string; items: string[] }[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingKey, setUploadingKey] = useState("");
+  const [pickerKey, setPickerKey] = useState("");
   const [review, setReview] = useState<any>(null);
   const [revBusy, setRevBusy] = useState(false);
   const [trBusy, setTrBusy] = useState(false);
@@ -77,19 +80,22 @@ export default function EntryEditor({
           });
         fs.sort((a, b) => ["input", "textarea", "rich"].indexOf(a.kind) - ["input", "textarea", "rich"].indexOf(b.kind));
         setFields(fs);
-        // media + relations (arrays of records)
-        let m: { key: string; url: string; mime?: string; name?: string } | null = null;
+        // media + relations (arrays of records). Every schema-declared media
+        // key gets its own uploader — even when empty (new entries) — not
+        // just the first one found (see the plan's Part 2 step 1: this used
+        // to hardcode mk[0], which silently hid every media field but the
+        // first, e.g. video.subtitles behind video.thumbnail).
+        const m: { key: string; url: string; mime?: string; name?: string }[] = [];
         const mk = mediaKeys || [];
-        if (mk.length) {
-          // schema-declared media field — show the uploader even when empty (new entries)
-          const k = mk[0]; const v = e[k];
-          m = (v && typeof v === "object" && typeof v.url === "string") ? { key: k, url: v.url, mime: v.mime, name: v.name } : { key: k, url: "" };
+        for (const k of mk) {
+          const v = e[k];
+          m.push((v && typeof v === "object" && typeof v.url === "string") ? { key: k, url: v.url, mime: v.mime, name: v.name } : { key: k, url: "" });
         }
         const rs: { key: string; items: string[] }[] = [];
         for (const k of Object.keys(e)) {
-          if (SYS.has(k) || k === "localizations") continue;
+          if (SYS.has(k) || k === "localizations" || mk.includes(k)) continue;
           const v = e[k];
-          if (!m && v && typeof v === "object" && !Array.isArray(v) && typeof v.url === "string") { m = { key: k, url: v.url, mime: v.mime, name: v.name }; }
+          if (v && typeof v === "object" && !Array.isArray(v) && typeof v.url === "string") { m.push({ key: k, url: v.url, mime: v.mime, name: v.name }); }
           else if (Array.isArray(v) && v.length && typeof v[0] === "object") {
             rs.push({ key: k, items: v.slice(0, 12).map((o: any) => o.title || o.name || o.label || ("#" + (o.documentId ?? o.id))) });
           }
@@ -169,25 +175,35 @@ export default function EntryEditor({
     }, 14);
   }
 
-  async function upload(file: File) {
-    setUploading(true); setMsg(null);
+  async function upload(key: string, file: File) {
+    setUploadingKey(key); setMsg(null);
     try {
       const asset = await cms.media.upload(file);
-      setMedia((m) => ({ key: m?.key || "coverImage", url: asset.url, mime: asset.mime, name: asset.name, newId: asset.id }));
+      setMedia((arr) => arr.map((m) => (m.key === key ? { ...m, url: asset.url, mime: asset.mime, name: asset.name, newId: asset.id } : m)));
     } catch (err) {
       if (err instanceof CmsError) setMsg({ t: "Upload failed (HTTP " + err.status + ")", ok: false });
       else setMsg({ t: "Upload failed", ok: false });
     }
-    finally { setUploading(false); }
+    finally { setUploadingKey(""); }
+  }
+
+  // Media library gap (TOR — search/tag/reuse/crop/caption) — "reuse" half:
+  // pick a previously-uploaded asset instead of always uploading a fresh
+  // file. Same field-state update as upload() above, just from an asset
+  // that already exists rather than a freshly-uploaded one.
+  function pick(key: string, asset: MediaAsset) {
+    setMedia((arr) => arr.map((m) => (m.key === key ? { ...m, url: asset.url, mime: asset.mime, name: asset.name, newId: asset.id } : m)));
+    setPickerKey("");
   }
 
   async function save() {
     const changed = fields.filter((f) => f.value !== f.initial);
-    if (changed.length === 0 && !media?.newId) { setMsg({ t: t("e.nochange"), ok: false }); return; }
+    const mediaChanged = media.filter((m) => m.newId);
+    if (changed.length === 0 && mediaChanged.length === 0) { setMsg({ t: t("e.nochange"), ok: false }); return; }
     setBusy("save"); setMsg(null);
     const payload: Record<string, any> = {};
     changed.forEach((f) => (payload[f.key] = f.value));
-    if (media?.newId) payload[media.key] = media.newId;
+    mediaChanged.forEach((m) => (payload[m.key] = m.newId));
     try {
       await cms.entries.update(uid, docId, payload, locOpt);
       setFields((f) => f.map((x) => ({ ...x, initial: x.value })));
@@ -208,10 +224,11 @@ export default function EntryEditor({
       // saved state (found live: typed a real title/body, published, the
       // live post still said "Untitled Post" with no content).
       const changed = fields.filter((f) => f.value !== f.initial);
-      if (changed.length > 0 || media?.newId) {
+      const mediaChanged = media.filter((m) => m.newId);
+      if (changed.length > 0 || mediaChanged.length > 0) {
         const payload: Record<string, any> = {};
         changed.forEach((f) => (payload[f.key] = f.value));
-        if (media?.newId) payload[media.key] = media.newId;
+        mediaChanged.forEach((m) => (payload[m.key] = m.newId));
         await cms.entries.update(uid, docId, payload, locOpt);
         setFields((f) => f.map((x) => ({ ...x, initial: x.value })));
       }
@@ -357,20 +374,32 @@ export default function EntryEditor({
             );
           })}
 
-          {media && (
-            <div className="fld">
-              <label>{labelize(media.key)}</label>
+          {media.map((m) => (
+            <div className="fld" key={m.key}>
+              <label>{labelize(m.key)}</label>
               <div className="ed-media">
-                {media.url
-                  ? (isImageFile(media.mime, media.url)
-                    ? <img className="ed-img" src={mediaSrc(media.url)} alt="" />
-                    : <a className="ed-img ed-file" href={mediaSrc(media.url)} target="_blank" rel="noreferrer"><Icon name="doc" /><span>{media.name || media.url.split("/").pop()}</span></a>)
+                {m.url
+                  ? (isImageFile(m.mime, m.url)
+                    ? <img className="ed-img" src={mediaSrc(m.url)} alt="" />
+                    : <a className="ed-img ed-file" href={mediaSrc(m.url)} target="_blank" rel="noreferrer"><Icon name="doc" /><span>{m.name || m.url.split("/").pop()}</span></a>)
                   : <div className="ed-img ed-img--none">{t("m.none")}</div>}
                 <label className="btn btn--g" style={{ cursor: "pointer" }}>
-                  <Icon name="img" />{uploading ? t("m.uploading") : t("m.change")}
-                  <input type="file" hidden disabled={uploading}
-                    onChange={(ev) => ev.target.files?.[0] && upload(ev.target.files[0])} />
+                  <Icon name="img" />{uploadingKey === m.key ? t("m.uploading") : t("m.change")}
+                  <input type="file" hidden disabled={uploadingKey !== ""}
+                    onChange={(ev) => ev.target.files?.[0] && upload(m.key, ev.target.files[0])} />
                 </label>
+                <button type="button" className="btn btn--g" onClick={() => setPickerKey(m.key)}>
+                  <Icon name="doc" />{t("m.browse")}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {pickerKey && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}
+              onClick={() => setPickerKey("")}>
+              <div style={{ width: 720, maxWidth: "92vw", maxHeight: "80vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+                <MediaLibrary onPick={(asset) => pick(pickerKey, asset)} />
               </div>
             </div>
           )}

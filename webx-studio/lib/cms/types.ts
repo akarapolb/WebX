@@ -26,15 +26,31 @@ export type ContentTypeInfo = {
   uid: string;
   name: string;
   api: string;
+  /** REST plural path segment (e.g. "articles") — Strapi's own info.pluralName,
+   * needed anywhere a caller builds a public REST URL from a uid (public-site
+   * has no admin session to re-derive this any other way). */
+  pluralName: string;
   attributes: Record<string, any>;
 };
 
 export type MediaAsset = {
   id: number;
+  documentId?: string;
   url: string;
   mime?: string;
   name?: string;
+  /** Thumbnail URL when the backend generated one (Strapi's responsive
+   * formats) — falls back to `url` itself when absent (e.g. WordPress,
+   * or a non-image file), same as MediaLibrary.tsx's own display logic. */
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  caption?: string;
+  alt?: string;
+  tags?: string;
 };
+
+export type MediaAssetList = { data: MediaAsset[]; total: number; page: number; pageSize: number };
 
 export type CurrentUser = {
   id: any;
@@ -127,7 +143,23 @@ export interface CmsAdapter {
     unpublish(uid: string, id: string, opts?: { locale?: string }): Promise<void>;
   };
   media: {
-    upload(file: File): Promise<MediaAsset>;
+    /** `tenantKey` is a no-op for the Strapi adapter (that engine resolves
+     * the caller's tenant itself, server-side, from the admin bearer token
+     * — see strapi-cms/src/api/media-meta) but is REQUIRED for WordPress,
+     * which has no session-to-tenant resolution of its own; governance.ts
+     * resolves it once (resolveEffectiveTenant) and passes it to whichever
+     * adapter is active uniformly. */
+    upload(file: File, tenantKey?: string): Promise<MediaAsset>;
+    /** Real centralized media library (TOR gap — search/tag/reuse/crop/
+     * caption): list this tenant's own previously-uploaded assets, newest
+     * first, optionally filtered by a search term against name/caption/
+     * alt-text/tags. */
+    list(opts?: { search?: string; page?: number; pageSize?: number; tenantKey?: string }): Promise<MediaAssetList>;
+    /** Partial update — an omitted field is left untouched, an explicit
+     * `null` clears it (matches strapi-cms/src/api/media-meta's own PATCH
+     * semantics). */
+    update(id: string, patch: { caption?: string | null; alt?: string | null; tags?: string | null }, tenantKey?: string): Promise<MediaAsset>;
+    remove(id: string, tenantKey?: string): Promise<void>;
   };
   auth: {
     me(): Promise<CurrentUser | null>;

@@ -27,7 +27,9 @@ import { STRAPI_URL } from "@/lib/config";
 
 const ALLOWED_EXACT: Record<string, Set<string>> = {
   "api/analytics/summary": new Set(["GET"]),
+  "api/analytics/report": new Set(["GET"]),
   "content-manager/collection-types/api::block-type.block-type": new Set(["GET"]),
+  "content-manager/collection-types/api::icon.icon": new Set(["GET"]),
   "api/ai/answer": new Set(["GET"]),
   "api/search": new Set(["GET"]),
   "api/console/context": new Set(["GET"]),

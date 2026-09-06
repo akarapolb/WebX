@@ -33,7 +33,18 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-strapi}
       DATABASE_USERNAME: ${DATABASE_USERNAME:-strapi}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD}
-      DATABASE_SSL: "false"
+      # Off by default to match this compose file's own `db` service (same
+      # Docker network, not a public hop) — set DATABASE_SSL=true in .env for
+      # any deployment where Strapi and the database aren't on the same
+      # trusted private network (TOR Security: encryption in transit).
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+      DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
+      DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}
+      # AES-256-GCM key encrypting citizen PII at rest on contact-message/
+      # registration (src/utils/pii-crypto.ts) — PDPA. Separate key from
+      # ENCRYPTION_KEY (Strapi core's own) and WEBX_ENCRYPTION_KEY (webx's,
+      # below) by design — different security domains.
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:?set PII_ENCRYPTION_KEY}
       # Public-site's real production domain(s), comma-separated — needed so
       # its browser-side calls (e.g. the cookie-consent banner) pass CORS.
       # Leave unset for a Docker-Compose-only deploy where public-site is
@@ -256,6 +267,51 @@ services:
       WP_ADMIN_EMAIL: ${WORDPRESS_ADMIN_EMAIL:?set WORDPRESS_ADMIN_EMAIL}
     entrypoint: ["sh", "-c", "sh /bootstrap.sh; tail -f /dev/null"]
 
+  # WordPress's own daily database + content backup — TOR gap audit finding:
+  # the db-backup service above only ever covered Strapi's Postgres database
+  # and uploads volume. For every tenant created with engine:"wordpress"
+  # (which is what ORST/RoyalSociety actually are), their real content lives
+  # entirely in wp-mysql + wp-content-data, and neither had any backup
+  # coverage at all until this service. Same image, same script
+  # (backup-db.js, now mysqldump-capable) as db-backup, just pointed at the
+  # WordPress database/volume instead — see that service's own comment for
+  # the "local disk only, off-site is still on you" caveat, which applies
+  # here too. wp-content-data holds WordPress core files alongside real
+  # uploads (it's the whole /var/www/html, not a dedicated uploads dir like
+  # Strapi's) — backed up as one tarball for the same reason a full-site
+  # backup is normally taken rather than trying to carve out just
+  # wp-content/uploads from a bind-mounted core install.
+  wp-db-backup:
+    build:
+      context: ./strapi-cms
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    profiles: ["wordpress"]
+    depends_on:
+      wp-mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_CLIENT: mysql
+      DATABASE_HOST: wp-mysql
+      DATABASE_PORT: 3306
+      DATABASE_NAME: wordpress
+      DATABASE_USERNAME: wordpress
+      DATABASE_PASSWORD: ${WORDPRESS_DB_PASSWORD:?set WORDPRESS_DB_PASSWORD}
+      UPLOADS_SRC: /app/uploads-src
+      UPLOAD_PREFIX: wp-content
+      BACKUP_KEEP: ${BACKUP_KEEP:-30}
+      INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - wp-db-backups:/app/backups
+      - wp-content-data:/app/uploads-src:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          node scripts/backup-db.js || echo "[wp-db-backup] backup failed"
+          sleep "$$INTERVAL_SECONDS"
+        done
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     restart: unless-stopped
@@ -298,4 +354,5 @@ volumes:
   db-backups:
   wp-db-data:
   wp-content-data:
+  wp-db-backups:
   keycloak-data:

@@ -1,20 +1,45 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import Icon from "./Icon";
 import RichText from "./RichText";
 import InlineText from "./InlineText";
 import BlockTypeEditor, { BlockType } from "./BlockTypeEditor";
+import Toolbox, { type PageTemplate } from "./Toolbox";
+import IconManager, { CustomIcon } from "./IconManager";
+import IconPicker from "./IconPicker";
+import IconSpriteDefs from "./blockPreview/IconSpriteDefs";
+import RealPreview from "./blockPreview/RealPreview";
+import { FEATURE_ICONS, FEATURE_THEMES, STAT_ICONS } from "./blockPreview/iconChoices";
+import type { Path } from "./blockPreview/editing";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
-import { cms, CmsError } from "@/lib/cms";
+import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
+import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
+import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
 
 type Block = Record<string, any> & { __component: string };
-type Page = { docId: string; locale?: string; title: string };
+// `tenantKey` — only ever set for a WordPress page (wordpress.ts's
+// normalizePost() derives it from the wtenant taxonomy term on every read)
+// — is what lets open() resolve the RIGHT per-page dialect for a session
+// with no single home tenant of its own (see open()'s own comment).
+type Page = { docId: string; locale?: string; title: string; tenantKey?: string };
 type Device = "desktop" | "tablet" | "mobile";
 
 const LANDING_UID = "api::landing.landing";
+const PAGE_UID = "api::page.page";
+// A WordPress-hosted page (ORST/RoyalSociety) — see wordpress.ts's
+// POST_TYPES/ACF_JSON_FIELDS and wordpress/mu-plugins/acf-fields.php's
+// group_page_layout. Its blocks live in a different dialect (blockDialect.ts)
+// than the two Strapi uids above, translated at open()/pageBody() only.
+const WP_PAGE_UID = "wp:page";
 const PV_UID = "api::page-version.page-version";
 const AB_UID = "api::ab-event.ab-event";
+// Saved whole-page block sets — the Toolbox's Templates tab (see Toolbox.tsx
+// and strapi-cms/src/api/page-template). Strapi-only storage even for a
+// WordPress-hosted page: a template is Builder authoring metadata, not site
+// content, and WordPress has no equivalent place to keep one.
+const TPL_UID = "api::page-template.page-template";
 function toLocalInput(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso); if (isNaN(d.getTime())) return "";
@@ -44,14 +69,395 @@ function diffBlocks(prev: any[], curr: any[]): { added: number; removed: number;
   }
   return { added, removed, changed, rows };
 }
+// `cat` groups the palette below into scannable sections once there were
+// enough block types that a single flat grid (20+ and growing) became a
+// pure scroll-and-scan exercise — see BLOCK_CATEGORIES just below.
 const TYPES = [
-  { comp: "block.hero", key: "vb.hero", icon: "layout", fields: [{ k: "kicker" }, { k: "heading" }, { k: "subheading", ta: true }, { k: "ctaLabel" }, { k: "ctaUrl" }], def: { heading: "New hero", subheading: "Describe your offer here", ctaLabel: "Get started" } },
-  { comp: "block.richtext", key: "vb.richtext", icon: "doc", fields: [{ k: "body", rich: true }], def: { body: "<p>Write something compelling…</p>" } },
-  { comp: "block.cta-banner", key: "vb.cta", icon: "cta", fields: [{ k: "heading" }, { k: "text", ta: true }, { k: "buttonLabel" }, { k: "buttonUrl" }], def: { heading: "Ready to start?", text: "", buttonLabel: "Get started", buttonUrl: "#" } },
-  { comp: "block.image", key: "vb.image", icon: "img", fields: [{ k: "caption" }], def: { caption: "" } },
-  { comp: "block.feature-grid", key: "vb.features", icon: "grid", fields: [{ k: "heading" }], def: { heading: "Features", items: [{ title: "Feature", text: "" }, { title: "Feature", text: "" }, { title: "Feature", text: "" }] } },
+  { comp: "block.hero", key: "vb.hero", icon: "layout", cat: "content", fields: [{ k: "kicker" }, { k: "heading" }, { k: "subheading", ta: true }, { k: "ctaLabel" }, { k: "ctaUrl" }], def: { heading: "New hero", subheading: "Describe your offer here", ctaLabel: "Get started" } },
+  { comp: "block.richtext", key: "vb.richtext", icon: "doc", cat: "content", fields: [{ k: "body", rich: true }], def: { body: "<p>Write something compelling…</p>" } },
+  { comp: "block.cta-banner", key: "vb.cta", icon: "cta", cat: "content", fields: [{ k: "heading" }, { k: "text", ta: true }, { k: "buttonLabel" }, { k: "buttonUrl" }], def: { heading: "Ready to start?", text: "", buttonLabel: "Get started", buttonUrl: "#" } },
+  { comp: "block.image", key: "vb.image", icon: "img", cat: "content", fields: [{ k: "caption" }], def: { caption: "" } },
+  { comp: "block.feature-grid", key: "vb.features", icon: "grid", cat: "grids", fields: [{ k: "heading" }], def: { heading: "Features", items: [{ title: "Feature", text: "" }, { title: "Feature", text: "" }, { title: "Feature", text: "" }] } },
+  // Live-data blocks (highlights/news-panel/video-channel/awards/faq): hold
+  // only framing config — the content itself is pulled at request time from
+  // the tenant's own banners/articles/videos/awards/faqs collections (see
+  // public-site/components/blocks/BlockRenderer.tsx), same as the legacy
+  // hardcoded sections already do. Nothing to preview inline here.
+  { comp: "block.highlights", key: "vb.highlights", icon: "img", cat: "live", fields: [], def: {} },
+  { comp: "block.stat-row", key: "vb.statrow", icon: "grid", cat: "grids", fields: [], def: { items: [{ icon: "users", value: "0", label: "Label" }, { icon: "grid", value: "0", label: "Label" }] } },
+  { comp: "block.news-panel", key: "vb.newspanel", icon: "doc", cat: "live", fields: [{ k: "newsTabLabel" }, { k: "articleTabLabel" }], def: { newsTabLabel: "DGA News", articleTabLabel: "บทความ" } },
+  { comp: "block.video-channel", key: "vb.videochannel", icon: "img", cat: "live", fields: [{ k: "title" }], def: { title: "DGA Channel" } },
+  { comp: "block.awards", key: "vb.awards", icon: "grid", cat: "live", fields: [{ k: "eyebrow" }, { k: "title" }, { k: "subtitle", ta: true }], def: { eyebrow: "ความภาคภูมิใจของเรา", title: "DGA Auditorium", subtitle: "" } },
+  { comp: "block.faq", key: "vb.faq", icon: "doc", cat: "live", fields: [{ k: "eyebrow" }, { k: "title" }], def: { eyebrow: "ถาม–ตอบ", title: "คำถามที่พบบ่อย" } },
+  { comp: "block.featured-promo", key: "vb.featuredpromo", icon: "cta", cat: "promo", fields: [{ k: "eyebrow" }, { k: "title" }, { k: "description", ta: true }, { k: "primaryLabel" }, { k: "primaryUrl" }, { k: "secondaryLabel" }, { k: "secondaryUrl" }], def: { title: "New featured promo", primaryLabel: "Get started", primaryUrl: "#", items: [] } },
+  // Webflow-style Embed escape hatch — raw HTML/CSS/JS, for cases the block
+  // library can't cover. `html` runs as-is on the live site (see
+  // BlockRenderer.tsx's EmbedBlock) — gated server-side by governance.ts's
+  // embedCode custom-role permission, not by anything in this file.
+  { comp: "block.embed", key: "vb.embed", icon: "code", cat: "promo", fields: [{ k: "label" }, { k: "html", code: true }], def: { label: "", html: "" } },
+  // Webflow-style Collection List — binds to ANY content type (see
+  // LISTABLE_UIDS below), renders a card grid, no per-type component
+  // needed. Only `heading` is a plain field; the content-type + field
+  // mappings get a bespoke sidebar block (see the block.collection-list
+  // conditional further down), same as block.custom's dynamic form.
+  { comp: "block.collection-list", key: "vb.collectionlist", icon: "card", cat: "grids", fields: [{ k: "heading" }],
+    def: { heading: "", contentTypeUid: "", pluralName: "", titleField: "", imageField: "", excerptField: "", dateField: "", linkField: "", bodyField: "", linkToDetail: false,
+      layout: "grid", videoUrlField: "", sortField: "createdAt", sortDir: "desc", pageSize: 12 } },
+  // Public-facing forms (contact/complaint/application/registration) —
+  // bound to one of a fixed, small set of write-only content types (see
+  // FORM_FIELD_DEFS). Unlike block.collection-list, WHICH fields appear is
+  // not admin-configurable — only the framing text below is. The
+  // content-type/mode picker gets a bespoke sidebar block further down.
+  { comp: "block.form", key: "vb.form", icon: "inbox", cat: "promo",
+    fields: [{ k: "heading" }, { k: "consentText", ta: true }, { k: "submitLabel" }, { k: "successMessage", ta: true }],
+    def: { heading: "ติดต่อเรา", contentTypeUid: "", mode: "submit",
+      consentText: "ข้าพเจ้ายินยอมให้เก็บรวบรวมและใช้ข้อมูลตามนโยบายความเป็นส่วนตัว (PDPA)",
+      submitLabel: "ส่งข้อมูล", successMessage: "ส่งข้อมูลเรียบร้อยแล้ว ขอบคุณที่ติดต่อเรา" } },
+  // Small, self-contained blocks — same "framing block + repeatable item
+  // component" shape as feature-grid/stat-row above, items edited via a
+  // bespoke sidebar block further down (same convention as those two).
+  { comp: "block.testimonials", key: "vb.testimonials", icon: "msg", cat: "promo", fields: [{ k: "heading" }],
+    def: { heading: "เสียงจากผู้ใช้บริการ", items: [{ quote: "", author: "", role: "" }] } },
+  { comp: "block.logo-cloud", key: "vb.logocloud", icon: "grid", cat: "grids", fields: [{ k: "heading" }],
+    def: { heading: "", items: [] } },
+  { comp: "block.team-grid", key: "vb.teamgrid", icon: "users", cat: "grids", fields: [{ k: "heading" }],
+    def: { heading: "ทีมงานของเรา", items: [{ name: "", role: "" }] } },
+  { comp: "block.blockquote", key: "vb.blockquote", icon: "msg", cat: "content", fields: [{ k: "quote", ta: true }, { k: "attribution" }],
+    def: { quote: "", attribution: "" } },
+  // No generic `fields` at all — style/size are enums, not text, so this
+  // gets a small bespoke sidebar (like block.form's mode picker) instead.
+  { comp: "block.spacer", key: "vb.spacer", icon: "layout", cat: "content", fields: [],
+    def: { style: "space", size: "md" } },
+  // Generic tabs/accordion — one item list, two display modes (b.layout).
+  { comp: "block.tabs", key: "vb.tabs", icon: "layout", cat: "grids", fields: [{ k: "heading" }],
+    def: { heading: "", layout: "tabs", items: [{ title: "Tab 1", body: "" }, { title: "Tab 2", body: "" }] } },
+  // Parallel comparison/pricing cards — see the bespoke sidebar's own note
+  // on why this isn't a synchronized row-by-row matrix.
+  { comp: "block.comparison", key: "vb.comparison", icon: "grid", cat: "grids", fields: [{ k: "heading" }],
+    def: { heading: "", columns: [{ name: "Plan A", features: [] }, { name: "Plan B", features: [] }] } },
 ];
-const metaOf = (c: string) => TYPES.find((t) => t.comp === c);
+// ORST's own 14 block types (public-site/templates/orst/Blocks.tsx) — a
+// completely different dialect (`type`, not `__component`; see
+// blockDialect.ts) and a completely different visual design (verified: zero
+// shared CSS tokens or class names with gov-portal). `tpl: "orst"` is what
+// paletteTypes below filters on so a gov-portal tenant never sees these and
+// vice versa. Every entry's `comp` here is already namespaced
+// ("orst." + Blocks.tsx's own type string) so ALL_TYPES stays one flat,
+// collision-free array — metaOf/iconOf/labelOf/add/addAt/compName/aMeta
+// need no changes at all because of this.
+//
+// Only ONE repeatable list per block type is exposed here (the `items`
+// descriptor the generic editor below reads) even where Blocks.tsx supports
+// more than one (e.g. page-hero also has a breadcrumb array, cta-band/
+// two-column also have `actions`) — picked whichever list an editor is most
+// likely to actually touch; the rest keeps whatever was seeded and can be
+// hand-edited later via a raw-JSON view, matching this codebase's existing
+// "not every field needs a no-code control in v1" precedent (see
+// block.comparison's parallel-cards-not-matrix decision above). `table`
+// has no items editor at all — its `columns`/`rows` shape is a genuine 2D
+// grid the single-list `items` descriptor can't express.
+//
+// rich-text deliberately has NO `html` field in this palette — Blocks.tsx
+// renders `b.html` via dangerouslySetInnerHTML, and exposing it here would
+// hand every Builder editor a raw-script injection point on a live .go.th
+// site with no permission gate (see governance.ts's hasEmbedBlock, which
+// this palette avoids needing to extend by simply never offering the
+// field). Only the safe, escaped `paragraphs` list is editable.
+const ORST_TYPES = [
+  { comp: "orst.page-hero", key: "vb.orst.pagehero", icon: "layout", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "actions", fields: [{ k: "label" }, { k: "href" }, { k: "variant", select: ["", "ghost"] }], def: { label: "", href: "#" } },
+    def: { heading: "หัวข้อหน้า", lead: "", actions: [] } },
+  { comp: "orst.rich-text", key: "vb.orst.richtext", icon: "doc", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "width", select: ["", "full"] }],
+    items: { key: "paragraphs", scalar: true, def: "" },
+    def: { heading: "", paragraphs: ["เขียนเนื้อหาที่นี่"] } },
+  { comp: "orst.card-grid", key: "vb.orst.cardgrid", icon: "card", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "columns", select: ["1", "2", "3", "4"] }],
+    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }, { k: "meta" }, { k: "tag" }, { k: "href" }],
+      def: { icon: "i-file", title: "หัวข้อ", body: "", href: "#" } },
+    def: { heading: "", columns: "3", items: [] } },
+  { comp: "orst.feature-list", key: "vb.orst.featurelist", icon: "grid", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "columns", select: ["1", "2", "3", "4"] }],
+    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }], def: { icon: "i-shield", title: "หัวข้อ", body: "" } },
+    def: { heading: "", columns: "3", items: [] } },
+  { comp: "orst.stat-row", key: "vb.orst.statrow", icon: "grid", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "items", fields: [{ k: "value" }, { k: "label" }, { k: "note" }], def: { value: "0", label: "ป้ายกำกับ" } },
+    def: { heading: "", items: [] } },
+  { comp: "orst.link-list", key: "vb.orst.linklist", icon: "doc", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "desc", ta: true }, { k: "tag" }, { k: "meta" }, { k: "href" }],
+      def: { icon: "i-file", title: "หัวข้อ", href: "#" } },
+    def: { heading: "", items: [] } },
+  { comp: "orst.media-grid", key: "vb.orst.mediagrid", icon: "img", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "columns", select: ["1", "2", "3", "4"] }],
+    items: { key: "items", fields: [{ k: "image" }, { k: "alt" }, { k: "title" }, { k: "desc", ta: true }, { k: "tag" }, { k: "href" }],
+      def: { image: "", title: "หัวข้อ" } },
+    def: { heading: "", columns: "3", items: [] } },
+  { comp: "orst.steps", key: "vb.orst.steps", icon: "layout", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "items", fields: [{ k: "title" }, { k: "body", ta: true }], def: { title: "ขั้นตอน", body: "" } },
+    def: { heading: "", items: [] } },
+  { comp: "orst.two-column", key: "vb.orst.twocolumn", icon: "layout", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "subheading" }, { k: "image" }, { k: "imageAlt" }, { k: "imageSide", select: ["", "left"] }],
+    items: { key: "paragraphs", scalar: true, def: "" },
+    def: { heading: "", subheading: "", image: "", paragraphs: [] } },
+  { comp: "orst.contact-info", key: "vb.orst.contactinfo", icon: "msg", cat: "orst", tpl: "orst",
+    fields: [{ k: "address", ta: true }, { k: "phone" }, { k: "email" }, { k: "hours" }, { k: "mapEmbed" }],
+    def: { address: "", phone: "", email: "", hours: "" } },
+  // Ported from ContactPage.tsx during its full decomposition into blocks
+  // (see app/orst/[page]/page.tsx) — a hero with an attached info-card,
+  // which page-hero (no such card) doesn't model.
+  { comp: "orst.contact-hero", key: "vb.orst.contacthero", icon: "layout", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "cta1Label" }, { k: "cta1Url" }, { k: "cta2Label" }, { k: "cta2Url" },
+      { k: "officeHours" }, { k: "phone" }, { k: "email" }, { k: "address", ta: true }],
+    def: { heading: "ติดต่อเรา", lead: "", cta1Label: "ส่งข้อความถึงเรา", cta1Url: "#contact-form", cta2Label: "ดูแผนที่และการเดินทาง", cta2Url: "https://www.google.com/maps" } },
+  // The form's own fields (name/email/phone/subject/message) are fixed —
+  // they're tied to a real Strapi content type's schema (see Blocks.tsx's
+  // ContactFormBlock comment). Only framing text is editable here, same
+  // convention as gov-portal's own block.form.
+  { comp: "orst.contact-form", key: "vb.orst.contactform", icon: "inbox", cat: "orst", tpl: "orst",
+    fields: [{ k: "kicker" }, { k: "heading" }, { k: "intro", ta: true }],
+    def: { kicker: "Contact Form", heading: "ส่งข้อความถึงเรา", intro: "กรอกข้อมูลให้ครบถ้วน เจ้าหน้าที่จะพิจารณาและติดต่อกลับตามช่องทางที่ท่านระบุ" } },
+  // Ported from KnowledgePage.tsx during its full decomposition — a hero
+  // with an attached stat-list aside, distinct from contact-hero's info
+  // card. The source page's search box/quick-chips were non-functional
+  // decoration (confirmed by that page's own file comment) and were
+  // dropped rather than ported inert, per the user's own "simplify to real
+  // content" call.
+  { comp: "orst.stats-hero", key: "vb.orst.statshero", icon: "layout", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "panelHeading" }, { k: "note", ta: true }],
+    items: { key: "stats", fields: [{ k: "label" }, { k: "value" }], def: { label: "ป้ายกำกับ", value: "0" } },
+    def: { heading: "หัวข้อ", lead: "", panelHeading: "ภาพรวม", stats: [] } },
+  // Ported from HomePage.tsx during its full decomposition. A third,
+  // distinct hero style (see Blocks.tsx's HomeHero comment) — no
+  // breadcrumb/actions, no info card.
+  { comp: "orst.home-hero", key: "vb.orst.homehero", icon: "layout", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    def: { heading: "หัวข้อหน้าแรก", lead: "" } },
+  // media-tabs/news-tabs/service-hub/logo-marquee: only top-level framing
+  // is exposed here — the tabs/items arrays are genuinely nested (tabs
+  // containing items, or featured+side groups) in a shape the generic
+  // single-list items editor can't represent, same scope line as the table
+  // block's columns/rows. Edit the tabs/items content via the Content
+  // screen (raw JSON) for now; a nested-items editor is a natural follow-up
+  // if this turns out to need frequent hands-on editing.
+  { comp: "orst.media-tabs", key: "vb.orst.mediatabs", icon: "grid", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    def: { heading: "คลังสื่อและองค์ความรู้", tabs: [] } },
+  { comp: "orst.news-tabs", key: "vb.orst.newstabs", icon: "doc", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    def: { heading: "ข่าวสารและกิจกรรม", tabs: [] } },
+  { comp: "orst.service-hub", key: "vb.orst.servicehub", icon: "inbox", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" },
+      { k: "introLabel" }, { k: "introHeading" }, { k: "introLead", ta: true }],
+    def: { heading: "บริการประชาชนดิจิทัล", steps: [], items: [] } },
+  { comp: "orst.logo-marquee", key: "vb.orst.logomarquee", icon: "grid", cat: "orst", tpl: "orst",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    def: { heading: "หน่วยงานและระบบที่เกี่ยวข้อง", items: [] } },
+  // The one no-code "compose a new block" escape hatch for this template —
+  // see Blocks.tsx's FlexPanel for the full rationale. `layout` picks which
+  // of 6 pre-built, already-styled arrangements to render as; everything
+  // else is the same generic fields/items shape every other type here uses,
+  // so no new sidebar code was needed for this either.
+  { comp: "orst.flex-panel", key: "vb.orst.flexpanel", icon: "layout", cat: "orst", tpl: "orst",
+    // `tone` only affects the "banner" layout's icon/color (Blocks.tsx's
+    // FlexPanel), and "banner" is the one layout that never reads `items` —
+    // hiding both elsewhere keeps the sidebar from showing controls that
+    // silently do nothing for whichever layout is currently selected.
+    fields: [{ k: "layout", select: ["cards", "banner", "list", "cta", "stats", "feature"] }, { k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true },
+      { k: "tone", select: ["info", "warn", "success"], when: (b: any) => b.layout === "banner" }],
+    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "หัวข้อ" },
+      when: (b: any) => b.layout !== "banner" },
+    def: { layout: "cards", heading: "", items: [] } },
+];
+// RoyalSociety's own 22 block types (public-site/templates/royalsociety/
+// Blocks.tsx) — same "shared vocabulary, per-template skin" split as ORST's
+// own set just above: several of these conceptually mirror an ORST type
+// (page-hero/card-grid/faq/table/notice/cta-band/logo-marquee/contact-info/
+// contact-form) but render RoyalSociety's own `.rs-*`/`.about-*`/`.ks-*`
+// classes and its own inline-SVG RsIcon set — zero shared CSS with ORST or
+// gov-portal (see Blocks.tsx's own header comment). `tpl: "royalsociety"` is
+// what paletteTypes filters on, `comp` is namespaced the same mechanical way
+// ("royalsociety." + Blocks.tsx's own type string), so this can never
+// collide with "block.*" or "orst.*" either.
+//
+// `intro-feature` deliberately has NO `html` field exposed, same reasoning
+// as `orst.rich-text` — that field is a bespoke server-side merge from the
+// wp:page "about" post's own native content (see app/royalsociety/[page]/
+// page.tsx), not a Builder-editable raw-HTML sink.
+const ROYALSOCIETY_TYPES = [
+  { comp: "royalsociety.page-hero", key: "vb.rs.pagehero", icon: "layout", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "variant", select: ["", "deep"] }],
+    def: { heading: "หัวข้อหน้า", lead: "" } },
+  { comp: "royalsociety.about-hero", key: "vb.rs.abouthero", icon: "layout", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "subtitle" }, { k: "lead", ta: true }, { k: "action1Label" }, { k: "action1Href" }, { k: "action2Label" }, { k: "action2Href" }, { k: "image" }],
+    def: { heading: "เกี่ยวกับราชบัณฑิตยสภา" } },
+  { comp: "royalsociety.home-hero", key: "vb.rs.homehero", icon: "layout", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }],
+    def: { heading: "หัวข้อหน้าแรก" } },
+  { comp: "royalsociety.trust-strip", key: "vb.rs.truststrip", icon: "grid", cat: "royalsociety", tpl: "royalsociety",
+    fields: [],
+    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }], def: { icon: "i-book", title: "หัวข้อ" } },
+    def: { items: [] } },
+  { comp: "royalsociety.news-feed", key: "vb.rs.newsfeed", icon: "doc", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    items: { key: "items", fields: [{ k: "date" }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "หัวข้อข่าว" } },
+    def: { heading: "ข่าวสารและกิจกรรมล่าสุด", items: [] } },
+  { comp: "royalsociety.list-panel", key: "vb.rs.listpanel", icon: "doc", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "items", fields: [{ k: "date" }, { k: "tag" }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "หัวข้อ" } },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.card-grid", key: "vb.rs.cardgrid", icon: "card", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "columns", select: ["2", "3", "4"] }, { k: "variant", select: ["", "flat"] }, { k: "linkLabel" }],
+    items: { key: "items", fields: [{ k: "title" }, { k: "body", ta: true }, { k: "image" }, { k: "href" }], def: { title: "หัวข้อ" } },
+    def: { heading: "", columns: "3", items: [] } },
+  { comp: "royalsociety.stats-steps", key: "vb.rs.statssteps", icon: "grid", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "items", scalar: true, def: "" },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.contact-info", key: "vb.rs.contactinfo", icon: "msg", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "heading" }, { k: "address", ta: true }, { k: "phone" }, { k: "email" }, { k: "hours" }, { k: "mapEmbed" }],
+    def: { heading: "", address: "", phone: "", email: "", hours: "" } },
+  { comp: "royalsociety.contact-form", key: "vb.rs.contactform", icon: "inbox", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    def: { heading: "ส่งเรื่องถึงเรา" } },
+  { comp: "royalsociety.intro-feature", key: "vb.rs.introfeature", icon: "layout", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "highlightLabel" }, { k: "highlightText", ta: true }],
+    items: { key: "items", fields: [{ k: "label" }, { k: "title" }, { k: "body", ta: true }], def: { label: "", title: "", body: "" } },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.timeline", key: "vb.rs.timeline", icon: "doc", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "items", fields: [{ k: "year" }, { k: "statusLabel" }, { k: "title" }, { k: "body", ta: true }], def: { title: "เหตุการณ์" } },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.mission-grid", key: "vb.rs.missiongrid", icon: "grid", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "linkLabel" }, { k: "linkHref" }],
+    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }], def: { icon: "i-book", title: "", body: "" } },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.org-structure", key: "vb.rs.orgstructure", icon: "grid", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "image" },
+      { k: "councilLabel" }, { k: "councilTitle" }, { k: "councilBody", ta: true },
+      { k: "officeLabel" }, { k: "officeTitle" }, { k: "officeBody", ta: true },
+      { k: "schoolsHeading" }, { k: "schoolsLead", ta: true }],
+    items: { key: "items", fields: [{ k: "title" }, { k: "body", ta: true }], def: { title: "" } },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.feature-directory", key: "vb.rs.featuredirectory", icon: "card", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "variant", select: ["services", "knowledge"] },
+      { k: "featureLabel" }, { k: "featureTitle" }, { k: "featureBody", ta: true }, { k: "featureLinkLabel" }, { k: "featureLinkUrl" }, { k: "linkLabel" }],
+    items: { key: "items", fields: [{ k: "title" }, { k: "body", ta: true }, { k: "href" }, { k: "linkLabel" }], def: { title: "" } },
+    def: { heading: "", variant: "services", items: [] } },
+  { comp: "royalsociety.recommended-carousel", key: "vb.rs.recommended", icon: "card", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    items: { key: "items", fields: [{ k: "image" }, { k: "type" }, { k: "category" }, { k: "title" }, { k: "body", ta: true }, { k: "href" }, { k: "linkLabel" }], def: { title: "" } },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.service-gateway", key: "vb.rs.servicegateway", icon: "inbox", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" },
+      { k: "mainLabel" }, { k: "mainTitle" }, { k: "mainBody", ta: true }, { k: "mainActionLabel" }, { k: "mainHref" }, { k: "processLabel" }],
+    items: { key: "items", fields: [{ k: "label" }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "" } },
+    def: { heading: "", items: [], steps: [] } },
+  { comp: "royalsociety.logo-marquee", key: "vb.rs.logomarquee", icon: "grid", cat: "royalsociety", tpl: "royalsociety",
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    items: { key: "items", fields: [{ k: "name" }, { k: "image" }, { k: "href" }], def: { name: "" } },
+    def: { heading: "", items: [] } },
+  { comp: "royalsociety.vm-strip", key: "vb.rs.vmstrip", icon: "layout", cat: "royalsociety", tpl: "royalsociety",
+    fields: [],
+    items: { key: "items", scalar: true, def: "" },
+    def: { items: [] } },
+  // The one no-code "compose a new block" escape hatch for this template —
+  // see ORST_TYPES' identical orst.flex-panel entry and Blocks.tsx's
+  // FlexPanel for the full rationale.
+  { comp: "royalsociety.flex-panel", key: "vb.rs.flexpanel", icon: "layout", cat: "royalsociety", tpl: "royalsociety",
+    // `tone` only affects "banner" (`.rs-note` tone class), "banner" never
+    // reads `items`, and "feature" (Blocks.tsx's `.trust-strip` branch)
+    // reads none of eyebrow/heading/lead at all — its dark band is
+    // load-bearing for that, see the comment on FlexPanel's "feature"
+    // branch. Hiding each where it's a no-op keeps the sidebar honest about
+    // which fields the current layout actually uses.
+    fields: [{ k: "layout", select: ["cards", "banner", "list", "cta", "stats", "feature"] },
+      { k: "eyebrow", when: (b: any) => b.layout !== "feature" }, { k: "heading", when: (b: any) => b.layout !== "feature" }, { k: "lead", ta: true, when: (b: any) => b.layout !== "feature" },
+      { k: "tone", select: ["info", "warn", "success"], when: (b: any) => b.layout === "banner" }],
+    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "หัวข้อ" },
+      when: (b: any) => b.layout !== "banner" },
+    def: { layout: "cards", heading: "", items: [] } },
+];
+// Shared across EVERY WordPress-dialect tenant (orst, royalsociety, and any
+// future one — e.g. nbtc, which today has no dialect entry of its own at
+// all and would otherwise start with an empty Toolbox) — see
+// blockDialect.ts's GENERIC_WP_TYPES comment for which types qualify and
+// why, and for the bug this closes (an unscoped WordPress session, unable
+// to guess which tenant's prefix applies, silently mis-resolved these as
+// "orst.*" regardless of which tenant's page was actually open). `comp` is
+// the bare stored `type` string, un-prefixed — `tpl` is deliberately
+// omitted; paletteTypes below shows these for ANY WP dialect instead of
+// gating on one specific `tpl` value.
+const GENERIC_TYPES = [
+  { comp: "table", key: "vb.wp.table", icon: "grid", cat: "wp-shared", generic: true,
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "caption" }],
+    def: { heading: "", columns: [], rows: [] } },
+  { comp: "faq", key: "vb.wp.faq", icon: "doc", cat: "wp-shared", generic: true,
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    items: { key: "items", fields: [{ k: "q" }, { k: "a", ta: true }], def: { q: "คำถาม", a: "" } },
+    def: { heading: "", items: [] } },
+  { comp: "notice", key: "vb.wp.notice", icon: "doc", cat: "wp-shared", generic: true,
+    fields: [{ k: "title" }, { k: "body", ta: true }, { k: "tone", select: ["info", "warn", "success"] }],
+    def: { title: "", body: "", tone: "info" } },
+  // RoyalSociety's own definition carried an extra `eyebrow` field ORST's
+  // didn't — included here (harmless as an always-present optional field
+  // for ORST too, same convention already used throughout both catalogs).
+  { comp: "cta-band", key: "vb.wp.ctaband", icon: "cta", cat: "wp-shared", generic: true,
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "body", ta: true }],
+    items: { key: "actions", fields: [{ k: "label" }, { k: "href" }, { k: "variant", select: ["", "ghost"] }], def: { label: "", href: "#" } },
+    def: { heading: "", body: "", actions: [] } },
+];
+const BLOCK_CATEGORIES = [
+  { key: "content", labelKey: "vb.cat.content" },
+  { key: "grids", labelKey: "vb.cat.grids" },
+  { key: "live", labelKey: "vb.cat.live" },
+  { key: "promo", labelKey: "vb.cat.promo" },
+  // Shared WP-dialect vocabulary shows first, then each tenant's own types.
+  { key: "wp-shared", labelKey: "vb.cat.wpshared" },
+  // Single flat category per WordPress template — unlike gov-portal's 23,
+  // there's no live-data/promo distinction worth a separate section for.
+  { key: "orst", labelKey: "vb.cat.orst" },
+  { key: "royalsociety", labelKey: "vb.cat.royalsociety" },
+];
+// Every type across every template, flat and namespace-collision-free (see
+// ORST_TYPES's own comment on why "orst."/"royalsociety." can never collide
+// with "block."). metaOf is the ONLY lookup that needs to search all four —
+// iconOf/labelOf/add/addAt/compName/aMeta all call metaOf and therefore need
+// no changes.
+const ALL_TYPES = [...TYPES, ...GENERIC_TYPES, ...ORST_TYPES, ...ROYALSOCIETY_TYPES];
+const LIVE_DATA_COMPS = new Set(["block.highlights", "block.news-panel", "block.video-channel", "block.awards", "block.faq", "block.collection-list"]);
+// Curated, not "every content type" — avoids surfacing system/structural
+// types (page, tenant, audit-log, custom-role…) in the picker. Every uid
+// here is already confirmed public-readable (ensurePublicPermissions in
+// strapi-cms/src/seed/seed.ts already grants find/findOne to all of these)
+// and tenant-scoped (governance.ts's SCOPED set).
+const LISTABLE_UIDS = new Set([
+  "api::article.article", "api::video.video", "api::award.award", "api::faq.faq",
+  "api::service.service", "api::job.job", "api::download.download", "api::ebook.ebook",
+  "api::gallery.gallery", "api::event.event", "api::blog.blog", "api::catalog.catalog",
+  "api::weblink.weblink", "api::location.location", "api::popup.popup",
+]);
+function fieldsOfType(attrs: Record<string, any> | undefined, types: string[]): string[] {
+  return Object.entries(attrs || {}).filter(([, a]: any) => types.includes(a?.type)).map(([k]) => k);
+}
+// Explicit shape so metaOf's return type includes ORST_TYPES' optional
+// `items`/`tpl` fields without widening TYPES' own (much larger, pre-existing)
+// literal array — TS won't infer that merge automatically across a union.
+// `when(b)` — optional per-field/per-items visibility gate, keyed off the
+// block's OWN current field values (e.g. FlexPanel's `layout` select).
+// Omitted means always visible, same as before this existed.
+type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean };
+type BlockTypeMeta = {
+  comp: string; key: string; icon: string; cat: string; fields: ItemField[]; def: any;
+  items?: { key: string; fields?: ItemField[]; def: any; scalar?: boolean; when?: (b: any) => boolean };
+  tpl?: string;
+  // Shown for every WP-dialect tenant regardless of `tpl` — see GENERIC_TYPES.
+  generic?: boolean;
+};
+const metaOf = (c: string) => ALL_TYPES.find((t) => t.comp === c) as BlockTypeMeta | undefined;
 const DEVW: Record<Device, string> = { desktop: "100%", tablet: "800px", mobile: "390px" };
 
 function serialize(b: Block) {
@@ -64,6 +470,38 @@ function serialize(b: Block) {
     else out[k] = v;
   }
   return out;
+}
+
+// serialize() above exists to satisfy a Strapi dynamic zone: it drops
+// non-numeric `id`s (Strapi component row ids) and collapses a media object
+// to its numeric upload id so Strapi can re-link the relation. Neither is
+// true of a WordPress-hosted block — `id` is a hand-authored STRING anchor
+// that public-site's withItems()/withFields() merge keys on (and that
+// Blocks.tsx emits as the section's own DOM id), and images are plain
+// absolute URL strings the static export writes out verbatim. A deep clone
+// with no field surgery is the correct — and only — transformation here.
+function serializeWire(b: Block): Record<string, any> {
+  return JSON.parse(JSON.stringify(b));
+}
+
+// Small immutable path-set, the one indirection point every block-mutation
+// helper in this file (old and new) routes through — see updateBlock/
+// updateBlockField below. `path` may index into arrays (numbers) or objects
+// (strings), e.g. ["items", 2, "title"].
+function getPath(obj: any, path: Path): any {
+  return path.reduce((o: any, k) => (o == null ? undefined : o[k]), obj);
+}
+function setPath(obj: any, path: Path, value: any): any {
+  if (!path.length) return value;
+  const [k, ...rest] = path;
+  if (typeof k === "number") {
+    const arr = Array.isArray(obj) ? obj.slice() : [];
+    arr[k] = setPath(arr[k], rest, value);
+    return arr;
+  }
+  const o = obj && typeof obj === "object" ? { ...obj } : {};
+  o[k] = setPath(o[k], rest, value);
+  return o;
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as any)[c]));
@@ -80,15 +518,42 @@ function interpolate(bt: BlockType, props: Record<string, any>) {
 
 export default function VisualBuilder() {
   const { t, lang } = useLang();
-  const { currentKey, current } = useTenant();
+  const { currentKey, current, engine } = useTenant();
+  const searchParams = useSearchParams();
+  // Under a WordPress session BOTH Strapi uids are unreachable (the
+  // WordPress adapter only knows its own wp: uids — resolvePostType throws)
+  // — loadPages() below would swallow that error and the Builder would show
+  // an empty page list forever with no indication why. Resolving from the
+  // session's own engine instead of the ?uid= query param fixes that as a
+  // side effect: a Strapi session gets the exact same expression as before
+  // (?uid=api::page.page picks PAGE_UID, anything else LANDING_UID), so
+  // that path is byte-for-byte unchanged and cannot regress.
+  const uid = engine === "wordpress" ? WP_PAGE_UID : searchParams.get("uid") === PAGE_UID ? PAGE_UID : LANDING_UID;
+  const isLanding = uid === LANDING_UID;
+  const isWpPage = uid === WP_PAGE_UID;
   const [pages, setPages] = useState<Page[]>([]);
   const [sel, setSel] = useState<Page | null>(null);
+  // Mirrors `sel` for loadPages' own "is a page already open" check below —
+  // a ref (not the state var) because loadPages must read the CURRENT
+  // selection, not whatever `sel` was when its own closure was last
+  // recreated (open()'s per-page template resolution, further down, now
+  // changes `template` on every page switch for an unscoped session, which
+  // would otherwise re-trigger loadPages via its existing `template`
+  // dependency and silently reopen the default page out from under
+  // whatever the user just switched to).
+  const selRef = useRef<Page | null>(null);
+  // Reset on a genuine content-type switch (uid comes from the URL's own
+  // ?uid= — this component doesn't remount when it changes) so loadPages
+  // still auto-opens a default page for the NEW list, same as before
+  // selRef existed; only a same-uid reopen (the case selRef guards against
+  // above) should skip it.
+  useEffect(() => { selRef.current = null; }, [uid]);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [active, setActive] = useState<number>(-1);
   const [device, setDevice] = useState<Device>("desktop");
   const [dragI, setDragI] = useState<number>(-1);
   const [insAt, setInsAt] = useState<number>(-1);
-  const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType } | null>(null);
+  const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType; template?: PageTemplate } | null>(null);
   const [dropAt, setDropAt] = useState<number>(-1);
   const [dragBlock, setDragBlock] = useState<number>(-1);
   const [previewMode, setPreviewMode] = useState(false);
@@ -97,6 +562,25 @@ export default function VisualBuilder() {
   const [aiBusy, setAiBusy] = useState(false);
   const [customTypes, setCustomTypes] = useState<BlockType[]>([]);
   const [showTypeEditor, setShowTypeEditor] = useState(false);
+  const [customIcons, setCustomIcons] = useState<CustomIcon[]>([]);
+  const [showIconManager, setShowIconManager] = useState(false);
+  // Toolbox rail (components/Toolbox.tsx) — open by default: it's the
+  // primary way to place anything, and hiding it behind a toggle by default
+  // would just recreate the discoverability problem of the old palette
+  // buried at the bottom of the inspector's scroll.
+  const [tbOpen, setTbOpen] = useState(true);
+  // Distraction-free mode: the builder takes over the whole viewport,
+  // hiding the app shell's nav rail and topbar. CSS-fixed rather than the
+  // native Fullscreen API on purpose — requestFullscreen() hides the
+  // browser's own chrome too (no address bar, no tab strip), which is
+  // disorienting for a tool people keep open all day, and it can't be
+  // entered without a user gesture on every re-render. Esc exits, matching
+  // the modals in this same file.
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const [templates, setTemplates] = useState<PageTemplate[]>([]);
+  const [tplForm, setTplForm] = useState<{ name: string; description: string } | null>(null);
+  const [tplManage, setTplManage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
@@ -109,28 +593,128 @@ export default function VisualBuilder() {
   const [otherBlocks, setOtherBlocks] = useState<Block[]>([]);
   const [abEnabled, setAbEnabled] = useState(false);
   const [abSplit, setAbSplit] = useState(50);
+  // Snapshot of whatever was last successfully loaded/saved — compared
+  // against the live pageBody() to know if there are unsaved edits, so
+  // switching pages / creating a new page / closing the tab can warn
+  // instead of silently discarding work (see confirmDiscardIfDirty below).
+  const savedSnapshotRef = useRef<string>("");
   const [abOpen, setAbOpen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return;
+    // Esc is already the exit key for preview mode and for every dialog in
+    // this file (see the shared key handler further down). Those are the
+    // *inner* layers — leaving one of them should not also drop the whole
+    // builder out of full screen, so this only claims Esc once nothing else
+    // is open to consume it.
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (previewMode || historyOpen || schedOpen || abOpen || showTypeEditor || showIconManager || tplForm || tplManage) return;
+      setFullscreen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    // Stop the page behind from scrolling under the overlay.
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [fullscreen, previewMode, historyOpen, schedOpen, abOpen, showTypeEditor, showIconManager, tplForm, tplManage]);
   const [abStats, setAbStats] = useState<{ A: { view: number; conversion: number }; B: { view: number; conversion: number } }>({ A: { view: 0, conversion: 0 }, B: { view: 0, conversion: 0 } });
+  const [previewHomeData, setPreviewHomeData] = useState<any>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  // Whether this tenant's publicTemplate is "gov-portal" — the only template
+  // RealPreview has a ported renderer for (see the effect below). When true,
+  // the real-styled canvas IS the primary editing surface (previewMode just
+  // toggles its edit affordances on/off); when false, the .vbk-* mockup
+  // canvas is the only editing surface, unchanged from before this feature.
+  const [gpSupported, setGpSupported] = useState(false);
+  // The tenant's publicTemplate, kept (not thrown away like before this
+  // feature) so the block palette and blockDialect.ts's translation can key
+  // off it too — set for real by the same tenant fetch gpSupported already
+  // runs (see the effect below), but that fetch is async and loadPages()/
+  // open() below can race ahead of it on first mount. isWpPage is already
+  // known synchronously from the session's own engine (no fetch needed), so
+  // default to "orst" as a placeholder whenever it's true — merely a guess
+  // to keep `template` non-null for the brief window before the real value
+  // resolves; templateReady below is what actually gates any use of it.
+  const [template, setTemplate] = useState<Dialect>(uid === WP_PAGE_UID ? "orst" : "gov-portal");
+  // Two WordPress templates (ORST, RoyalSociety) now share this pipeline, so
+  // a wrong initial guess is no longer harmless (toBuilder/toWire would
+  // namespace-translate with the WRONG prefix, corrupting the loaded blocks
+  // — unlike the old single-WP-template case, where "wrong" only ever meant
+  // "gov-portal identity" vs "orst," never one non-identity dialect vs
+  // another). loadPages()/open() below must not read `template` until the
+  // effect just below has resolved the tenant's REAL publicTemplate at least
+  // once. A non-WP page's template never needs this (toBuilder/toWire are
+  // identity for "gov-portal" regardless), so those start ready immediately.
+  const [templateReady, setTemplateReady] = useState(!isWpPage);
+  // Content types Collection List can bind to — global schema, not tenant
+  // data, so a one-time fetch (no tenantKey dependency), unlike loadTypes/
+  // loadIcons below.
+  const [contentTypes, setContentTypes] = useState<ContentTypeInfo[]>([]);
+  useEffect(() => {
+    cms.schema.listContentTypes().then((all) => setContentTypes(all.filter((c) => LISTABLE_UIDS.has(c.uid)))).catch(() => {});
+  }, []);
+  // Per-collection-list-block entry data for the real-preview canvas, keyed
+  // by block index — separate from previewHomeData since different blocks
+  // can bind different content types/queries (previewHomeData is one fixed
+  // tenant-wide fetch; this is N independent per-block fetches).
+  const [collectionData, setCollectionData] = useState<Record<number, any[]>>({});
+  const clSig = JSON.stringify(blocks.map((b, i) => (b.__component === "block.collection-list" ? [i, b.contentTypeUid, b.sortField, b.sortDir, b.pageSize] : null)).filter(Boolean));
+  useEffect(() => {
+    if (!gpSupported) { setCollectionData({}); return; }
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(blocks.map(async (b, i) => {
+        if (b.__component !== "block.collection-list" || !b.contentTypeUid) return null;
+        try {
+          const { data } = await cms.entries.list<any>(b.contentTypeUid, { sort: (b.sortField || "createdAt") + ":" + (b.sortDir || "desc"), pageSize: b.pageSize || 12 });
+          return [i, data] as const;
+        } catch { return null; }
+      }));
+      if (!cancelled) setCollectionData(Object.fromEntries(entries.filter(Boolean) as [number, any[]][]));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpSupported, clSig]);
   const tenantKey = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   const loadPages = useCallback(async () => {
     try {
-      const { data } = await cms.entries.list<any>(LANDING_UID, {
+      const { data } = await cms.entries.list<any>(uid, {
         page: 1, pageSize: 50, sort: "updatedAt:DESC",
         ...(tenantKey ? { filter: [{ field: "tenant.key", op: "eq" as const, value: tenantKey }] } : {}),
       });
-      const list = data.map((e: any) => ({ docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "#" + (e.documentId ?? e.id) }));
+      const list = data.map((e: any) => ({ docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "#" + (e.documentId ?? e.id), tenantKey: e.tenantKey || undefined }));
       setPages(list);
-      if (list[0]) open(list[0]);
+      // Only auto-select a default page the FIRST time — a re-run of this
+      // callback (e.g. open()'s own per-page template resolution below
+      // changing `template`, which this callback depends on) must refresh
+      // the list without yanking the user back to page 1 if they've already
+      // opened something else. See selRef's own comment.
+      if (list[0] && !selRef.current) open(list[0]);
     } catch { setPages([]); }
+    // `template` is a real dependency, not just an exhaustive-deps nag:
+    // `open` is a plain (non-memoized) function redefined every render, so
+    // its closure only has the CURRENT render's `template`. loadPages must
+    // be recreated whenever `template` changes so its captured `open` isn't
+    // stale — without this, loadPages (created once on mount, before the
+    // tenant-template fetch below resolves) forever calls the `open` that
+    // closed over the INITIAL placeholder guess, so toBuilder() would
+    // permanently mistranslate every royalsociety block using the "orst."
+    // prefix (verified live: a royalsociety-only type like "list-panel"
+    // came back as the unrecognized component "orst.list-panel"). The
+    // templateReady gate below only controls WHEN loadPages first runs;
+    // this dependency is what makes sure it runs with the RIGHT template.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantKey]);
-  useEffect(() => { loadPages(); }, [loadPages]);
+  }, [tenantKey, uid, template]);
+  // Gated on templateReady — see that state's own comment. For a non-WP
+  // page this is true from the first render, so this line is a no-op change
+  // for every existing Strapi tenant.
+  useEffect(() => { if (templateReady) loadPages(); }, [loadPages, templateReady]);
 
   async function createPage() {
     setSaving(true); setMsg(null);
     try {
-      const e: any = await cms.entries.create(LANDING_UID, { title: "Untitled page", active: true });
+      const e: any = await cms.entries.create(uid, isLanding ? { title: "Untitled page", active: true } : { title: "Untitled page" });
       const np = { docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "Untitled page" };
       await loadPages();
       setPages((ps) => (ps.some((p) => p.docId === np.docId) ? ps : [np, ...ps])); // ensure selector shows it
@@ -159,50 +743,257 @@ export default function VisualBuilder() {
   }, [tenantKey]);
   useEffect(() => { loadTypes(); }, [loadTypes]);
 
-  async function open(p: Page) {
-    setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null);
+  const loadIcons = useCallback(async () => {
     try {
-      const data: any = await cms.entries.get(LANDING_UID, p.docId, p.locale ? { locale: p.locale } : undefined);
-      const bl = (data.blocks ?? []) as Block[];
+      let qs = "?pageSize=100&populate=image";
+      if (tenantKey) qs += "&filters[$or][0][tenant][key][$eq]=" + encodeURIComponent(tenantKey) + "&filters[$or][1][tenant][id][$null]=true";
+      const r = await fetch("/api/strapi/content-manager/collection-types/api::icon.icon" + qs);
+      if (!r.ok) return;
+      const j = await r.json();
+      setCustomIcons((j.results ?? j.data ?? []).map((e: any) => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, imageUrl: e.image?.url, tenantKey: e.tenant?.key })));
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantKey]);
+  useEffect(() => { loadIcons(); }, [loadIcons]);
+
+  // Saved page templates. Unlike loadTypes/loadIcons above (raw
+  // /api/strapi/... fetches that 401 under a WordPress session), this goes
+  // through cms.entries — page-template is a BOOKKEEPING uid in
+  // governance.ts, so it resolves to Strapi with the service credential no
+  // matter which engine this session logged in against, and a WordPress
+  // tenant gets templates too. The "mine or shared" split is applied here
+  // rather than in the query because EntryQuery.filter is flat AND-only and
+  // can't express OR (same limitation loadTypes documents).
+  const loadTemplates = useCallback(async () => {
+    try {
+      const { data } = await cms.entries.list<any>(TPL_UID, { pageSize: 100, sort: "updatedAt:DESC" });
+      setTemplates(
+        data
+          .filter((e: any) => !e.tenantKey || !tenantKey || e.tenantKey === tenantKey)
+          .map((e: any) => ({
+            docId: String(e.documentId ?? e.id), key: e.key, name: e.name,
+            description: e.description || "", dialect: e.dialect || "gov-portal",
+            blocks: Array.isArray(e.blocks) ? e.blocks : [], tenantKey: e.tenantKey || "",
+          }))
+      );
+    } catch { setTemplates([]); }
+  }, [tenantKey]);
+  useEffect(() => { loadTemplates(); }, [loadTemplates]);
+
+  async function open(p: Page) {
+    selRef.current = p;
+    setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null); clearUndo();
+    try {
+      const data: any = await cms.entries.get(uid, p.docId, p.locale ? { locale: p.locale } : undefined);
+      // For a session with no single home tenant (the shared wpadmin/
+      // scheduler login — tenantKey is "" since it isn't in any one
+      // tenant's adminEmails, see governance.ts's resolveEffectiveTenant),
+      // the tenant-level effect above never runs and `template` is stuck at
+      // its useState hardcoded guess ("orst") no matter which page is
+      // actually open — confirmed live during the ORST/RoyalSociety audit:
+      // every RoyalSociety-only block on such a session showed as
+      // unrecognized, and a saved template leaked across tenants. A
+      // normally-scoped editor (tenantKey set) is unaffected — the effect
+      // above already resolves `template` correctly for them. Resolve THIS
+      // page's own tenant/dialect directly when we have one and the session
+      // doesn't, rather than trusting the (possibly wrong) session-level
+      // value.
+      let pageTemplate = template;
+      if (!tenantKey && p.tenantKey) {
+        try {
+          const { data: tenants } = await cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: p.tenantKey }] });
+          const resolved = tenants[0]?.publicTemplate as Dialect | undefined;
+          if (resolved) { pageTemplate = resolved; setTemplate(resolved); }
+        } catch {}
+      }
+      // toBuilder is the identity function for template === "gov-portal"
+      // (every existing Strapi tenant), so this is safe to call
+      // unconditionally — see blockDialect.ts.
+      const bl = toBuilder((data.blocks ?? []) as any[], pageTemplate) as Block[];
       setBlocks(bl); setActive(bl.length ? 0 : -1);
-      setOtherBlocks((data.variantBlocks ?? []) as Block[]);
-      setEditing("A");
-      setAbEnabled(!!data.abEnabled);
-      setAbSplit(typeof data.abSplit === "number" ? data.abSplit : 50);
+      let variantBlocks: Block[] = [];
+      let ab = false, split = 50;
+      if (isLanding) {
+        variantBlocks = (data.variantBlocks ?? []) as Block[];
+        ab = !!data.abEnabled;
+        split = typeof data.abSplit === "number" ? data.abSplit : 50;
+        setOtherBlocks(variantBlocks);
+        setEditing("A");
+        setAbEnabled(ab);
+        setAbSplit(split);
+      } else {
+        setOtherBlocks([]); setEditing("A"); setAbEnabled(false); setAbSplit(50);
+      }
+      // Snapshot from the freshly-fetched data, not React state (which
+      // hasn't committed the setBlocks/etc. calls above yet). open() always
+      // resets to editing "A" above, so that's the side to snapshot against.
+      savedSnapshotRef.current = snapshotOf(bl, variantBlocks, "A", ab, split, pageTemplate);
     } catch {} finally { setLoading(false); }
   }
 
-  const setField = (i: number, k: string, v: any) => setBlocks((b) => b.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
-  const move = (i: number, d: number) => setBlocks((b) => { const n = [...b]; const j = i + d; if (j < 0 || j >= n.length) return b; [n[i], n[j]] = [n[j], n[i]]; setActive(j); return n; });
-  const reorder = (from: number, to: number) => setBlocks((b) => { if (from === to || from < 0) return b; const n = [...b]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; });
-  const remove = (i: number) => { setBlocks((b) => b.filter((_, j) => j !== i)); setActive(-1); };
-  const dup = (i: number) => setBlocks((b) => { const c = JSON.parse(JSON.stringify(b[i])); delete c.id; const n = [...b]; n.splice(i + 1, 0, c); setActive(i + 1); return n; });
-  const add = (comp: string) => { const m = metaOf(comp); setBlocks((b) => { setActive(b.length); return [...b, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))]; }); };
-  const addAt = (idx: number, comp: string) => { const m = metaOf(comp); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))); setActive(idx); return n; }); setInsAt(-1); };
-  const addCustomAt = (idx: number, ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, { __component: "block.custom", typeKey: ct.key, props }); setActive(idx); return n; }); };
+  // ---- in-session undo/redo ----
+  // Every block-list mutation (field edit, add, remove, reorder, duplicate)
+  // pushes the PRE-mutation array here first. Rapid edits (e.g. typing)
+  // coalesce into one undo step via the 600ms debounce in pushUndo — without
+  // it, one Ctrl+Z would only ever remove a single keystroke, which is not
+  // what "undo" means to a non-technical editor.
+  const [undoStack, setUndoStack] = useState<Block[][]>([]);
+  const [redoStack, setRedoStack] = useState<Block[][]>([]);
+  const lastPushRef = useRef<number>(0);
+  const pushUndo = useCallback((prevBlocks: Block[]) => {
+    const now = Date.now();
+    if (now - lastPushRef.current < 600) return;
+    lastPushRef.current = now;
+    setUndoStack((s) => [...s.slice(-49), prevBlocks]); // cap at 50 steps
+    setRedoStack([]);
+  }, []);
+  function undo() {
+    setUndoStack((s) => {
+      if (!s.length) return s;
+      const prev = s[s.length - 1];
+      setRedoStack((r) => [...r, blocks]);
+      setBlocks(prev);
+      setActive((a) => Math.min(a, prev.length - 1));
+      return s.slice(0, -1);
+    });
+  }
+  function redo() {
+    setRedoStack((s) => {
+      if (!s.length) return s;
+      const next = s[s.length - 1];
+      setUndoStack((u) => [...u, blocks]);
+      setBlocks(next);
+      setActive((a) => Math.min(a, next.length - 1));
+      return s.slice(0, -1);
+    });
+  }
+  // Jumping to a different page/version/variant makes prior undo history
+  // meaningless (undoing "past" that jump would silently land on a DIFFERENT
+  // page's content) — clear it rather than let it dangle.
+  function clearUndo() { setUndoStack([]); setRedoStack([]); }
+
+  // The one indirection point for mutating a block's data — every other
+  // mutation helper in this file (old bespoke ones below, and the real-
+  // canvas edit callbacks passed to RealPreview) routes through these two,
+  // so the sidebar and the inline-editable canvas can never drift out of
+  // sync: both ultimately call setBlocks the same way.
+  const updateBlock = useCallback((i: number, patcher: (b: Block) => Block) => {
+    pushUndo(blocks);
+    setBlocks((bs) => bs.map((b, j) => (j === i ? patcher(b) : b)));
+  }, [blocks, pushUndo]);
+  const updateBlockField = useCallback((i: number, path: Path, value: any) => {
+    updateBlock(i, (b) => setPath(b, path, value));
+  }, [updateBlock]);
+  const uploadFieldImage = useCallback(async (i: number, path: Path, file: File) => {
+    setUploadingI(i);
+    try {
+      if (isWpPage) {
+        // cms.media.upload() below always hits /api/strapi/upload, which
+        // carries a Strapi bearer token only — 401s under a WordPress
+        // session. /api/cms/media is the engine-aware route (governed.
+        // media.upload) added alongside this. Its result is written as a
+        // plain URL string, not {id,url} — ORST's block components read
+        // image fields as plain strings (Blocks.tsx: <img src={it.image}>),
+        // never a Strapi media relation.
+        const r = await fetch("/api/cms/media", { method: "POST", body: (() => { const fd = new FormData(); fd.append("files", file); return fd; })() });
+        if (!r.ok) throw new CmsError("upload failed", r.status);
+        const asset = await r.json();
+        updateBlockField(i, path, asset.url as string);
+      } else {
+        const asset = await cms.media.upload(file);
+        updateBlockField(i, path, { id: asset.id, url: asset.url });
+      }
+    } catch (e) {
+      setMsg(e instanceof CmsError ? { t: "Image upload failed (HTTP " + e.status + ")", ok: false } : { t: "Could not upload image — check your connection and try again.", ok: false });
+    } finally { setUploadingI(-1); }
+  }, [updateBlockField, isWpPage]);
+  // Generic array add/remove for the real-canvas's own array-field edit
+  // affordances (feature-grid/stat-row items) — path points at the array
+  // itself (e.g. ["items"]), not an item within it.
+  const onArrayAdd = useCallback((i: number, path: Path, item: any) => {
+    updateBlock(i, (b) => setPath(b, path, [...(getPath(b, path) || []), item]));
+  }, [updateBlock]);
+  const onArrayRemove = useCallback((i: number, path: Path, k: number) => {
+    updateBlock(i, (b) => setPath(b, path, (getPath(b, path) || []).filter((_: any, kk: number) => kk !== k)));
+  }, [updateBlock]);
+
+  const setField = (i: number, k: string, v: any) => updateBlockField(i, [k], v);
+  const move = (i: number, d: number) => { pushUndo(blocks); setBlocks((b) => { const n = [...b]; const j = i + d; if (j < 0 || j >= n.length) return b; [n[i], n[j]] = [n[j], n[i]]; setActive(j); return n; }); };
+  const reorder = (from: number, to: number) => { pushUndo(blocks); setBlocks((b) => { if (from === to || from < 0) return b; const n = [...b]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; }); };
+  const remove = (i: number) => { pushUndo(blocks); setBlocks((b) => b.filter((_, j) => j !== i)); setActive(-1); };
+  const dup = (i: number) => { pushUndo(blocks); setBlocks((b) => { const c = JSON.parse(JSON.stringify(b[i])); delete c.id; const n = [...b]; n.splice(i + 1, 0, c); setActive(i + 1); return n; }); };
+  const add = (comp: string) => { const m = metaOf(comp); pushUndo(blocks); setBlocks((b) => { setActive(b.length); return [...b, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))]; }); };
+  const addAt = (idx: number, comp: string) => { const m = metaOf(comp); pushUndo(blocks); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))); setActive(idx); return n; }); setInsAt(-1); };
+  const addCustomAt = (idx: number, ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); pushUndo(blocks); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, { __component: "block.custom", typeKey: ct.key, props }); setActive(idx); return n; }); };
+  // Templates carry whole block arrays, so "insert at index" splices all of
+  // them in at once rather than one block — the same gesture as any other
+  // toolbox tile, just N blocks wide.
+  const addTemplateAt = (idx: number, tpl: PageTemplate) => {
+    const bl = (tpl.blocks || []).map((b: any) => JSON.parse(JSON.stringify(b)));
+    if (!bl.length) return;
+    pushUndo(blocks);
+    setBlocks((b) => { const n = [...b]; n.splice(idx, 0, ...bl); setActive(idx); return n; });
+    setInsAt(-1);
+  };
   function handleDrop(idx: number) {
     if (dragBlock >= 0) { const to = idx > dragBlock ? idx - 1 : idx; reorder(dragBlock, to); setActive(to); }
     else if (dragNew?.comp) addAt(idx, dragNew.comp);
     else if (dragNew?.custom) addCustomAt(idx, dragNew.custom);
+    else if (dragNew?.template) addTemplateAt(idx, dragNew.template);
     setDragNew(null); setDragBlock(-1); setDropAt(-1);
   }
-  async function uploadImg(i: number, file: File) {
-    setUploadingI(i);
-    try {
-      const asset = await cms.media.upload(file);
-      setField(i, "image", { id: asset.id, url: asset.url });
-    } catch {} finally { setUploadingI(-1); }
+  /** Append a template's blocks, or replace the page with them. Both are
+   * undoable like any other edit — nothing here writes to the server until
+   * the normal Save/Publish, so a mis-clicked "Replace" is one Ctrl+Z away. */
+  function applyTemplate(tpl: PageTemplate, mode: "replace" | "append") {
+    const bl = (tpl.blocks || []).map((b: any) => JSON.parse(JSON.stringify(b)));
+    if (!bl.length) return;
+    if (mode === "replace" && blocks.length && !window.confirm(t("tbx.confirmreplace"))) return;
+    pushUndo(blocks);
+    setBlocks((b) => (mode === "replace" ? bl : [...b, ...bl]));
+    setActive(mode === "replace" ? 0 : blocks.length);
+    setMsg({ t: t("tbx.tplapplied"), ok: true });
   }
+  async function saveTemplate() {
+    if (!tplForm) return;
+    setSaving(true); setMsg(null);
+    try {
+      await cms.entries.create(TPL_UID, {
+        key: (tplForm.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "template") + "-" + Math.random().toString(36).slice(2, 6),
+        name: tplForm.name.trim(), description: tplForm.description.trim(),
+        // The dialect the CURRENT canvas is authored in — a gov-portal
+        // template's block.* components are meaningless on an ORST page, so
+        // Toolbox only ever offers back the ones matching this tenant.
+        // Stored in BUILDER dialect (what the canvas holds), not pageBody()'s
+        // wire dialect, so applying one is a straight splice with no
+        // translate round-trip. `id` is dropped per block for the same
+        // reason dup() drops it: these become NEW components wherever the
+        // template is applied, and a reused Strapi component-row id would
+        // re-link the original page's row instead of creating one.
+        dialect: template, tenantKey,
+        blocks: blocks.map((b) => { const c = JSON.parse(JSON.stringify(b)); delete c.id; return c; }),
+      });
+      setTplForm(null); await loadTemplates();
+      setMsg({ t: t("tbx.tplsaved"), ok: true });
+    } catch (e) {
+      setMsg({ t: e instanceof CmsError ? "Could not save template (HTTP " + e.status + ")" : "Cannot reach the backend.", ok: false });
+    } finally { setSaving(false); }
+  }
+  async function deleteTemplate(tpl: PageTemplate) {
+    if (!tpl.docId || !window.confirm(t("tbx.confirmdeltpl"))) return;
+    try { await cms.entries.remove(TPL_UID, tpl.docId); await loadTemplates(); setMsg({ t: t("tbx.tpldeleted"), ok: true }); }
+    catch { setMsg({ t: "Could not delete template.", ok: false }); }
+  }
+  async function shareTemplate(tpl: PageTemplate) {
+    if (!tpl.docId) return;
+    try { await cms.entries.update(TPL_UID, tpl.docId, { tenantKey: "" }); await loadTemplates(); setMsg({ t: t("bt.shared"), ok: true }); }
+    catch { setMsg({ t: "Could not share template.", ok: false }); }
+  }
+  const uploadImg = (i: number, file: File) => uploadFieldImage(i, ["image"], file);
   // custom blocks
-  const addCustom = (ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); setBlocks((b) => { setActive(b.length); return [...b, { __component: "block.custom", typeKey: ct.key, props }]; }); };
-  const setProp = (i: number, key: string, val: any) => setBlocks((b) => b.map((x, j) => (j === i ? { ...x, props: { ...(x.props || {}), [key]: val } } : x)));
-  async function uploadProp(i: number, key: string, file: File) {
-    setUploadingI(i);
-    try {
-      const asset = await cms.media.upload(file);
-      setProp(i, key, { id: asset.id, url: asset.url });
-    } catch {} finally { setUploadingI(-1); }
-  }
+  const addCustom = (ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); pushUndo(blocks); setBlocks((b) => { setActive(b.length); return [...b, { __component: "block.custom", typeKey: ct.key, props }]; }); };
+  const setProp = (i: number, key: string, val: any) => updateBlockField(i, ["props", key], val);
+  const uploadProp = (i: number, key: string, file: File) => uploadFieldImage(i, ["props", key], file);
   const iconOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.icon || "grid") : (metaOf(b.__component)?.icon || "doc");
   const labelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
   // AI: generate a section. Prefers the LLM-agnostic /api/ai layer (schema-aware
@@ -229,26 +1020,114 @@ export default function VisualBuilder() {
         const ans = j?.data?.answer || "";
         block = { __component: "block.hero", kicker: "AI", heading: p, subheading: ans || (lang === "th" ? "เพิ่มรายละเอียดที่นี่" : "Add details here"), ctaLabel: lang === "th" ? "เริ่มใช้งาน" : "Get started", ctaUrl: "#" };
       }
+      pushUndo(blocks);
       setBlocks((b) => { setActive(b.length); return [...b, block]; });
       setAiPrompt("");
     } finally { setAiBusy(false); }
   }
-  // feature items
-  const setItem = (i: number, k: number, field: string, v: string) => setBlocks((b) => b.map((x, j) => j === i ? { ...x, items: (x.items || []).map((it: any, kk: number) => kk === k ? { ...it, [field]: v } : it) } : x));
-  const addItem = (i: number) => setBlocks((b) => b.map((x, j) => j === i ? { ...x, items: [...(x.items || []), { title: "Feature", text: "" }] } : x));
-  const rmItem = (i: number, k: number) => setBlocks((b) => b.map((x, j) => j === i ? { ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) } : x));
+  // feature items — thin wrappers over updateBlock/updateBlockField (see
+  // those definitions above): same external call signatures as before this
+  // refactor, so no sidebar JSX below needed to change, but now the exact
+  // same primitives the real-canvas edit affordances call through too — one
+  // mutation path, not two.
+  const setItem = (i: number, k: number, field: string, v: string) => updateBlockField(i, ["items", k, field], v);
+  const addItem = (i: number) => updateBlock(i, (x) => ({ ...x, items: [...(x.items || []), { title: "Feature", text: "" }] }));
+  const rmItem = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) }));
 
-  // build the landing body, writing BOTH variants (A = dynamic zone, B = json) + A/B config
+  // stat-row items (block.stat-row's own items array — icon/value/label)
+  const setStatItem = (i: number, k: number, field: string, v: string) => updateBlockField(i, ["items", k, field], v);
+  const addStatItem = (i: number) => updateBlock(i, (x) => ({ ...x, items: [...(x.items || []), { icon: "users", value: "0", label: "Label" }] }));
+  const rmStatItem = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) }));
+
+  // featured-promo's checklist items — a plain string[], not objects
+  const setChecklistItem = (i: number, k: number, v: string) => updateBlockField(i, ["items", k], v);
+  const addChecklistItem = (i: number) => updateBlock(i, (x) => ({ ...x, items: [...(x.items || []), "Checklist item"] }));
+  const rmChecklistItem = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) }));
+
+  // testimonials items
+  const setTestiItem = (i: number, k: number, field: string, v: string) => updateBlockField(i, ["items", k, field], v);
+  const addTestiItem = (i: number) => updateBlock(i, (x) => ({ ...x, items: [...(x.items || []), { quote: "", author: "", role: "" }] }));
+  const rmTestiItem = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) }));
+  const uploadTestiAvatar = (i: number, k: number, file: File) => uploadFieldImage(i, ["items", k, "avatar"], file);
+
+  // logo-cloud items
+  const setLogoItem = (i: number, k: number, field: string, v: string) => updateBlockField(i, ["items", k, field], v);
+  const addLogoItem = (i: number) => updateBlock(i, (x) => ({ ...x, items: [...(x.items || []), { name: "", url: "" }] }));
+  const rmLogoItem = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) }));
+  const uploadLogoImg = (i: number, k: number, file: File) => uploadFieldImage(i, ["items", k, "logo"], file);
+
+  // team-grid items
+  const setTeamItem = (i: number, k: number, field: string, v: string) => updateBlockField(i, ["items", k, field], v);
+  const addTeamItem = (i: number) => updateBlock(i, (x) => ({ ...x, items: [...(x.items || []), { name: "", role: "" }] }));
+  const rmTeamItem = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) }));
+  const uploadTeamPhoto = (i: number, k: number, file: File) => uploadFieldImage(i, ["items", k, "photo"], file);
+
+  // tabs/accordion items
+  const setTabItem = (i: number, k: number, field: string, v: string) => updateBlockField(i, ["items", k, field], v);
+  const addTabItem = (i: number) => updateBlock(i, (x) => ({ ...x, items: [...(x.items || []), { title: "New tab", body: "" }] }));
+  const rmTabItem = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, items: (x.items || []).filter((_: any, kk: number) => kk !== k) }));
+
+  // comparison columns + each column's own features[] (an array nested
+  // inside an array item — setPath/getPath already handle arbitrary depth).
+  const setCmpCol = (i: number, k: number, field: string, v: any) => updateBlockField(i, ["columns", k, field], v);
+  const addCmpCol = (i: number) => updateBlock(i, (x) => ({ ...x, columns: [...(x.columns || []), { name: "New option", features: [] }] }));
+  const rmCmpCol = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, columns: (x.columns || []).filter((_: any, kk: number) => kk !== k) }));
+  const setCmpFeature = (i: number, k: number, fi: number, v: string) => updateBlockField(i, ["columns", k, "features", fi], v);
+  const addCmpFeature = (i: number, k: number) => updateBlock(i, (x) => ({ ...x, columns: (x.columns || []).map((c: any, kk: number) => kk === k ? { ...c, features: [...(c.features || []), ""] } : c) }));
+  const rmCmpFeature = (i: number, k: number, fi: number) => updateBlock(i, (x) => ({ ...x, columns: (x.columns || []).map((c: any, kk: number) => kk === k ? { ...c, features: (c.features || []).filter((_: any, ffi: number) => ffi !== fi) } : c) }));
+
+  // build the update body. Landing writes BOTH variants (A = dynamic zone, B =
+  // json) + A/B config; a plain page only has `blocks` — no splash-only fields.
+  // A WordPress page (wp:page, always !isLanding) writes back through
+  // serializeWire + toWire instead of serialize — see both functions' own
+  // comments for why the Strapi-shaped one is wrong here.
   function pageBody() {
+    if (isWpPage) return { blocks: toWire(blocks.map(serializeWire), template) };
+    if (!isLanding) return { blocks: blocks.map(serialize), ...(sel?.locale ? { locale: sel.locale } : {}) };
     const aBlocks = editing === "A" ? blocks : otherBlocks;
     const bBlocks = editing === "B" ? blocks : otherBlocks;
     return { blocks: aBlocks.map(serialize), variantBlocks: bBlocks, abEnabled, abSplit, ...(sel?.locale ? { locale: sel.locale } : {}) };
   }
+  // Same shape as pageBody() minus `locale` (never changes via editing, so
+  // irrelevant to dirty-detection) — a pure function of explicit args so
+  // open() can snapshot freshly-fetched data before React state commits.
+  // Must use the identical serializer pageBody() uses for isDirty to ever
+  // resolve false after a real save. `dialect` defaults to the outer
+  // `template` (correct for every call outside open()) but MUST be passed
+  // explicitly there: open() calls this synchronously right after its own
+  // setTemplate(pageTemplate), and a React state update doesn't change what
+  // `template` resolves to inside a still-executing closure — using the
+  // default would silently snapshot against the PRE-update dialect while
+  // `bl` itself was already built with the correct one, permanently
+  // mismatching every unscoped-session per-page resolution (see open()'s
+  // own comment) and showing a phantom "unsaved changes" on a freshly
+  // opened, untouched page.
+  function snapshotOf(bl: Block[], variantBl: Block[], editingSide: "A" | "B", ab: boolean, split: number, dialect: Dialect = template): string {
+    if (isWpPage) return JSON.stringify({ blocks: toWire(bl.map(serializeWire), dialect) });
+    if (!isLanding) return JSON.stringify({ blocks: bl.map(serialize) });
+    const aBlocks = editingSide === "A" ? bl : variantBl;
+    const bBlocks = editingSide === "B" ? bl : variantBl;
+    return JSON.stringify({ blocks: aBlocks.map(serialize), variantBlocks: bBlocks, abEnabled: ab, abSplit: split });
+  }
+  const isDirty = useMemo(() => !!sel && snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit) !== savedSnapshotRef.current,
+    [blocks, otherBlocks, editing, abEnabled, abSplit, sel]);
+  // Gate for any action that would discard the canvas (switch page, create a
+  // new page, navigate away) — a no-op confirm when there's nothing unsaved.
+  function confirmDiscardIfDirty(): boolean {
+    return !isDirty || window.confirm(t("vb.unsavedwarn"));
+  }
+  // Warn on tab close/refresh too — the in-app guards above don't cover that.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) { if (isDirty) { e.preventDefault(); e.returnValue = ""; } }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
   async function save() {
     if (!sel) return;
     setSaving(true); setMsg(null);
     try {
-      await cms.entries.update(LANDING_UID, sel.docId, pageBody(), sel.locale ? { locale: sel.locale } : undefined);
+      await cms.entries.update(uid, sel.docId, pageBody(), sel.locale ? { locale: sel.locale } : undefined);
+      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit);
       setMsg({ t: t("vb.saved"), ok: true });
     } catch (e) {
       if (e instanceof CmsError) setMsg({ t: "Save failed (HTTP " + e.status + ")", ok: false });
@@ -262,13 +1141,14 @@ export default function VisualBuilder() {
     setSaving(true); setMsg(null);
     const opts = sel.locale ? { locale: sel.locale } : undefined;
     try {
-      await cms.entries.update(LANDING_UID, sel.docId, pageBody(), opts);
+      await cms.entries.update(uid, sel.docId, pageBody(), opts);
+      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit);
     } catch (e) {
       setMsg(e instanceof CmsError ? { t: "Save failed (HTTP " + e.status + ")", ok: false } : { t: "Cannot reach the backend.", ok: false });
       setSaving(false); return;
     }
     try {
-      await cms.publish.publish(LANDING_UID, sel.docId, opts);
+      await cms.publish.publish(uid, sel.docId, opts);
       setMsg({ t: t("vb.published"), ok: true });
       await saveVersion("Published");
     } catch (e) {
@@ -281,20 +1161,38 @@ export default function VisualBuilder() {
   async function saveVersion(label: string) {
     if (!sel) return;
     try {
-      await cms.entries.create(PV_UID, { documentRef: sel.docId, contentType: LANDING_UID, label, data: { title: sel.title, blocks } });
+      // tenantKey: page-version is a Strapi bookkeeping type shared across
+      // every tenant and engine (see governance.ts's BOOKKEEPING_UIDS) —
+      // stamped on every write (cheap, and lets a future backfill happen),
+      // but only actually FILTERED on for wp: uids below, where it matters —
+      // see loadHistory's comment for why.
+      await cms.entries.create(PV_UID, { documentRef: sel.docId, contentType: uid, tenantKey: currentKey, label, data: { title: sel.title, blocks } });
     } catch {}
   }
   async function loadHistory() {
     if (!sel) return;
     setHistoryOpen(true); setVersions([]);
     try {
-      const { data } = await cms.entries.list<any>(PV_UID, { sort: "createdAt:DESC", pageSize: 50, filter: [{ field: "documentRef", op: "eq", value: sel.docId }] });
+      const filter = [
+        { field: "documentRef", op: "eq" as const, value: sel.docId },
+        { field: "contentType", op: "eq" as const, value: uid },
+        // Strapi's own page/landing document ids are effectively unique, so
+        // contentType+documentRef alone is already safe there — and every
+        // page-version row saved before this field existed has no
+        // tenantKey, so filtering on it unconditionally would hide a
+        // Strapi page's own pre-existing history. A WordPress page's id is
+        // a small integer that CAN collide with another tenant's page on
+        // the same shared WordPress instance, so it's the one case this
+        // extra filter is required for.
+        ...(uid.startsWith("wp:") ? [{ field: "tenantKey", op: "eq" as const, value: currentKey }] : []),
+      ];
+      const { data } = await cms.entries.list<any>(PV_UID, { sort: "createdAt:DESC", pageSize: 50, filter });
       setVersions(data.map((e: any) => ({ id: e.documentId ?? e.id, label: e.label, createdAt: e.createdAt, data: e.data })));
     } catch {}
   }
   function restore(v: any) {
     const b = v?.data?.blocks;
-    if (Array.isArray(b)) { setBlocks(b as Block[]); setActive(b.length ? 0 : -1); setHistoryOpen(false); setMsg({ t: t("vb.restored"), ok: true }); }
+    if (Array.isArray(b)) { setBlocks(b as Block[]); setActive(b.length ? 0 : -1); setHistoryOpen(false); setMsg({ t: t("vb.restored"), ok: true }); clearUndo(); }
   }
 
   // ---- scheduled publishing (publishStart / publishEnd) ----
@@ -302,7 +1200,7 @@ export default function VisualBuilder() {
     if (!sel) return;
     setSchedOpen(true); setSched({ start: "", end: "" });
     try {
-      const d: any = await cms.entries.get(LANDING_UID, sel.docId, sel.locale ? { locale: sel.locale } : undefined);
+      const d: any = await cms.entries.get(uid, sel.docId, sel.locale ? { locale: sel.locale } : undefined);
       setSched({ start: toLocalInput(d.publishStart), end: toLocalInput(d.publishEnd) });
     } catch {}
   }
@@ -311,7 +1209,7 @@ export default function VisualBuilder() {
     setSaving(true); setMsg(null);
     try {
       const body: any = { publishStart: sched.start ? new Date(sched.start).toISOString() : null, publishEnd: sched.end ? new Date(sched.end).toISOString() : null };
-      await cms.entries.update(LANDING_UID, sel.docId, body, sel.locale ? { locale: sel.locale } : undefined);
+      await cms.entries.update(uid, sel.docId, body, sel.locale ? { locale: sel.locale } : undefined);
       setMsg({ t: t("vb.schedsaved"), ok: true });
       setSchedOpen(false);
     } catch (e) {
@@ -328,6 +1226,7 @@ export default function VisualBuilder() {
     setBlocks(otherBlocks);            // load the other variant onto the canvas
     setActive(otherBlocks.length ? 0 : -1);
     setEditing(v);
+    clearUndo(); // undo history from the OTHER variant doesn't apply here
   }
   async function loadAbStats() {
     if (!sel) return;
@@ -340,11 +1239,76 @@ export default function VisualBuilder() {
   }
   function openAb() { if (!sel) return; setAbOpen(true); loadAbStats(); }
 
+  // Real preview (webx-studio/components/blockPreview/RealPreview.tsx) only
+  // has a ported renderer for the gov-portal template today — ORST/
+  // RoyalSociety have entirely different CSS/markup this doesn't cover yet.
+  // `publicTemplate` isn't tracked anywhere else in webx-studio, so this is
+  // the one place that needs to ask for it. Runs on tenant load, not gated
+  // behind the previewMode toggle — RealPreview is now the primary editing
+  // canvas for gov-portal tenants, always shown, not just when "previewing".
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") { if (previewMode) setPreviewMode(false); if (historyOpen) setHistoryOpen(false); if (schedOpen) setSchedOpen(false); if (abOpen) setAbOpen(false); } }
+    if (!tenantKey) { setGpSupported(false); setTemplateReady(true); return; }
+    let cancelled = false;
+    (async () => {
+      setPreviewLoading(true); setGpSupported(false); setPreviewHomeData(null);
+      try {
+        const { data: tenants } = await cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: tenantKey }] });
+        const tpl = (tenants[0]?.publicTemplate || "gov-portal") as Dialect;
+        if (!cancelled) { setTemplate(tpl); setTemplateReady(true); }
+        if (tpl !== "gov-portal") return;
+        if (!cancelled) setGpSupported(true);
+        // tenantFilter is required, not optional — an unscoped caller (e.g.
+        // the scheduler account) sees every tenant's rows unfiltered
+        // otherwise, and this list() call has no other tenant scoping.
+        const tenantFilter = { field: "tenant.key", op: "eq" as const, value: tenantKey };
+        const [banners, articles, videos, awards, faqs] = await Promise.all([
+          cms.entries.list<any>("api::banner.banner", { pageSize: 100, sort: "order:asc", filter: [tenantFilter, { field: "active", op: "eq", value: true }] }),
+          cms.entries.list<any>("api::article.article", { pageSize: 100, sort: "publishDate:desc", filter: [tenantFilter] }),
+          cms.entries.list<any>("api::video.video", { pageSize: 100, sort: "date:desc", filter: [tenantFilter] }),
+          cms.entries.list<any>("api::award.award", { pageSize: 100, sort: "order:asc", filter: [tenantFilter] }),
+          cms.entries.list<any>("api::faq.faq", { pageSize: 100, sort: "order:asc", filter: [tenantFilter] }),
+        ]);
+        if (!cancelled) setPreviewHomeData({ banners: banners.data, articles: articles.data, videos: videos.data, awards: awards.data, faqs: faqs.data });
+      } catch { if (!cancelled) { setPreviewHomeData({}); setTemplateReady(true); } }
+      finally { if (!cancelled) setPreviewLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [tenantKey]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { if (previewMode) setPreviewMode(false); if (historyOpen) setHistoryOpen(false); if (schedOpen) setSchedOpen(false); if (abOpen) setAbOpen(false); return; }
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      // Ctrl+S always overrides the browser's own "save page" dialog — this
+      // is the one shortcut that should fire even while typing in a field.
+      if (k === "s") { e.preventDefault(); if (sel) save(); return; }
+      // Everything else here yields to native in-field behavior (browser's
+      // own undo-while-typing, Backspace deleting a character, etc.) — only
+      // acts when focus isn't inside a text input/textarea/contentEditable.
+      const el = document.activeElement as HTMLElement | null;
+      const isTyping = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      if (isTyping) return;
+      if (k === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      if (k === "y") { e.preventDefault(); redo(); return; }
+      if (k === "d" && active >= 0) { e.preventDefault(); dup(active); return; }
+    }
+    // Delete/Backspace for the selected block is a separate, lower-priority
+    // listener (no modifier key involved) — same isTyping guard, so it never
+    // hijacks normal text deletion inside a field.
+    function onKeyDel(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (active < 0) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.preventDefault();
+      remove(active);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [previewMode, historyOpen, schedOpen, abOpen]);
+    window.addEventListener("keydown", onKeyDel);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keydown", onKeyDel); };
+  }, [previewMode, historyOpen, schedOpen, abOpen, active, sel]);
 
   // ---- canvas preview (inline-editable) ----
   function preview(b: Block, i: number) {
@@ -396,8 +1360,96 @@ export default function VisualBuilder() {
       if (!bt) return <div className="vbk-rich"><span className="muted">Unknown block: {b.typeKey}</span></div>;
       return <div className="vbk-custom" dangerouslySetInnerHTML={{ __html: interpolate(bt, b.props || {}) }} />;
     }
+    if (c === "block.stat-row") {
+      const items = Array.isArray(b.items) ? b.items : [];
+      return (
+        <div className="vbk-features">
+          <div className="vbk-grid" style={{ gridTemplateColumns: `repeat(${Math.max(items.length, 1)},1fr)` }}>
+            {items.map((it: any, k: number) => (
+              <div className="vbk-feat" key={k}>
+                <div className="ic"><Icon name={it.icon === "clock" ? "clock" : it.icon === "shield" ? "shield" : "grid"} /></div>
+                <InlineText as="b" value={it.value || ""} onChange={(v) => setStatItem(i, k, "value", v)} placeholder="Value" />
+                <InlineText as="span" value={it.label || ""} onChange={(v) => setStatItem(i, k, "label", v)} placeholder="Label" />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    if (c === "block.featured-promo") return (
+      <div className="vbk-cta">
+        <div style={{ flex: 1 }}>
+          <InlineText as="span" className="vbk-kicker" value={b.eyebrow || ""} onChange={(v) => setField(i, "eyebrow", v)} placeholder="EYEBROW" />
+          <InlineText as="h2" value={b.title || ""} onChange={(v) => setField(i, "title", v)} placeholder="Heading" />
+          <InlineText as="p" value={b.description || ""} onChange={(v) => setField(i, "description", v)} placeholder="Description…" />
+        </div>
+        <InlineText as="span" className="vbk-btn" value={b.primaryLabel || ""} onChange={(v) => setField(i, "primaryLabel", v)} placeholder="Primary button" />
+      </div>
+    );
+    if (c === "block.embed") return (
+      <div className="vbk-rich vbk-livedata">
+        <b><Icon name="code" />{" "}{b.label || t("vb.embed")}</b>
+        <span className="muted" style={{ display: "block", marginTop: 4 }}>{t("vb.embedwarn")}</span>
+      </div>
+    );
+    if (c === "block.form") return (
+      <div className="vbk-rich vbk-livedata">
+        <b><Icon name="inbox" />{" "}{b.heading || FORM_FIELD_DEFS[b.contentTypeUid]?.label || t("vb.form")}</b>
+        <span className="muted" style={{ display: "block", marginTop: 4 }}>{t("vb.formwarn")}</span>
+      </div>
+    );
+    if (LIVE_DATA_COMPS.has(c)) return (
+      <div className="vbk-rich vbk-livedata">
+        <b>{compName(c)}</b>
+        <span className="muted" style={{ display: "block", marginTop: 4 }}>{t("vb.livedata")}</span>
+      </div>
+    );
+    // Generic mockup-canvas fallback for every ORST block type (this branch
+    // never fires for gov-portal, which is exhaustively handled above) —
+    // covers all 14 without one bespoke preview each. Most share a
+    // heading/lead "section head" shape (Blocks.tsx's own SectionHead), but
+    // cta-band (heading/body) and notice (title/body) don't, and
+    // contact-info has neither — so this picks whichever title-like and
+    // body-like field the block's OWN fields list (bm.fields) actually
+    // declares, rather than assuming heading/lead always exist. Editing a
+    // field that doesn't apply to a type would silently do nothing on the
+    // real site, which is worse than just not offering it inline. Full
+    // real-CSS fidelity is a later phase (host the real renderer instead of
+    // porting it) — this is enough to orient an editor, not a final look.
+    const bm = metaOf(c);
+    if (bm?.tpl) {
+      const has = (k: string) => (bm.fields || []).some((f) => f.k === k);
+      const titleKey = has("heading") ? "heading" : has("title") ? "title" : null;
+      const bodyKey = has("lead") ? "lead" : has("body") ? "body" : null;
+      // A source-bound block's stored `items` is whatever was last written
+      // to WordPress (typically stale seed placeholders — resolveSources()
+      // recomputes the real list at PUBLIC-SITE render time, a step this
+      // Builder never runs). Showing that count would misrepresent it as
+      // live; show the same "content pulled at render time" notice
+      // gov-portal's own LIVE_DATA_COMPS blocks already use instead.
+      const items = bm.items && !b.source ? ((b[bm.items.key] as any[]) || []) : null;
+      return (
+        <div className="vbk-hero">
+          {titleKey
+            ? <InlineText as="h2" value={b[titleKey] || ""} onChange={(v) => setField(i, titleKey, v)} placeholder={t(bm.key)} />
+            : <b>{t(bm.key)}</b>}
+          {bodyKey && <InlineText as="p" value={b[bodyKey] || ""} onChange={(v) => setField(i, bodyKey, v)} placeholder="…" />}
+          {items && <span className="muted" style={{ display: "block", marginTop: 4 }}>{items.length} {bm.items!.key}</span>}
+          {b.source && <span className="muted" style={{ display: "block", marginTop: 4 }}>{t("vb.livedata")}</span>}
+        </div>
+      );
+    }
     return <div className="vbk-rich"><span className="muted">{c}</span></div>;
   }
+
+  // The block palette a tenant actually sees — gov-portal's bundled TYPES
+  // (tpl undefined) for a Strapi/gov-portal session, ORST_TYPES/
+  // ROYALSOCIETY_TYPES (tpl==="orst"/"royalsociety") for a WordPress tenant
+  // on that template. Every entry not matching the active template is
+  // filtered out at this one point, so the three render sites below (the
+  // insert-between popup, the search results, and the categorized grid)
+  // never need their own template check.
+  const paletteTypes = ALL_TYPES.filter((ty: any) => (ty.tpl || "gov-portal") === template || (ty.generic && (template === "orst" || template === "royalsociety")));
 
   function ins(index: number) {
     return (
@@ -406,9 +1458,17 @@ export default function VisualBuilder() {
         onDragLeave={() => setDropAt((d) => (d === index ? -1 : d))}
         onDrop={(e) => { e.preventDefault(); handleDrop(index); }}>
         <button className="vbk-ins-btn" aria-label={t("a11y.insert")} title={t("a11y.insert")} onClick={() => setInsAt(insAt === index ? -1 : index)}><Icon name="plus" /></button>
+        {/* Same Toolbox component as the rail, in compact mode — this used
+            to be a flat, unsearchable list of every type, which stopped
+            being usable once the palette passed ~20 entries. */}
         {insAt === index && (
           <div className="vbk-ins-pop">
-            {TYPES.map((ty) => <button key={ty.comp} onClick={() => addAt(index, ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
+            <Toolbox compact t={t} dialect={template}
+              types={paletteTypes as any} categories={BLOCK_CATEGORIES} customTypes={customTypes} templates={templates}
+              onAdd={(comp) => addAt(index, comp)}
+              onAddCustom={(ct) => { addCustomAt(index, ct); setInsAt(-1); }}
+              onApplyTemplate={(tpl) => addTemplateAt(index, tpl)}
+              onDragNew={setDragNew} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} />
           </div>
         )}
       </div>
@@ -420,25 +1480,64 @@ export default function VisualBuilder() {
 
   return (
     <>
+      {/* One copy of the icon sprite for THIS (parent) document — IconPicker
+          renders <use href="#i-xxx">, which only resolves symbols defined
+          in the same document; RealPreview's own copy (inside its iframe)
+          is a separate document and doesn't help here. */}
+      <IconSpriteDefs />
+      {/* Modals below stay OUTSIDE this wrapper so they keep positioning
+          against the viewport rather than a fixed ancestor. */}
+      <div className={fullscreen ? "vb-full" : undefined}>
       <div className="vh">
-        <div><h1>{t("nav.builder")}</h1><p>{t("vb.sub")}</p></div>
+        <div><h1>{t("nav.builder")}</h1>{!fullscreen && <p>{t("vb.sub")}</p>}</div>
         <div className="vh-act">
           {pages.length > 0 && (
-            <select className="vb-sel" value={sel?.docId || ""} onChange={(e) => { const p = pages.find((x) => x.docId === e.target.value); if (p) open(p); }} title={t("vb.pages")}>
+            <select className="vb-sel" value={sel?.docId || ""} onChange={(e) => {
+              const p = pages.find((x) => x.docId === e.target.value);
+              if (p && confirmDiscardIfDirty()) open(p);
+            }} title={t("vb.pages")}>
               {pages.map((p) => <option key={p.docId} value={p.docId}>{p.title}</option>)}
             </select>
           )}
-          <button className="btn btn--g" onClick={createPage} disabled={saving} title={t("vb.newpage")}><Icon name="plus" />{t("vb.newpage")}</button>
+          {/* WordPress page slugs are globally unique and public-site looks
+              them up as "<tenant>-<slug>"; app/orst/[page]/page.tsx's
+              generateStaticParams also enumerates a fixed page list — a
+              Builder-created wp:page today would be an orphan with no
+              route. Creation unlocks once that route enumerates WordPress
+              pages too (see the plan's later phases). */}
+          {!isWpPage && <button className="btn btn--g" onClick={() => confirmDiscardIfDirty() && createPage()} disabled={saving} title={t("vb.newpage")}><Icon name="plus" />{t("vb.newpage")}</button>}
+          {/* Icon-only, grouped like the device/undo toggles next to it —
+              this row already carries 10 controls, and a labelled button
+              here pushed Publish off the right edge. */}
+          {!previewMode && (
+            <div className="seg">
+              <button className={tbOpen ? "on" : ""} onClick={() => setTbOpen((o) => !o)}
+                title={t("tbx.toolbox")} aria-label={t("tbx.toolbox")} aria-pressed={tbOpen}>
+                <Icon name="grid" />
+              </button>
+            </div>
+          )}
           <div className="seg">
             {(["desktop", "tablet", "mobile"] as Device[]).map((d) => (
               <button key={d} className={device === d ? "on" : ""} onClick={() => setDevice(d)} title={d}><Icon name={d} /></button>
             ))}
           </div>
+          <div className="seg">
+            <button onClick={undo} disabled={!undoStack.length} title={t("vb.undo") + " (Ctrl+Z)"}><Icon name="undo" /></button>
+            <button onClick={redo} disabled={!redoStack.length} title={t("vb.redo") + " (Ctrl+Shift+Z)"}><Icon name="redo" /></button>
+          </div>
+          {isDirty && <span className="badge b-warn" title={t("vb.unsavedwarn")}><span className="dot" />{t("vb.unsaved")}</span>}
           {sel && !previewMode && <>
-            <button className={"btn btn--g" + (abEnabled ? " ab-on" : "")} onClick={openAb} title={t("vb.ab")}><Icon name="split" />{t("vb.ab")}{abEnabled ? " ·" + (editing) : ""}</button>
-            <button className="btn btn--g" onClick={openSchedule} title={t("vb.schedule")}><Icon name="calendar" />{t("vb.schedule")}</button>
+            {isLanding && <button className={"btn btn--g" + (abEnabled ? " ab-on" : "")} onClick={openAb} title={t("vb.ab")}><Icon name="split" />{t("vb.ab")}{abEnabled ? " ·" + (editing) : ""}</button>}
+            {isLanding && <button className="btn btn--g" onClick={openSchedule} title={t("vb.schedule")}><Icon name="calendar" />{t("vb.schedule")}</button>}
             <button className="btn btn--g" onClick={loadHistory} title={t("vb.history")}><Icon name="clock" />{t("vb.history")}</button>
           </>}
+          <div className="seg">
+            <button className={fullscreen ? "on" : ""} onClick={() => setFullscreen((f) => !f)}
+              title={fullscreen ? t("vb.exitfull") : t("vb.full")} aria-label={fullscreen ? t("vb.exitfull") : t("vb.full")} aria-pressed={fullscreen}>
+              <Icon name={fullscreen ? "shrink" : "expand"} />
+            </button>
+          </div>
           {sel && <>
             <button className="btn btn--g" onClick={() => setPreviewMode((p) => !p)}><Icon name="eye" />{previewMode ? t("vb.exitpreview") : t("vb.preview")}</button>
             <button className="btn btn--g" onClick={save} disabled={saving}>{t("vb.save")}</button>
@@ -451,7 +1550,7 @@ export default function VisualBuilder() {
 
       {previewMode && <div className="vb-pvbar"><Icon name="eye" />{t("vb.previewhint")}</div>}
       {editing === "B" && !previewMode && <div className="vb-pvbar vb-bbar"><Icon name="split" />{t("vb.editingb")}</div>}
-      <div className={"vb2" + (previewMode ? " preview" : "")}>
+      <div className={"vb2" + (previewMode ? " preview" : "") + (tbOpen && !previewMode ? " tbx-open" : "")}>
         <aside className="vb-insp">
           <div className="vb-insp-h">{t("vb.blocks")} {blocks.length > 0 && <span className="mono" style={{ color: "var(--mut)" }}>{blocks.length}</span>}</div>
           {blocks.map((b, i) => {
@@ -460,7 +1559,21 @@ export default function VisualBuilder() {
             return (
               <div className={"vb-block" + (isA ? " sel" : "") + (dragI === i ? " drag" : "")} key={i}
                 draggable onDragStart={() => setDragI(i)} onDragEnd={() => setDragI(-1)}
-                onDragOver={(e) => e.preventDefault()} onDrop={() => { reorder(dragI, i); setDragI(-1); }}>
+                onDragOver={(e) => e.preventDefault()}
+                // Dropping a NEW toolbox tile here (dragNew) used to silently
+                // no-op — this list's own onDrop only ever handled reordering
+                // an EXISTING block (dragI), so the only working way to place
+                // a block was the toolbox's click-to-append or, for the
+                // gov-portal RealPreview canvas specifically, nothing at all
+                // (that canvas has no insert-between affordance of its own —
+                // see the vb-stage branch below). Found stress-testing DGA.
+                onDrop={() => {
+                  if (dragI >= 0) { reorder(dragI, i); setDragI(-1); }
+                  else if (dragNew?.comp) addAt(i, dragNew.comp);
+                  else if (dragNew?.custom) addCustomAt(i, dragNew.custom);
+                  else if (dragNew?.template) addTemplateAt(i, dragNew.template);
+                  setDragNew(null); setDropAt(-1);
+                }}>
                 <div className="vb-block-h" onClick={() => setActive(isA ? -1 : i)}>
                   <span className="vb-grip"><Icon name="drag" /></span>
                   <Icon name={iconOf(b)} />
@@ -474,17 +1587,114 @@ export default function VisualBuilder() {
                 </div>
                 {isA && (
                   <div className="vb-block-b">
-                    {(bm?.fields || []).map((f: any) => (
+                    {b.__component === "block.embed" && (
+                      <div className="notice" style={{ marginBottom: 9 }}><Icon name="shield" />{t("vb.embedwarn")}</div>
+                    )}
+                    {b.__component === "block.form" && (
+                      <div className="notice" style={{ marginBottom: 9 }}><Icon name="shield" />{t("vb.formwarn")}</div>
+                    )}
+                    {(bm?.fields || []).filter((f: any) => !f.when || f.when(b)).map((f: any) => (
                       <div className="fld" key={f.k} style={{ marginBottom: 9 }}>
                         <label style={{ fontSize: 11 }}>{f.k}</label>
                         {f.rich
                           ? <RichText value={b[f.k] || ""} onChange={(h) => setField(i, f.k, h)} />
-                          : f.ta
-                            ? <textarea value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} style={{ minHeight: 54 }} />
-                            : <input value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} />}
+                          : f.code
+                            ? <textarea value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} style={{ minHeight: 140, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 12.5 }} spellCheck={false} />
+                            : f.select
+                              ? <select value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)}>
+                                  {f.select.map((opt: string) => <option key={opt} value={opt}>{opt || "—"}</option>)}
+                                </select>
+                              : f.ta
+                                ? <textarea value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} style={{ minHeight: 54 }} />
+                                : <input value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} />}
                       </div>
                     ))}
-                    {(b.__component === "block.image" || b.__component === "block.hero") && (
+                    {/* Live-data source binding — the ORST answer to
+                        gov-portal's block.collection-list content-type
+                        picker. Only meaningful on the plain "items" list
+                        (not "paragraphs"/"actions", which are always
+                        admin-authored) — see public-site/lib/blockSource.ts
+                        for what each postType/map combination actually
+                        does; this UI doesn't validate the combination makes
+                        sense, matching the same escape-hatch tradeoff
+                        block.custom's freeform props already accept. When
+                        bound, resolveSources() OVERWRITES `items` on every
+                        render, so the generic items editor below is hidden
+                        — hand-editing items on a source-bound block would
+                        silently vanish on the next publish, which is worse
+                        than not offering the control at all. */}
+                    {bm?.tpl && bm.items?.key === "items" && (!bm.items.when || bm.items.when(b)) && (
+                      <div className="fld" style={{ marginBottom: 9 }}>
+                        <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
+                          <input type="checkbox" checked={!!b.source} onChange={(e) => setField(i, "source", e.target.checked ? { kind: "wp", postType: "service", map: "card" } : undefined)} />
+                          {t("vb.orst.source")}
+                        </label>
+                        {b.source && (
+                          <div style={{ display: "grid", gap: 6, marginTop: 6, background: "var(--sunk)", borderRadius: 9, padding: 8 }}>
+                            <select value={b.source.postType || "service"} onChange={(e) => updateBlockField(i, ["source", "postType"], e.target.value)}>
+                              {["service", "publication", "news", "faq", "resource", "mission", "org-unit", "document", "timeline"].map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                            <select value={b.source.map || "card"} onChange={(e) => updateBlockField(i, ["source", "map"], e.target.value)}>
+                              {["card", "link", "faq", "mission", "orgunit", "document", "timeline", "dated"].map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                            <input placeholder="icon (i-file, i-video, …)" value={b.source.icon || ""} onChange={(e) => updateBlockField(i, ["source", "icon"], e.target.value)} />
+                            <input placeholder="tag override" value={b.source.tag || ""} onChange={(e) => updateBlockField(i, ["source", "tag"], e.target.value)} />
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <input style={{ flex: 1 }} placeholder="limit" value={b.source.limit ?? ""} onChange={(e) => updateBlockField(i, ["source", "limit"], e.target.value ? Number(e.target.value) : undefined)} />
+                              <input style={{ flex: 1 }} placeholder="offset" value={b.source.offset ?? ""} onChange={(e) => updateBlockField(i, ["source", "offset"], e.target.value ? Number(e.target.value) : undefined)} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Generic repeatable-list editor — one `items` descriptor per
+                        block type (see ORST_TYPES above) drives add/edit/remove
+                        for whichever array that type actually has, through the
+                        same updateBlockField/onArrayAdd/onArrayRemove primitives
+                        every bespoke items editor further down already uses, so
+                        undo/redo and dirty-tracking work identically. Object
+                        items (bm.items.fields set) render one input per field;
+                        scalar items (bm.items.scalar, e.g. rich-text's
+                        `paragraphs: string[]`) render a single input per entry,
+                        mirroring block.featured-promo's checklist just below.
+                        Hidden when the block is source-bound (see above), or
+                        when the type's own `items.when(b)` says this block's
+                        current field values don't use `items` at all (e.g.
+                        FlexPanel's "banner" layout). */}
+                    {bm?.items && (!bm.items.when || bm.items.when(b)) && !(bm.items.key === "items" && b.source) && (
+                      <div className="fld" style={{ marginBottom: 9 }}>
+                        <label style={{ fontSize: 11 }}>{bm.items.key}</label>
+                        {((b[bm.items.key] as any[]) || []).map((it: any, k: number) => (
+                          <div key={k} style={{ display: "flex", gap: 6, alignItems: bm.items!.scalar ? "center" : "flex-start", marginBottom: 6, background: "var(--sunk)", borderRadius: 9, padding: 7 }}>
+                            {bm.items!.scalar ? (
+                              <input style={{ flex: 1 }} value={it || ""} onChange={(e) => updateBlockField(i, [bm.items!.key, k], e.target.value)} />
+                            ) : (
+                              <div style={{ flex: 1, display: "grid", gap: 6 }}>
+                                {(bm.items!.fields || []).map((f: any) => f.icon ? (
+                                  // Same full "i-xxx" id convention block.feature-grid's own
+                                  // IconPicker already uses (see its own comment) — every WP-
+                                  // dialect (ORST/RoyalSociety) type with an icon item field
+                                  // stores it the same way, so the same built-in set applies.
+                                  <IconPicker key={f.k} value={it?.[f.k] || "i-check"} builtIn={FEATURE_ICONS} customIcons={customIcons} title="icon"
+                                    onChange={(v) => updateBlockField(i, [bm.items!.key, k, f.k], v)} />
+                                ) : f.select ? (
+                                  <select key={f.k} value={it?.[f.k] || ""} onChange={(e) => updateBlockField(i, [bm.items!.key, k, f.k], e.target.value)}>
+                                    {f.select.map((opt: string) => <option key={opt} value={opt}>{f.k + (opt ? ": " + opt : "")}</option>)}
+                                  </select>
+                                ) : (
+                                  f.ta
+                                    ? <textarea key={f.k} placeholder={f.k} value={it?.[f.k] || ""} onChange={(e) => updateBlockField(i, [bm.items!.key, k, f.k], e.target.value)} style={{ minHeight: 44 }} />
+                                    : <input key={f.k} placeholder={f.k} value={it?.[f.k] || ""} onChange={(e) => updateBlockField(i, [bm.items!.key, k, f.k], e.target.value)} />
+                                ))}
+                              </div>
+                            )}
+                            <button className="ic-btn" aria-label={t("a11y.delete")} onClick={() => onArrayRemove(i, [bm.items!.key], k)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" onClick={() => onArrayAdd(i, [bm.items!.key], JSON.parse(JSON.stringify(bm.items!.def)))}><Icon name="plus" />{bm.items.key}</button>
+                      </div>
+                    )}
+                    {(b.__component === "block.image" || b.__component === "block.hero" || b.__component === "block.featured-promo") && (
                       <div className="fld" style={{ marginBottom: 9 }}>
                         <label style={{ fontSize: 11 }}>image</label>
                         <div className="ed-media">
@@ -503,12 +1713,233 @@ export default function VisualBuilder() {
                         <label style={{ fontSize: 11 }}>items</label>
                         {(b.items || []).map((it: any, k: number) => (
                           <div className="vb-item" key={k}>
+                            <IconPicker value={it.icon || "i-check"} builtIn={FEATURE_ICONS} customIcons={customIcons} title="icon"
+                              onChange={(v) => setItem(i, k, "icon", v)} />
                             <input value={it.title || ""} placeholder="title" onChange={(e) => setItem(i, k, "title", e.target.value)} />
                             <input value={it.text || ""} placeholder="text" onChange={(e) => setItem(i, k, "text", e.target.value)} />
+                            <input value={it.url || ""} placeholder="url" onChange={(e) => setItem(i, k, "url", e.target.value)} />
+                            <select value={it.colorTheme || "blue"} onChange={(e) => setItem(i, k, "colorTheme", e.target.value)} title="color">
+                              {FEATURE_THEMES.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
                             <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmItem(i, k)}><Icon name="trash" /></button>
                           </div>
                         ))}
                         <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addItem(i)}><Icon name="plus" />item</button>
+                      </div>
+                    )}
+                    {b.__component === "block.stat-row" && (
+                      <div className="vb-items">
+                        <label style={{ fontSize: 11 }}>items</label>
+                        {(b.items || []).map((it: any, k: number) => (
+                          <div className="vb-item" key={k}>
+                            {/* stat-row items store the SHORT unprefixed form
+                                ("clock", not "i-clock" — see blocks.tsx's own
+                                AnyIcon comment, which prefixes only at render
+                                time) — IconPicker wants real symbol ids to
+                                look them up in the sprite, so the "i-" prefix
+                                is added going in and stripped coming back out,
+                                right here, without touching what's stored. */}
+                            <IconPicker value={"i-" + (it.icon || "users")} builtIn={STAT_ICONS.map((ic) => "i-" + ic)} customIcons={customIcons} title="icon"
+                              // Only unprefix a value that's actually one of
+                              // the built-ins passed in above — a custom
+                              // icon's own key (which IconPicker returns
+                              // as-is) is stored raw either way, even on the
+                              // unlikely chance it happens to start with "i-".
+                              onChange={(v) => setStatItem(i, k, "icon", v.startsWith("i-") && STAT_ICONS.includes(v.slice(2)) ? v.slice(2) : v)} />
+                            <input value={it.value || ""} placeholder="value" onChange={(e) => setStatItem(i, k, "value", e.target.value)} />
+                            <input value={it.label || ""} placeholder="label" onChange={(e) => setStatItem(i, k, "label", e.target.value)} />
+                            <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmStatItem(i, k)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addStatItem(i)}><Icon name="plus" />item</button>
+                      </div>
+                    )}
+                    {b.__component === "block.featured-promo" && (
+                      <div className="vb-items">
+                        <label style={{ fontSize: 11 }}>checklist</label>
+                        {(b.items || []).map((li: string, k: number) => (
+                          <div className="vb-item" key={k}>
+                            <input value={li || ""} placeholder="checklist item" onChange={(e) => setChecklistItem(i, k, e.target.value)} />
+                            <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmChecklistItem(i, k)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addChecklistItem(i)}><Icon name="plus" />item</button>
+                      </div>
+                    )}
+                    {b.__component === "block.testimonials" && (
+                      <div className="vb-items">
+                        <label style={{ fontSize: 11 }}>items</label>
+                        {(b.items || []).map((it: any, k: number) => (
+                          <div className="vb-item" key={k} style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
+                            <div className="ed-media" style={{ flex: "0 0 auto" }}>
+                              {it.avatar?.url ? <img className="ed-img" src={(it.avatar.url as string).startsWith("http") ? it.avatar.url : "/api/strapi" + it.avatar.url} alt="" /> : <div className="ed-img ed-img--none">{t("m.none")}</div>}
+                              <label className="btn btn--g" style={{ cursor: "pointer" }}><Icon name="img" />{uploadingI === i ? t("m.uploading") : t("m.change")}<input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && uploadTestiAvatar(i, k, e.target.files[0])} /></label>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 5 }}>
+                              <textarea value={it.quote || ""} placeholder="quote" style={{ minHeight: 50 }} onChange={(e) => setTestiItem(i, k, "quote", e.target.value)} />
+                              <input value={it.author || ""} placeholder="author" onChange={(e) => setTestiItem(i, k, "author", e.target.value)} />
+                              <input value={it.role || ""} placeholder="role" onChange={(e) => setTestiItem(i, k, "role", e.target.value)} />
+                            </div>
+                            <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmTestiItem(i, k)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addTestiItem(i)}><Icon name="plus" />item</button>
+                      </div>
+                    )}
+                    {b.__component === "block.logo-cloud" && (
+                      <div className="vb-items">
+                        <label style={{ fontSize: 11 }}>items</label>
+                        {(b.items || []).map((it: any, k: number) => (
+                          <div className="vb-item" key={k} style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
+                            <div className="ed-media" style={{ flex: "0 0 auto" }}>
+                              {it.logo?.url ? <img className="ed-img" src={(it.logo.url as string).startsWith("http") ? it.logo.url : "/api/strapi" + it.logo.url} alt="" /> : <div className="ed-img ed-img--none">{t("m.none")}</div>}
+                              <label className="btn btn--g" style={{ cursor: "pointer" }}><Icon name="img" />{uploadingI === i ? t("m.uploading") : t("m.change")}<input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && uploadLogoImg(i, k, e.target.files[0])} /></label>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 5 }}>
+                              <input value={it.name || ""} placeholder="name" onChange={(e) => setLogoItem(i, k, "name", e.target.value)} />
+                              <input value={it.url || ""} placeholder="link url (optional)" onChange={(e) => setLogoItem(i, k, "url", e.target.value)} />
+                            </div>
+                            <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmLogoItem(i, k)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addLogoItem(i)}><Icon name="plus" />item</button>
+                      </div>
+                    )}
+                    {b.__component === "block.team-grid" && (
+                      <div className="vb-items">
+                        <label style={{ fontSize: 11 }}>items</label>
+                        {(b.items || []).map((it: any, k: number) => (
+                          <div className="vb-item" key={k} style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
+                            <div className="ed-media" style={{ flex: "0 0 auto" }}>
+                              {it.photo?.url ? <img className="ed-img" src={(it.photo.url as string).startsWith("http") ? it.photo.url : "/api/strapi" + it.photo.url} alt="" /> : <div className="ed-img ed-img--none">{t("m.none")}</div>}
+                              <label className="btn btn--g" style={{ cursor: "pointer" }}><Icon name="img" />{uploadingI === i ? t("m.uploading") : t("m.change")}<input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && uploadTeamPhoto(i, k, e.target.files[0])} /></label>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 5 }}>
+                              <input value={it.name || ""} placeholder="name" onChange={(e) => setTeamItem(i, k, "name", e.target.value)} />
+                              <input value={it.role || ""} placeholder="role" onChange={(e) => setTeamItem(i, k, "role", e.target.value)} />
+                              <textarea value={it.bio || ""} placeholder="bio (optional)" style={{ minHeight: 40 }} onChange={(e) => setTeamItem(i, k, "bio", e.target.value)} />
+                            </div>
+                            <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmTeamItem(i, k)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addTeamItem(i)}><Icon name="plus" />item</button>
+                      </div>
+                    )}
+                    {b.__component === "block.spacer" && (
+                      <>
+                        <div className="fld" style={{ marginBottom: 9 }}>
+                          <label style={{ fontSize: 11 }}>{t("vb.spacer.style")}</label>
+                          <select value={b.style || "space"} onChange={(e) => setField(i, "style", e.target.value)}>
+                            <option value="space">{t("vb.spacer.blank")}</option>
+                            <option value="line">{t("vb.spacer.line")}</option>
+                          </select>
+                        </div>
+                        <div className="fld" style={{ marginBottom: 9 }}>
+                          <label style={{ fontSize: 11 }}>{t("vb.spacer.size")}</label>
+                          <select value={b.size || "md"} onChange={(e) => setField(i, "size", e.target.value)}>
+                            <option value="sm">{t("vb.spacer.sm")}</option>
+                            <option value="md">{t("vb.spacer.md")}</option>
+                            <option value="lg">{t("vb.spacer.lg")}</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+                    {b.__component === "block.tabs" && (
+                      <>
+                        <div className="fld" style={{ marginBottom: 9 }}>
+                          <label style={{ fontSize: 11 }}>{t("vb.tabs.layout")}</label>
+                          <select value={b.layout || "tabs"} onChange={(e) => setField(i, "layout", e.target.value)}>
+                            <option value="tabs">{t("vb.tabs.tabs")}</option>
+                            <option value="accordion">{t("vb.tabs.accordion")}</option>
+                          </select>
+                        </div>
+                        <div className="vb-items">
+                          <label style={{ fontSize: 11 }}>{t("vb.tabs.items")}</label>
+                          {(b.items || []).map((it: any, k: number) => (
+                            <div key={k} style={{ border: "1px solid var(--line2)", borderRadius: 9, padding: 8, marginBottom: 7 }}>
+                              <div style={{ display: "flex", gap: 5, marginBottom: 6, alignItems: "center" }}>
+                                <input value={it.title || ""} placeholder="title" style={{ flex: 1 }} onChange={(e) => setTabItem(i, k, "title", e.target.value)} />
+                                <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmTabItem(i, k)}><Icon name="trash" /></button>
+                              </div>
+                              <RichText value={it.body || ""} onChange={(h) => setTabItem(i, k, "body", h)} />
+                            </div>
+                          ))}
+                          <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addTabItem(i)}><Icon name="plus" />item</button>
+                        </div>
+                      </>
+                    )}
+                    {b.__component === "block.comparison" && (
+                      <div className="vb-items">
+                        <label style={{ fontSize: 11 }}>{t("vb.cmp.columns")}</label>
+                        {(b.columns || []).map((c: any, k: number) => (
+                          <div key={k} style={{ border: "1px solid var(--line2)", borderRadius: 9, padding: 8, marginBottom: 7, display: "flex", flexDirection: "column", gap: 5 }}>
+                            <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                              <input value={c.name || ""} placeholder="name" style={{ flex: 1 }} onChange={(e) => setCmpCol(i, k, "name", e.target.value)} />
+                              <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmCmpCol(i, k)}><Icon name="trash" /></button>
+                            </div>
+                            <div style={{ display: "flex", gap: 5 }}>
+                              <input value={c.price || ""} placeholder={t("vb.cmp.price")} style={{ flex: 1 }} onChange={(e) => setCmpCol(i, k, "price", e.target.value)} />
+                              <input value={c.period || ""} placeholder={t("vb.cmp.period")} style={{ flex: 1 }} onChange={(e) => setCmpCol(i, k, "period", e.target.value)} />
+                            </div>
+                            <textarea value={c.description || ""} placeholder="description" style={{ minHeight: 40 }} onChange={(e) => setCmpCol(i, k, "description", e.target.value)} />
+                            <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
+                              <input type="checkbox" checked={!!c.highlight} onChange={(e) => setCmpCol(i, k, "highlight", e.target.checked)} />
+                              {t("vb.cmp.highlight")}
+                            </label>
+                            <div>
+                              <label style={{ fontSize: 10.5, color: "var(--mut)" }}>{t("vb.cmp.features")}</label>
+                              {(c.features || []).map((f: string, fi: number) => (
+                                <div key={fi} style={{ display: "flex", gap: 5, marginTop: 4 }}>
+                                  <input value={f || ""} placeholder="feature" style={{ flex: 1 }} onChange={(e) => setCmpFeature(i, k, fi, e.target.value)} />
+                                  <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => rmCmpFeature(i, k, fi)}><Icon name="trash" /></button>
+                                </div>
+                              ))}
+                              <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginTop: 4 }} onClick={() => addCmpFeature(i, k)}><Icon name="plus" />feature</button>
+                            </div>
+                            <div style={{ display: "flex", gap: 5 }}>
+                              <input value={c.ctaLabel || ""} placeholder={t("vb.cmp.ctalabel")} style={{ flex: 1 }} onChange={(e) => setCmpCol(i, k, "ctaLabel", e.target.value)} />
+                              <input value={c.ctaUrl || ""} placeholder={t("vb.cmp.ctaurl")} style={{ flex: 1 }} onChange={(e) => setCmpCol(i, k, "ctaUrl", e.target.value)} />
+                            </div>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => addCmpCol(i)}><Icon name="plus" />{t("vb.cmp.addcolumn")}</button>
+                      </div>
+                    )}
+                    {/* table's `columns: string[]` + `rows: string[][]` is a
+                        genuine 2D grid, not a single repeatable list, so it
+                        doesn't fit the generic `items` descriptor (see
+                        GENERIC_TYPES' own note on why this type has none) —
+                        a bespoke editor, same convention as block.comparison
+                        above. `table` is one of GENERIC_TYPES' shared
+                        entries (bare, un-prefixed `__component`) since the
+                        shape (and this editor UI) is identical across every
+                        WP-dialect tenant — only each Blocks.tsx's CSS skin
+                        differs. Rows aren't resized when a column is
+                        added/removed; a row shorter than the current column
+                        count just renders blank cells for the missing ones
+                        (`c || ""` below), same forgiving behavior every
+                        Blocks.tsx's TableBlock renders with. */}
+                    {b.__component === "table" && (
+                      <div className="vb-items">
+                        <label style={{ fontSize: 11 }}>{t("vb.orst.table.columns")}</label>
+                        {((b.columns as string[]) || []).map((c, k) => (
+                          <div key={k} style={{ display: "flex", gap: 5, marginBottom: 5 }}>
+                            <input style={{ flex: 1 }} value={c || ""} onChange={(e) => updateBlockField(i, ["columns", k], e.target.value)} />
+                            <button className="rm" aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => onArrayRemove(i, ["columns"], k)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginBottom: 10 }} onClick={() => onArrayAdd(i, ["columns"], "")}><Icon name="plus" />{t("vb.orst.table.addcolumn")}</button>
+                        <label style={{ fontSize: 11 }}>{t("vb.orst.table.rows")}</label>
+                        {((b.rows as string[][]) || []).map((row, ri) => (
+                          <div key={ri} style={{ border: "1px solid var(--line2)", borderRadius: 9, padding: 8, marginBottom: 7 }}>
+                            {((b.columns as string[]) || [""]).map((col, ci) => (
+                              <input key={ci} style={{ width: "100%", marginBottom: ci < (b.columns?.length || 1) - 1 ? 5 : 0 }} placeholder={col || "column " + (ci + 1)}
+                                value={row?.[ci] || ""} onChange={(e) => updateBlockField(i, ["rows", ri, ci], e.target.value)} />
+                            ))}
+                            <button className="rm" style={{ marginTop: 5 }} aria-label={t("a11y.removeitem")} title={t("a11y.removeitem")} onClick={() => onArrayRemove(i, ["rows"], ri)}><Icon name="trash" /></button>
+                          </div>
+                        ))}
+                        <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => onArrayAdd(i, ["rows"], new Array((b.columns as string[])?.length || 1).fill(""))}><Icon name="plus" />{t("vb.orst.table.addrow")}</button>
                       </div>
                     )}
                     {b.__component === "block.custom" && (() => {
@@ -530,35 +1961,195 @@ export default function VisualBuilder() {
                         </div>
                       ));
                     })()}
+                    {b.__component === "block.collection-list" && (() => {
+                      const ct = contentTypes.find((c) => c.uid === b.contentTypeUid);
+                      const attrs = ct?.attributes;
+                      const titleOpts = fieldsOfType(attrs, ["string", "uid", "text"]);
+                      const imageOpts = fieldsOfType(attrs, ["media"]);
+                      const excerptOpts = fieldsOfType(attrs, ["text", "richtext", "customField", "string"]);
+                      const dateOpts = fieldsOfType(attrs, ["date", "datetime"]);
+                      const linkOpts = fieldsOfType(attrs, ["string", "uid"]);
+                      const videoUrlOpts = fieldsOfType(attrs, ["string"]);
+                      const sortOpts = Array.from(new Set([...fieldsOfType(attrs, ["string", "date", "datetime", "integer"]), "createdAt", "updatedAt", "publishedAt"]));
+                      return (
+                        <>
+                          <div className="fld" style={{ marginBottom: 9 }}>
+                            <label style={{ fontSize: 11 }}>{t("vb.cl.contenttype")}</label>
+                            <select value={b.contentTypeUid || ""} onChange={(e) => {
+                              const next = contentTypes.find((c) => c.uid === e.target.value);
+                              updateBlock(i, (bl) => ({ ...bl, contentTypeUid: next?.uid || "", pluralName: next?.pluralName || "",
+                                titleField: "", imageField: "", excerptField: "", dateField: "", linkField: "", bodyField: "", linkToDetail: false,
+                                layout: "grid", videoUrlField: "", sortField: "createdAt", sortDir: "desc" }));
+                            }}>
+                              <option value="">— {t("vb.cl.contenttype")} —</option>
+                              {contentTypes.map((c) => <option key={c.uid} value={c.uid}>{c.name}</option>)}
+                            </select>
+                          </div>
+                          {ct && (
+                            <>
+                              {b.contentTypeUid === "api::location.location" && (
+                                <div className="fld" style={{ marginBottom: 9 }}>
+                                  <label style={{ fontSize: 11 }}>{t("vb.cl.layout")}</label>
+                                  <select value={b.layout || "grid"} onChange={(e) => setField(i, "layout", e.target.value)}>
+                                    <option value="grid">{t("vb.cl.layout.grid")}</option>
+                                    <option value="map">{t("vb.cl.layout.map")}</option>
+                                  </select>
+                                </div>
+                              )}
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11 }}>{t("vb.cl.title")}</label>
+                                <select value={b.titleField || ""} onChange={(e) => setField(i, "titleField", e.target.value)}>
+                                  <option value="">—</option>
+                                  {titleOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              </div>
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11 }}>{t("vb.cl.image")}</label>
+                                <select value={b.imageField || ""} onChange={(e) => setField(i, "imageField", e.target.value)}>
+                                  <option value="">{t("vb.cl.none")}</option>
+                                  {imageOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              </div>
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11 }}>{t("vb.cl.excerpt")}</label>
+                                <select value={b.excerptField || ""} onChange={(e) => setField(i, "excerptField", e.target.value)}>
+                                  <option value="">{t("vb.cl.none")}</option>
+                                  {excerptOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              </div>
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11 }}>{t("vb.cl.date")}</label>
+                                <select value={b.dateField || ""} onChange={(e) => setField(i, "dateField", e.target.value)}>
+                                  <option value="">{t("vb.cl.none")}</option>
+                                  {dateOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              </div>
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11 }}>{t("vb.cl.body")}</label>
+                                <select value={b.bodyField || ""} onChange={(e) => setField(i, "bodyField", e.target.value)}>
+                                  <option value="">{t("vb.cl.none")}</option>
+                                  {excerptOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              </div>
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11 }}>{t("vb.cl.videourl")}</label>
+                                <select value={b.videoUrlField || ""} onChange={(e) => setField(i, "videoUrlField", e.target.value)}>
+                                  <option value="">{t("vb.cl.none")}</option>
+                                  {videoUrlOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              </div>
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
+                                  <input type="checkbox" checked={!!b.linkToDetail} onChange={(e) => setField(i, "linkToDetail", e.target.checked)} />
+                                  {t("vb.cl.linktodetail")}
+                                </label>
+                              </div>
+                              {!b.linkToDetail && (
+                                <div className="fld" style={{ marginBottom: 9 }}>
+                                  <label style={{ fontSize: 11 }}>{t("vb.cl.link")}</label>
+                                  <select value={b.linkField || ""} onChange={(e) => setField(i, "linkField", e.target.value)}>
+                                    <option value="">{t("vb.cl.none")}</option>
+                                    {linkOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                  </select>
+                                </div>
+                              )}
+                              <div className="fld" style={{ marginBottom: 9, display: "flex", gap: 8 }}>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: 11 }}>{t("vb.cl.sort")}</label>
+                                  <select value={b.sortField || "createdAt"} onChange={(e) => setField(i, "sortField", e.target.value)}>
+                                    {sortOpts.map((f) => <option key={f} value={f}>{f}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: 11 }}>{t("vb.cl.sortdir")}</label>
+                                  <select value={b.sortDir || "desc"} onChange={(e) => setField(i, "sortDir", e.target.value)}>
+                                    <option value="desc">↓</option>
+                                    <option value="asc">↑</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="fld" style={{ marginBottom: 9 }}>
+                                <label style={{ fontSize: 11 }}>{t("vb.cl.pagesize")}</label>
+                                <input type="number" min={1} max={100} value={b.pageSize ?? 12} onChange={(e) => setField(i, "pageSize", Number(e.target.value) || 12)} />
+                              </div>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {b.__component === "block.form" && (() => {
+                      const typeOpts = Object.values(FORM_FIELD_DEFS);
+                      const def = FORM_FIELD_DEFS[b.contentTypeUid];
+                      return (
+                        <>
+                          <div className="fld" style={{ marginBottom: 9 }}>
+                            <label style={{ fontSize: 11 }}>{t("vb.form.contenttype")}</label>
+                            <select value={b.contentTypeUid || ""} onChange={(e) =>
+                              updateBlock(i, (bl) => ({ ...bl, contentTypeUid: e.target.value, mode: "submit" }))
+                            }>
+                              <option value="">— {t("vb.form.contenttype")} —</option>
+                              {typeOpts.map((d) => <option key={d.uid} value={d.uid}>{d.label}</option>)}
+                            </select>
+                          </div>
+                          {def?.hasTracking && (
+                            <div className="fld" style={{ marginBottom: 9 }}>
+                              <label style={{ fontSize: 11 }}>{t("vb.form.mode")}</label>
+                              <select value={b.mode || "submit"} onChange={(e) => setField(i, "mode", e.target.value)}>
+                                <option value="submit">{t("vb.form.mode.submit")}</option>
+                                <option value="track">{t("vb.form.mode.track")}</option>
+                              </select>
+                            </div>
+                          )}
+                          {def?.isAnonymousToggleable && (b.mode || "submit") !== "track" && (
+                            <div className="notice" style={{ marginBottom: 9 }}><Icon name="shield" />{t("vb.form.anonwarn")}</div>
+                          )}
+                          {!def && !b.contentTypeUid && (
+                            <div className="muted" style={{ fontSize: 11 }}>{t("vb.form.pick")}</div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
             );
           })}
-          <div className="vb-add">
-            <div className="vb-ai">
-              <Icon name="spark" />
-              <input value={aiPrompt} placeholder={t("vb.aiph")} onChange={(e) => setAiPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && aiGenerate()} />
-              <button className="vb-ai-btn" onClick={aiGenerate} disabled={aiBusy || !aiPrompt.trim()}>{aiBusy ? t("vb.aigen") : t("vb.aibtn")}</button>
-            </div>
-            <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.addblock")}</div>
-            <div className="vb-add-grid">
-              {TYPES.map((ty) => <button key={ty.comp} className="vb-add-btn" draggable onDragStart={() => setDragNew({ comp: ty.comp })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} onClick={() => add(ty.comp)}><Icon name={ty.icon} />{t(ty.key)}</button>)}
-            </div>
-            {customTypes.length > 0 && (
-              <>
-                <div className="muted" style={{ fontSize: 11, margin: "12px 0 7px" }}>{t("vb.custom")}</div>
-                <div className="vb-add-grid">
-                  {customTypes.map((ct) => <button key={ct.key} className="vb-add-btn" draggable onDragStart={() => setDragNew({ custom: ct })} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} onClick={() => addCustom(ct)}><Icon name={ct.icon || "grid"} />{ct.name}</button>)}
-                </div>
-              </>
-            )}
-            <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={() => setShowTypeEditor(true)}><Icon name="code" />{t("vb.manage")}</button>
-          </div>
         </aside>
 
         <div className="vb-stage">
-          {!sel || loading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{loading ? t("vb.loading") : t("vb.empty")}</div> : (
+          {!sel || loading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{loading ? t("vb.loading") : t("vb.empty")}</div> : gpSupported ? (
+            previewLoading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.loading")}</div> :
+            <div className="vb-frame" style={{ maxWidth: DEVW[device], margin: device === "desktop" ? undefined : "0 auto" }}>
+              {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th"}</span><span className="vb-dev-tag">{device}</span></div>}
+              <RealPreview blocks={blocks} homeData={previewHomeData} customTypes={Object.fromEntries(customTypes.map((c) => [c.key, c]))} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))} collectionData={collectionData} tenant={tenantKey || "dga"}
+                {...(previewMode ? {} : {
+                  active, onSelect: setActive,
+                  onFieldChange: updateBlockField,
+                  onImagePick: uploadFieldImage,
+                  onArrayAdd, onArrayRemove,
+                  onDeselect: () => setActive(-1),
+                })} />
+            </div>
+          ) : isWpPage && (template === "orst" || template === "royalsociety") ? (
+            // Preview-harness templates (ORST and RoyalSociety — see
+            // RealPreview.tsx's HARNESS_PATH) render their OWN real CSS/icon
+            // set via a cross-origin iframe instead of the .vbk-* mockup.
+            // Always read-only regardless of previewMode (no edit-callback
+            // props passed) — see RealPreview's own comment on why inline
+            // click-to-edit isn't possible across that boundary; all editing
+            // for these pages happens in the sidebar.
+            <div className="vb-frame" style={{ maxWidth: DEVW[device], margin: device === "desktop" ? undefined : "0 auto" }}>
+              {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th"}</span><span className="vb-dev-tag">{device}</span></div>}
+              {/* The harness renders via the template's OWN Blocks.tsx,
+                  which reads `type` — the wire dialect, not the Builder's
+                  internal `__component` one blocks is stored in here. Same
+                  toWire() translation pageBody() applies before saving; see
+                  blockDialect.ts. */}
+              <RealPreview blocks={toWire(blocks, template)} tenant={tenantKey || template} harness={template} />
+            </div>
+          ) : previewMode ? (
+            <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.previewunsupported")}</div>
+          ) : (
             <div className="vb-frame">
               <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th/" + (sel.title || "").slice(0, 14)}</span><span className="vb-dev-tag">{device}</span></div>
               <div className={"vb-canvas" + (dragNew || dragBlock >= 0 ? " dragging" : "")} style={{ maxWidth: DEVW[device] }}>
@@ -586,9 +2177,88 @@ export default function VisualBuilder() {
             </div>
           )}
         </div>
+        {/* Toolbox rail. Rendered last in the DOM but ordered first
+            visually (see globals.css's .vb2 order rules) so the inspector
+            keeps its original keyboard/screen-reader position. */}
+        {tbOpen && !previewMode && (
+          <aside className="vb-tbpane">
+            <Toolbox t={t} dialect={template}
+              types={paletteTypes as any} categories={BLOCK_CATEGORIES}
+              customTypes={customTypes} templates={templates}
+              onAdd={add} onAddCustom={addCustom} onApplyTemplate={applyTemplate}
+              onDragNew={setDragNew} onDragEnd={() => { setDragNew(null); setDropAt(-1); }}
+              onSaveTemplate={() => (blocks.length ? setTplForm({ name: sel?.title || "", description: "" }) : setMsg({ t: t("tbx.tplempty"), ok: false }))}
+              onManageTemplates={() => setTplManage(true)}
+              // Both manage raw Strapi content types (block-type/icon) — no
+              // WordPress equivalent, and the underlying fetches 401 under a
+              // WordPress session, so they stay hidden there (unchanged from
+              // when these buttons lived at the bottom of the inspector).
+              onManageTypes={isWpPage ? undefined : () => setShowTypeEditor(true)}
+              onManageIcons={isWpPage ? undefined : () => setShowIconManager(true)}
+              canManage
+              ai={{ prompt: aiPrompt, busy: aiBusy, setPrompt: setAiPrompt, run: aiGenerate }} />
+          </aside>
+        )}
+      </div>
       </div>
 
       {showTypeEditor && <BlockTypeEditor tenantKey={tenantKey} onClose={() => setShowTypeEditor(false)} onSaved={loadTypes} />}
+      {showIconManager && <IconManager tenantKey={tenantKey} onClose={() => setShowIconManager(false)} onSaved={loadIcons} />}
+
+      {/* Save the current canvas as a reusable template */}
+      {tplForm && (
+        <>
+          <div className="scrim" onClick={() => setTplForm(null)} />
+          <div className="vb-sched" role="dialog" aria-modal="true" aria-label={t("tbx.savetpl")}>
+            <div className="ovhead"><h3 style={{ flex: 1 }}>{t("tbx.savetpl")}</h3><button className="ic-btn" onClick={() => setTplForm(null)} aria-label={t("a11y.close")}><Icon name="close" /></button></div>
+            <p className="muted" style={{ fontSize: 12.5, margin: "0 0 14px" }}>{t("tbx.tplsavehint")}</p>
+            <label className="vb-fld"><span>{t("tbx.tplname")}</span>
+              <input value={tplForm.name} autoFocus onChange={(e) => setTplForm((f) => ({ ...f!, name: e.target.value }))} placeholder={t("tbx.tplname")} />
+            </label>
+            <label className="vb-fld"><span>{t("tbx.tpldesc")}</span>
+              <input value={tplForm.description} onChange={(e) => setTplForm((f) => ({ ...f!, description: e.target.value }))} />
+            </label>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+              {blocks.length} {t("tbx.blockcount")} · {t("tbx.tpldialect")}: <span className="mono">{template}</span>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 16, alignItems: "center" }}>
+              <button className="btn btn--p" onClick={saveTemplate} disabled={saving || !tplForm.name.trim()}>{t("tbx.savetpl")}</button>
+              <button className="btn btn--g" onClick={() => setTplForm(null)}>{t("e.cancel")}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Manage saved templates — rename is deliberately out of scope (a
+          template is cheap to re-save); this covers the two actions that
+          can't be done any other way: removing one, and promoting one to
+          every workspace. */}
+      {tplManage && (
+        <>
+          <div className="scrim" onClick={() => setTplManage(false)} />
+          <div className="vb-sched" role="dialog" aria-modal="true" aria-label={t("tbx.managetpl")}>
+            <div className="ovhead"><h3 style={{ flex: 1 }}>{t("tbx.managetpl")}</h3><button className="ic-btn" onClick={() => setTplManage(false)} aria-label={t("a11y.close")}><Icon name="close" /></button></div>
+            {templates.length === 0 && <div className="muted" style={{ fontSize: 12.5, padding: "8px 0" }}>{t("tbx.notemplates")}</div>}
+            {templates.map((tpl) => (
+              <div className="vb-ver" key={tpl.docId || tpl.key}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b>{tpl.name}</b>
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {(tpl.blocks || []).length} {t("tbx.blockcount")} · <span className="mono">{tpl.dialect}</span> · {tpl.tenantKey ? t("tbx.tplmine") : t("tbx.tplglobal")}
+                  </div>
+                </div>
+                {/* Promoting to global clears tenantKey — but governance.ts's
+                    tenantStamp re-stamps a workspace-scoped caller's own key
+                    on every write, so this can only take effect for an
+                    unscoped (all-workspaces) session. Offer it only there
+                    rather than showing a button that silently no-ops. */}
+                {!tenantKey && tpl.tenantKey && <button className="vb-cmp" onClick={() => shareTemplate(tpl)}>{t("tbx.tplshare")}</button>}
+                <button className="btn btn--g" onClick={() => deleteTemplate(tpl)}><Icon name="trash" />{t("tbx.delete")}</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {historyOpen && (
         <>

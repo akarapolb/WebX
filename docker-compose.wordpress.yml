@@ -55,6 +55,26 @@ services:
       # two separate local env files in dev, unlike docker-compose.yml's
       # single shared .env.
       WEBX_INTERNAL_SECRET: ${STRAPI_INTERNAL_SECRET:-dev-internal-secret}
+      # mu-plugins/webx-blocks-sync.php's own outbound call, once a native
+      # Gutenberg save has synced page.acf.blocks — triggers the same
+      # debounced public-site rebuild governance.ts's doPublish() already
+      # triggers for a Visual Builder publish (see
+      # webx-studio/app/api/internal/rebuild/route.ts). Same
+      # host.docker.internal reasoning as STRAPI_INTERNAL_URL above;
+      # WEBX_STUDIO_PORT overrides the port alone since it's the one part
+      # that varies between dev machines (webx-studio defaults to 3000, but
+      # falls back to 3001+ whenever 3000 is already taken locally).
+      WEBX_STUDIO_INTERNAL_URL: http://host.docker.internal:${WEBX_STUDIO_PORT:-3000}
+      # Must match webx-studio/.env.local's own WEBX_SCHEDULER_SECRET — same
+      # secret the external release-scheduler cron already authenticates
+      # with against /api/internal/releases/process-due, reused here rather
+      # than minting a second internal secret for one more internal caller.
+      # (The fallback below is an obvious placeholder, same convention as
+      # WEBX_INTERNAL_SECRET's "dev-internal-secret" above — set
+      # WEBX_SCHEDULER_SECRET in your shell/.env to the real dev value from
+      # webx-studio/.env.local for the sync hook's rebuild call to actually
+      # authenticate.)
+      WEBX_SCHEDULER_SECRET: ${WEBX_SCHEDULER_SECRET:-dev-scheduler-secret}
     volumes:
       - wp-content-data:/var/www/html
     ports:
@@ -74,6 +94,21 @@ services:
       WORDPRESS_SCHEDULER_USERNAME: wpadmin
       WP_ADMIN_PASSWORD: ${WP_DEV_ADMIN_PASSWORD:-ChangeMe!Dev2569}
       WP_ADMIN_EMAIL: admin@webx.local
+      # Must match the `wordpress` service's own DB_* values above — wp-cli
+      # reads wp-config.php too (same shared volume), and wp-config.php
+      # resolves DB_HOST/NAME/USER/PASSWORD from THIS container's own env at
+      # runtime (getenv_docker(), the official image's own pattern), not
+      # from a value baked into the file. Without these, wp-cli silently
+      # falls back to wp-config.php's placeholder defaults ("mysql" host,
+      # "example username"/"example password") instead of erroring loudly,
+      # which is why `wp db check`/`wp core install` inside bootstrap.sh (and
+      # any ad-hoc `wp` command run against this service) failed with
+      # "Error establishing a database connection" instead of ever
+      # completing — this was never a transient timing issue.
+      WORDPRESS_DB_HOST: wp-mysql:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wpsecret
     # Runs the bootstrap once, then idles so `docker compose exec wp-cli wp
     # ...` still works for ad-hoc commands afterward — same as before this
     # existed, just no longer starting from a completely bare WordPress.

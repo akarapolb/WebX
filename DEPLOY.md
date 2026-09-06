@@ -55,6 +55,13 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
 - [ ] HTTPS/TLS terminated in front (reverse proxy / platform).
 - [ ] CORS + trusted proxy configured for the public WebX origin.
 - [x] Backups: nightly `pg_dump` + the uploads volume — the `db-backup` service, local disk only (see `BACKUP_KEEP`/`BACKUP_INTERVAL_SECONDS` in `.env.production.example`). Off-site storage is still on you.
+- [x] WordPress engine backups: nightly `mysqldump` + the wp-content-data volume — the `wp-db-backup` service (profile `wordpress`), same local-disk-only caveat as above. This previously did not exist at all — every `engine:"wordpress"` tenant's actual content had zero backup coverage (TOR gap audit).
+- [x] Quarterly restore drill automated (`strapi-cms/scripts/restore-test.js`, DR-Plan.md §3/§6) — restores the latest backup into a disposable scratch database (never the live one) and runs a real integrity check, instead of the previous written-policy-only "test restore quarterly" line with nothing behind it. Schedule it the same way as `backup-db.js` (see DR-Plan.md), just quarterly instead of hourly/nightly.
+- [x] Access-log retention: both engines now enforce a real ≥90-day floor (configurable via `TRAFFIC_LOG_RETENTION_DAYS` on Strapi, `WEBX_ACCESS_LOG_RETENTION_DAYS` on WordPress — `strapi-cms/src/middlewares/traffic-log.ts`, `wordpress/mu-plugins/access-log.php`) with an actual purge, not just "never deletes anything." WordPress previously had no access logging at all (TOR gap audit) — deploy `access-log.php` the same way as any other mu-plugin change (see below).
+- [x] PII encryption at rest: `contact-message`/`registration` name/email/phone are AES-256-GCM encrypted in the database (`strapi-cms/src/utils/pii-crypto.ts`), transparent decrypt-on-read for the admin API. Requires `PII_ENCRYPTION_KEY` (32 raw bytes, base64) — see `.env.production.example`.
+- [ ] `DATABASE_SSL=true` (+ `DATABASE_SSL_CA` if the DB provider needs a custom CA) once Strapi and the database are not on the same trusted private network — off by default for same-network/docker-compose deployments.
+- [x] WordPress base image pinned (`wordpress/Dockerfile`'s `FROM wordpress:7.1-php8.3-apache`, was `:latest` — TOR gap audit: `:latest` silently pulled in a new WordPress core / PHP / OS patch level on every rebuild, with no diff to review before it hit production). Bump this string deliberately, on its own change, when the org decides to upgrade — never let a routine rebuild carry a silent core upgrade.
+- [ ] File-permission / OS hardening on whatever host actually runs these containers: WordPress's own uploads directory (`wp-content/uploads`) should not be script-executable (`php_admin_flag engine off` in an nginx/Apache location block, or the equivalent for the real reverse proxy in front of it — not configurable from inside this repo, since it depends on the real host's web-server config); container filesystems should run read-only where the image allows it, with only the actual data volumes (`wp-content-data`, `strapi-uploads`, the Postgres/MySQL data dirs) writable; and the containers should run as their images' own non-root user (verify with `docker inspect --format '{{.Config.User}}'` — the official WordPress/Strapi images already default to this, so the risk is a deploy script overriding it with `--user root`, not the base images themselves).
 - [ ] Least-privilege Strapi API token for the MCP/CLI (review find/create only
       if those tools are used).
 - [ ] PDPA: submission content types are **not** public-readable (verify roles).
@@ -72,6 +79,26 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
         ```
       (A fresh volume — e.g. a new environment — picks it up automatically
       via the Dockerfile's `COPY mu-plugins/` line, no manual step needed there.)
+      The same applies to `wordpress/blocks/` (the native Gutenberg block
+      sources) after running `npm run build` there — copy `blocks/build/`
+      into the running container's `mu-plugins/webx-blocks/` the same way:
+        ```
+        docker compose cp wordpress/blocks/build/. \
+          wordpress:/var/www/html/wp-content/mu-plugins/webx-blocks/
+        docker compose restart wordpress
+        ```
+      Same again for `wordpress/theme/webx-theme/` (the custom theme — TOR
+      gap audit) — a fresh volume picks it up and activates it automatically
+      via the Dockerfile's `COPY theme/...` line + bootstrap.sh's
+      `wp theme activate webx-theme`; an existing deployment needs both a
+      manual copy AND activation (themes, unlike mu-plugins, need an
+      explicit activation step):
+        ```
+        docker compose cp wordpress/theme/webx-theme \
+          wordpress:/var/www/html/wp-content/themes/webx-theme
+        docker compose exec wp-cli wp --path=/var/www/html --allow-root \
+          theme activate webx-theme
+        ```
 
 ## DGA / government on-prem notes
 
@@ -83,3 +110,22 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
   so failover is "point DNS at the standby". (TOR Security: DR site.)
 - Penetration test before go-live (TOR งวด 4); the BFF token isolation,
   field-RBAC, rate-limiting, and PDPA role checks are the surfaces to validate.
+
+## `public-site`'s own build-time env vars
+
+`public-site` is a separate static export (`output: "export"`, built with
+`npm run build`, deployed to its own static host — not part of the Docker
+Compose stack above). Two of its env vars matter specifically for the
+orst/royalsociety delivery, which is genuinely **two different production
+domains** (`www.orst.go.th`, `www.royalsociety.go.th`), not one site with two
+paths:
+
+- `PUBLIC_SITE_URL_ORST` / `PUBLIC_SITE_URL_ROYALSOCIETY` — each tenant's real
+  `https://` origin, used to build absolute OG/canonical URLs, the RSS feed's
+  `<link>`/`atom:link`, and each `.ics` calendar's `UID` domain
+  (`public-site/lib/seo.ts`'s `siteUrlFor()`). **Set both before go-live** —
+  left unset, both tenants fall back to the same shared default and one
+  tenant's meta tags/feed links end up pointing at the other tenant's domain
+  (or `localhost` in dev).
+- `PUBLIC_SITE_URL` — shared fallback for any tenant without its own var
+  above (fine for a single-domain staging deploy), and the local dev default.

@@ -6,7 +6,7 @@ import { useTenant } from "./TenantProvider";
 import { cms } from "@/lib/cms";
 
 type CType = { uid: string; label: string };
-type Perm = { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; publish?: boolean; hidden?: string[]; readonly?: string[] };
+type Perm = { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; publish?: boolean; embedCode?: boolean; hidden?: string[]; readonly?: string[] };
 type Role = { roleKey: string; name: string; permissions: Record<string, Perm> };
 
 const SYS = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt", "locale", "status", "createdBy", "updatedBy", "localizations"]);
@@ -14,6 +14,11 @@ const ACTIONS: { key: keyof Perm; label: string }[] = [
   { key: "view", label: "View" }, { key: "create", label: "Create" }, { key: "update", label: "Update" },
   { key: "delete", label: "Delete" }, { key: "publish", label: "Publish" },
 ];
+// The content types whose page-builder blocks can include a Custom Code
+// block (raw HTML/CSS/JS) — governance.ts's create/update only enforces
+// embedCode for these uids (see PAGE_LIKE_UIDS there), so the checkbox is
+// only shown here. wp:page is WordPress-backed ORST/RoyalSociety pages.
+const PAGE_LIKE = new Set(["api::page.page", "api::landing.landing", "wp:page"]);
 
 export default function CustomRoles() {
   const { t } = useLang();
@@ -141,6 +146,7 @@ export default function CustomRoles() {
               <tr>
                 <th>{t("cr.contentType")}</th>
                 {ACTIONS.map((a) => <th key={a.key} style={{ width: 70, textAlign: "center" }}>{a.label}</th>)}
+                <th style={{ width: 90, textAlign: "center" }}>{t("cr.embedcode")}</th>
                 <th style={{ width: 90 }} />
               </tr>
             </thead>
@@ -157,6 +163,11 @@ export default function CustomRoles() {
                           <input type="checkbox" checked={Boolean(p[a.key])} onChange={(e) => setAction(ct.uid, a.key, e.target.checked)} />
                         </td>
                       ))}
+                      <td style={{ textAlign: "center" }}>
+                        {PAGE_LIKE.has(ct.uid) && (
+                          <input type="checkbox" checked={Boolean(p.embedCode)} onChange={(e) => setAction(ct.uid, "embedCode", e.target.checked)} title={t("cr.embedcodehint")} />
+                        )}
+                      </td>
                       <td>
                         <button type="button" className="btn btn--g" style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => expandRow(ct.uid)}>
                           {expanded === ct.uid ? t("cr.hideFields") : t("cr.fields")}
@@ -165,7 +176,7 @@ export default function CustomRoles() {
                     </tr>
                     {expanded === ct.uid && (
                       <tr>
-                        <td colSpan={ACTIONS.length + 2} style={{ background: "var(--panel-2, rgba(255,255,255,0.04))" }}>
+                        <td colSpan={ACTIONS.length + 3} style={{ background: "var(--panel-2, rgba(255,255,255,0.04))" }}>
                           {fields.length === 0 ? (
                             <div className="muted" style={{ padding: 8 }}>{t("fp.nofields")}</div>
                           ) : (

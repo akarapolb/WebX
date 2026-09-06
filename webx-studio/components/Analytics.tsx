@@ -28,12 +28,24 @@ function Stat({ icon, label, value, hint }: { icon: string; label: string; value
   );
 }
 
+function currentMonthValue(): string {
+  const now = new Date();
+  return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+}
+
 export default function Analytics() {
   const { t } = useLang();
   const { currentKey } = useTenant();
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  // Monthly report gap (TOR — no "report" concept existed anywhere before
+  // this, and the Dashboard's own "Export" button had no onClick at all).
+  // Defaults to the current month — unlike public-site's static export,
+  // this app server-renders per request, so there's no real server/client
+  // clock-skew risk here (the gap is milliseconds, not until-the-next-
+  // deploy) the way it was for public-site's ShareButtons/EventCalendar.
+  const [reportMonth, setReportMonth] = useState(currentMonthValue());
   const tenant = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   const load = useCallback(async () => {
@@ -51,13 +63,25 @@ export default function Analytics() {
   const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
   const c = data?.consent;
   const ext = data?.externalAnalytics || {};
-  const extKeys = Object.entries(ext).filter(([, v]) => v && String(v).trim());
+  // Real GA4 Data API pull (TOR gap audit — this panel used to just echo the
+  // tenant's own tracking id back, never real traffic numbers) — rendered
+  // separately below as real stat badges; excluded from the generic
+  // tracking-id echo loop so it doesn't stringify as "[object Object]".
+  const ga4Metrics = (ext as any).ga4Metrics as { activeUsers: number; screenPageViews: number; sessions: number; rangeDays: number } | undefined;
+  const extKeys = Object.entries(ext).filter(([k, v]) => k !== "ga4Metrics" && v && String(v).trim());
 
   return (
     <>
       <div className="vh">
         <div><h1>{t("nav.analytics")}</h1><p>{t("an.sub")}</p></div>
-        <div className="vh-act"><button className="btn btn--g" onClick={load}><Icon name="undo" />{t("al.refresh")}</button></div>
+        <div className="vh-act" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)}
+            style={{ background: "var(--panel)", border: "1px solid var(--line2)", borderRadius: 9, padding: "8px 10px", fontSize: 13, color: "var(--ink)" }} />
+          <a className="btn btn--p" href={"/api/strapi/api/analytics/report?month=" + encodeURIComponent(reportMonth) + (tenant ? "&tenant=" + encodeURIComponent(tenant) : "")}>
+            <Icon name="doc" />{t("an.report")}
+          </a>
+          <button className="btn btn--g" onClick={load}><Icon name="undo" />{t("al.refresh")}</button>
+        </div>
       </div>
 
       {err && <div className="panel"><span className="badge b-warn"><span className="dot" />!</span><span className="muted" style={{ marginLeft: 10 }}>{err}</span></div>}
@@ -119,11 +143,19 @@ export default function Analytics() {
 
           <div className="panel" style={{ marginTop: 16 }}>
             <h3 style={{ margin: "0 0 6px" }}>{t("an.external")}</h3>
+            {ga4Metrics && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: extKeys.length ? 10 : 0 }}>
+                <span className="badge b-ok"><b>{fmt(ga4Metrics.activeUsers)}</b>&nbsp;active users</span>
+                <span className="badge b-ok"><b>{fmt(ga4Metrics.screenPageViews)}</b>&nbsp;page views</span>
+                <span className="badge b-ok"><b>{fmt(ga4Metrics.sessions)}</b>&nbsp;sessions</span>
+                <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>last {ga4Metrics.rangeDays}d, real GA4 pull</span>
+              </div>
+            )}
             {extKeys.length ? (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {extKeys.map(([k, v]) => <span key={k} className="badge b-mut"><b>{k}</b>&nbsp;{String(v)}</span>)}
               </div>
-            ) : <span className="muted">{t("an.noext")}</span>}
+            ) : !ga4Metrics && <span className="muted">{t("an.noext")}</span>}
           </div>
 
           <div className="notice" style={{ marginTop: 16 }}><Icon name="shield" /> {t("an.foot")}</div>

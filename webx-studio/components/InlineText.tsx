@@ -12,7 +12,11 @@ export default function InlineText({
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = ref.current;
-    if (el && document.activeElement !== el && el.textContent !== value) el.textContent = value || "";
+    // el.ownerDocument, not the ambient `document` — when this is mounted via
+    // createPortal into RealPreview.tsx's iframe, the ambient `document` is
+    // the PARENT window's, so that comparison would always be false and this
+    // would clobber the caret on every keystroke inside the iframe.
+    if (el && el.ownerDocument.activeElement !== el && el.textContent !== value) el.textContent = value || "";
   }, [value]);
   const Tag: any = as;
   return (

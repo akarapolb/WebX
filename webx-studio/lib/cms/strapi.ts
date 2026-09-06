@@ -5,7 +5,7 @@
 // see docs/TECHNICAL.md and the Engine Adapter Blueprint for why.
 import "server-only";
 import type {
-  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, CurrentUser, AdminUser, NewUserInput,
+  CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, MediaAssetList, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
 import { sessionToken } from "../strapi";
@@ -21,6 +21,19 @@ async function authHeaders(extra?: Record<string, string>): Promise<Record<strin
   // documents.use() hook skips its own audit-log write for it (governance.ts
   // writes that row instead) — see strapi-cms/src/index.ts.
   return { Authorization: "Bearer " + token, "X-WebX-Governed": "1", ...(extra || {}) };
+}
+
+/** Strapi's own file shape (from /upload or /api/media-meta) -> MediaAsset.
+ * `formats.thumbnail` only exists for images Strapi could resize — anything
+ * else (PDFs, or an image below the thumbnail breakpoint) falls back to the
+ * file's own url, matching MediaLibrary.tsx's own display logic. */
+function toMediaAsset(f: any): MediaAsset {
+  return {
+    id: f.id, documentId: f.documentId, url: f.url, mime: f.mime, name: f.name,
+    thumbnailUrl: f.formats?.thumbnail?.url || f.url,
+    width: f.width, height: f.height,
+    caption: f.caption || undefined, alt: f.alternativeText || undefined, tags: f.tags || undefined,
+  };
 }
 
 function buildQuery(q?: EntryQuery): string {
@@ -64,6 +77,7 @@ export const strapiAdapter: CmsAdapter = {
           uid: x.uid,
           name: x.info?.displayName ?? x.apiID ?? x.uid,
           api: x.apiID ?? "",
+          pluralName: x.info?.pluralName ?? "",
           attributes: x.attributes || {},
         }))
         .sort((a: ContentTypeInfo, b: ContentTypeInfo) => a.name.localeCompare(b.name));
@@ -133,11 +147,13 @@ export const strapiAdapter: CmsAdapter = {
   },
 
   media: {
-    // Not called server-side today — media upload keeps going through the
-    // browser-facing /api/strapi/upload pass-through (see browser-client.ts);
-    // plugin::upload.file was never tenant/RBAC/audit-governed, so there's
-    // nothing for governance.ts to add here. Implemented for interface
-    // completeness / future server-side callers.
+    // Media library gap (TOR — search/tag/reuse/crop/caption): uploads now
+    // ALSO get claimed for the caller's tenant immediately afterward, via
+    // strapi-cms's own custom src/api/media-meta (plugin::upload.file has
+    // no tenant scoping of its own — see that file's top comment for why).
+    // A failed claim doesn't fail the upload itself (the file still exists
+    // and is usable), it just won't show up in anyone's media library until
+    // claimed later from there.
     async upload(file: File): Promise<MediaAsset> {
       const fd = new FormData();
       fd.append("files", file);
@@ -146,7 +162,36 @@ export const strapiAdapter: CmsAdapter = {
       const j = await json(r);
       const f = Array.isArray(j) ? j[0] : j;
       if (!f?.id) throw new Error("upload response missing id");
-      return { id: f.id, url: f.url, mime: f.mime, name: f.name };
+      if (f.documentId) {
+        try {
+          await fetch(BASE + "/api/media-meta/" + f.documentId, { method: "PUT", headers: await authHeaders({ "Content-Type": "application/json" }), body: "{}", cache: "no-store" });
+        } catch { /* see comment above */ }
+      }
+      return toMediaAsset(f);
+    },
+    async list(opts): Promise<MediaAssetList> {
+      const params = new URLSearchParams();
+      if (opts?.search) params.set("search", opts.search);
+      if (opts?.page) params.set("page", String(opts.page));
+      if (opts?.pageSize) params.set("pageSize", String(opts.pageSize));
+      const r = await fetch(BASE + "/api/media-meta?" + params.toString(), { headers: await authHeaders(), cache: "no-store" });
+      if (!r.ok) throw new CmsError("media list failed", r.status);
+      const j = await json(r);
+      return { data: (j.data || []).map(toMediaAsset), total: j.meta?.pagination?.total ?? 0, page: j.meta?.pagination?.page ?? 1, pageSize: j.meta?.pagination?.pageSize ?? 30 };
+    },
+    async update(id, patch): Promise<MediaAsset> {
+      const body: Record<string, any> = {};
+      if (patch.caption !== undefined) body.caption = patch.caption;
+      if (patch.alt !== undefined) body.alternativeText = patch.alt;
+      if (patch.tags !== undefined) body.tags = patch.tags;
+      const r = await fetch(BASE + "/api/media-meta/" + id, { method: "PUT", headers: await authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body), cache: "no-store" });
+      if (!r.ok) throw new CmsError("media update failed", r.status);
+      const j = await json(r);
+      return toMediaAsset(j.data);
+    },
+    async remove(id): Promise<void> {
+      const r = await fetch(BASE + "/api/media-meta/" + id, { method: "DELETE", headers: await authHeaders(), cache: "no-store" });
+      if (!r.ok) throw new CmsError("media remove failed", r.status);
     },
   },
 

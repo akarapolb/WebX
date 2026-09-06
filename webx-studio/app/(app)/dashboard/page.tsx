@@ -59,7 +59,16 @@ export default function Dashboard() {
       <div className="vh">
         <div><h1>{t("dash.title")}</h1><p>{t("dash.sub")}</p></div>
         <div className="vh-act">
-          <button className="btn btn--g"><Icon name="doc" />{t("dash.export")}</button>
+          {/* Monthly report gap (TOR) — this used to be a decorative
+              <button> with no onClick at all (found live: clicking it did
+              nothing). Real KPIs on this page are still limited (uptime is
+              hardcoded — see the `real:false` flag above), so this points
+              at Analytics' own report generator (real first-party metrics,
+              current month, current tenant) rather than exporting this
+              page's own partly-simulated numbers. */}
+          <a className="btn btn--g" href={"/api/strapi/api/analytics/report" + (currentKey && currentKey !== "workspace" ? "?tenant=" + encodeURIComponent(currentKey) : "")}>
+            <Icon name="doc" />{t("dash.export")}
+          </a>
         </div>
       </div>
 

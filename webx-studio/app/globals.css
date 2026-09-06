@@ -89,7 +89,11 @@ svg{display:block;width:18px;height:18px;flex:none}
 .vh{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
 .vh h1{font-size:25px;font-weight:800;letter-spacing:-.03em;margin:0}
 .vh p{font-size:13.5px;color:var(--ink2);margin:3px 0 0}
-.vh-act{display:flex;gap:9px}
+/* Wraps rather than overflowing: the Builder's own action row is the
+   longest in the app (page picker, new page, panel + device + undo groups,
+   A/B, Schedule, History, Preview, Save, Publish) and used to clip Publish
+   off the right edge once the toolbox toggle joined it. */
+.vh-act{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
 
 .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:9px 15px;border-radius:10px;transition:all var(--t);border:1px solid transparent;white-space:nowrap}
 .btn svg{width:15px;height:15px}
@@ -147,8 +151,9 @@ svg{display:block;width:18px;height:18px;flex:none}
 .auth .sub{color:var(--ink2);font-size:13px;margin:3px 0 22px}
 .fld{margin-bottom:14px}
 .fld label{display:block;font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:6px}
-.fld input{width:100%;background:var(--sunk);border:1px solid var(--line2);border-radius:10px;padding:11px 13px;font-size:14px;color:var(--ink)}
-.fld input:focus{outline:none;border-color:var(--accent)}
+.fld input,.fld select{width:100%;background:var(--sunk);border:1px solid var(--line2);border-radius:10px;padding:11px 13px;font-size:14px;color:var(--ink);font-family:inherit}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--accent)}
+.fld select{cursor:pointer}
 .auth .btn--p{width:100%;justify-content:center;padding:12px;margin-top:6px}
 .auth-err{color:var(--bad);font-size:12.5px;min-height:18px;margin-bottom:6px}
 .auth-foot{margin-top:18px;font-size:11.5px;color:var(--mut);display:flex;align-items:center;gap:7px;justify-content:center}
@@ -242,7 +247,18 @@ svg{display:block;width:18px;height:18px;flex:none}
 /* visual builder (WYSIWYG) */
 .vb-sel{background:var(--sunk);border:1px solid var(--line2);border-radius:9px;padding:8px 11px;font-size:13px;color:var(--ink);font-family:inherit;max-width:200px}
 .seg button svg{width:16px;height:16px}
-.vb2{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start}
+/* Design-tool layout: toolbox (what you place) on the left, canvas in the
+   middle, inspector (properties of what's selected) on the right — the
+   arrangement every visual editor this tool is measured against uses. The
+   toolbox rail collapses, and both rails disappear in preview mode. */
+.vb2{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+.vb2.tbx-open{grid-template-columns:272px 1fr 340px}
+/* Visual order is toolbox → canvas → inspector; DOM order keeps the
+   inspector first (unchanged from before the toolbox existed) so keyboard
+   and screen-reader order don't shift for anyone already used to it. */
+.vb2 .vb-tbpane{order:1}
+.vb2 .vb-stage{order:2}
+.vb2 .vb-insp{order:3}
 .vb-insp{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px;max-height:calc(100vh - 190px);overflow:auto;position:sticky;top:0}
 .vb-insp-h{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600;padding:4px 6px 10px;display:flex;gap:8px;align-items:center}
 .vb-block{border:1px solid var(--line);border-radius:11px;margin-bottom:8px;overflow:hidden;transition:border var(--t)}
@@ -263,6 +279,73 @@ svg{display:block;width:18px;height:18px;flex:none}
 .vb-add-btn{display:flex;align-items:center;gap:7px;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--sunk);color:var(--ink2);font-size:12px;font-weight:500;transition:all var(--t)}
 .vb-add-btn:hover{border-color:var(--accent);color:var(--accent)}
 .vb-add-btn svg{width:14px;height:14px;color:var(--accent)}
+.vb-search{display:flex;align-items:center;gap:7px;background:var(--sunk);border:1px solid var(--line2);border-radius:9px;padding:7px 10px;margin-bottom:10px}
+.vb-search svg{width:14px;height:14px;color:var(--mut);flex:none}
+.vb-search input{flex:1;background:none;border:none;color:var(--ink);font-size:12.5px;font-family:inherit;min-width:0}
+.vb-search input:focus{outline:none}
+.vb-search button{flex:none;width:18px;height:18px;border-radius:50%;background:var(--line2);color:var(--ink2);display:grid;place-items:center}
+.vb-search button svg{width:10px;height:10px;color:inherit}
+.vb-cat-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 7px}
+.vb-cat-label:first-child{margin-top:0}
+
+/* Full-screen (distraction-free) builder — covers the app shell entirely.
+   z-index sits below the modals/scrim (81) so History, Schedule, the block
+   designer and the template dialogs still layer on top of it correctly. */
+.vb-full{position:fixed;inset:0;z-index:70;background:var(--bg);padding:14px 18px 18px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.vb-full .vh{margin-bottom:0}
+.vb-full .vh h1{font-size:19px}
+.vb-full .vb2{flex:1;min-height:0}
+/* The two rails and the canvas get the reclaimed height — the non-fullscreen
+   values budget for the shell's topbar and this page's own header. */
+.vb-full .vb-insp,.vb-full .vb-tbpane{max-height:calc(100vh - 118px)}
+.vb-full .vb-stage{min-height:calc(100vh - 118px)}
+
+/* ---- Toolbox (components/Toolbox.tsx) ---- */
+.vb-tbpane{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px;max-height:calc(100vh - 190px);position:sticky;top:0;display:flex;flex-direction:column;overflow:hidden}
+.tbx{display:flex;flex-direction:column;flex:1;min-height:0}
+.tbx-tabs{margin-bottom:10px}
+.tbx-tabs button{flex:1;justify-content:center;gap:5px;font-size:11.5px;padding:7px 6px}
+.tbx-tabs button svg{width:13px;height:13px}
+.tbx-search{margin-bottom:8px}
+.tbx-scroll{flex:1;min-height:0;overflow:auto;margin:0 -2px;padding:0 2px 2px}
+.tbx-grid-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.tbx-tile{display:flex;flex-direction:column;padding:0;border-radius:10px;border:1px solid var(--line);background:var(--sunk);overflow:hidden;text-align:left;transition:border var(--t),box-shadow var(--t);cursor:grab}
+.tbx-tile:hover{border-color:var(--accent);box-shadow:0 3px 12px -4px rgba(0,0,0,.45)}
+.tbx-tile:active{cursor:grabbing}
+.tbx-tile-l{display:flex;align-items:center;gap:6px;padding:7px 8px;font-size:11px;font-weight:600;color:var(--ink2);border-top:1px solid var(--line);background:var(--panel);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tbx-tile-l svg{width:12px;height:12px;color:var(--accent);flex:none}
+/* Schematic silhouettes — see Toolbox.tsx's header on why these aren't
+   live renders. Primitives only: bar, box, pill, field, dot, band. */
+.tbx-th{height:62px;padding:9px;display:flex;flex-direction:column;gap:4px;justify-content:center;background:var(--bg2);overflow:hidden}
+.tbx-bar{display:block;background:var(--line2);border-radius:2px;flex:none}
+.tbx-box{display:block;background:var(--line2);border-radius:3px;height:15px;width:100%}
+.tbx-box.g{flex:1;min-height:24px}
+.tbx-pill{display:block;width:26px;height:8px;border-radius:99px;background:var(--accent);opacity:.7;flex:none}
+.tbx-grid{display:grid;gap:4px;align-content:center}
+.tbx-row{display:flex;align-items:center;gap:8px}
+.tbx-col{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tbx-field{display:block;height:9px;border-radius:3px;border:1px solid var(--line2);flex:none}
+.tbx-dot{width:13px;height:13px;border-radius:50%;background:var(--line2);flex:none}
+.tbx-quote{font-size:19px;line-height:11px;color:var(--accent);opacity:.6;font-weight:800}
+.tbx-code .tbx-bar{background:var(--accent);opacity:.35}
+.tbx-tpl{gap:3px;justify-content:flex-start}
+.tbx-band{display:block;height:6px;border-radius:2px;background:var(--line2);flex:none}
+.tbx-band.t{height:14px;background:var(--accent);opacity:.5}
+.tbx-tile-tpl{cursor:default}
+.tbx-tpl-drag{cursor:grab;display:flex;flex-direction:column;min-width:0}
+.tbx-tpl-drag:active{cursor:grabbing}
+.tbx-tpl-a{display:flex;align-items:center;gap:6px;padding:5px 8px;border-top:1px solid var(--line);background:var(--panel)}
+.tbx-count{flex:1;font-size:10px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbx-tpl-a button{flex:none;font-size:10.5px;font-weight:700;color:var(--accent);padding:3px 7px;border:1px solid var(--line2);border-radius:6px;background:var(--sunk);font-family:inherit}
+.tbx-tpl-a button:hover{border-color:var(--accent)}
+.tbx-empty{font-size:11.5px;color:var(--mut);padding:16px 4px;text-align:center}
+.tbx-foot{border-top:1px solid var(--line);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.tbx-foot-b{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tbx-foot-b .vb-add-btn{font-size:11px;padding:7px 8px}
+/* Compact = inside the canvas's insert-between popover */
+.tbx-compact{width:290px;max-height:340px}
+.tbx-compact .tbx-th{height:48px}
+.tbx-compact .tbx-grid-tiles{gap:6px}
 .vb-stage{background:var(--sunk);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;min-height:60vh;display:flex;justify-content:center}
 .vb-frame{width:100%;background:var(--panel);border:1px solid var(--line2);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);align-self:flex-start;transition:max-width .35s}
 .vb-frame-bar{height:34px;background:var(--bg2);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 12px}
@@ -323,12 +406,61 @@ html[data-theme="dark"] .vbk-imgph{background:#1b1d25}
 .vb-item{display:flex;gap:5px;margin-bottom:6px;align-items:center}
 .vb-item input{flex:1;background:var(--sunk);border:1px solid var(--line2);border-radius:7px;padding:6px 8px;font-size:12px;color:var(--ink);min-width:0;font-family:inherit}
 .vb-item input:focus{outline:none;border-color:var(--accent)}
+/* Bare selects (e.g. the "color theme" pick next to IconPicker below) get
+   the same treatment as the text inputs beside them, rather than the
+   browser's unstyled default box — was the visible "unpolished" look the
+   icon dropdown right next to it also had before IconPicker replaced it. */
+.vb-item select{background:var(--sunk);border:1px solid var(--line2);border-radius:7px;padding:6px 8px;font-size:12px;color:var(--ink);font-family:inherit;cursor:pointer;flex:none}
+.vb-item select:focus{outline:none;border-color:var(--accent)}
 .vb-item .rm{width:26px;height:26px;flex:none;border:1px solid var(--line2);background:var(--sunk);border-radius:7px;color:var(--mut);display:grid;place-items:center}
 .vb-item .rm:hover{border-color:var(--bad);color:var(--bad)}
 .vb-item .rm svg{width:12px;height:12px}
+
+/* ---- IconPicker (components/IconPicker.tsx) ---- */
+/* The sprite in blockPreview/IconSpriteDefs.tsx draws bare, unstyled <path>s
+   (stroke-based line icons, no fill/stroke of their own) — public-site's
+   design-system.css supplies the `.icon{fill:none;stroke:currentColor;…}`
+   rule that makes them visible, but that stylesheet only loads INSIDE
+   RealPreview's iframe, never in this (parent) document. Without an
+   equivalent rule here, every <svg class="icon"><use .../></svg> IconPicker
+   renders falls back to the SVG spec's own default (fill:black, no stroke)
+   — every sprite path is an open outline, so this rendered as a blank dark
+   square. Scoped to only the two places this file uses the sprite (not a
+   bare `.icon` rule) so it can't clash with anything else that name might
+   mean elsewhere in this app later.
+   Mirror of design-system.css's own rule — keep in sync by hand, same
+   existing convention as this codebase's every other ported-CSS copy. */
+.icpick-trig svg,.icpick-opt svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.icpick{position:relative;flex:none}
+.icpick-trig{width:34px;height:34px;border-radius:7px;border:1px solid var(--line2);background:var(--sunk);color:var(--ink2);display:grid;place-items:center;transition:border-color var(--t)}
+.icpick-trig:hover{border-color:var(--accent);color:var(--accent)}
+.icpick-trig svg{width:16px;height:16px}
+.icpick-trig img{width:16px;height:16px;object-fit:contain;border-radius:3px}
+.icpick-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:8px;box-shadow:var(--shadow);width:200px}
+.icpick-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.icpick-opt{width:34px;height:34px;border-radius:7px;border:1px solid transparent;background:var(--sunk);color:var(--ink2);display:grid;place-items:center;transition:all var(--t)}
+.icpick-opt:hover{border-color:var(--accent);color:var(--accent)}
+.icpick-opt.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.icpick-opt svg{width:16px;height:16px}
+.icpick-opt img{width:18px;height:18px;object-fit:contain;border-radius:3px}
+.icpick-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:8px 2px 5px}
 /* block-type editor modal */
-.bt-modal{position:fixed;top:6vh;left:50%;transform:translateX(-50%);width:min(900px,94vw);max-height:88vh;background:var(--bg2);border:1px solid var(--line2);border-radius:16px;z-index:81;box-shadow:0 40px 90px -30px rgba(0,0,0,.7);display:flex;flex-direction:column;overflow:hidden}
+.bt-modal{position:fixed;top:6vh;left:50%;transform:translateX(-50%);width:min(1180px,96vw);max-height:88vh;background:var(--bg2);border:1px solid var(--line2);border-radius:16px;z-index:81;box-shadow:0 40px 90px -30px rgba(0,0,0,.7);display:flex;flex-direction:column;overflow:hidden}
 .bt-body{display:grid;grid-template-columns:240px 1fr;flex:1;min-height:0}
+/* Visual mode gets a third column: a live render of the block being
+   designed, in the public site's own CSS (see BlockTypeEditor's preview
+   iframe). Advanced mode keeps the original two columns — its raw HTML
+   textarea is the preview. */
+.bt-body.with-pv{grid-template-columns:220px minmax(0,1fr) 360px}
+.bt-pv{border-left:1px solid var(--line);padding:12px;display:flex;flex-direction:column;min-width:0;gap:8px}
+.bt-pv-h{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600;display:flex;align-items:center;gap:6px}
+.bt-pv-h svg{width:13px;height:13px;color:var(--accent)}
+.bt-pv iframe{flex:1;min-height:220px;width:100%;border:1px solid var(--line2);border-radius:10px;background:#fff}
+.bt-elrow{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.bt-elopts{display:flex;gap:5px;margin:4px 0 8px 26px;flex-wrap:wrap}
+.bt-elopts select{background:var(--sunk);border:1px solid var(--line2);border-radius:7px;padding:4px 7px;font-size:11px;color:var(--ink2);font-family:inherit}
+.bt-elopts select:focus{outline:none;border-color:var(--accent)}
+@media (max-width:1100px){ .bt-body.with-pv{grid-template-columns:220px 1fr} .bt-pv{display:none} }
 .bt-list{border-right:1px solid var(--line);padding:12px;overflow:auto}
 .bt-form{padding:18px 20px;overflow:auto}
 .bt-form .fld{margin-bottom:14px}
@@ -359,10 +491,12 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vbk-ins-btn{position:absolute;top:-13px;width:26px;height:26px;border-radius:50%;border:none;background:var(--accent);color:#fff;display:grid;place-items:center;opacity:0;transition:opacity .15s;box-shadow:0 2px 8px -2px rgba(0,0,0,.4)}
 .vbk-ins:hover .vbk-ins-btn,.vbk-ins-btn:focus{opacity:1}
 .vbk-ins-btn svg{width:15px;height:15px}
-.vbk-ins-pop{position:absolute;top:18px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:6px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;min-width:150px}
-.vbk-ins-pop button{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;border:none;background:none;color:var(--ink2);font-size:12.5px;text-align:left;font-family:inherit}
-.vbk-ins-pop button:hover{background:var(--panel2);color:var(--accent)}
-.vbk-ins-pop svg{width:14px;height:14px;color:var(--accent)}
+/* Hosts a compact <Toolbox> — child selectors are scoped with `>` so the
+   toolbox's own tiles/tabs/search inside it keep their own styling. */
+.vbk-ins-pop{position:absolute;top:18px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;min-width:150px;text-align:left;cursor:default}
+.vbk-ins-pop > button{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;border:none;background:none;color:var(--ink2);font-size:12.5px;text-align:left;font-family:inherit}
+.vbk-ins-pop > button:hover{background:var(--panel2);color:var(--accent)}
+.vbk-ins-pop > button svg{width:14px;height:14px;color:var(--accent)}
 .vb-add-btn[draggable]{cursor:grab}
 .vb-add-btn[draggable]:active{cursor:grabbing}
 .vb-canvas.dragging .vbk-ins{height:10px}
@@ -376,12 +510,17 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vbk-wrap.ghost{opacity:.4}
 .vb-pvbar{display:flex;align-items:center;gap:8px;justify-content:center;padding:8px 14px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;border-radius:10px;margin-bottom:10px}
 .vb-pvbar svg{width:15px;height:15px}
-.vb2.preview{grid-template-columns:1fr}
-.vb2.preview .vb-insp{display:none}
+.vb2.preview,.vb2.preview.tbx-open{grid-template-columns:1fr}
+.vb2.preview .vb-insp,.vb2.preview .vb-tbpane{display:none}
 .vb2.preview .vb-stage{background:var(--bg)}
 .vb2.preview .vbk-wrap{pointer-events:none;border-color:transparent!important}
 .vb2.preview .vbk-grip-c,.vb2.preview .vbk-tools,.vb2.preview .vbk-ins{display:none}
 .vb2.preview .vbk-wrap.sel{outline:none;box-shadow:none}
+/* real preview (webx-studio/components/blockPreview/RealPreview.tsx) — the
+   tenant's actual CSS, isolated in an iframe, replacing the .vbk-* canvas
+   entirely while in preview mode */
+.vb-realpreview{width:100%;min-height:60vh;border-radius:12px;overflow:hidden;border:1px solid var(--line2);background:#fff}
+.vb-realpreview iframe{width:100%;height:80vh;border:0;display:block}
 /* version history drawer */
 .vb-drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,92vw);background:var(--panel);border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(0,0,0,.28);z-index:61;display:flex;flex-direction:column;animation:drwin .22s ease}
 .vb-drawer .ovhead{flex:none}
@@ -481,7 +620,7 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vb-ai input:focus{outline:none}
 .vb-ai-btn{flex:none;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;font-family:inherit}
 .vb-ai-btn:disabled{opacity:.5}
-@media (max-width:1080px){ .vb2{grid-template-columns:1fr} }
+@media (max-width:1080px){ .vb2,.vb2.tbx-open{grid-template-columns:1fr} .vb-tbpane,.vb-insp{position:static;max-height:none} }
 
 /* command palette */
 .cmdk{position:fixed;top:14vh;left:50%;transform:translateX(-50%);width:min(620px,94vw);background:var(--panel);border:1px solid var(--line2);border-radius:16px;z-index:80;box-shadow:0 40px 90px -30px rgba(0,0,0,.7);animation:cmdk-in .2s}
@@ -502,9 +641,14 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 
 /* content filter bar + pagination */
 .cbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.cbar .seg{display:flex;background:var(--sunk);border:1px solid var(--line);border-radius:9px;padding:2px}
-.cbar .seg button{padding:5px 12px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--mut);background:none;border:none;transition:all var(--t)}
-.cbar .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+/* segmented pill toggle — used by .cbar's own filters, BlockTypeEditor's
+   mine/marketplace + visual/advanced switches, VisualBuilder's device/A-B
+   toggles, etc. Was previously only styled when nested under .cbar, so
+   every other usage silently fell back to plain unstyled buttons. */
+.seg{display:flex;background:var(--sunk);border:1px solid var(--line);border-radius:9px;padding:2px}
+.seg button{padding:5px 12px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--mut);background:none;border:none;transition:all var(--t)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
 .cbar .cinput{flex:1;min-width:180px;max-width:340px;display:flex;align-items:center;gap:8px;background:var(--sunk);border:1px solid var(--line2);border-radius:9px;padding:7px 11px}
 .cbar .cinput svg{width:14px;height:14px;color:var(--mut)}
 .cbar .cinput input{flex:1;background:none;border:none;color:var(--ink);font-size:13px;font-family:inherit}
@@ -527,4 +671,22 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .rt-area a{color:var(--accent)}
 
 @media (max-width:1080px){ .kpis{grid-template-columns:repeat(2,1fr)} .two{grid-template-columns:1fr} .cgrid{grid-template-columns:1fr} }
-@media (max-width:720px){ .sb{display:none} .page{padding:18px} }
+/* hamburger + drawer are always in the DOM (hidden by these two rules on
+   desktop) so Shell.tsx doesn't need to know the viewport width itself */
+.tb-hamburger{display:none}
+.sb-close{display:none;margin-left:auto;color:#cfd5e6}
+.sb-backdrop{display:none}
+@media (max-width:720px){
+  .page{padding:18px}
+  .tb-hamburger{display:grid}
+  /* below 720px the sidebar used to just display:none with nothing to
+     replace it — a phone-width admin lost every nav link entirely (TOR
+     §4.4.1.1(2) requires the admin stay usable on mobile) */
+  .sb{display:none}
+  .sb.open{
+    display:flex; position:fixed; inset:0 auto 0 0; z-index:60;
+    width:82vw; max-width:300px; box-shadow:4px 0 32px -8px rgba(0,0,0,.5);
+  }
+  .sb-close{display:grid}
+  .sb-backdrop.show{display:block;position:fixed;inset:0;background:rgba(8,10,16,.55);z-index:55}
+}

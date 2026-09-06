@@ -178,7 +178,17 @@ test.describe("WebX Studio user management + public-site rebuild", () => {
 
     await page.getByTestId("rebuild-now-btn").click();
 
+    // A real build takes well over a minute (observed: ~70s for this
+    // site's ~118 pages) — asserting straight for data-building="false"
+    // races the click: if that check's very first poll lands before
+    // Status.tsx's own fetch/state-update from the click has landed,
+    // "false" is still literally true from BEFORE the click, and the
+    // assertion passes instantly without ever having observed a real
+    // build cycle (found live: the whole test completed in ~2.5s while
+    // the server log showed the actual rebuild still finishing a minute
+    // later). Confirming the "true" transition first closes that race.
     const statusBadge = page.getByTestId("public-site-status");
+    await expect(statusBadge).toHaveAttribute("data-building", "true", { timeout: 10_000 });
     await expect(statusBadge).toHaveAttribute("data-building", "false", { timeout: 150_000 });
 
     const after = await lastBuiltEl.getAttribute("data-last-built");

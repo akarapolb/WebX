@@ -24,6 +24,11 @@ export default function Shell({
   const [nwOpen, setNwOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [cmdk, setCmdk] = useState(false);
+  // Mobile nav drawer (<720px, see globals.css's .sb.open) — below that
+  // width the sidebar used to just display:none with no replacement at
+  // all, so a phone-width admin lost every nav link (TOR §4.4.1.1(2)
+  // requires the admin stay usable on mobile). Auto-closes on navigation.
+  const [sbOpen, setSbOpen] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -32,6 +37,8 @@ export default function Shell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  useEffect(() => { setSbOpen(false); }, [pathname]);
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
@@ -47,11 +54,13 @@ export default function Shell({
 
   return (
     <div className="shell">
-      <aside className="sb">
+      <div className={sbOpen ? "sb-backdrop show" : "sb-backdrop"} onClick={() => setSbOpen(false)} />
+      <aside className={sbOpen ? "sb open" : "sb"}>
         <div className="sb-top">
           <div className="brand">
             <div className="brand-mark">W</div>
             <div className="brand-name">WebX Studio<small>Multi-tenant CMS</small></div>
+            <button className="ic-btn sb-close" title="Close menu" onClick={() => setSbOpen(false)}><Icon name="close" /></button>
           </div>
           <div className="ten">
             <button className="ten-btn" onClick={() => setTenOpen((o) => !o)}>
@@ -102,6 +111,7 @@ export default function Shell({
 
       <div className="main">
         <header className="tb">
+          <button className="ic-btn tb-hamburger" title="Menu" onClick={() => setSbOpen(true)}><Icon name="menu" /></button>
           <button className="searchbtn" onClick={() => setCmdk(true)}>
             <Icon name="search" /><span className="ph">{t("tb.search")}</span><span className="kbd">⌘K</span>
           </button>
