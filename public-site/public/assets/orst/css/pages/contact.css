@@ -6,6 +6,8 @@
  * from base.css's shared card-surface rule — this file only adds the
  * page-specific layout and inner details.
  * ========================================================================== */
+@layer pages {
+
 
 /* ---------- hero ---------- */
 
@@ -50,13 +52,13 @@
   gap: 8px;
   font-size: .86rem;
   font-weight: 700;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   background: var(--orst-primary-faint);
   padding: 8px 14px;
   border-radius: var(--orst-radius-pill);
   width: fit-content;
 }
-.office-status span { width: 8px; height: 8px; border-radius: 50%; background: #2f9e5c; flex: none; }
+.office-status span { width: 8px; height: 8px; border-radius: 50%; background: var(--orst-success-ink); flex: none; }
 .hero-info-list { display: flex; flex-direction: column; gap: var(--orst-space-3); }
 .hero-info-list > a, .hero-info-list > div {
   display: flex;
@@ -66,7 +68,7 @@
   border-radius: var(--orst-radius-sm);
 }
 .hero-info-list > a:hover { background: var(--orst-primary-faint); }
-.hero-info-list .icon { color: var(--orst-primary); flex: none; margin-top: 2px; }
+.hero-info-list .icon { color: var(--orst-heading); flex: none; margin-top: 2px; }
 .hero-info-list span { display: flex; flex-direction: column; gap: 2px; font-weight: 700; color: var(--orst-ink); font-size: .94rem; }
 .hero-info-list small { color: var(--orst-ink-faint); font-weight: 500; font-size: .8rem; }
 
@@ -93,7 +95,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%;
   background: var(--orst-primary-faint);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
 .contact-item h3 { font-size: .98rem; }
 .contact-item p { font-size: .92rem; margin-top: 2px; }
@@ -112,7 +114,7 @@
   text-align: center;
   color: var(--orst-ink-faint);
 }
-.map-visual .icon-lg { color: var(--orst-primary); margin-inline: auto; }
+.map-visual .icon-lg { color: var(--orst-heading); margin-inline: auto; }
 .map-visual h3 { margin-top: var(--orst-space-2); font-size: 1rem; }
 .map-visual p { font-size: .84rem; margin-top: 2px; }
 .map-actions { display: flex; flex-wrap: wrap; gap: var(--orst-space-2); }
@@ -134,7 +136,7 @@
   .field.full { grid-column: 1 / -1; }
 }
 .field { display: flex; flex-direction: column; gap: 8px; }
-.required { color: #c0392b; }
+.required { color: var(--orst-error-ink); }
 
 .contact-choice { display: flex; flex-wrap: wrap; gap: var(--orst-space-4); }
 .contact-choice label { display: flex; align-items: center; gap: 8px; font-weight: 500; }
@@ -152,7 +154,7 @@
   margin-bottom: var(--orst-space-5);
 }
 .privacy-check input { margin-top: 2px; }
-.privacy-check a { color: var(--orst-primary); font-weight: 700; text-decoration: underline; }
+.privacy-check a { color: var(--orst-heading); font-weight: 700; text-decoration: underline; }
 
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--orst-space-3); }
 .form-note { color: var(--orst-ink-faint); font-size: .84rem; }
@@ -170,4 +172,5 @@
 .department-card { padding: var(--orst-space-5); }
 .department-card h3 { font-size: .98rem; margin-bottom: 6px; }
 .department-card p { font-size: .86rem; color: var(--orst-ink-soft); }
-.department-card a { color: var(--orst-primary); font-weight: 600; }
+.department-card a { color: var(--orst-heading); font-weight: 600; }
+}

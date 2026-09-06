@@ -21,6 +21,8 @@
  *      last resort, it's the primary design for ~everything except large
  *      desktop monitors.
  * ========================================================================== */
+@layer components {
+
 
 /* ---------- topbar ---------- */
 
@@ -113,9 +115,9 @@
 }
 .main-nav a:hover, .main-nav a.active {
   background: var(--orst-primary-faint);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
-.main-nav a.active { color: var(--orst-primary); font-weight: 700; }
+.main-nav a.active { color: var(--orst-heading); font-weight: 700; }
 
 .nav-caret { display: inline-flex; width: 12px; height: 12px; }
 .nav-caret svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; transition: transform var(--orst-duration) var(--orst-ease); }
@@ -207,7 +209,7 @@
 .mega-link strong { display: block; color: var(--orst-ink); font-size: .94rem; }
 .mega-link small { display: block; color: var(--orst-ink-faint); font-size: .8rem; margin-top: 2px; }
 .mega-link em { font-style: normal; color: var(--orst-ink-faint); }
-.mega-link:hover em { color: var(--orst-primary); }
+.mega-link:hover em { color: var(--orst-heading); }
 
 /* Unlimited-depth mega-menu links (TOR gap) — a link with children renders
    as a native <details>/<summary>, zero JS, same as this section's existing
@@ -299,7 +301,7 @@
   color: var(--orst-ink);
   border-bottom: 1px solid var(--orst-line);
 }
-.mobile-link.active { color: var(--orst-primary); }
+.mobile-link.active { color: var(--orst-heading); }
 .mobile-link span { color: var(--orst-ink-faint); }
 
 .mobile-nav-group { border-bottom: 1px solid var(--orst-line); }
@@ -319,7 +321,7 @@
   width: 22px; height: 22px;
   border-radius: 50%;
   background: var(--orst-primary-faint);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   font-size: 1rem;
   flex: none;
   transition: transform var(--orst-duration) var(--orst-ease);
@@ -331,7 +333,7 @@
   padding: 10px 12px;
   border-radius: var(--orst-radius-sm);
   font-weight: 700;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   background: var(--orst-primary-faint);
   margin-bottom: var(--orst-space-3);
 }
@@ -350,7 +352,7 @@
   color: var(--orst-ink-soft);
   font-size: .92rem;
 }
-.mobile-submenu-group a:hover { color: var(--orst-primary); }
+.mobile-submenu-group a:hover { color: var(--orst-heading); }
 
 /* ============================================================================
  * Footer
@@ -450,13 +452,13 @@
 /* Event calendar ("ปฏิทินกิจกรรม") — TOR gap audit, see components/EventCalendar.tsx */
 .wx-cal--loading { min-height: 420px; }
 .wx-cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--orst-space-3); margin-bottom: var(--orst-space-4); }
-.wx-cal-month { font-family: var(--orst-font-display); font-size: 1.15rem; color: var(--orst-primary); min-width: 12ch; }
+.wx-cal-month { font-family: var(--orst-font-display); font-size: 1.15rem; color: var(--orst-heading); min-width: 12ch; }
 .wx-cal-nav {
   display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
   border-radius: 999px; border: 1px solid var(--orst-line); background: var(--orst-surface);
-  color: var(--orst-primary); font-size: 1.1rem; cursor: pointer;
+  color: var(--orst-heading); font-size: 1.1rem; cursor: pointer;
 }
-.wx-cal-nav:hover { border-color: var(--orst-primary); }
+.wx-cal-nav:hover { border-color: var(--orst-heading); }
 .wx-cal-subscribe {
   margin-left: auto; font-size: .84rem; color: var(--orst-primary-soft); text-decoration: underline;
   text-underline-offset: 3px;
@@ -472,13 +474,13 @@
 .wx-cal-cell--has-events { cursor: pointer; background: var(--orst-primary-faint); }
 .wx-cal-cell--has-events:hover { border-color: var(--orst-primary-soft); }
 .wx-cal-cell--today .wx-cal-cell-num { font-weight: 700; color: var(--orst-gold-strong); }
-.wx-cal-cell--selected { border-color: var(--orst-primary); background: var(--orst-primary-faint); }
+.wx-cal-cell--selected { border-color: var(--orst-heading); background: var(--orst-primary-faint); }
 .wx-cal-cell-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--orst-gold); }
 .wx-cal-day-panel {
   margin-top: var(--orst-space-5); padding: var(--orst-space-5); border-radius: var(--orst-radius-card);
   background: var(--orst-surface-sunk); border: 1px solid var(--orst-line);
 }
-.wx-cal-day-panel h3 { font-size: 1rem; color: var(--orst-primary); margin-bottom: var(--orst-space-3); }
+.wx-cal-day-panel h3 { font-size: 1rem; color: var(--orst-heading); margin-bottom: var(--orst-space-3); }
 .wx-cal-day-panel ul { display: flex; flex-direction: column; gap: var(--orst-space-4); }
 .wx-cal-event { padding-top: var(--orst-space-3); border-top: 1px solid var(--orst-line); }
 .wx-cal-event:first-child { padding-top: 0; border-top: none; }
@@ -491,7 +493,7 @@
 .wx-cal-event-body { font-size: .9rem; color: var(--orst-ink-soft); margin-top: var(--orst-space-2); }
 .wx-cal-event-add {
   margin-top: var(--orst-space-3); font-size: .82rem; padding: 6px 14px; border-radius: 999px;
-  border: 1px solid var(--orst-primary); color: var(--orst-primary); background: none; cursor: pointer; font-family: inherit;
+  border: 1px solid var(--orst-primary); color: var(--orst-heading); background: none; cursor: pointer; font-family: inherit;
 }
 .wx-cal-event-add:hover { background: var(--orst-primary-faint); }
 .wx-cal-empty { color: var(--orst-ink-faint); font-size: .92rem; margin-top: var(--orst-space-4); }
@@ -506,13 +508,13 @@
   flex: 1 1 240px; padding: 10px 16px; border-radius: var(--orst-radius-pill); border: 1px solid var(--orst-line);
   background: var(--orst-surface); color: var(--orst-ink); font-family: inherit; font-size: .92rem;
 }
-.wx-dir-search:focus { outline: none; border-color: var(--orst-primary); box-shadow: var(--orst-focus-ring); }
+.wx-dir-search:focus { outline: none; border-color: var(--orst-heading); box-shadow: var(--orst-focus-ring); }
 .wx-dir-tiers { display: flex; flex-wrap: wrap; gap: var(--orst-space-2); }
 .wx-dir-tier-btn {
   padding: 6px 16px; border-radius: var(--orst-radius-pill); border: 1px solid var(--orst-line);
   background: var(--orst-surface); color: var(--orst-ink-soft); font-size: .84rem; cursor: pointer; font-family: inherit;
 }
-.wx-dir-tier-btn.is-active { border-color: var(--orst-primary); background: var(--orst-primary-faint); color: var(--orst-primary); }
+.wx-dir-tier-btn.is-active { border-color: var(--orst-heading); background: var(--orst-primary-faint); color: var(--orst-heading); }
 .wx-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--orst-space-5); }
 .wx-dir-card {
   padding: var(--orst-space-5); border-radius: var(--orst-radius-card); background: var(--orst-surface);
@@ -523,7 +525,7 @@
   background: var(--orst-primary-faint); display: flex; align-items: center; justify-content: center;
 }
 .wx-dir-photo img { width: 100%; height: 100%; object-fit: cover; }
-.wx-dir-photo-fallback { font-family: var(--orst-font-display); font-size: 1.6rem; color: var(--orst-primary); }
+.wx-dir-photo-fallback { font-family: var(--orst-font-display); font-size: 1.6rem; color: var(--orst-heading); }
 .wx-dir-name { font-size: 1rem; color: var(--orst-ink); }
 .wx-dir-tier-badge {
   display: inline-block; margin-top: var(--orst-space-2); font-size: .74rem; padding: 2px 10px; border-radius: 999px;
@@ -540,7 +542,7 @@
   padding: 6px 14px; border-radius: var(--orst-radius-pill); border: 1px solid var(--orst-line);
   background: var(--orst-surface); color: var(--orst-ink-soft); font-size: .82rem; cursor: pointer; font-family: inherit;
 }
-.wx-export-btn:hover { border-color: var(--orst-primary); color: var(--orst-primary); }
+.wx-export-btn:hover { border-color: var(--orst-heading); color: var(--orst-heading); }
 @media (max-width: 560px) { .wx-export { justify-content: flex-start; flex-wrap: wrap; } }
 
 /* Job listing + application e-form (TOR gap audit — see
@@ -570,9 +572,9 @@
   max-width: var(--orst-container-max); margin: 0 auto; padding: var(--orst-space-3) var(--orst-container-pad);
   display: flex; align-items: center; gap: var(--orst-space-3); flex-wrap: wrap;
 }
-.wx-breaking--info { background: #eaf3fb; color: #0b3d63; }
+.wx-breaking--info { background: var(--orst-info-bg); color: var(--orst-info-ink); }
 .wx-breaking--warning { background: var(--orst-gold-faint); color: var(--orst-gold-strong); }
-.wx-breaking--critical { background: #fdeceb; color: #7a1d16; }
+.wx-breaking--critical { background: var(--orst-error-bg); color: var(--orst-error-ink); }
 .wx-breaking-badge {
   display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .74rem; font-weight: 700;
   background: rgba(0,0,0,0.12);
@@ -584,3 +586,4 @@
   padding: 2px 6px; opacity: .7;
 }
 .wx-breaking-close:hover { opacity: 1; }
+}

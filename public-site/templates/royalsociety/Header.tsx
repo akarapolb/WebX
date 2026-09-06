@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import MobileMenuToggle from "./MobileMenuToggle";
 import MobileSearchForm from "./MobileSearchForm";
 import AccessibilityTools from "./AccessibilityTools";
+import ThemeToggle from "./ThemeToggle";
 import { RsIcon } from "./icons";
 import Picture from "@/components/Picture";
 import type { NavItem as CmsNavItem, NavMegaLink } from "@/lib/cms";
@@ -228,6 +229,7 @@ export default function Header({ active, navItems, locale = "th" }: { active?: s
             {topbarLinks(locale, active).map((item) => (
               <a href={item.href} lang={item.hrefLang} key={item.label}>{item.label}</a>
             ))}
+            <ThemeToggle />
           </div>
         </div>
       </div>

@@ -17,6 +17,8 @@
  * .skip-link-inline) are styled in 03-layout.css alongside the rest of the
  * topbar; reduced-motion is handled once, in 02-base.css.
  * ========================================================================== */
+@layer accessibility {
+
 
 html[data-font-size="small"] {
   font-size: 15px;
@@ -99,4 +101,5 @@ body.access-contrast button,
 body.access-contrast .round-action {
   background: #111 !important;
   color: #fff !important;
+}
 }

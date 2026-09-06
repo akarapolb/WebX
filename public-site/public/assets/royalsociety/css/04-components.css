@@ -15,6 +15,8 @@
  * Naming: .block / .block__element / .block--modifier (BEM-ish), matching
  * the previous revision's own documented convention.
  * ========================================================================== */
+@layer components {
+
 
 /* ==========================================================================
  * 1. Buttons — .rs-btn
@@ -30,7 +32,7 @@
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
   background: var(--rs-surface);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-body);
   font-size: 1rem;
   font-weight: 700;
@@ -138,7 +140,7 @@
 
 .page-hero__title {
   margin: 0;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: clamp(2.2rem, 4.2vw, 3.6rem);
   font-weight: 700;
@@ -198,7 +200,7 @@
 }
 
 .breadcrumb a {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .breadcrumb a:hover {
@@ -309,7 +311,7 @@
 }
 
 .rs-card__title a {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .rs-card__title a:hover {
@@ -327,7 +329,7 @@
 .rs-card__link {
   margin-top: auto;
   padding-top: 8px;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
 }
 
@@ -420,7 +422,7 @@
 }
 
 .rs-list-item__body h3 a {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .rs-list-item__body h3 a:hover {
@@ -470,7 +472,7 @@
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-pill);
   background: var(--rs-surface);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
@@ -560,7 +562,7 @@
 
 .search-result-type {
   font-size: 0.78rem;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -583,13 +585,13 @@
 /* Event calendar ("ปฏิทินกิจกรรม") — TOR gap audit, see components/EventCalendar.tsx */
 .wx-cal--loading { min-height: 420px; }
 .wx-cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--rs-space-3); margin-bottom: var(--rs-space-4); }
-.wx-cal-month { font-family: var(--rs-font-display); font-size: 1.1rem; color: var(--rs-primary); min-width: 12ch; }
+.wx-cal-month { font-family: var(--rs-font-display); font-size: 1.1rem; color: var(--rs-heading); min-width: 12ch; }
 .wx-cal-nav {
   display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
   border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line); background: var(--rs-surface);
-  color: var(--rs-primary); font-size: 1.1rem; cursor: pointer;
+  color: var(--rs-heading); font-size: 1.1rem; cursor: pointer;
 }
-.wx-cal-nav:hover { border-color: var(--rs-primary); }
+.wx-cal-nav:hover { border-color: var(--rs-heading); }
 .wx-cal-subscribe { margin-left: auto; font-size: .84rem; color: var(--rs-primary-soft); text-decoration: underline; text-underline-offset: 3px; }
 .wx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .wx-cal-weekday { text-align: center; font-size: .8rem; color: var(--rs-ink-faint); padding-bottom: var(--rs-space-2); }
@@ -599,13 +601,13 @@
   font-family: inherit; color: var(--rs-ink); cursor: default;
 }
 .wx-cal-cell--empty { visibility: hidden; }
-.wx-cal-cell--has-events { cursor: pointer; background: rgba(6, 71, 63, 0.06); }
+.wx-cal-cell--has-events { cursor: pointer; background: var(--rs-primary-faint); }
 .wx-cal-cell--has-events:hover { border-color: var(--rs-primary-soft); }
 .wx-cal-cell--today .wx-cal-cell-num { font-weight: 700; color: var(--rs-gold-strong); }
-.wx-cal-cell--selected { border-color: var(--rs-primary); background: rgba(6, 71, 63, 0.06); }
+.wx-cal-cell--selected { border-color: var(--rs-heading); background: var(--rs-primary-faint); }
 .wx-cal-cell-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--rs-gold); }
 .wx-cal-day-panel { margin-top: var(--rs-space-5); padding: var(--rs-space-5); border-radius: var(--rs-radius-card); background: var(--rs-ground); border: 1px solid var(--rs-line); }
-.wx-cal-day-panel h3 { font-size: 1rem; color: var(--rs-primary); margin-bottom: var(--rs-space-3); }
+.wx-cal-day-panel h3 { font-size: 1rem; color: var(--rs-heading); margin-bottom: var(--rs-space-3); }
 .wx-cal-day-panel ul { display: flex; flex-direction: column; gap: var(--rs-space-4); }
 .wx-cal-event { padding-top: var(--rs-space-3); border-top: 1px solid var(--rs-line); }
 .wx-cal-event:first-child { padding-top: 0; border-top: none; }
@@ -615,9 +617,9 @@
 .wx-cal-event-body { font-size: .9rem; color: var(--rs-ink-soft); margin-top: var(--rs-space-2); }
 .wx-cal-event-add {
   margin-top: var(--rs-space-3); font-size: .82rem; padding: 6px 14px; border-radius: var(--rs-radius-pill);
-  border: 1px solid var(--rs-primary); color: var(--rs-primary); background: none; cursor: pointer; font-family: inherit;
+  border: 1px solid var(--rs-primary); color: var(--rs-heading); background: none; cursor: pointer; font-family: inherit;
 }
-.wx-cal-event-add:hover { background: rgba(6, 71, 63, 0.06); }
+.wx-cal-event-add:hover { background: var(--rs-primary-faint); }
 .wx-cal-empty { color: var(--rs-ink-faint); font-size: .92rem; margin-top: var(--rs-space-4); }
 @media (max-width: 640px) {
   .wx-cal-cell-num { font-size: .85rem; }
@@ -630,13 +632,13 @@
   flex: 1 1 240px; padding: 10px 16px; border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line);
   background: var(--rs-surface); color: var(--rs-ink); font-family: inherit; font-size: .92rem;
 }
-.wx-dir-search:focus { outline: none; border-color: var(--rs-primary); }
+.wx-dir-search:focus { outline: none; border-color: var(--rs-heading); }
 .wx-dir-tiers { display: flex; flex-wrap: wrap; gap: var(--rs-space-2); }
 .wx-dir-tier-btn {
   padding: 6px 16px; border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line);
   background: var(--rs-surface); color: var(--rs-ink-soft); font-size: .84rem; cursor: pointer; font-family: inherit;
 }
-.wx-dir-tier-btn.is-active { border-color: var(--rs-primary); background: rgba(6, 71, 63, 0.06); color: var(--rs-primary); }
+.wx-dir-tier-btn.is-active { border-color: var(--rs-heading); background: var(--rs-primary-faint); color: var(--rs-heading); }
 .wx-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--rs-space-5); }
 .wx-dir-card {
   padding: var(--rs-space-5); border-radius: var(--rs-radius-card); background: var(--rs-surface);
@@ -644,10 +646,10 @@
 }
 .wx-dir-photo {
   width: 88px; height: 88px; border-radius: 999px; margin: 0 auto var(--rs-space-3); overflow: hidden;
-  background: rgba(6, 71, 63, 0.06); display: flex; align-items: center; justify-content: center;
+  background: var(--rs-primary-faint); display: flex; align-items: center; justify-content: center;
 }
 .wx-dir-photo img { width: 100%; height: 100%; object-fit: cover; }
-.wx-dir-photo-fallback { font-family: var(--rs-font-display); font-size: 1.6rem; color: var(--rs-primary); }
+.wx-dir-photo-fallback { font-family: var(--rs-font-display); font-size: 1.6rem; color: var(--rs-heading); }
 .wx-dir-name { font-size: 1rem; color: var(--rs-ink); }
 .wx-dir-tier-badge {
   display: inline-block; margin-top: var(--rs-space-2); font-size: .74rem; padding: 2px 10px; border-radius: var(--rs-radius-pill);
@@ -664,13 +666,13 @@
   padding: 6px 14px; border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line);
   background: var(--rs-surface); color: var(--rs-ink-soft); font-size: .82rem; cursor: pointer; font-family: inherit;
 }
-.wx-export-btn:hover { border-color: var(--rs-primary); color: var(--rs-primary); }
+.wx-export-btn:hover { border-color: var(--rs-heading); color: var(--rs-heading); }
 @media (max-width: 560px) { .wx-export { justify-content: flex-start; flex-wrap: wrap; } }
 
 /* Job listing + application e-form (TOR gap audit — see
    components/JobApplicationForm.tsx's own file comment). */
 .wx-job-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--rs-space-4); }
-.wx-job-card h3 { margin: 0 0 var(--rs-space-2); color: var(--rs-primary); }
+.wx-job-card h3 { margin: 0 0 var(--rs-space-2); color: var(--rs-heading); }
 .wx-job-meta { display: flex; flex-wrap: wrap; gap: var(--rs-space-2); font-size: .84rem; color: var(--rs-ink-soft); margin: var(--rs-space-2) 0; }
 .wx-job-meta span { background: var(--rs-surface-sunk, var(--rs-surface)); border-radius: var(--rs-radius-pill, 999px); padding: 2px 10px; }
 .wx-job-apply-form { max-width: 720px; }
@@ -683,7 +685,7 @@
 .wx-job-apply-form textarea { min-height: 96px; resize: vertical; }
 .wx-job-apply-actions .wx-export-btn { background: var(--rs-primary); color: #fff; border-color: var(--rs-primary); padding: 10px 22px; }
 .wx-job-apply-actions .wx-export-btn:hover { background: var(--rs-primary); opacity: .9; }
-.wx-job-apply-done { padding: var(--rs-space-4); border-radius: 16px; background: var(--rs-surface-sunk, #eef4f2); color: var(--rs-primary); }
+.wx-job-apply-done { padding: var(--rs-space-4); border-radius: 16px; background: var(--rs-surface-sunk, #eef4f2); color: var(--rs-heading); }
 
 /* ==========================================================================
  * 9. Rich text — .prose (WordPress content via dangerouslySetInnerHTML)
@@ -702,7 +704,7 @@
 
 .prose h2 {
   margin-top: 1.8em;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.6rem;
   line-height: 1.4;
@@ -710,14 +712,14 @@
 
 .prose h3 {
   margin-top: 1.5em;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.25rem;
   line-height: 1.45;
 }
 
 .prose a {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -823,7 +825,7 @@
 }
 
 .rs-field > label {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-size: 0.94rem;
   font-weight: 700;
 }
@@ -862,7 +864,7 @@
 }
 
 .rs-field__hint--error {
-  color: #a3341f;
+  color: var(--rs-error-ink);
   font-weight: 700;
 }
 
@@ -889,7 +891,7 @@
   gap: var(--rs-space-4);
   min-height: 60px;
   padding: 14px 22px;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
   cursor: pointer;
   list-style: none;
@@ -930,7 +932,7 @@
   display: grid;
   gap: 4px;
   padding: 16px 22px;
-  border-left: 3px solid var(--rs-primary);
+  border-left: 3px solid var(--rs-heading);
   border-radius: 0 var(--rs-radius-card) var(--rs-radius-card) 0;
   background: var(--rs-gold-soft);
   color: var(--rs-ink);
@@ -938,17 +940,17 @@
 }
 
 .rs-note strong {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .rs-note--warn {
   border-left-color: var(--rs-gold-strong);
-  background: #fdf6e6;
+  background: var(--rs-warn-bg);
 }
 
 .rs-note--success {
-  border-left-color: #1c7a4f;
-  background: #eaf6ef;
+  border-left-color: var(--rs-success-ink);
+  background: var(--rs-success-bg);
 }
 
 /* ==========================================================================
@@ -974,7 +976,7 @@
 
 .rs-empty h3 {
   margin: 0;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-size: 1.2rem;
 }
 
@@ -1005,7 +1007,7 @@
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
   background: var(--rs-surface);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
 }
 
@@ -1041,7 +1043,7 @@
 }
 
 .rs-stat__value {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: clamp(1.9rem, 3vw, 2.6rem);
   font-weight: 700;
@@ -1131,9 +1133,9 @@
   max-width: 1280px; margin: 0 auto; padding: var(--rs-space-3) var(--rs-container-pad);
   display: flex; align-items: center; gap: var(--rs-space-3); flex-wrap: wrap;
 }
-.wx-breaking--info { background: #eaf3fb; color: #0b3d63; }
+.wx-breaking--info { background: var(--rs-info-bg); color: var(--rs-info-ink); }
 .wx-breaking--warning { background: var(--rs-gold-soft); color: var(--rs-gold-strong); }
-.wx-breaking--critical { background: #fdeceb; color: #7a1d16; }
+.wx-breaking--critical { background: var(--rs-error-bg); color: var(--rs-error-ink); }
 .wx-breaking-badge {
   display: inline-block; padding: 2px 10px; border-radius: var(--rs-radius-pill); font-size: .74rem; font-weight: 700;
   background: rgba(0,0,0,0.12);
@@ -1145,3 +1147,4 @@
   padding: 2px 6px; opacity: .7;
 }
 .wx-breaking-close:hover { opacity: 1; }
+}

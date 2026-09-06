@@ -4,6 +4,8 @@
  * .filter-panel, .featured-article, .knowledge-card) get border/radius/
  * shadow from base.css's shared card-surface rule.
  * ========================================================================== */
+@layer pages {
+
 
 /* ---------- hero ---------- */
 
@@ -57,7 +59,7 @@
 .stat-list .stat-row { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--orst-space-3); border-bottom: 1px solid var(--orst-line); }
 .stat-list .stat-row:last-child { border-bottom: 0; padding-bottom: 0; }
 .stat-list .stat-row span { color: var(--orst-ink-soft); font-size: .9rem; }
-.stat-list .stat-row strong { font-family: var(--orst-font-display); color: var(--orst-primary); font-size: 1.15rem; }
+.stat-list .stat-row strong { font-family: var(--orst-font-display); color: var(--orst-heading); font-size: 1.15rem; }
 .hero-note { font-size: .82rem; color: var(--orst-ink-faint); background: var(--orst-surface-sunk); padding: var(--orst-space-3); border-radius: var(--orst-radius-sm); }
 
 /* ---------- quick paths ---------- */
@@ -67,7 +69,7 @@
 @media (min-width: 768px) { .quick-paths { grid-template-columns: repeat(4, 1fr); } }
 .path-card { padding: var(--orst-space-5); display: flex; flex-direction: column; gap: 8px; transition: transform var(--orst-duration) var(--orst-ease), box-shadow var(--orst-duration) var(--orst-ease); }
 .path-card:hover { transform: translateY(-4px); box-shadow: var(--orst-shadow-lift); }
-.path-icon { width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--orst-radius-sm); background: var(--orst-primary-faint); color: var(--orst-primary); }
+.path-icon { width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--orst-radius-sm); background: var(--orst-primary-faint); color: var(--orst-heading); }
 .path-card h3 { font-size: .98rem; }
 .path-card p { font-size: .84rem; }
 
@@ -75,7 +77,7 @@
 
 .view-actions { display: inline-flex; gap: 4px; background: var(--orst-surface-sunk); padding: 4px; border-radius: var(--orst-radius-pill); }
 .view-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--orst-radius-pill); font-size: .84rem; font-weight: 700; color: var(--orst-ink-soft); }
-.view-btn.active { background: var(--orst-surface); color: var(--orst-primary); box-shadow: var(--orst-shadow-card); }
+.view-btn.active { background: var(--orst-surface); color: var(--orst-heading); box-shadow: var(--orst-shadow-card); }
 
 /* ---------- layout: filters + main ---------- */
 
@@ -85,14 +87,14 @@
 .filter-panel { padding: var(--orst-space-5); position: sticky; top: 116px; display: flex; flex-direction: column; gap: var(--orst-space-5); max-height: calc(100vh - 140px); overflow-y: auto; }
 .filter-title { display: flex; align-items: center; justify-content: space-between; }
 .filter-title h2 { font-size: 1rem; }
-.filter-title button { font-size: .82rem; font-weight: 700; color: var(--orst-primary); }
+.filter-title button { font-size: .82rem; font-weight: 700; color: var(--orst-heading); }
 .filter-group { display: flex; flex-direction: column; gap: 6px; }
 .filter-group h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--orst-ink-faint); margin-bottom: 4px; }
 .category-btn { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: var(--orst-radius-sm); font-size: .9rem; color: var(--orst-ink-soft); }
 .category-btn:hover { background: var(--orst-surface-sunk); }
-.category-btn.active { background: var(--orst-primary-faint); color: var(--orst-primary); font-weight: 700; }
+.category-btn.active { background: var(--orst-primary-faint); color: var(--orst-heading); font-weight: 700; }
 .category-btn small { color: var(--orst-ink-faint); font-weight: 500; }
-.category-btn.active small { color: var(--orst-primary); }
+.category-btn.active small { color: var(--orst-heading); }
 .check-row { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: .9rem; padding: 6px 4px; color: var(--orst-ink-soft); }
 .filter-cta { background: var(--orst-gold-faint); border-radius: var(--orst-radius-sm); padding: var(--orst-space-4); font-size: .84rem; color: var(--orst-ink-soft); }
 .filter-cta strong { display: block; color: var(--orst-gold-strong); margin-bottom: 4px; }
@@ -142,3 +144,4 @@
 }
 .pagination button.active { background: var(--orst-primary); color: var(--orst-ink-inverse); border-color: var(--orst-primary); }
 .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+}

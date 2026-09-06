@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import IconSprite from "@/components/IconSprite";
 import CookieConsent from "@/components/CookieConsent";
+import ScrollReveal from "@/components/ScrollReveal";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -36,6 +37,16 @@ const THEME_BOOT = `(function(){try{
   }
 }catch(e){}})();`;
 
+// Scroll-reveal bootstrap — runs synchronously in <head>, before paint, same
+// as the theme boot above. All it does is add one class, and only when
+// motion is actually wanted; the safety guarantee (content is never
+// invisible without it) lives in the CSS + ScrollReveal.tsx, not here.
+const REVEAL_BOOT = `(function(){try{
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.add('js-reveal');
+  }
+}catch(e){}})();`;
+
 // Phase 8 — this used to also load the gov-portal design's 3 CSS files
 // (design-system/templates/home) globally, which was fine when every tenant
 // shared one template. Now that ORST/RoyalSociety bring their own distinct
@@ -49,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="th" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        <script dangerouslySetInnerHTML={{ __html: REVEAL_BOOT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
@@ -73,6 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main-content" className="webx-skip-link">ข้ามไปยังเนื้อหาหลัก</a>
         {children}
         <CookieConsent />
+        <ScrollReveal />
       </body>
     </html>
   );

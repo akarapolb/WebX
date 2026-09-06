@@ -61,7 +61,7 @@ function BlockIcon({ id, className = "icon" }: { id?: string; className?: string
 function SectionHead({ block }: { block: Block }) {
   if (!block.heading && !block.lead) return null;
   return (
-    <div className="section-head">
+    <div className="section-head reveal">
       <div>
         {block.eyebrow ? <span className="block-eyebrow">{block.eyebrow}</span> : null}
         {block.heading ? <h2>{block.heading}</h2> : null}
@@ -180,7 +180,7 @@ function CardGrid({ b }: { b: Block }) {
   const items: any[] = b.items || [];
   return (
     <Section block={b}>
-      <div className={colsClass(b.columns)}>
+      <div className={colsClass(b.columns) + " reveal"}>
         {items.map((it, i) => {
           const inner = (
             <>

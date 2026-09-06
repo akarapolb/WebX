@@ -9,6 +9,8 @@
  * Breakpoints used throughout this tenant's CSS: 480 / 640 / 860 / 1080 /
  * 1360 (see tokens.css's comment block for why 1360 is the nav breakpoint).
  * ========================================================================== */
+@layer base {
+
 
 /* ---------- reset ---------- */
 
@@ -25,6 +27,22 @@ table { border-collapse: collapse; width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+}
+
+/* Scroll-reveal — see components/ScrollReveal.tsx for the observer and
+   app/layout.tsx's REVEAL_BOOT for the html.js-reveal class. Content is
+   opacity:1 by default (this rule alone) regardless of whether JS ever
+   runs; only the second rule, gated on a class JS itself adds, hides it
+   first. That ordering is deliberate — it's what keeps a blocked/failed
+   script from ever leaving real content permanently invisible. */
+.reveal {
+  opacity: 1;
+  transform: none;
+  transition: opacity .6s var(--orst-ease), transform .6s var(--orst-ease);
+}
+html.js-reveal .reveal:not(.is-visible) {
+  opacity: 0;
+  transform: translateY(16px);
 }
 
 /* ---------- root ---------- */
@@ -49,8 +67,8 @@ main { display: block; }
 
 /* ---------- typography ---------- */
 
-h1, h2, h3 { font-family: var(--orst-font-display); color: var(--orst-primary); font-weight: 600; line-height: var(--orst-leading-heading); }
-h4, h5, h6 { font-family: var(--orst-font-body); color: var(--orst-primary); font-weight: 700; line-height: 1.35; }
+h1, h2, h3 { font-family: var(--orst-font-display); color: var(--orst-heading); font-weight: 600; line-height: var(--orst-leading-heading); }
+h4, h5, h6 { font-family: var(--orst-font-body); color: var(--orst-heading); font-weight: 700; line-height: 1.35; }
 
 /* Display sizes come from the editorial scale in tokens.css. `text-wrap:
    balance` matters more in Thai than in Latin here — Thai has no inter-word
@@ -166,7 +184,7 @@ strong, b { color: var(--orst-ink); }
   align-items: center;
   gap: 6px;
   font-weight: 700;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   padding: 10px 18px;
   border-radius: var(--orst-radius-pill);
   border: 1px solid var(--orst-line);
@@ -206,13 +224,13 @@ strong, b { color: var(--orst-ink); }
 
 .btn.secondary, .block-btn.is-ghost {
   background: transparent;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   border-color: var(--orst-line-strong);
   box-shadow: none;
 }
 .btn.secondary:hover, .block-btn.is-ghost:hover {
   background: var(--orst-primary-faint);
-  border-color: var(--orst-primary);
+  border-color: var(--orst-heading);
   box-shadow: none;
 }
 
@@ -224,7 +242,7 @@ strong, b { color: var(--orst-ink); }
   border-radius: var(--orst-radius-pill);
   border: 1px solid var(--orst-line);
   background: var(--orst-surface);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   font-weight: 700;
   font-size: .92rem;
   white-space: nowrap;
@@ -245,7 +263,7 @@ strong, b { color: var(--orst-ink); }
   gap: 6px;
   font-weight: 700;
   font-size: .88rem;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   padding: 8px 16px;
   border-radius: var(--orst-radius-pill);
   border: 1px solid var(--orst-line);
@@ -327,7 +345,7 @@ input:focus, select:focus, textarea:focus {
 
 input[type="checkbox"], input[type="radio"] {
   width: 18px; height: 18px;
-  accent-color: var(--orst-primary);
+  accent-color: var(--orst-heading);
   flex: none;
 }
 
@@ -425,7 +443,7 @@ body.access-contrast button {
   color: var(--orst-ink);
 }
 
-.poll-option:hover:not(:disabled) { border-color: var(--orst-primary); }
+.poll-option:hover:not(:disabled) { border-color: var(--orst-heading); }
 .poll-option:disabled { cursor: default; }
 
 .poll-option-label { position: relative; z-index: 1; font-weight: 500; }
@@ -439,7 +457,7 @@ body.access-contrast button {
   transition: width 0.4s ease;
 }
 
-.poll-option.is-mine { border-color: var(--orst-primary); }
+.poll-option.is-mine { border-color: var(--orst-heading); }
 .poll-option.is-mine .poll-option-bar { opacity: 0.28; }
 
 .poll-total { margin-top: var(--orst-space-4); font-size: 0.9rem; color: var(--orst-ink-muted, var(--orst-ink)); }
@@ -477,3 +495,4 @@ body.access-contrast button {
 .search-result-item a:hover { text-decoration: underline; }
 
 ::selection { background: var(--orst-gold-faint); color: var(--orst-primary-strong); }
+}

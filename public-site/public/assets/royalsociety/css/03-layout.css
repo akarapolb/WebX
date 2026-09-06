@@ -20,6 +20,8 @@
  *     never has to be legible at a width too narrow for 7 Thai nav labels.
  * Verified at 375 / 768 / 1280 / 1440 / 1920px — see build notes.
  * ========================================================================== */
+@layer layout {
+
 
 #app-header {
   position: sticky;
@@ -136,7 +138,7 @@
   display: flex;
   align-items: center;
   gap: var(--rs-space-3);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .brand-logo-img,
@@ -159,7 +161,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: clamp(1.05rem, 1.05vw, 1.34rem);
   font-weight: 700;
@@ -195,11 +197,11 @@
 .main-nav > a:focus-visible,
 .main-nav > a[aria-expanded="true"] {
   background: var(--rs-gold-soft);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .main-nav > a.active {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .main-nav > a.active::after {
@@ -255,7 +257,7 @@
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
   background: var(--rs-surface);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
   white-space: nowrap;
   transition: background var(--rs-transition), border-color var(--rs-transition), transform var(--rs-transition);
@@ -361,7 +363,7 @@
 
 .mega-group h4 {
   margin: 0 0 var(--rs-space-2);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-body);
   font-size: 0.98rem;
 }
@@ -381,7 +383,7 @@
 }
 
 .mega-group a:hover {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .mega-group a::after {
@@ -400,7 +402,7 @@
 .mega-link-details > summary::-webkit-details-marker { display: none; }
 .mega-link-details > summary::after { content: "›"; color: var(--rs-gold); }
 .mega-link-details:last-child > summary { border-bottom: 0; }
-.mega-link-details > summary:hover { color: var(--rs-primary); }
+.mega-link-details > summary:hover { color: var(--rs-heading); }
 .mega-submenu { padding-left: var(--rs-space-4); border-left: 1px solid var(--rs-line); margin: 4px 0 8px 8px; }
 
 .rs-mobile-links-nested { margin-left: var(--rs-space-3); }
@@ -491,7 +493,7 @@
 }
 
 .rs-mobile-head strong {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.1rem;
 }
@@ -518,7 +520,7 @@
 }
 
 .rs-mobile-search .icon {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .rs-mobile-search input {
@@ -546,7 +548,7 @@
   padding: 0 var(--rs-space-4);
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
   cursor: pointer;
   list-style: none;
@@ -590,7 +592,7 @@
 }
 
 .rs-mobile-links a:hover {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 body.mobile-menu-lock {
@@ -953,4 +955,5 @@ body.mobile-menu-lock {
   .header-actions .round-action.primary {
     display: none;
   }
+}
 }

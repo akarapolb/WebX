@@ -5,6 +5,8 @@
  * .content-card, etc. rules from base.css where the homepage wants a
  * different treatment.
  * ========================================================================== */
+@layer pages {
+
 
 /* ---------- hero ---------- */
 
@@ -191,7 +193,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--orst-radius-sm);
   background: var(--orst-primary-faint);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   margin-bottom: var(--orst-space-3);
 }
 .service-card h3 { font-size: 1rem; }
@@ -201,7 +203,7 @@
   color: var(--orst-ink-faint); font-size: 1.2rem;
   transition: transform var(--orst-duration) var(--orst-ease), color var(--orst-duration) var(--orst-ease);
 }
-.service-card:hover .arrow { color: var(--orst-primary); transform: translateX(3px); }
+.service-card:hover .arrow { color: var(--orst-heading); transform: translateX(3px); }
 
 /* ---------- knowledge hub (media tabs) ---------- */
 
@@ -272,7 +274,7 @@
   border: 1px solid var(--orst-line);
   box-shadow: var(--orst-shadow-card);
   font-size: 1.1rem;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   display: none;
   align-items: center;
   justify-content: center;
@@ -319,7 +321,7 @@
 }
 .news-mosaic-feature-img { position: relative; display: block; aspect-ratio: 16 / 9; background: var(--orst-surface-sunk); }
 .news-mosaic-feature-img img { width: 100%; height: 100%; object-fit: cover; }
-.news-type-badge { position: absolute; top: 16px; left: 16px; background: var(--orst-surface); color: var(--orst-primary); }
+.news-type-badge { position: absolute; top: 16px; left: 16px; background: var(--orst-surface); color: var(--orst-heading); }
 .news-mosaic-feature-body { padding: var(--orst-space-5); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .news-meta { display: flex; gap: var(--orst-space-3); font-size: .8rem; color: var(--orst-ink-faint); }
 .news-mosaic-feature-body h3 { font-size: 1.2rem; }
@@ -339,12 +341,12 @@
 .news-mosaic-card-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .news-mosaic-card-body h4 { font-size: .92rem; }
 .news-mosaic-card-body p { font-size: .8rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.news-mosaic-card-body a { font-size: .8rem; font-weight: 700; color: var(--orst-primary); }
+.news-mosaic-card-body a { font-size: .8rem; font-weight: 700; color: var(--orst-heading); }
 
 .events-calendar-card { padding: var(--orst-space-5); display: flex; flex-direction: column; gap: var(--orst-space-4); }
 .calendar-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--orst-space-2); }
 .calendar-head h3 { font-size: 1.1rem; }
-.calendar-head a { font-size: .82rem; font-weight: 700; color: var(--orst-primary); }
+.calendar-head a { font-size: .82rem; font-weight: 700; color: var(--orst-heading); }
 .calendar-month { display: flex; align-items: center; justify-content: space-between; }
 .calendar-month button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--orst-line); }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: .78rem; }
@@ -357,10 +359,19 @@
 .agenda-item { display: flex; gap: var(--orst-space-3); align-items: center; padding: 8px; border-radius: var(--orst-radius-sm); }
 .agenda-item:hover { background: var(--orst-primary-faint); }
 .agenda-date { flex: none; width: 44px; text-align: center; background: var(--orst-primary-faint); border-radius: var(--orst-radius-sm); padding: 5px 0; }
-.agenda-date b { display: block; color: var(--orst-primary); font-size: .96rem; }
-.agenda-date small { color: var(--orst-ink-faint); font-size: .68rem; }
+.agenda-date b { display: block; color: var(--orst-heading); font-size: .96rem; }
 .agenda-item > span:last-child { display: flex; flex-direction: column; gap: 2px; }
 .agenda-item small { color: var(--orst-ink-faint); font-size: .76rem; }
+/* `.agenda-item .agenda-date small`, not `.agenda-date small`: the plain
+   form ties in specificity with `.agenda-item small` just above (both one
+   class + one type selector), and — since `.agenda-date` is itself nested
+   inside `.agenda-item` — that generic rule was winning by source order
+   alone, silently overriding this one in BOTH themes (only measured as an
+   actual AA failure once dark mode's own contrast got audited: ink-faint
+   at 4.32:1 on this chip's tinted background, under the 4.5:1 floor).
+   Qualifying the selector on the real ancestor makes it win unconditionally
+   instead of depending on which rule happens to load second. */
+.agenda-item .agenda-date small { color: var(--orst-ink-soft); font-size: .68rem; }
 
 /* ---------- public service (digital service hub) ---------- */
 
@@ -436,7 +447,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--orst-radius-sm);
   background: var(--orst-primary-faint);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
 .public-service-icon svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .public-service-content { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -449,7 +460,7 @@
   align-self: flex-start;
   display: inline-flex; align-items: center; gap: 6px;
   font-weight: 700; font-size: .86rem;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
 .service-link-btn:hover { text-decoration: underline; }
 
@@ -471,7 +482,7 @@
   background: var(--orst-surface);
   border: 1px solid var(--orst-line);
   padding: 12px;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
 .network-logo img { width: 100%; height: 100%; object-fit: contain; }
 .network-logo-item strong { font-size: .78rem; text-align: center; color: var(--orst-ink-soft); font-weight: 600; }
@@ -503,7 +514,7 @@
   color: var(--orst-ink);
 }
 .help-faq-item summary::-webkit-details-marker { display: none; }
-.help-faq-item summary svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; color: var(--orst-primary); transition: transform var(--orst-duration) var(--orst-ease); }
+.help-faq-item summary svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; color: var(--orst-heading); transition: transform var(--orst-duration) var(--orst-ease); }
 .help-faq-item[open] summary svg { transform: rotate(180deg); }
 .help-faq-item > div { padding: 0 var(--orst-space-5) var(--orst-space-5); color: var(--orst-ink-soft); font-size: .94rem; }
 
@@ -517,4 +528,5 @@
   text-align: center;
 }
 .faq-center-footer span { color: var(--orst-ink-faint); font-size: .92rem; }
-.faq-center-footer a { font-weight: 700; color: var(--orst-primary); }
+.faq-center-footer a { font-weight: 700; color: var(--orst-heading); }
+}

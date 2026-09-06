@@ -1,3 +1,11 @@
+/* Cascade layer order for this tenant's whole CSS, declared once, here,
+   because this is the first stylesheet loaded (see
+   app/royalsociety/layout.tsx). Matches the current <link> load order
+   exactly — see ORST's own tokens.css for the full rationale (same
+   mechanism, same caveat: this only governs conflicts BETWEEN files/layers,
+   not within one). */
+@layer tokens, base, layout, components, accessibility, pages;
+
 /* ============================================================================
  * 01-tokens.css — Phase 10 design system for the Royal Society of Thailand
  * (ราชบัณฑิตยสภา), the "parent" institution to the ORST tenant. More formal
@@ -11,6 +19,8 @@
  * convention) — every other stylesheet in this tenant's CSS should
  * reference these custom properties, never a literal hex/px value.
  * ========================================================================== */
+@layer tokens {
+
 :root {
   /* Color */
   --rs-primary: #06473f;
@@ -26,6 +36,14 @@
      ever improves legibility. */
   --rs-gold-strong: #7d5f27;
   --rs-gold-soft: #f5ecd9;
+  /* Two tokens several components already referenced (`.wx-cal-cell--has-
+     events`, `.wx-dir-tier-btn.is-active`, the job-listing "applied" panel)
+     but that had never actually been defined here — each call site was
+     silently living on its own inline `var(--x, fallback)` default or a raw
+     rgba() twin of --rs-primary. Defining them properly is what lets a
+     dark-mode override reach every one of those call sites at once. */
+  --rs-primary-faint: rgba(6, 71, 63, 0.06);
+  --rs-surface-sunk: #eef4f2;
   --rs-ground: #fbf7ef;
   --rs-surface: #ffffff;
   --rs-ink: #16201d;
@@ -106,9 +124,82 @@
   --rs-rule-gold: rgba(185, 145, 67, .42);
   --rs-rule-gold-strong: rgba(185, 145, 67, .72);
 
+  /* `--rs-heading` — the same split as ORST's own `--orst-heading` (see its
+     tokens.css comment): `--rs-primary` also fills always-dark surfaces
+     (the deep panel gradient, solid `.rs-btn--primary`) that must stay the
+     same dark teal in either theme, while heading/accent text sitting on
+     the page's own ground needs to flip for dark mode. Every plain `color:`
+     reference to `--rs-primary` was moved to this token; every
+     `background:`/paired `border-color:` fill was left alone. */
+  --rs-heading: var(--rs-primary);
+
+  /* Semantic status colors, consolidated from what several components
+     already shipped as one-off literals (the breaking-news banner,
+     `.rs-note--warn/--success`, `.rs-field__hint--error`) with no dark-mode
+     variant. Error/info share the exact values ORST's own tokens use —
+     same real institution, same danger-red the customer would recognize
+     from either site. */
+  --rs-success-bg: #eaf6ef;
+  --rs-success-ink: #1c7a4f;
+  --rs-warn-bg: #fdf6e6;
+  --rs-error-bg: #fdeceb;
+  --rs-error-ink: #c0392b;
+  --rs-info-bg: #eaf3fb;
+  --rs-info-ink: #0b3d63;
+
   /* z-index scale, low to high */
   --rs-z-header: 900;
   --rs-z-mega: 950;
   --rs-z-overlay: 980;
   --rs-z-drawer: 990;
+}
+
+/* ============================================================================
+ * Dark theme — see ORST's own tokens.css for the full rationale (same
+ * `[data-theme]` mechanism, same boot script, same reason only the
+ * `[data-theme="dark"]` case is needed). Pitched to THIS tenant's more
+ * formal, rectilinear register: a slightly cooler, deeper ground than
+ * ORST's, gold kept a touch more restrained (rule-driven rather than warm),
+ * consistent with the light-mode palette's own "more formal/ceremonial"
+ * character versus ORST's "softer, service-forward" one.
+ *
+ * Same token-swap-only approach as ORST: every value here redefines a
+ * token already declared above, so no component file needed touching.
+ * `--rs-primary*`-as-fill and the hardcoded `#fff` used on the always-dark
+ * panel/hero bands are deliberately left alone — those surfaces are already
+ * dark in light mode. */
+:root[data-theme="dark"] {
+  --rs-ground: #0d1614;
+  --rs-surface: #16211e;
+  --rs-surface-sunk: #0a100e;
+  --rs-ink: #edf0ec;
+  --rs-ink-soft: #b6c1ba;
+  --rs-ink-faint: #879089;
+  --rs-line: rgba(237, 240, 236, 0.14);
+  --rs-line-gold: rgba(216, 172, 94, 0.28);
+
+  /* 9.6:1 on --rs-ground, verified against the actual rendered background. */
+  --rs-heading: #86d3bd;
+  --rs-focus: #4fd8ba;
+
+  --rs-gold: #cf9f56;
+  --rs-gold-strong: #e4bd7c;
+  --rs-gold-soft: rgba(207, 159, 86, 0.12);
+  --rs-archival: #c9ab86;
+
+  --rs-primary-faint: rgba(134, 211, 189, 0.08);
+  --rs-rule-gold: rgba(207, 159, 86, 0.4);
+  --rs-rule-gold-strong: rgba(207, 159, 86, 0.78);
+
+  --rs-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --rs-shadow-lift: 0 16px 40px rgba(0, 0, 0, 0.5);
+
+  --rs-success-bg: rgba(74, 222, 128, 0.12);
+  --rs-success-ink: #6ee7a3;
+  --rs-warn-bg: rgba(216, 172, 94, 0.14);
+  --rs-error-bg: rgba(248, 113, 113, 0.14);
+  --rs-error-ink: #f597a0;
+  --rs-info-bg: rgba(96, 165, 250, 0.14);
+  --rs-info-ink: #93c5fd;
+}
 }

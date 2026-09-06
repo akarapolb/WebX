@@ -59,7 +59,7 @@ function SafeRsIcon({ id, className }: { id?: string; className?: string }) {
 function SectionHead({ b, titleId }: { b: Block; titleId: string }) {
   if (!b.heading && !b.lead && !b.eyebrow) return null;
   return (
-    <div className="section-head">
+    <div className="section-head reveal">
       {b.eyebrow ? <span className="eyebrow">{b.eyebrow}</span> : null}
       {b.heading ? <h2 id={titleId}>{b.heading}</h2> : null}
       {b.lead ? <p>{b.lead}</p> : null}
@@ -324,7 +324,7 @@ function CardGrid({ b }: { b: Block }) {
   const flat = b.variant === "flat";
   return (
     <Section b={b}>
-      <div className={colsClass(b.columns)}>
+      <div className={colsClass(b.columns) + " reveal"}>
         {items.map((it, i) => (
           <article className={"rs-card" + (flat ? " rs-card--flat" : "")} key={i}>
             {!flat && it.image ? (

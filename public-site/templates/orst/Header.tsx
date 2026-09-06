@@ -1,5 +1,6 @@
 import MobileMenuToggle from "./MobileMenuToggle";
 import AccessibilityTools from "./AccessibilityTools";
+import ThemeToggle from "./ThemeToggle";
 import Picture from "@/components/Picture";
 import type { NavItem, NavMegaLink } from "@/lib/cms";
 
@@ -217,6 +218,7 @@ export default function Header({ active, navItems, locale = "th" }: { active?: s
               {locale === "en" ? "TH" : "EN"}
             </a>
             <a href="#">{s.login}</a>
+            <ThemeToggle />
           </div>
         </div>
       </div>

@@ -5,6 +5,8 @@
  * (.section, .section.alt, .section-head, .view-all) lives in base.css —
  * this file only covers the block-specific inner markup.
  * ========================================================================== */
+@layer blocks {
+
 
 /* ---------- page-hero ---------- */
 
@@ -55,7 +57,7 @@
 .block-prose.block-prose-narrow { max-width: 66ch; }
 .block-prose p { color: var(--orst-ink-soft); }
 .block-prose h2, .block-prose h3 { margin-top: var(--orst-space-3); }
-.block-prose a { color: var(--orst-primary); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.block-prose a { color: var(--orst-heading); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .block-prose ul, .block-prose ol { padding-left: 1.4em; list-style: disc; display: flex; flex-direction: column; gap: 8px; }
 .block-prose ol { list-style: decimal; }
 
@@ -158,7 +160,7 @@ a.block-card.is-link:hover .block-card-icon {
   font-family: var(--orst-font-display);
   font-size: 1.12rem;
   font-weight: 600;
-  color: var(--orst-primary);
+  color: var(--orst-heading);
   line-height: 1.4;
 }
 .block-feature p { font-size: .93rem; }
@@ -222,7 +224,7 @@ a.block-card.is-link:hover .block-card-icon {
   display: block;
   font-family: var(--orst-font-display);
   font-size: clamp(1.7rem, 1.4rem + 1vw, 2.3rem);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
 .block-stat span { display: block; font-weight: 700; margin-top: 6px; }
 .block-stat small { display: block; color: var(--orst-ink-faint); font-size: .8rem; margin-top: 4px; }
@@ -246,7 +248,7 @@ a.block-card.is-link:hover .block-card-icon {
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%;
   background: var(--orst-primary-faint);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
 .block-link-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .block-link-text strong { font-size: 1rem; }
@@ -276,11 +278,11 @@ a.block-media-card.is-link:hover { transform: translateY(-4px); box-shadow: var(
 
 .block-table-wrap { overflow-x: auto; border: 1px solid var(--orst-line); border-radius: var(--orst-radius-card); }
 .block-table { min-width: 560px; }
-.block-table caption { text-align: left; padding: var(--orst-space-4); font-weight: 700; color: var(--orst-primary); background: var(--orst-primary-faint); }
+.block-table caption { text-align: left; padding: var(--orst-space-4); font-weight: 700; color: var(--orst-heading); background: var(--orst-primary-faint); }
 .block-table th, .block-table td { padding: 14px 18px; text-align: left; border-bottom: 1px solid var(--orst-line); font-size: .92rem; }
 .block-table thead th { background: var(--orst-surface-sunk); color: var(--orst-ink); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
 .block-table-empty { text-align: center; color: var(--orst-ink-faint); font-style: italic; padding: var(--orst-space-6) var(--orst-space-4); }
-.block-table tbody th { color: var(--orst-primary); font-weight: 700; }
+.block-table tbody th { color: var(--orst-heading); font-weight: 700; }
 .block-table tbody tr:last-child td, .block-table tbody tr:last-child th { border-bottom: 0; }
 
 /* ---------- faq (block wrapper around FaqAccordion) ---------- */
@@ -303,7 +305,7 @@ a.block-media-card.is-link:hover { transform: translateY(-4px); box-shadow: var(
   font-weight: 700;
   color: var(--orst-ink);
 }
-.faq-q .icon { transition: transform var(--orst-duration) var(--orst-ease); color: var(--orst-primary); }
+.faq-q .icon { transition: transform var(--orst-duration) var(--orst-ease); color: var(--orst-heading); }
 .faq-q[aria-expanded="true"] .icon { transform: rotate(180deg); }
 .faq-a { padding: 0 var(--orst-space-5) var(--orst-space-5); }
 .faq-a p { font-size: .94rem; }
@@ -410,11 +412,11 @@ a.block-media-card.is-link:hover { transform: translateY(-4px); box-shadow: var(
   border-radius: 50%;
 }
 .block-notice.is-info { background: var(--orst-primary-faint); border-color: var(--orst-primary-line); }
-.block-notice.is-info .block-notice-icon { background: var(--orst-surface); color: var(--orst-primary); }
+.block-notice.is-info .block-notice-icon { background: var(--orst-surface); color: var(--orst-heading); }
 .block-notice.is-warn { background: var(--orst-gold-faint); border-color: rgba(185, 141, 62, 0.3); }
 .block-notice.is-warn .block-notice-icon { background: var(--orst-surface); color: var(--orst-gold-strong); }
-.block-notice.is-success { background: #eaf5ee; border-color: #bfe2cb; }
-.block-notice.is-success .block-notice-icon { background: var(--orst-surface); color: #2f7d4f; }
+.block-notice.is-success { background: var(--orst-success-bg); border-color: var(--orst-success-line); }
+.block-notice.is-success .block-notice-icon { background: var(--orst-surface); color: var(--orst-success-ink); }
 .block-notice strong { display: block; margin-bottom: 4px; }
 .block-notice p { font-size: .92rem; }
 
@@ -440,10 +442,11 @@ a.block-media-card.is-link:hover { transform: translateY(-4px); box-shadow: var(
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%;
   background: var(--orst-primary-faint);
-  color: var(--orst-primary);
+  color: var(--orst-heading);
 }
 .block-contact-row small { display: block; color: var(--orst-ink-faint); font-size: .78rem; margin-bottom: 3px; }
 .block-contact-row a, .block-contact-row span { font-weight: 700; color: var(--orst-ink); }
-.block-contact-row a:hover { color: var(--orst-primary); }
+.block-contact-row a:hover { color: var(--orst-heading); }
 .block-contact-map { border-radius: var(--orst-radius-card); overflow: hidden; min-height: 260px; border: 1px solid var(--orst-line); }
 .block-contact-map iframe { width: 100%; height: 100%; min-height: 260px; border: 0; }
+}

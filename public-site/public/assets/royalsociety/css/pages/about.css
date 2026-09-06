@@ -14,6 +14,8 @@
  * `missionItems`, including each item's real acf.icon id). Both keep the
  * exact hardcoded fallback content when their fetcher returns nothing.
  * ========================================================================== */
+@layer pages {
+
 
 .about-page {
   background: var(--rs-ground);
@@ -88,7 +90,7 @@
 
 .about-hero-clean-subtitle {
   margin-top: var(--rs-space-3);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.2rem;
   font-weight: 600;
@@ -135,7 +137,7 @@
 .about-clean-btn.secondary {
   border-color: var(--rs-line-gold);
   background: var(--rs-surface);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .about-clean-btn.secondary:hover {
@@ -181,7 +183,7 @@
 
 .about-hero-clean-facts dd {
   margin: 0;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.5rem;
   font-weight: 700;
@@ -225,7 +227,7 @@
 }
 
 .about-intro-v3-highlight strong {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
 }
 
@@ -366,7 +368,7 @@
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
   background: var(--rs-ground);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 0.9rem;
   font-weight: 700;
@@ -439,7 +441,7 @@
   align-items: center;
   gap: 8px;
   margin-top: var(--rs-space-5);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
 }
 
@@ -570,7 +572,7 @@
 }
 
 .structure-main-card.soft h3 {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .structure-main-card.soft p {
@@ -652,7 +654,7 @@
 }
 
 .school-v2-card strong {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.02rem;
 }
@@ -749,7 +751,7 @@
   align-items: center;
   gap: 8px;
   margin-top: var(--rs-space-4);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
 }
 
@@ -789,7 +791,7 @@
   place-items: center;
   border-radius: var(--rs-radius-sm);
   background: var(--rs-ground);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .knowledge-icon svg {
@@ -818,7 +820,7 @@
   align-items: center;
   gap: 6px;
   margin-top: var(--rs-space-2);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-size: 0.88rem;
   font-weight: 700;
 }
@@ -882,7 +884,7 @@
 
 .about-btn.primary:hover {
   background: #fff;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 /* ==========================================================================
@@ -958,4 +960,5 @@
     flex-direction: column;
     align-items: flex-start;
   }
+}
 }

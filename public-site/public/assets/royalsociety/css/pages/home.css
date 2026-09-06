@@ -8,6 +8,8 @@
  * referenced pre-token variables (--deep/--gold/--paper) that no longer
  * exist, so nothing from it was reused.
  * ========================================================================== */
+@layer pages {
+
 
 /* ==========================================================================
  * Hero — auto-rotating slide background (HeroSlider.tsx owns the JS)
@@ -233,7 +235,7 @@
   padding: 12px 22px;
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
   white-space: nowrap;
   transition: border-color var(--rs-transition), background var(--rs-transition);
@@ -302,7 +304,7 @@
 }
 
 .latest-main-news__body h3 a {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .latest-main-news__body h3 a:hover {
@@ -321,7 +323,7 @@
   align-items: center;
   gap: 6px;
   margin-top: var(--rs-space-3);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
 }
 
@@ -379,7 +381,7 @@
 }
 
 .latest-small-news__body h3 a {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .latest-small-news__body p {
@@ -526,7 +528,7 @@
   place-items: center;
   border-radius: var(--rs-radius-sm);
   background: var(--rs-gold-soft);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .ks-icon svg {
@@ -546,7 +548,7 @@
 }
 
 .ks-card-text strong {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.05rem;
 }
@@ -626,7 +628,7 @@
   padding: 10px 20px;
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -642,7 +644,7 @@
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
   background: var(--rs-surface);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-size: 1.2rem;
   line-height: 1;
 }
@@ -749,7 +751,7 @@
   align-items: center;
   gap: 6px;
   margin-top: var(--rs-space-2);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-size: 0.92rem;
   font-weight: 700;
 }
@@ -777,7 +779,7 @@
   padding: 12px 22px;
   border: 1px solid var(--rs-line-gold);
   border-radius: var(--rs-radius-sm);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -885,7 +887,7 @@
   place-items: center;
   border-radius: var(--rs-radius-sm);
   background: var(--rs-gold-soft);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
 }
 
 .ps-service-item__icon svg {
@@ -913,7 +915,7 @@
 }
 
 .ps-service-item__text strong {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.02rem;
 }
@@ -943,7 +945,7 @@
 }
 
 .ps-process-strip > span {
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-size: 1.05rem;
   font-weight: 700;
@@ -1004,7 +1006,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
 }
 
@@ -1183,4 +1185,5 @@
     align-items: flex-start;
     gap: var(--rs-space-3);
   }
+}
 }

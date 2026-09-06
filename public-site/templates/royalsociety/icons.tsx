@@ -32,7 +32,9 @@ export type RsIconId =
   | "i-book"
   | "i-shield"
   | "i-service"
-  | "i-people";
+  | "i-people"
+  | "i-sun"
+  | "i-moon";
 
 const PATHS: Record<RsIconId, ReactNode> = {
   "i-search": (
@@ -77,6 +79,16 @@ const PATHS: Record<RsIconId, ReactNode> = {
       <path d="M3.5 20c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
       <path d="M16 5.2a3.2 3.2 0 0 1 0 6.1M17.2 14.4c2 .7 3.4 2.5 3.4 4.8" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
     </>
+  ),
+  // Dark-mode toggle (Header.tsx) — same outline stroke style as the rest.
+  "i-sun": (
+    <>
+      <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth={2} />
+      <path d="M12 2.5v2.6M12 18.9v2.6M4.5 12H7M17 12h2.5M6.3 6.3l1.8 1.8M15.9 15.9l1.8 1.8M6.3 17.7l1.8-1.8M15.9 8.1l1.8-1.8" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+    </>
+  ),
+  "i-moon": (
+    <path d="M20.5 14.8A8.5 8.5 0 0 1 9.2 3.5a8.5 8.5 0 1 0 11.3 11.3Z" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" />
   ),
 };
 

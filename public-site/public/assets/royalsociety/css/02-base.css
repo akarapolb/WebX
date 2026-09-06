@@ -10,6 +10,8 @@
  * Provides: .container .section .section-head .eyebrow .section-kicker
  * .view-all .icon .sr-only .reveal .no-wrap-desktop and element defaults.
  * ========================================================================== */
+@layer base {
+
 
 *,
 *::before,
@@ -67,7 +69,7 @@ h2,
 h3,
 h4 {
   margin: 0;
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-family: var(--rs-font-display);
   font-weight: 700;
   line-height: var(--rs-leading-heading);
@@ -171,7 +173,7 @@ p {
   display: inline-flex;
   align-items: center;
   gap: var(--rs-space-2);
-  color: var(--rs-primary);
+  color: var(--rs-heading);
   font-weight: 700;
 }
 
@@ -210,19 +212,23 @@ p {
  * Motion + focus
  * ========================================================================== */
 
-/* HomePage.tsx marks several section wrappers ".reveal" (ported verbatim
-   from the pre-Phase-11 markup), but no IntersectionObserver exists
-   anywhere in this tenant to ever add the matching ".is-visible" class —
-   the sister ORST tenant hit the exact same gap and its own HomePage.tsx
-   file comment documents the fix it landed on: drop any opacity:0 default
-   so content "renders immediately instead of staying invisible" rather
-   than depending on JS that was never built. Same fix here, for the same
-   reason: content must never be invisible-by-default. .reveal stays a
-   valid, inert hook (harmless if a real scroll-reveal observer is added
-   later) rather than being stripped out of the markup. */
+/* A real observer now exists (components/ScrollReveal.tsx, mounted once in
+   the shared root layout for every tenant) — this class was previously
+   inert here for exactly the reason its own history is worth keeping: no
+   IntersectionObserver ever added the matching ".is-visible" class, so this
+   rule stayed opacity:1 unconditionally rather than risk content that's
+   invisible if the JS that was supposed to reveal it never showed up.
+   That safety constraint still holds — this bare rule is still the
+   unconditional default — but now there's a second, JS-gated rule below
+   that can actually hide-then-reveal, since the JS to reverse it is real. */
 .reveal {
   opacity: 1;
   transform: none;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+html.js-reveal .reveal:not(.is-visible) {
+  opacity: 0;
+  transform: translateY(16px);
 }
 
 button:focus-visible,
@@ -263,4 +269,5 @@ textarea:focus-visible,
   .section-head {
     margin-bottom: var(--rs-space-5);
   }
+}
 }

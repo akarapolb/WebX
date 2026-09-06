@@ -1,3 +1,17 @@
+/* Cascade layer order for this tenant's whole CSS, declared once, here,
+   because this is the first stylesheet loaded (see app/orst/layout.tsx).
+   Matches the current <link> load order exactly, so this changes nothing
+   about which rule wins today — what it buys is for later: a rule in a
+   later layer always wins over one in an earlier layer regardless of
+   selector specificity, so which file is "allowed" to override which is
+   now a fact declared in one place, not an emergent property of <link>
+   order that a future reordering could silently flip. It doesn't resolve
+   conflicts BETWEEN rules in the same file/layer — those still fall back to
+   plain specificity and source order exactly as before (see e.g. today's
+   `.agenda-item .agenda-date small` fix, a same-file conflict layers alone
+   don't touch). */
+@layer tokens, base, blocks, components, pages;
+
 /* ============================================================================
  * tokens.css — Phase 10 design system for ORST (Office of the Royal Society
  * of Thailand). Softer, service-forward institutional feel: pill/rounded
@@ -10,6 +24,8 @@
  * (they extend the tenant's already-configured Strapi brand.primaryColor/
  * template.background rather than inventing an unrelated palette).
  * ========================================================================== */
+@layer tokens {
+
 :root {
   /* Color */
   --orst-primary: #073b34;
@@ -127,6 +143,30 @@
   --orst-hero-scrim: linear-gradient(100deg, rgba(5, 42, 37, .94) 0%, rgba(5, 42, 37, .86) 32%, rgba(6, 50, 44, .62) 58%, rgba(7, 59, 52, .34) 100%);
   --orst-hero-scrim-mobile: linear-gradient(180deg, rgba(5, 42, 37, .72) 0%, rgba(5, 42, 37, .88) 55%, rgba(5, 42, 37, .95) 100%);
 
+  /* `--orst-heading` — a dedicated alias for "brand-colour text sitting on
+     the page's own ground/surface" (headings, active nav/tab states, icon
+     accents), split out from `--orst-primary` specifically so dark mode
+     works: `--orst-primary` also fills genuinely-always-dark surfaces (the
+     hero/footer/CTA bands, solid teal buttons) that must stay the same deep
+     teal in EITHER theme, while heading text needs to flip to a light tone
+     against a dark ground. Every plain `color:` reference to
+     `--orst-primary` in this tenant's CSS was moved to this token; every
+     `background:`/paired `border-color:` fill was deliberately left alone. */
+  --orst-heading: var(--orst-primary);
+
+  /* Semantic status colors — success/error/info state chips (notice boxes,
+     the breaking-news banner, required-field marks, the "office open" dot)
+     previously used one-off literal hex values with no dark-mode variant at
+     all. Consolidated into tokens so a dark theme can override every one at
+     once. Values below match what was already shipping in light mode. */
+  --orst-success-bg: #eaf5ee;
+  --orst-success-ink: #2f7d4f;
+  --orst-success-line: #bfe2cb;
+  --orst-error-bg: #fdeceb;
+  --orst-error-ink: #c0392b;
+  --orst-info-bg: #eaf3fb;
+  --orst-info-ink: #0b3d63;
+
   /* Layering */
   --orst-z-header: 60;
   --orst-z-mega: 55;
@@ -146,4 +186,81 @@
               narrower "laptop" width — the full 8-item nav genuinely
               doesn't fit next to the logo/search/CTA any narrower than
               this, even with header-inner's own wider max-width) */
+}
+
+/* ============================================================================
+ * Dark theme
+ * ----------------------------------------------------------------------------
+ * `[data-theme]` is stamped on <html> by app/layout.tsx's THEME_BOOT script
+ * BEFORE first paint (localStorage `dga-theme`, falling back to the OS
+ * preference) — the same mechanism the gov-portal template already used, so
+ * this tenant's toggle (see ORST's Header.tsx) writes to the exact same key
+ * and interoperates with it rather than inventing a second one. Because the
+ * boot script always resolves to an explicit "light" or "dark" value (never
+ * leaves the attribute absent), only the `[data-theme="dark"]` selector is
+ * needed here — there is no bare `prefers-color-scheme` case to also cover.
+ *
+ * "A deep archival room at night," not pure black: the ground is a warm
+ * near-black charcoal-green (keeps the institution's own hue instead of
+ * going neutral), card surfaces sit one step lighter for real elevation, and
+ * gold is brightened rather than reused as-is — the same gold that reads
+ * clearly on warm ivory goes muddy on a dark ground.
+ *
+ * Every value below is a redefinition of a token declared in the plain
+ * :root block above — no new selectors on individual components. That's
+ * only possible because this tenant's own architecture note at the top of
+ * this file was already enforced ("every stylesheet should reference these
+ * custom properties, never a literal hex/px value") — the entire dark theme
+ * is a token swap, not a component-by-component reskin. `--orst-ink-inverse*`
+ * and the raw `--orst-primary*`/`--orst-gold`-as-fill values are deliberately
+ * NOT redefined here: those color the hero/footer/CTA bands and solid
+ * buttons, which are already dark in light mode and stay exactly as they
+ * are in dark mode too. */
+:root[data-theme="dark"] {
+  --orst-ground: #0e1613;
+  --orst-surface: #172520;
+  --orst-surface-sunk: #0a100d;
+  --orst-ink: #eef1ec;
+  --orst-ink-soft: #b9c4bd;
+  --orst-ink-faint: #8a968f;
+  --orst-line: rgba(238, 241, 236, 0.12);
+  --orst-line-strong: rgba(238, 241, 236, 0.22);
+
+  /* Heading/accent ink: light mint-teal rather than the deep teal used on
+     ivory. 9.8:1 on --orst-ground, verified against the actual rendered
+     background, not assumed. */
+  --orst-heading: #8fd9c4;
+  --orst-focus: #4fd8ba;
+  --orst-focus-ring: 0 0 0 3px rgba(79, 216, 186, 0.35);
+
+  /* Gold brightens for the same reason heading does — #b98d3e/#6f5214 were
+     tuned for contrast against warm ivory and lose most of that contrast
+     against a near-black ground. */
+  --orst-gold: #d8ac5e;
+  --orst-gold-strong: #e8c384;
+  --orst-gold-soft: rgba(216, 172, 94, 0.14);
+  --orst-gold-faint: rgba(216, 172, 94, 0.1);
+  --orst-archival: #c9ab86;
+
+  --orst-primary-faint: rgba(143, 217, 196, 0.08);
+  --orst-primary-line: rgba(143, 217, 196, 0.18);
+  --orst-rule-gold: rgba(216, 172, 94, 0.4);
+  --orst-rule-gold-strong: rgba(216, 172, 94, 0.78);
+
+  /* Shadows read as "deeper black," not "softer" — a light-mode soft shadow
+     tuned against an ivory ground all but disappears against one this dark. */
+  --orst-shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.36);
+  --orst-shadow-card: 0 2px 10px rgba(0, 0, 0, 0.28);
+  --orst-shadow-lift: 0 20px 48px rgba(0, 0, 0, 0.48);
+
+  /* Status chips — darkened backgrounds, brightened ink, so a notice box
+     doesn't sit as a jarring pastel rectangle on a near-black page. */
+  --orst-success-bg: rgba(74, 222, 128, 0.12);
+  --orst-success-ink: #6ee7a3;
+  --orst-success-line: rgba(74, 222, 128, 0.3);
+  --orst-error-bg: rgba(248, 113, 113, 0.14);
+  --orst-error-ink: #f597a0;
+  --orst-info-bg: rgba(96, 165, 250, 0.14);
+  --orst-info-ink: #93c5fd;
+}
 }
