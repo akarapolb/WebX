@@ -11,7 +11,7 @@
       "heading": "เกี่ยวกับเรา",
       "lead": "ประวัติ ภารกิจ โครงสร้างองค์กร และข้อมูลเปิดเผยของสำนักงานราชบัณฑิตยสภา",
       "breadcrumb": [
-        { "label": "หน้าหลัก", "href": "index.html" },
+        { "label": "หน้าหลัก", "href": "/orst" },
         { "label": "เกี่ยวกับเรา" }
       ]
     },
@@ -64,6 +64,15 @@
       ]
     },
     {
+      "type": "member-directory",
+      "id": "members",
+      "variant": "alt",
+      "heading": "ราชบัณฑิตและภาคีสมาชิก",
+      "lead": "รายชื่อผู้ทรงคุณวุฒิที่ได้รับการแต่งตั้งเป็นราชบัณฑิตและภาคีสมาชิก",
+      "source": { "kind": "wp", "postType": "member", "map": "directory" },
+      "items": []
+    },
+    {
       "type": "link-list",
       "id": "transparency",
       "variant": "alt",
@@ -81,8 +90,8 @@
       "heading": "ต้องการข้อมูลเพิ่มเติม",
       "body": "ติดต่อสำนักงานได้ตามช่องทางที่สะดวก",
       "actions": [
-        { "label": "ติดต่อเรา", "href": "contact.html" },
-        { "label": "บริการประชาชน", "href": "services.html", "variant": "ghost" }
+        { "label": "ติดต่อเรา", "href": "/orst/contact" },
+        { "label": "บริการประชาชน", "href": "/orst/services", "variant": "ghost" }
       ]
     }
   ]

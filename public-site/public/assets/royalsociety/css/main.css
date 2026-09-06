@@ -19,6 +19,15 @@
  *  ---------------------------------------------------------------------------
  *  ก่อนขึ้น production: ควรรวม 5 ไฟล์นี้เป็นไฟล์เดียวด้วย build tool
  *  เพราะ @import ทำให้เบราว์เซอร์ต้องโหลดต่อกันเป็นทอด ๆ
+ *
+ *  TOR gap audit (PageSpeed/Core Web Vitals) — this exact predicted problem
+ *  was confirmed live (a real Lighthouse run measured LCP=2.88s on
+ *  /royalsociety, over the TOR's own 2.5s target, tracing back to this
+ *  @import chain). Fixed not by combining these files, but by loading the
+ *  same 5 files as direct parallel <link> tags instead — see
+ *  app/royalsociety/layout.tsx and app/en/royalsociety/layout.tsx, which no
+ *  longer reference this file at all. Left as-is (not deleted) for any other
+ *  future consumer, but the @import chain above should not be re-adopted.
  *  ---------------------------------------------------------------------------
  * ========================================================================== */
 

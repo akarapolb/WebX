@@ -17,13 +17,26 @@
   --rs-primary-strong: #033029;
   --rs-primary-soft: #0d6b5e;
   --rs-gold: #b99143;
-  --rs-gold-strong: #8a6a2e;
+  /* Darkened from #8a6a2e during the premium pass. A real Lighthouse audit
+     of /royalsociety/about and /knowledge measured it at 4.27:1 against its
+     own --rs-gold-soft chip background (.page-hero__kicker,
+     .rs-list-item__tag), under the WCAG AA 4.5:1 floor — those pages had
+     never been audited, only the homepage had. Now 5.06:1 there, and every
+     other use of this token is small or secondary text, so darkening only
+     ever improves legibility. */
+  --rs-gold-strong: #7d5f27;
   --rs-gold-soft: #f5ecd9;
   --rs-ground: #fbf7ef;
   --rs-surface: #ffffff;
   --rs-ink: #16201d;
   --rs-ink-soft: #47534e;
-  --rs-ink-faint: #79847f;
+  /* Darkened from #79847f during the premium pass: a real Lighthouse audit
+     measured it at 3.87:1 on white (.wx-dir-division on the member
+     directory), under the AA 4.5:1 floor — now 5.14:1. The sister ORST
+     tenant had already fixed the identical bug in its own --orst-ink-faint;
+     this one had simply never been audited on the pages that use it. Every
+     real use is muted secondary text, so darkening only helps. */
+  --rs-ink-faint: #667069;
   --rs-line: rgba(6, 71, 63, 0.14);
   --rs-line-gold: rgba(185, 145, 67, 0.32);
   --rs-focus: #0d6b5e;
@@ -67,6 +80,31 @@
   /* Motion + elevation scale */
   --rs-transition: 180ms ease;
   --rs-transition-slow: 320ms ease;
+
+  /* ---- Premium editorial pass. Mirrors the same layer added to ORST's
+     tokens.css, but pitched to this tenant's own register: this is the
+     ceremonial, rule-driven sibling, so the display sizes run larger and
+     the rules do more of the work than any fill or shadow would. Additive
+     only — nothing above changes. */
+
+  /* Line-heights are deliberately never below 1.18: Thai stacks vowel and
+     tone marks vertically above and below the base glyph, and a tighter
+     value clips them at display sizes — invisible in Latin-only review. */
+  --rs-display-xl: clamp(2.5rem, 1.6rem + 3.8vw, 4.6rem);
+  --rs-display-lg: clamp(1.95rem, 1.45rem + 2.1vw, 3rem);
+  --rs-display-md: clamp(1.25rem, 1.08rem + .74vw, 1.65rem);
+  --rs-leading-display: 1.18;
+  --rs-leading-heading: 1.3;
+
+  /* Muted archival brown for dates, meta and secondary labels, so they stop
+     being either teal or gold. 5.9:1 on --rs-ground, over the AA floor. */
+  --rs-archival: #6b5b47;
+
+  /* Gold hairlines — this tenant's existing --rs-line-gold is a border
+     tint; these two are the editorial *rule* weights used for eyebrows,
+     dividers and the header edge. */
+  --rs-rule-gold: rgba(185, 145, 67, .42);
+  --rs-rule-gold-strong: rgba(185, 145, 67, .72);
 
   /* z-index scale, low to high */
   --rs-z-header: 900;

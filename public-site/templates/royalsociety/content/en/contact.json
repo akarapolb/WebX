@@ -1,0 +1,35 @@
+{
+  "title": "Contact Us",
+  "navKey": "contact",
+  "blocks": [
+    {
+      "id": "contact-hero",
+      "type": "page-hero",
+      "eyebrow": "Contact",
+      "heading": "Contact Us",
+      "lead": "Send a question, feedback, or any matter you'd like to raise with the Office of the Royal Society. Staff will respond through the channel you provide."
+    },
+    {
+      "id": "contact-form-section",
+      "type": "contact-form",
+      "eyebrow": "Form",
+      "heading": "Send Us a Message",
+      "lead": "Fields marked * are required."
+    },
+    {
+      "id": "contact-office",
+      "type": "contact-info",
+      "heading": "Office of the Royal Society",
+      "address": "Sanam Suea Pa, Dusit District, Bangkok",
+      "phone": "0 2481 0347",
+      "email": "saraban@royalsociety.go.th",
+      "hours": "Monday–Friday, 08:30–16:30 (closed Saturdays, Sundays, and public holidays)"
+    },
+    {
+      "id": "contact-tip",
+      "type": "notice",
+      "title": "Before You Send Your Question",
+      "body": "Try searching the knowledge archive first — many frequently asked questions already have answers on the Knowledge page (/royalsociety/knowledge)."
+    }
+  ]
+}

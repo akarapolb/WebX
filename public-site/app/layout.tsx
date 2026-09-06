@@ -1,18 +1,39 @@
 import type { Metadata } from "next";
 import IconSprite from "@/components/IconSprite";
 import CookieConsent from "@/components/CookieConsent";
+import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "WebX public site",
+  // Lets every page's generateMetadata (lib/seo.ts's pageMetadata) hand back
+  // relative OG/canonical URLs and still resolve to real absolute ones.
+  metadataBase: new URL(SITE_URL),
 };
 
 // Theme bootstrap — same localStorage-read-before-paint pattern as the
 // original index.html, so there's no flash of the wrong theme. No tenant
 // cloak needed anymore: each tenant's HTML is generated separately at build
 // time, so there's nothing to re-brand after load.
+//
+// Bilingual EN (TOR gap) — this is also where <html lang> gets corrected for
+// an /en/ route. Next's own i18n router needs per-request rendering, which
+// `output: "export"` can't do (a fully static export has no request to
+// inspect), and only ONE layout in the whole app may render <html>/<body> —
+// nested route-group layouts can't redeclare it. So there's no way to pick
+// the right `lang` at build time per static page; this runs synchronously
+// in <head>, before paint, exactly like the theme read above, so there's no
+// perceptible flash for a real visitor — the one honest gap is a crawler
+// that doesn't execute JS at all, which would still see the source-order
+// default (lang="th") baked into the static HTML. Google's own crawler does
+// execute JS, so this is a defensible trade-off, not a silent one.
 const THEME_BOOT = `(function(){try{
   var t = localStorage.getItem('dga-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
   document.documentElement.setAttribute('data-theme', t);
+  if (location.pathname.indexOf('/en/') === 0 || location.pathname === '/en') {
+    document.documentElement.setAttribute('lang', 'en');
+    var sk = document.querySelector('.webx-skip-link');
+    if (sk) sk.textContent = 'Skip to main content';
+  }
 }catch(e){}})();`;
 
 // Phase 8 — this used to also load the gov-portal design's 3 CSS files

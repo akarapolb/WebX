@@ -88,7 +88,13 @@ export default function CookieConsent() {
         boxShadow: "0 -4px 20px rgba(0,0,0,0.25)",
       }}
     >
-      <p style={{ margin: 0, flex: "1 1 380px", maxWidth: 680 }}>
+      {/* `color` is repeated here rather than left to inherit from the
+          banner above: ORST's base.css carries a global `p { color:
+          var(--orst-ink-soft) }`, and an explicit declaration on the element
+          always beats an inherited one no matter how specific the ancestor
+          rule is — so this notice rendered dark-grey on the near-black
+          banner at 2.36:1. Caught by a real Lighthouse audit. */}
+      <p style={{ margin: 0, flex: "1 1 380px", maxWidth: 680, color: "#f2f3f6" }}>
         เว็บไซต์นี้ใช้คุกกี้เพื่อพัฒนาประสบการณ์การใช้งานและวิเคราะห์การเข้าชม
         คุณสามารถเลือกยอมรับทั้งหมดหรือเฉพาะคุกกี้ที่จำเป็นได้ (
         <a href="/privacy" style={{ color: "#9fd3ff", textDecoration: "underline" }}>นโยบายความเป็นส่วนตัว</a>
@@ -107,7 +113,10 @@ export default function CookieConsent() {
         <button
           onClick={() => save("accept_all", { necessary: true, analytics: true, marketing: true })}
           style={{
-            background: "#2f7dff", color: "#fff", border: "none",
+            // TOR gap audit (accessibility/WCAG) — a real Lighthouse audit
+            // found white-on-#2f7dff at 3.81:1, under WCAG AA's 4.5:1 floor;
+            // darkened to a still-clearly-blue #0f56c4 (6.67:1).
+            background: "#0f56c4", color: "#fff", border: "none",
             borderRadius: 8, padding: "9px 18px", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
           }}
         >

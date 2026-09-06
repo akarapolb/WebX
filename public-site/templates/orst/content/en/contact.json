@@ -1,0 +1,55 @@
+{
+  "title": "Contact Us",
+  "navKey": "contact",
+  "description": "Ways to reach the Office of the Royal Society, a contact form, and internal departments.",
+  "blocks": [
+    {
+      "type": "contact-hero",
+      "id": "hero",
+      "eyebrow": "Ways to Reach the Office",
+      "heading": "Contact the Office of the Royal Society",
+      "lead": "Choose a convenient channel — ask a question, message our staff, or check the map to find your way to the office.",
+      "cta1Label": "Send us a message",
+      "cta1Url": "#contact-form",
+      "cta2Label": "View map & directions",
+      "cta2Url": "https://www.google.com/maps",
+      "officeHours": "Open Monday–Friday, 08:30–16:30",
+      "phone": "0 2141 1728",
+      "email": "saraban@orst.go.th",
+      "address": "Government Complex Commemorating His Majesty the King's 80th Birthday Anniversary, Building C, Chaeng Watthana Rd., Lak Si, Bangkok 10210"
+    },
+    {
+      "type": "contact-info",
+      "id": "info",
+      "heading": "Contact Information",
+      "address": "Office of the Royal Society, Government Complex Commemorating His Majesty the King's 80th Birthday Anniversary, Building C, Chaeng Watthana Rd., Lak Si, Bangkok 10210",
+      "phone": "0 2141 1728",
+      "email": "saraban@orst.go.th",
+      "hours": "Monday–Friday, 08:30–16:30 (closed Saturdays, Sundays, and public holidays)"
+    },
+    {
+      "type": "contact-form",
+      "id": "form",
+      "kicker": "Contact Form",
+      "heading": "Send Us a Message",
+      "intro": "Please fill in your details completely — a staff member will review your message and respond through the channel you provide."
+    },
+    {
+      "type": "card-grid",
+      "id": "departments",
+      "variant": "alt",
+      "eyebrow": "Internal Offices",
+      "heading": "Internal Departments",
+      "lead": "Contact a specific department directly for faster coordination.",
+      "columns": 3,
+      "items": [
+        { "title": "Secretariat", "body": "Tel: 0-2280-0021 ext. 101", "href": "mailto:secretary@royin.go.th" },
+        { "title": "Thai Language Division", "body": "Tel: 0-2280-0021 ext. 201", "href": "mailto:thai@royin.go.th" },
+        { "title": "Library Division", "body": "Tel: 0-2280-0021 ext. 301", "href": "mailto:library@royin.go.th" },
+        { "title": "Publications Division", "body": "Tel: 0-2280-0021 ext. 401", "href": "mailto:publication@royin.go.th" },
+        { "title": "IT Division", "body": "Tel: 0-2280-0021 ext. 501", "href": "mailto:it@royin.go.th" },
+        { "title": "Finance & Accounting Division", "body": "Tel: 0-2280-0021 ext. 601", "href": "mailto:finance@royin.go.th" }
+      ]
+    }
+  ]
+}

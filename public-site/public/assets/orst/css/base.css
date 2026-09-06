@@ -49,15 +49,27 @@ main { display: block; }
 
 /* ---------- typography ---------- */
 
-h1, h2, h3 { font-family: var(--orst-font-display); color: var(--orst-primary); font-weight: 600; line-height: 1.25; }
+h1, h2, h3 { font-family: var(--orst-font-display); color: var(--orst-primary); font-weight: 600; line-height: var(--orst-leading-heading); }
 h4, h5, h6 { font-family: var(--orst-font-body); color: var(--orst-primary); font-weight: 700; line-height: 1.35; }
 
-h1 { font-size: clamp(2rem, 1.4rem + 2.6vw, 3.4rem); line-height: 1.14; letter-spacing: -0.01em; }
-h2 { font-size: clamp(1.6rem, 1.3rem + 1.4vw, 2.35rem); }
-h3 { font-size: clamp(1.15rem, 1.02rem + 0.6vw, 1.4rem); }
+/* Display sizes come from the editorial scale in tokens.css. `text-wrap:
+   balance` matters more in Thai than in Latin here — Thai has no inter-word
+   spaces, so the browser breaks on syllable boundaries and a two-line
+   headline very easily ends up with one long line and one orphaned word. */
+h1 { font-size: var(--orst-display-xl); line-height: var(--orst-leading-display); letter-spacing: -0.01em; }
+h2 { font-size: var(--orst-display-lg); }
+h3 { font-size: var(--orst-display-md); }
 h4 { font-size: 1.05rem; }
+h1, h2, h3 { text-wrap: balance; }
 
 p { color: var(--orst-ink-soft); }
+/* Editorial measure: unbounded body text across a 1400px container is the
+   single most "untended" thing a wide page can do. Block-level opt-outs
+   (cards, table cells, form help text) set their own max-width already. */
+.prose p, .block-rich-text p, .section > .container > p { max-width: 62ch; }
+
+/* Figures that line up in columns should not shift as their digits change. */
+.block-stat-row, .block-table, .data-table, .stat-value, .block-meta time { font-variant-numeric: tabular-nums; }
 
 a { transition: color var(--orst-duration) var(--orst-ease); }
 
@@ -117,27 +129,35 @@ strong, b { color: var(--orst-ink); }
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--orst-space-4);
-  margin-bottom: clamp(24px, 3.4vw, var(--orst-space-7));
+  margin-bottom: clamp(28px, 4vw, var(--orst-space-8));
 }
-.section-head h2 { margin-top: var(--orst-space-2); }
-.section-head p { max-width: 58ch; margin-top: var(--orst-space-2); }
+.section-head h2 { margin-top: var(--orst-space-3); }
+.section-head p { max-width: 58ch; margin-top: var(--orst-space-3); }
 
 .section-kicker, .block-eyebrow, .eyebrow, .intro-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   font-family: var(--orst-font-body);
-  font-size: .78rem;
+  font-size: .76rem;
   font-weight: 700;
-  letter-spacing: .09em;
+  letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--orst-gold-strong);
 }
+/* A longer, true hairline rather than the old short 2px bar — at 1px it
+   reads as an editorial rule instead of a UI chip, which is the whole
+   register shift this pass is after. */
 .section-kicker::before, .block-eyebrow::before, .eyebrow::before, .intro-label::before {
   content: "";
-  width: 18px; height: 2px;
-  border-radius: 2px;
-  background: var(--orst-gold);
+  flex: none;
+  width: 30px; height: 1px;
+  background: var(--orst-rule-gold-strong);
+  /* Pinned to the first line rather than vertically centred: these labels
+     wrap to two lines at phone widths, and a centred rule then floats
+     against the middle of the block instead of leading the text. */
+  align-self: flex-start;
+  margin-top: .62em;
 }
 
 .view-all {
@@ -326,5 +346,134 @@ input[type="checkbox"], input[type="radio"] {
 /* ---------- misc ---------- */
 
 hr { border: 0; border-top: 1px solid var(--orst-line); margin: var(--orst-space-6) 0; }
+
+/* ---------- accessibility toolbar hooks ---------- */
+/* Driven by templates/orst/AccessibilityTools.tsx via
+   lib/useAccessibilityToolbar.ts (TOR gap audit) — same hook shape
+   RoyalSociety's own royalsociety/css/05-accessibility.css already uses,
+   ported here since ORST had no such rules at all. */
+
+html[data-font-size="small"] { font-size: 15px; }
+html[data-font-size="large"] { font-size: 18px; }
+
+body.access-contrast { background: #000 !important; color: #fff !important; }
+
+body.access-contrast main,
+body.access-contrast section,
+body.access-contrast header,
+body.access-contrast footer,
+body.access-contrast .site-header,
+body.access-contrast .topbar {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body.access-contrast h1,
+body.access-contrast h2,
+body.access-contrast h3,
+body.access-contrast p,
+body.access-contrast span,
+body.access-contrast small,
+body.access-contrast strong,
+body.access-contrast a {
+  color: #fff !important;
+}
+
+body.access-contrast a,
+body.access-contrast button,
+body.access-contrast input {
+  border-color: #fff !important;
+}
+
+body.access-contrast button {
+  background: #111 !important;
+  color: #fff !important;
+}
+
+/* ---------- poll block ---------- */
+/* Real vote UI for templates/orst/PollBlock.tsx (TOR gap audit — the
+   backend already existed, nothing rendered it). */
+
+.poll-panel {
+  background: var(--orst-surface);
+  border: 1px solid var(--orst-line);
+  border-radius: var(--orst-radius-card);
+  box-shadow: var(--orst-shadow-card);
+  padding: var(--orst-space-6);
+  max-width: 640px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.poll-question { font-weight: 600; font-size: 1.05rem; margin-bottom: var(--orst-space-5); }
+
+.poll-options { display: grid; gap: var(--orst-space-3); text-align: left; }
+
+.poll-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--orst-space-3);
+  padding: 12px 16px;
+  border: 1px solid var(--orst-line);
+  border-radius: var(--orst-radius-sm, 12px);
+  background: var(--orst-surface);
+  cursor: pointer;
+  overflow: hidden;
+  font: inherit;
+  color: var(--orst-ink);
+}
+
+.poll-option:hover:not(:disabled) { border-color: var(--orst-primary); }
+.poll-option:disabled { cursor: default; }
+
+.poll-option-label { position: relative; z-index: 1; font-weight: 500; }
+.poll-option-pct { position: relative; z-index: 1; font-variant-numeric: tabular-nums; color: var(--orst-ink-muted, var(--orst-ink)); }
+
+.poll-option-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--orst-primary-soft, var(--orst-primary));
+  opacity: 0.16;
+  transition: width 0.4s ease;
+}
+
+.poll-option.is-mine { border-color: var(--orst-primary); }
+.poll-option.is-mine .poll-option-bar { opacity: 0.28; }
+
+.poll-total { margin-top: var(--orst-space-4); font-size: 0.9rem; color: var(--orst-ink-muted, var(--orst-ink)); }
+
+/* ---------- site search ---------- */
+/* templates/orst/SearchResults.tsx (TOR gap audit). */
+
+.search-form { display: flex; gap: 10px; margin-top: var(--orst-space-4); }
+.search-form input[type="search"] {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid var(--orst-line);
+  border-radius: var(--orst-radius-sm);
+  font: inherit;
+}
+
+.search-results-list { list-style: none; margin: var(--orst-space-4) 0 0; padding: 0; display: grid; gap: 10px; }
+
+.search-result-item {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-result-type {
+  font-size: 0.78rem;
+  color: var(--orst-primary-soft, var(--orst-primary));
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.search-result-item a { font-size: 1.05rem; font-weight: 500; color: var(--orst-ink); text-decoration: none; }
+.search-result-item a:hover { text-decoration: underline; }
 
 ::selection { background: var(--orst-gold-faint); color: var(--orst-primary-strong); }

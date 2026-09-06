@@ -9,26 +9,16 @@ import VideoChannel from "./VideoChannel";
 import Awards from "./Awards";
 import Faqs from "./Faqs";
 import Featured from "./Featured";
-import { getHomeData, getTenant, type Tenant } from "@/lib/cms";
+import BlockRenderer from "./blocks/BlockRenderer";
+import { getHomeData, getNavItems, getPage, getTenant, type Tenant } from "@/lib/cms";
+import { brandCssVars } from "@/lib/brandColor";
+
+// One designated slug per tenant renders AT the homepage route instead of
+// as a sub-page under [tenant]/[slug] — see that route for the rest of a
+// tenant's pages.
+const BLOCK_PAGE_SLUG = "home-blocks";
 
 const FALLBACK_TENANT: Tenant = { key: "dga", name: "สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)" };
-
-// Same hex/shade/rgba math as assets/tenant.js's brand-color logic, ported
-// to run once at build time instead of on every client-side page load.
-function hex(c: string): [number, number, number] {
-  let h = c.replace("#", "");
-  if (h.length === 3) h = h.split("").map((x) => x + x).join("");
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-}
-function shade(c: string, pct: number): string {
-  const [r, g, b] = hex(c);
-  const f = (x: number) => Math.max(0, Math.min(255, Math.round((x * (100 + pct)) / 100)));
-  return `rgb(${f(r)},${f(g)},${f(b)})`;
-}
-function rgba(c: string, a: number): string {
-  const [r, g, b] = hex(c);
-  return `rgba(${r},${g},${b},${a})`;
-}
 
 // Shared by app/page.tsx (the default "dga" tenant, served at /) and
 // app/[tenant]/page.tsx (every other tenant, one static page each at build
@@ -42,27 +32,41 @@ export default async function HomePage({ tenantKey }: { tenantKey: string }) {
   // the extra round trip here.
   const tenantData = await getTenant(tenantKey);
   const data = await getHomeData(tenantKey, tenantData?.engine);
+  // Strapi-only for now (page.page has no WordPress equivalent) — a
+  // wordpress-engine tenant just never matches and falls through below.
+  const page = tenantData?.engine !== "wordpress" ? await getPage(tenantKey, BLOCK_PAGE_SLUG) : null;
+  const navItems = await getNavItems(tenantKey);
   const tenant = tenantData || FALLBACK_TENANT;
   const orgName = tenant.brand?.orgName?.th || tenant.name;
   const primary = tenant.brand?.primaryColor;
 
   return (
     <>
-      {primary && (
-        <style dangerouslySetInnerHTML={{ __html: `:root{--c-primary:${primary};--c-primary-700:${shade(primary, -22)};--c-primary-50:${rgba(primary, 0.1)}}` }} />
+      {primary && <style dangerouslySetInnerHTML={{ __html: brandCssVars(primary) }} />}
+      <Header tenant={tenant} logoAlt={orgName + " — หน้าแรก"} navItems={navItems} />
+      {page?.blocks?.length ? (
+        // <main> carries no layout-relevant CSS for this template (verified),
+        // so nesting the full stack here — where the legacy path splits
+        // Highlights (inside <main>) from Stats-through-Featured (outside
+        // it) — renders identically while keeping this branch a single call.
+        <main id="main">
+          <BlockRenderer blocks={page.blocks} tenant={tenantKey} homeData={data} />
+        </main>
+      ) : (
+        <>
+          <main id="main">
+            <Hero home={data.home} />
+            <Services items={data.services} />
+            <Highlights items={data.banners} />
+          </main>
+          <Stats />
+          <NewsPanels articles={data.articles} />
+          <VideoChannel items={data.videos} />
+          <Awards items={data.awards} />
+          <Faqs items={data.faqs} />
+          <Featured home={data.home} />
+        </>
       )}
-      <Header tenant={tenant} logoAlt={orgName + " — หน้าแรก"} />
-      <main id="main">
-        <Hero home={data.home} />
-        <Services items={data.services} />
-        <Highlights items={data.banners} />
-      </main>
-      <Stats />
-      <NewsPanels articles={data.articles} />
-      <VideoChannel items={data.videos} />
-      <Awards items={data.awards} />
-      <Faqs items={data.faqs} />
-      <Featured home={data.home} />
       <Footer tenant={tenant} />
     </>
   );

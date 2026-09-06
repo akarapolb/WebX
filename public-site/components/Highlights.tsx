@@ -9,12 +9,17 @@ export default function Highlights({ items }: { items: any[] }) {
     <section className="hl" aria-label="ไฮไลต์ประชาสัมพันธ์">
       <div className="hl-wrap">
         <div className="hl-track" style={{ overflowX: "auto", scrollSnapType: "x mandatory" }}>
-          {items.map((b, i) => (
-            <a key={i} className={"hl-slide n" + ((i % 5) + 1)} href={b.url || "#"} aria-label={b.label || ""} style={{ scrollSnapAlign: "start" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={mediaUrl(b.image)} alt="" loading="lazy" />
-            </a>
-          ))}
+          {items.map((b, i) => {
+            const img = mediaUrl(b.image);
+            return (
+              <a key={i} className={"hl-slide n" + ((i % 5) + 1)} href={b.url || "#"} aria-label={b.label || ""} style={{ scrollSnapAlign: "start" }}>
+                {img && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={img} alt="" loading="lazy" />
+                )}
+              </a>
+            );
+          })}
         </div>
       </div>
     </section>

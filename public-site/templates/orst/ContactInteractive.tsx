@@ -67,21 +67,39 @@ export function ContactForm({ tenant, children }: { tenant: string; children: (c
     const fd = new FormData(form);
     setStatus("sending");
     setError("");
+    // "ร้องเรียน / เสนอแนะ" specifically routes to api::complaint.complaint
+    // instead of the generic contact-message — that content type's own
+    // afterCreate lifecycle sends a real notification email to
+    // COMPLAINT_NOTIFY_EMAIL (TOR §4.4.1.2 4.7's "staff email notification"
+    // requirement), which contact-message has no lifecycle for at all.
+    // Every other subject keeps going to contact-messages, unchanged.
+    const isComplaint = fd.get("subject") === "complaint";
+    const endpoint = isComplaint
+      ? `${STRAPI}/api/complaints/submit?tenant=${encodeURIComponent(tenant)}`
+      : `${STRAPI}/api/contact-messages?tenant=${encodeURIComponent(tenant)}`;
+    const data = isComplaint
+      ? {
+          type: "รับเรื่องออนไลน์",
+          subject: "ร้องเรียน / เสนอแนะ",
+          detail: fd.get("message"),
+          anonymous: false,
+          name: fd.get("name"),
+          email: fd.get("email"),
+          phone: fd.get("phone") || undefined,
+          date: new Date().toISOString(),
+        }
+      : {
+          name: fd.get("name"),
+          email: fd.get("email"),
+          phone: fd.get("phone") || undefined,
+          subject: fd.get("subject"),
+          message: fd.get("message"),
+        };
     try {
-      const r = await fetch(`${STRAPI}/api/contact-messages?tenant=${encodeURIComponent(tenant)}`, {
+      const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: {
-            name: fd.get("name"),
-            email: fd.get("email"),
-            phone: fd.get("phone") || undefined,
-            subject: fd.get("subject"),
-            message: fd.get("message"),
-          },
-          captchaId: captcha.id,
-          captchaAnswer: fd.get("captchaAnswer"),
-        }),
+        body: JSON.stringify({ data, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
       });
       if (!r.ok) {
         const body = await r.json().catch(() => null);

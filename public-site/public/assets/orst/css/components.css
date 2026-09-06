@@ -42,7 +42,7 @@
   font-size: .8rem;
 }
 .topbar-group { display: flex; align-items: center; gap: var(--orst-space-4); flex-wrap: wrap; }
-.topbar-group button, .topbar-group a { color: var(--orst-ink-inverse-soft); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.topbar-group button, .topbar-group a, .topbar-group span { color: var(--orst-ink-inverse-soft); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .topbar-group button:hover, .topbar-group a:hover { color: var(--orst-ink-inverse); }
 .topbar-group .icon { width: 15px; height: 15px; }
 .topbar-right { gap: var(--orst-space-5); }
@@ -55,7 +55,10 @@
   top: 0;
   z-index: var(--orst-z-header);
   background: var(--orst-surface);
-  border-bottom: 1px solid var(--orst-line);
+  /* Gold hairline instead of a plain grey divider — the header is the first
+     thing a visitor reads as "this is an institution", and this is the same
+     rule language the eyebrows and section dividers use. */
+  border-bottom: 1px solid var(--orst-rule-gold);
 }
 
 .header-inner {
@@ -64,8 +67,8 @@
   display: flex;
   align-items: center;
   gap: var(--orst-space-4);
-  min-height: 76px;
-  padding-block: 12px;
+  min-height: 86px;
+  padding-block: var(--orst-space-4);
 }
 
 /* ---------- brand ---------- */
@@ -205,6 +208,22 @@
 .mega-link small { display: block; color: var(--orst-ink-faint); font-size: .8rem; margin-top: 2px; }
 .mega-link em { font-style: normal; color: var(--orst-ink-faint); }
 .mega-link:hover em { color: var(--orst-primary); }
+
+/* Unlimited-depth mega-menu links (TOR gap) — a link with children renders
+   as a native <details>/<summary>, zero JS, same as this section's existing
+   hover-revealed mega-menu and the mobile <details> accordion. */
+.mega-link-details { margin-inline: -12px; }
+.mega-link-details > summary.mega-link { cursor: pointer; list-style: none; }
+.mega-link-details > summary.mega-link::-webkit-details-marker { display: none; }
+.mega-link-details[open] > summary.mega-link em { transform: rotate(90deg); }
+.mega-submenu { padding-left: var(--orst-space-4); border-left: 1px solid var(--orst-line); margin: 2px 0 var(--orst-space-2) 12px; }
+
+.mobile-submenu-nested { margin-left: var(--orst-space-3); }
+.mobile-submenu-nested > summary { cursor: pointer; list-style: none; color: var(--orst-ink-inverse-soft); padding: 6px 0; }
+.mobile-submenu-nested > summary::-webkit-details-marker { display: none; }
+.mobile-submenu-nested > summary::before { content: "+"; margin-right: 6px; }
+.mobile-submenu-nested[open] > summary::before { content: "−"; }
+.mobile-submenu-nested-body { padding-left: var(--orst-space-3); }
 
 /* ---------- header actions ---------- */
 
@@ -384,13 +403,19 @@
 @media (min-width: 640px) {
   .orst-footer-links { grid-template-columns: repeat(4, 1fr); }
 }
+/* Column headings adopt the same letterspaced gold eyebrow language used by
+   .block-eyebrow in base.css, so the footer reads as part of the editorial
+   system rather than a separate utility zone. */
 .orst-footer-col h3 {
-  color: var(--orst-ink-inverse);
+  color: var(--orst-gold-faint);
   font-family: var(--orst-font-body);
-  font-size: .84rem;
+  font-size: .76rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: .16em;
   margin-bottom: var(--orst-space-4);
+  padding-bottom: var(--orst-space-3);
+  border-bottom: 1px solid rgba(253, 250, 243, .14);
 }
 .orst-footer-col ul { display: flex; flex-direction: column; gap: 12px; }
 .orst-footer-col a { color: var(--orst-ink-inverse-soft); font-size: .92rem; }
@@ -410,3 +435,152 @@
 .orst-footer-bottom nav { display: flex; flex-wrap: wrap; gap: var(--orst-space-5); }
 .orst-footer-bottom a { color: var(--orst-ink-inverse-faint); }
 .orst-footer-bottom a:hover { color: var(--orst-ink-inverse); }
+
+/* "Share this page" — TOR gap audit, no share affordance existed anywhere */
+.wx-share { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.wx-share-label { color: var(--orst-ink-inverse-faint); }
+.wx-share-btn {
+  display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--orst-ink-inverse-faint); color: var(--orst-ink-inverse-soft) !important;
+  font-size: .82rem; background: none; cursor: pointer; font-family: inherit;
+  transition: border-color .15s ease, color .15s ease;
+}
+.wx-share-btn:hover { border-color: var(--orst-ink-inverse); color: var(--orst-ink-inverse) !important; }
+
+/* Event calendar ("ปฏิทินกิจกรรม") — TOR gap audit, see components/EventCalendar.tsx */
+.wx-cal--loading { min-height: 420px; }
+.wx-cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--orst-space-3); margin-bottom: var(--orst-space-4); }
+.wx-cal-month { font-family: var(--orst-font-display); font-size: 1.15rem; color: var(--orst-primary); min-width: 12ch; }
+.wx-cal-nav {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+  border-radius: 999px; border: 1px solid var(--orst-line); background: var(--orst-surface);
+  color: var(--orst-primary); font-size: 1.1rem; cursor: pointer;
+}
+.wx-cal-nav:hover { border-color: var(--orst-primary); }
+.wx-cal-subscribe {
+  margin-left: auto; font-size: .84rem; color: var(--orst-primary-soft); text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.wx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.wx-cal-weekday { text-align: center; font-size: .8rem; color: var(--orst-ink-faint); padding-bottom: var(--orst-space-2); }
+.wx-cal-cell {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; border-radius: var(--orst-radius-sm); border: 1px solid transparent; background: none;
+  font-family: inherit; color: var(--orst-ink); cursor: default;
+}
+.wx-cal-cell--empty { visibility: hidden; }
+.wx-cal-cell--has-events { cursor: pointer; background: var(--orst-primary-faint); }
+.wx-cal-cell--has-events:hover { border-color: var(--orst-primary-soft); }
+.wx-cal-cell--today .wx-cal-cell-num { font-weight: 700; color: var(--orst-gold-strong); }
+.wx-cal-cell--selected { border-color: var(--orst-primary); background: var(--orst-primary-faint); }
+.wx-cal-cell-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--orst-gold); }
+.wx-cal-day-panel {
+  margin-top: var(--orst-space-5); padding: var(--orst-space-5); border-radius: var(--orst-radius-card);
+  background: var(--orst-surface-sunk); border: 1px solid var(--orst-line);
+}
+.wx-cal-day-panel h3 { font-size: 1rem; color: var(--orst-primary); margin-bottom: var(--orst-space-3); }
+.wx-cal-day-panel ul { display: flex; flex-direction: column; gap: var(--orst-space-4); }
+.wx-cal-event { padding-top: var(--orst-space-3); border-top: 1px solid var(--orst-line); }
+.wx-cal-event:first-child { padding-top: 0; border-top: none; }
+.wx-cal-event-cat {
+  display: inline-block; font-size: .74rem; padding: 2px 10px; border-radius: 999px;
+  background: var(--orst-gold-faint); color: var(--orst-gold-strong); margin-bottom: var(--orst-space-2);
+}
+.wx-cal-event-title { display: block; color: var(--orst-ink); }
+.wx-cal-event-meta { display: flex; flex-wrap: wrap; gap: var(--orst-space-3); font-size: .84rem; color: var(--orst-ink-soft); margin-top: 4px; }
+.wx-cal-event-body { font-size: .9rem; color: var(--orst-ink-soft); margin-top: var(--orst-space-2); }
+.wx-cal-event-add {
+  margin-top: var(--orst-space-3); font-size: .82rem; padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--orst-primary); color: var(--orst-primary); background: none; cursor: pointer; font-family: inherit;
+}
+.wx-cal-event-add:hover { background: var(--orst-primary-faint); }
+.wx-cal-empty { color: var(--orst-ink-faint); font-size: .92rem; margin-top: var(--orst-space-4); }
+@media (max-width: 640px) {
+  .wx-cal-cell-num { font-size: .85rem; }
+  .wx-cal-subscribe { margin-left: 0; width: 100%; }
+}
+
+/* Member/scholar directory — TOR gap audit, see components/MemberDirectory.tsx */
+.wx-dir-controls { display: flex; flex-wrap: wrap; gap: var(--orst-space-3); align-items: center; margin-bottom: var(--orst-space-5); }
+.wx-dir-search {
+  flex: 1 1 240px; padding: 10px 16px; border-radius: var(--orst-radius-pill); border: 1px solid var(--orst-line);
+  background: var(--orst-surface); color: var(--orst-ink); font-family: inherit; font-size: .92rem;
+}
+.wx-dir-search:focus { outline: none; border-color: var(--orst-primary); box-shadow: var(--orst-focus-ring); }
+.wx-dir-tiers { display: flex; flex-wrap: wrap; gap: var(--orst-space-2); }
+.wx-dir-tier-btn {
+  padding: 6px 16px; border-radius: var(--orst-radius-pill); border: 1px solid var(--orst-line);
+  background: var(--orst-surface); color: var(--orst-ink-soft); font-size: .84rem; cursor: pointer; font-family: inherit;
+}
+.wx-dir-tier-btn.is-active { border-color: var(--orst-primary); background: var(--orst-primary-faint); color: var(--orst-primary); }
+.wx-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--orst-space-5); }
+.wx-dir-card {
+  padding: var(--orst-space-5); border-radius: var(--orst-radius-card); background: var(--orst-surface);
+  border: 1px solid var(--orst-line); text-align: center; box-shadow: var(--orst-shadow-card);
+}
+.wx-dir-photo {
+  width: 88px; height: 88px; border-radius: 999px; margin: 0 auto var(--orst-space-3); overflow: hidden;
+  background: var(--orst-primary-faint); display: flex; align-items: center; justify-content: center;
+}
+.wx-dir-photo img { width: 100%; height: 100%; object-fit: cover; }
+.wx-dir-photo-fallback { font-family: var(--orst-font-display); font-size: 1.6rem; color: var(--orst-primary); }
+.wx-dir-name { font-size: 1rem; color: var(--orst-ink); }
+.wx-dir-tier-badge {
+  display: inline-block; margin-top: var(--orst-space-2); font-size: .74rem; padding: 2px 10px; border-radius: 999px;
+  background: var(--orst-gold-faint); color: var(--orst-gold-strong);
+}
+.wx-dir-division { font-size: .84rem; color: var(--orst-ink-faint); margin-top: var(--orst-space-2); }
+.wx-dir-bio { font-size: .88rem; color: var(--orst-ink-soft); margin-top: var(--orst-space-3); }
+.wx-dir-empty { color: var(--orst-ink-faint); font-size: .92rem; }
+
+/* "Export this list" — TOR gap audit, every table's "ดาวน์โหลด" column was
+   plain unclickable text; see components/ListExport.tsx */
+.wx-export { display: flex; justify-content: flex-end; gap: var(--orst-space-2); margin-bottom: var(--orst-space-3); }
+.wx-export-btn {
+  padding: 6px 14px; border-radius: var(--orst-radius-pill); border: 1px solid var(--orst-line);
+  background: var(--orst-surface); color: var(--orst-ink-soft); font-size: .82rem; cursor: pointer; font-family: inherit;
+}
+.wx-export-btn:hover { border-color: var(--orst-primary); color: var(--orst-primary); }
+@media (max-width: 560px) { .wx-export { justify-content: flex-start; flex-wrap: wrap; } }
+
+/* Job listing + application e-form (TOR gap audit — see
+   components/JobApplicationForm.tsx's own file comment). */
+.wx-job-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--orst-space-4); }
+.wx-job-card { padding: var(--orst-space-4); border-radius: var(--orst-radius-card); border: 1px solid var(--orst-line); background: var(--orst-surface); }
+.wx-job-card h3 { margin: 0 0 var(--orst-space-2); color: var(--orst-primary-strong); }
+.wx-job-meta { display: flex; flex-wrap: wrap; gap: var(--orst-space-2); font-size: .84rem; color: var(--orst-ink-soft); margin: var(--orst-space-2) 0; }
+.wx-job-meta span { background: var(--orst-primary-faint); border-radius: var(--orst-radius-pill); padding: 2px 10px; }
+.wx-job-apply-form { max-width: 720px; }
+.wx-job-apply-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--orst-space-3); }
+.wx-job-apply-form .wx-field { display: flex; flex-direction: column; gap: 6px; margin-top: 0; }
+.wx-job-apply-form label { font-size: .86rem; font-weight: 600; color: var(--orst-ink); }
+.wx-job-apply-form input, .wx-job-apply-form select, .wx-job-apply-form textarea {
+  padding: 10px 12px; border-radius: var(--orst-radius-sm); border: 1px solid var(--orst-line); font: inherit; background: var(--orst-surface); color: var(--orst-ink);
+}
+.wx-job-apply-form textarea { min-height: 96px; resize: vertical; }
+.wx-job-apply-actions .wx-export-btn { background: var(--orst-primary); color: var(--orst-ink-inverse); border-color: var(--orst-primary); padding: 10px 22px; }
+.wx-job-apply-actions .wx-export-btn:hover { background: var(--orst-primary-strong); }
+.wx-job-apply-done { padding: var(--orst-space-4); border-radius: var(--orst-radius-card); background: var(--orst-primary-faint); color: var(--orst-primary-strong); }
+
+/* Breaking-news banner (TOR gap — fast-publish path, see components/
+   BreakingNewsBanner.tsx) — fetched live client-side, so it sits above
+   everything else regardless of the static page underneath it. */
+.wx-breaking { position: relative; z-index: var(--orst-z-header, 60); }
+.wx-breaking-inner {
+  max-width: var(--orst-container-max); margin: 0 auto; padding: var(--orst-space-3) var(--orst-container-pad);
+  display: flex; align-items: center; gap: var(--orst-space-3); flex-wrap: wrap;
+}
+.wx-breaking--info { background: #eaf3fb; color: #0b3d63; }
+.wx-breaking--warning { background: var(--orst-gold-faint); color: var(--orst-gold-strong); }
+.wx-breaking--critical { background: #fdeceb; color: #7a1d16; }
+.wx-breaking-badge {
+  display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .74rem; font-weight: 700;
+  background: rgba(0,0,0,0.12);
+}
+.wx-breaking-message { flex: 1 1 320px; font-size: .92rem; margin: 0; }
+.wx-breaking-link { font-size: .88rem; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.wx-breaking-close {
+  background: none; border: none; font-size: 1.2rem; line-height: 1; cursor: pointer; color: inherit;
+  padding: 2px 6px; opacity: .7;
+}
+.wx-breaking-close:hover { opacity: 1; }

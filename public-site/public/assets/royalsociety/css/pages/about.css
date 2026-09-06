@@ -263,8 +263,12 @@
   text-transform: uppercase;
 }
 
+/* --rs-gold-strong, not --rs-gold: these numerals carry real ordering
+   information, and mid-gold measured 2.91:1 on white and 2.48:1 on the
+   gold-soft card — both under the 3:1 large-text floor. The deeper bronze
+   also reads better than brassy mid-gold at this size. */
 .story-v3-number {
-  color: var(--rs-gold);
+  color: var(--rs-gold-strong);
   font-family: var(--rs-font-display);
   font-size: 2rem;
   font-weight: 700;
@@ -485,8 +489,9 @@
   height: 22px;
 }
 
+/* Same fix and reason as .story-v3-number above. */
 .mission-v2-number {
-  color: var(--rs-gold);
+  color: var(--rs-gold-strong);
   font-family: var(--rs-font-display);
   font-size: 1.55rem;
   font-weight: 700;

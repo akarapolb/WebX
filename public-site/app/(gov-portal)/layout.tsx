@@ -8,6 +8,7 @@ export default function GovPortalLayout({ children }: { children: React.ReactNod
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Ubuntu:wght@300;400;500;700&display=swap" />
       <link rel="stylesheet" href="/assets/design-system.css" />
       <link rel="stylesheet" href="/assets/templates.css" />
+      <link rel="stylesheet" href="/assets/leaflet.css" />
       <link rel="stylesheet" href="/assets/home.css" />
       {children}
     </>

@@ -37,6 +37,15 @@
   opacity: 0;
   transition: opacity 1.1s ease;
 }
+/* TOR gap audit (PageSpeed/Core Web Vitals) — see templates/royalsociety/
+   HeroSlider.tsx's own comment: the very first paint has no transition to
+   wait out, so Chrome can count the already-visible first slide as LCP
+   immediately instead of after this rule's own 1.1s. Only ever applied
+   before the component's first mount tick — every later slide change still
+   gets the real cross-fade. */
+.rs-hero__slide.no-initial-transition {
+  transition: none;
+}
 
 .rs-hero__slide.is-active {
   opacity: 1;
@@ -50,10 +59,17 @@
     linear-gradient(180deg, rgba(3, 20, 17, 0.32) 0%, rgba(3, 20, 17, 0.5) 55%, rgba(3, 20, 17, 0.92) 100%);
 }
 
+/* This element carries BOTH `container` and `rs-hero__inner` (see HomeHero
+   in templates/royalsociety/Blocks.tsx). It used to declare `width: 100%`,
+   which — loading after 02-base.css — beat `.container`'s own
+   `min(var(--container), calc(100% - pad*2))` and silently removed the page
+   gutter, so the hero headline ran flush to the viewport edge while every
+   other section on the site stayed inset. Found live at 1113px. Letting
+   .container compute its own width restores the gutter; the element still
+   sits left in .rs-hero's flex row, which is what the stretch was for. */
 .rs-hero__inner {
   position: relative;
   z-index: 2;
-  width: 100%;
   padding-bottom: clamp(64px, 8vw, 108px);
 }
 
@@ -63,18 +79,30 @@
   max-width: 900px;
 }
 
+/* Editorial eyebrow rather than the old translucent pill. A glassy chip is
+   product-UI language; a gold rule over letterspaced caps is the language
+   this institution's own printed material actually uses, and it stops the
+   badge from competing with the headline underneath it. */
 .rs-hero__kicker {
   display: inline-flex;
   align-items: center;
+  gap: 12px;
   width: fit-content;
-  padding: 7px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: var(--rs-radius-pill);
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(6px);
-  font-size: 0.94rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  color: var(--rs-gold-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.rs-hero__kicker::before {
+  content: "";
+  flex: none;
+  width: 34px;
+  height: 1px;
+  background: var(--rs-gold);
+  align-self: flex-start;
+  margin-top: 0.62em;
 }
 
 .rs-hero-title {
@@ -89,9 +117,10 @@
   color: #fff;
   font-family: var(--rs-font-display);
   font-weight: 700;
-  font-size: clamp(2.5rem, 5.2vw, 4.4rem);
-  line-height: 1.18;
+  font-size: var(--rs-display-xl);
+  line-height: var(--rs-leading-display);
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 .rs-hero-title span {
@@ -157,7 +186,12 @@
   color: var(--rs-gold);
 }
 
-.trust-item h3 {
+/* TOR gap audit (accessibility/WCAG) — was <h3>, but nothing on this page
+   has an intervening <h2> between the hero's <h1> and this section (a real
+   Lighthouse audit flagged the resulting h1->h3 skip) — promoted to <h2> in
+   templates/royalsociety/Blocks.tsx's TrustStrip, matching NewsFeed's own
+   <h2> for its section heading right after. */
+.trust-item h2 {
   margin: 0;
   color: #fff;
   font-family: var(--rs-font-display);

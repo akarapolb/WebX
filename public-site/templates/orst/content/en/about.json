@@ -1,0 +1,98 @@
+{
+  "$schema": "../../blocks.schema.json",
+  "_note": "English counterpart of about.json — bracketed [...] placeholders mean the same as in the Thai version: real data not yet supplied.",
+  "title": "About Us",
+  "navKey": "about",
+  "description": "History, mission, organizational structure, and public-disclosure information for the Office of the Royal Society.",
+  "blocks": [
+    {
+      "type": "page-hero",
+      "eyebrow": "About Us",
+      "heading": "About Us",
+      "lead": "History, mission, organizational structure, and public-disclosure information for the Office of the Royal Society.",
+      "breadcrumb": [
+        { "label": "Home", "href": "/en/orst" },
+        { "label": "About Us" }
+      ]
+    },
+    {
+      "type": "rich-text",
+      "id": "overview",
+      "variant": "alt",
+      "heading": "Organization Overview",
+      "paragraphs": [
+        "[Paragraph 1 — brief history of the Office]",
+        "[Paragraph 2 — statutory role and scope of work]",
+        "[Paragraph 3 — significance to the public and the academic community]"
+      ]
+    },
+    {
+      "type": "feature-list",
+      "id": "mission",
+      "heading": "Roles & Key Mandates",
+      "columns": 2,
+      "items": [
+        { "icon": "i-book", "title": "Research & Scholarship", "body": "Promoting research across disciplines to develop knowledge that benefits the country" },
+        { "icon": "i-shield", "title": "Disseminate & Exchange Knowledge", "body": "Bringing academic work to the public through publications, digital media, databases, and academic activities" },
+        { "icon": "i-service", "title": "Develop & Preserve", "body": "Safeguarding academic, linguistic, artistic, and cultural heritage while keeping it contemporary" },
+        { "icon": "i-people", "title": "Academic Services", "body": "Providing reference information, terminology, standards, and guidance the public and agencies can put to practical use" }
+      ]
+    },
+    {
+      "type": "stat-row",
+      "id": "at-a-glance",
+      "variant": "alt",
+      "heading": "At a Glance",
+      "lead": "Last updated [date]",
+      "items": [
+        { "value": "[Number]", "label": "Fellows & Associate Members", "note": "[Note]" },
+        { "value": "[Number]", "label": "Academic Bureaus", "note": "[Note]" },
+        { "value": "[Number]", "label": "Published Works", "note": "[Note]" },
+        { "value": "[Number]", "label": "Terms in the Database", "note": "[Note]" }
+      ]
+    },
+    {
+      "type": "card-grid",
+      "id": "structure",
+      "heading": "Organizational Structure",
+      "lead": "Internal units and areas of responsibility",
+      "columns": 3,
+      "items": [
+        { "icon": "i-dictionary", "title": "[Bureau/Division 1]", "body": "[Scope of work]", "href": "#" },
+        { "icon": "i-journal", "title": "[Bureau/Division 2]", "body": "[Scope of work]", "href": "#" },
+        { "icon": "i-database", "title": "[Bureau/Division 3]", "body": "[Scope of work]", "href": "#" }
+      ]
+    },
+    {
+      "type": "member-directory",
+      "id": "members",
+      "variant": "alt",
+      "heading": "Fellows & Associate Members",
+      "lead": "Distinguished scholars appointed as Fellows and Associate Members of the Royal Society",
+      "source": { "kind": "wp", "postType": "member", "map": "directory" },
+      "items": []
+    },
+    {
+      "type": "link-list",
+      "id": "transparency",
+      "variant": "alt",
+      "heading": "Statutory Disclosure Information",
+      "lead": "Documents under the Integrity and Transparency Assessment (ITA) criteria",
+      "items": [
+        { "title": "Annual Action Plan", "desc": "[Fiscal year]", "tag": "PDF", "href": "#" },
+        { "title": "Annual Performance Report", "desc": "[Fiscal year]", "tag": "PDF", "href": "#" },
+        { "title": "Budget Expenditure Plan", "desc": "[Fiscal year]", "tag": "PDF", "href": "#" },
+        { "title": "Personal Data Protection Policy", "desc": "Guidance under the Personal Data Protection Act", "tag": "PDF", "href": "#" }
+      ]
+    },
+    {
+      "type": "cta-band",
+      "heading": "Need more information?",
+      "body": "Contact the Office through any convenient channel",
+      "actions": [
+        { "label": "Contact us", "href": "/en/orst/contact" },
+        { "label": "Public services", "href": "/en/orst/services", "variant": "ghost" }
+      ]
+    }
+  ]
+}

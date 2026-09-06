@@ -24,6 +24,39 @@
 // the footer.
 
 import type { Tenant } from "@/lib/cms";
+import ShareButtons from "@/components/ShareButtons";
+import Picture from "@/components/Picture";
+
+// Bilingual EN (TOR gap) — same known-bilingual-slugs + href-localizing
+// helper as Header.tsx (duplicated rather than shared, matching this file's
+// own established per-tenant-duplication convention). Footer's own quick
+// links only ever point at "/orst/knowledge" (not bilingual) and
+// "/orst/services" (is), so only the latter needs rewriting.
+function localizeHref(url: string, locale: "th" | "en"): string {
+  if (locale !== "en" || !url.startsWith("/orst")) return url;
+  const slug = url === "/orst" ? "home" : url.replace(/^\/orst\//, "");
+  if (!new Set(["home", "about", "contact", "services"]).has(slug)) return url;
+  return url === "/orst" ? "/en/orst" : "/en" + url;
+}
+
+const STR = {
+  th: {
+    tagline: "แหล่งรวมองค์ความรู้ มาตรฐานภาษาไทย ศัพท์บัญญัติ สิ่งพิมพ์ และบริการประชาชนของสำนักงานราชบัณฑิตยสภา",
+    knowledge: "เข้าคลังองค์ความรู้", services: "บริการประชาชน", contact: "ติดต่อเรา",
+    phone: "โทรศัพท์", email: "อีเมล", copyright: "© 2026 สำนักงานราชบัณฑิตยสภา",
+    privacy: "นโยบายความเป็นส่วนตัว", terms: "เงื่อนไขการใช้งาน", sitemap: "แผนผังเว็บไซต์",
+    policyNav: "ลิงก์นโยบายเว็บไซต์", homeAria: "สำนักงานราชบัณฑิตยสภา หน้าแรก",
+    address: <>สำนักงานราชบัณฑิตยสภา<br />ศูนย์ราชการเฉลิมพระเกียรติฯ อาคารซี<br />ถนนแจ้งวัฒนะ เขตหลักสี่ กรุงเทพมหานคร 10210</>,
+  },
+  en: {
+    tagline: "The national knowledge institute — Thai language standards, terminology, publications, and public services from the Office of the Royal Society.",
+    knowledge: "Knowledge hub", services: "Public services", contact: "Contact us",
+    phone: "Phone", email: "Email", copyright: "© 2026 Office of the Royal Society",
+    privacy: "Privacy policy", terms: "Terms of use", sitemap: "Sitemap",
+    policyNav: "Site policy links", homeAria: "Office of the Royal Society home",
+    address: <>Office of the Royal Society<br />Government Complex, Building C<br />Chaeng Watthana Rd., Lak Si, Bangkok 10210</>,
+  },
+} as const;
 
 const FALLBACK_COLUMNS: { heading: { th?: string }; links: { label: { th?: string }; url?: string }[] }[] = [
   {
@@ -55,9 +88,10 @@ const FALLBACK_COLUMNS: { heading: { th?: string }; links: { label: { th?: strin
   },
 ];
 
-export default function Footer({ tenant }: { tenant: Tenant | null }) {
+export default function Footer({ tenant, locale = "th" }: { tenant: Tenant | null; locale?: "th" | "en" }) {
+  const s = STR[locale];
   const columns = tenant?.footerColumns?.length ? tenant.footerColumns : FALLBACK_COLUMNS;
-  const address = tenant?.contact?.address?.th;
+  const address = tenant?.contact?.address?.[locale] || tenant?.contact?.address?.th;
   const phone = tenant?.contact?.phone;
   const email = tenant?.contact?.email;
 
@@ -66,9 +100,8 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
       <div className="container">
         <div className="orst-footer-top">
           <div className="orst-footer-brand">
-            <a className="orst-footer-logo-wrap" href="/orst" aria-label="สำนักงานราชบัณฑิตยสภา หน้าแรก">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <a className="orst-footer-logo-wrap" href={locale === "en" ? "/en/orst" : "/orst"} aria-label={s.homeAria}>
+              <Picture
                 src="/assets/orst/images/logo.png"
                 alt="สำนักงานราชบัณฑิตยสภา Office of the Royal Society"
                 className="orst-footer-logo"
@@ -76,17 +109,14 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
               />
             </a>
 
-            <p>
-              แหล่งรวมองค์ความรู้ มาตรฐานภาษาไทย ศัพท์บัญญัติ สิ่งพิมพ์
-              และบริการประชาชนของสำนักงานราชบัณฑิตยสภา
-            </p>
+            <p>{s.tagline}</p>
 
             <div className="orst-footer-actions">
               <a className="orst-footer-primary" href="/orst/knowledge">
-                เข้าคลังองค์ความรู้
+                {s.knowledge}
               </a>
-              <a className="orst-footer-secondary" href="/orst/services">
-                บริการประชาชน
+              <a className="orst-footer-secondary" href={localizeHref("/orst/services", locale)}>
+                {s.services}
               </a>
             </div>
           </div>
@@ -94,11 +124,11 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
           <div className="orst-footer-links">
             {columns.map((col, i) => (
               <div className="orst-footer-col" key={i}>
-                <h3>{col.heading?.th}</h3>
+                <h3>{(col.heading as any)?.[locale] || col.heading?.th}</h3>
                 <ul>
                   {col.links.map((link, j) => (
                     <li key={j}>
-                      <a href={link.url || "#"}>{link.label?.th}</a>
+                      <a href={link.url || "#"}>{(link.label as any)?.[locale] || link.label?.th}</a>
                     </li>
                   ))}
                 </ul>
@@ -106,32 +136,26 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
             ))}
 
             <div className="orst-footer-col orst-footer-contact">
-              <h3>ติดต่อเรา</h3>
-              {address ? (
-                <p>{address}</p>
-              ) : (
-                <p>
-                  สำนักงานราชบัณฑิตยสภา<br />
-                  ศูนย์ราชการเฉลิมพระเกียรติฯ อาคารซี<br />
-                  ถนนแจ้งวัฒนะ เขตหลักสี่ กรุงเทพมหานคร 10210
-                </p>
-              )}
+              <h3>{s.contact}</h3>
+              {address ? <p>{address}</p> : <p>{s.address}</p>}
               <p>
-                โทรศัพท์: {phone || "0 2141 1728"}
+                {s.phone}: {phone || "0 2141 1728"}
                 <br />
-                อีเมล: {email || "saraban@orst.go.th"}
+                {s.email}: {email || "saraban@orst.go.th"}
               </p>
             </div>
           </div>
         </div>
 
         <div className="orst-footer-bottom">
-          <span>© 2026 สำนักงานราชบัณฑิตยสภา</span>
+          <span>{s.copyright}</span>
 
-          <nav aria-label="ลิงก์นโยบายเว็บไซต์">
-            <a href="#">นโยบายความเป็นส่วนตัว</a>
-            <a href="#">เงื่อนไขการใช้งาน</a>
-            <a href="#">แผนผังเว็บไซต์</a>
+          <ShareButtons />
+
+          <nav aria-label={s.policyNav}>
+            <a href="#">{s.privacy}</a>
+            <a href="#">{s.terms}</a>
+            <a href="#">{s.sitemap}</a>
           </nav>
         </div>
       </div>

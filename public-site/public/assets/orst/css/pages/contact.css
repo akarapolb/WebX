@@ -29,7 +29,15 @@
 .contact-hero .eyebrow { color: var(--orst-gold-faint); margin-bottom: var(--orst-space-3); }
 .contact-hero .eyebrow::before { background: var(--orst-gold-faint); }
 .contact-hero h1 { color: var(--orst-ink-inverse); }
-.contact-hero > div > p { color: var(--orst-ink-inverse-soft); margin-top: var(--orst-space-3); max-width: 56ch; font-size: 1.02rem; }
+/* `.contact-hero > div > p` never matched: the lead sits one level deeper
+   than that (section.contact-hero > div.container.contact-hero-inner > div >
+   p — see ContactHero in templates/orst/Blocks.tsx), so it kept base.css's
+   dark `p` colour and rendered at 2.36:1 on the dark band. Caught by a real
+   Lighthouse audit. Anchored on .contact-hero-inner and kept as a child
+   chain rather than a blanket descendant selector, because the white
+   .hero-info-card aside also lives inside this hero and must keep its own
+   dark-on-light text. */
+.contact-hero-inner > div > p { color: var(--orst-ink-inverse-soft); margin-top: var(--orst-space-3); max-width: 56ch; font-size: 1.02rem; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: var(--orst-space-3); margin-top: var(--orst-space-6); }
 .hero-actions .btn.secondary { border-color: rgba(253, 250, 243, 0.35); color: var(--orst-ink-inverse); }
 .hero-actions .btn.secondary:hover { background: rgba(253, 250, 243, 0.12); }

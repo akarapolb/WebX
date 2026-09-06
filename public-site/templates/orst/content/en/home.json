@@ -1,0 +1,197 @@
+{
+  "title": "The National Knowledge Institute — Building a Thailand That Learns, Sustainably",
+  "navKey": "home",
+  "description": "The national knowledge institute for all Thai people — dictionary, coined terminology, academic articles, and digital services from the Office of the Royal Society.",
+  "blocks": [
+    {
+      "type": "home-hero",
+      "id": "hero",
+      "eyebrow": "The national knowledge institute for all Thai people",
+      "heading": "The National Knowledge Institute — Building a Thailand That Learns, Sustainably",
+      "lead": "A single, easy-to-use, accessible source for Thai-language standards, academic knowledge, and reference information."
+    },
+    {
+      "type": "feature-list",
+      "id": "trust-strip",
+      "columns": 4,
+      "items": [
+        { "icon": "i-book", "title": "Trustworthy", "body": "Information from vetted academic sources" },
+        { "icon": "i-shield", "title": "Thai-language standard", "body": "The national reference authority on language and scholarship" },
+        { "icon": "i-people", "title": "Accessible", "body": "Designed for everyone, on every device" },
+        { "icon": "i-access", "title": "For everyone", "body": "Supports older adults, people with disabilities, and keyboard use" }
+      ]
+    },
+    {
+      "type": "card-grid",
+      "id": "services",
+      "variant": "alt",
+      "heading": "Services & Knowledge Resources",
+      "lead": "Easily access the Office of the Royal Society's knowledge and services",
+      "columns": 4,
+      "items": [
+        { "icon": "i-book", "title": "Dictionary", "body": "Look up meanings and correct usage under the Thai-language standard", "href": "/orst/dictionary" },
+        { "icon": "i-form", "title": "Coined Terminology", "body": "Specialized terms and standardized vocabulary", "href": "/orst/dictionary" },
+        { "icon": "i-search", "title": "Research & Reference", "body": "Search academic information, documents, and research", "href": "/orst/knowledge" },
+        { "icon": "i-shield", "title": "Standards & Rules", "body": "Thai-language standards and usage guidelines", "href": "/orst/knowledge" },
+        { "icon": "i-file", "title": "News & Announcements", "body": "News and announcements from the Office", "href": "/orst/news" },
+        { "icon": "i-phone", "title": "Books & Textbooks", "body": "Books, textbooks, and academic publications online", "href": "/orst/publications" },
+        { "icon": "i-file", "title": "Databases", "body": "Academic and knowledge databases", "href": "/orst/dictionary" },
+        { "icon": "i-puzzle", "title": "Knowledge Archive", "body": "Articles, knowledge resources, and learning media", "href": "/orst/knowledge" },
+        { "icon": "i-video", "title": "Digital Media", "body": "Video, audio, and multimedia resources", "href": "/orst/publications" },
+        { "icon": "i-pen", "title": "Academic Services", "body": "Consultation, forms, and official correspondence", "href": "/en/orst/services" }
+      ]
+    },
+    {
+      "type": "media-tabs",
+      "id": "publications",
+      "eyebrow": "KNOWLEDGE HUB",
+      "heading": "Media & Knowledge Archive",
+      "lead": "E-books, journals, encyclopedias, research, and multimedia for continuous learning",
+      "viewAllLabel": "View all e-books →",
+      "viewAllUrl": "/orst/publications",
+      "tabs": [
+        {
+          "id": "ebook", "label": "E-Books", "kind": "pub",
+          "items": [
+            { "image": "/assets/orst/images/e-Book01.png", "caption": "Newsletter, Vol. 23 No. 267, August 2013" },
+            { "image": "/assets/orst/images/e-Book02.png", "caption": "Newsletter, Vol. 15 No. 164, January 2005" },
+            { "image": "/assets/orst/images/e-Book03.png", "caption": "Journal of the Royal Society of Thailand (Thai edition), Vol. 47 No. 3" },
+            { "image": "/assets/orst/images/e-Book06.png", "caption": "Newsletter, Vol. 21 No. 239, April 2011" },
+            { "image": "/assets/orst/images/e-Book07.png", "caption": "Dictionary of Metal-Casting Terminology" },
+            { "image": "/assets/orst/images/e-Book08.png", "caption": "Bulletin of the Bureau of Science, Vol. 4 No. 4 (Oct–Dec 2025)" },
+            { "image": "/assets/orst/images/e-Book03.png", "caption": "Rattanakosin Literature, Volume 1" }
+          ]
+        },
+        {
+          "id": "journals", "label": "Print Media", "kind": "pub",
+          "items": [
+            { "image": "/assets/orst/images/e-Book04.png", "caption": "Latest academic article from the Office of the Royal Society" },
+            { "image": "/assets/orst/images/e-Book05.png", "caption": "Archives of the Office of the Royal Society" },
+            { "tag": "Journal", "title": "Journal of the Royal Society of Thailand", "caption": "Journal of the Royal Society of Thailand and published articles" },
+            { "tag": "Article", "title": "Thai-Language Articles", "caption": "Articles on language, culture, and contemporary knowledge" },
+            { "tag": "Journal", "title": "Journal of the Royal Society of Thailand", "caption": "Journal of the Royal Society of Thailand and published articles" },
+            { "tag": "Journal", "title": "Journal of the Royal Society of Thailand", "caption": "Journal of the Royal Society of Thailand and published articles" }
+          ]
+        },
+        {
+          "id": "encyclopedia", "label": "Infographics", "kind": "pub",
+          "items": [
+            { "image": "/assets/orst/images/e-Book02.png", "caption": "Thai Junior Encyclopedia" },
+            { "tag": "Reference", "title": "Thai Knowledge Archive", "caption": "Knowledge resources for students, teachers, and the general public" },
+            { "tag": "Learning", "title": "General Knowledge", "caption": "Reference content for continuous learning" },
+            { "tag": "Reference", "title": "Thai Knowledge Archive", "caption": "Knowledge resources for students, teachers, and the general public" },
+            { "tag": "Learning", "title": "General Knowledge", "caption": "Reference content for continuous learning" },
+            { "tag": "Reference", "title": "Thai Knowledge Archive", "caption": "Knowledge resources for students, teachers, and the general public" },
+            { "tag": "Learning", "title": "General Knowledge", "caption": "Reference content for continuous learning" }
+          ]
+        },
+        {
+          "id": "multimedia", "label": "Multimedia", "kind": "media",
+          "items": [
+            { "image": "/assets/orst/images/Mult-01.png", "caption": "Thai language: heritage passed from generation to generation" },
+            { "image": "/assets/orst/images/Mult-02.png", "caption": "The role of the Office of the Royal Society in Thai society" },
+            { "image": "/assets/orst/images/Mult-03.png", "caption": "Cultural journeys: Thai arts and culture worth knowing" },
+            { "image": "/assets/orst/images/Mult-04.png", "caption": "Correct use of Thai in the digital age" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "news-tabs",
+      "id": "news",
+      "eyebrow": "NEWS & EVENTS",
+      "heading": "News & Events",
+      "lead": "Follow key news, announcements, activities, training, and schedules from the Office of the Royal Society.",
+      "viewAllLabel": "More news →",
+      "viewAllUrl": "/orst/news",
+      "tabs": [
+        {
+          "id": "news", "label": "News",
+          "featured": { "image": "/assets/orst/images/New-01.png", "badge": "Public Relations", "date": "24 May 2024", "category": "Public Relations", "title": "2024 Annual General Meeting", "body": "Report on operating results, organizational direction, and the Office's role in supporting the nation's body of knowledge.", "ctaLabel": "Read more →" },
+          "side": [
+            { "image": "/assets/orst/images/New-02.png", "type": "News", "title": "Office of the Royal Society Developments", "body": "News on missions, meetings, and knowledge-related activities of the Office." },
+            { "image": "/assets/orst/images/New-02.png", "type": "Organization", "title": "Developing the National Knowledge Archive System", "body": "Improving access to the dictionary, coined terminology, and knowledge base for easier public use." },
+            { "image": "/assets/orst/images/New-01.png", "type": "Digital", "title": "New Digital Thai-Language Information Service Launched", "body": "The public can now search Thai-language information and reference documents online more conveniently." },
+            { "image": "/assets/orst/images/New-01.png", "type": "Knowledge", "title": "Publishing Contemporary Thai-Language Knowledge", "body": "A collection of articles and knowledge media supporting the correct use of Thai in society today." }
+          ]
+        },
+        {
+          "id": "training", "label": "Training",
+          "featured": { "image": "/assets/orst/images/New-01.png", "badge": "Registration Open", "date": "18 June 2024", "category": "Training", "title": "Training on Using Thai in Government Work", "body": "Guidance on using Thai correctly, clearly, and appropriately in official documents, with real examples.", "ctaLabel": "Read more →" },
+          "side": [
+            { "image": "/assets/orst/images/New-01.png", "type": "Online", "title": "Writing Correct Official Documents", "body": "Learn the format of official correspondence, appropriate wording, and formal composition." },
+            { "image": "/assets/orst/images/New-02.png", "type": "Seminar", "title": "Thai Language in the Digital Age", "body": "Contemporary word usage, loanwords, and coined terminology in digital media and public documents." },
+            { "image": "/assets/orst/images/New-03.png", "type": "Training", "title": "Searching the Office's Knowledge Databases", "body": "An introduction to using the dictionary, coined terminology, journals, and e-books through the Office's online system." },
+            { "image": "/assets/orst/images/New-01.png", "type": "Thai Language", "title": "Using Loanwords and Coined Terms Correctly", "body": "Understanding the principles of using loanwords and coined terms appropriately for the communication context." }
+          ]
+        },
+        {
+          "id": "event", "label": "Events",
+          "featured": { "image": "/assets/orst/images/New-02.png", "badge": "Event", "date": "29 July 2024", "category": "Event", "title": "National Thai Language Day 2024", "body": "Talks, exhibitions, and knowledge-sharing on the Thai language for the public, students, and anyone interested.", "ctaLabel": "See schedule →" },
+          "side": [
+            { "image": "/assets/orst/images/New-03.png", "type": "Event", "title": "Thai Language Learning Promotion Activities", "body": "Activities sharing knowledge on language, culture, and everyday use of Thai." },
+            { "image": "/assets/orst/images/New-01.png", "type": "Exhibition", "title": "National Knowledge Exhibition", "body": "Presenting knowledge, books, publications, and digital media accessible to the public." },
+            { "image": "/assets/orst/images/New-02.png", "type": "Talk", "title": "Contemporary Thai Language Roundtable", "body": "Exchanging views on the use of Thai in modern society and digital media." },
+            { "image": "/assets/orst/images/New-03.png", "type": "Youth", "title": "Thai Language Activities for Youth", "body": "Promoting Thai-language learning through creative activities for students and young people." }
+          ]
+        },
+        {
+          "id": "announcement", "label": "Announcements",
+          "featured": { "image": "/assets/orst/images/New-01.png", "badge": "Announcement", "date": "16 May 2024", "category": "Announcement", "title": "New Announcement from the Office of the Royal Society", "body": "Published announcement with details, key documents, and supporting information for the public and relevant agencies.", "ctaLabel": "Read more →" },
+          "side": [
+            { "image": "/assets/orst/images/New-02.png", "type": "Recruitment", "title": "Recruitment Announcement and Related Documents", "body": "Details of the announcement, attached documents, qualifications, and relevant recruitment schedule." },
+            { "image": "/assets/orst/images/New-03.png", "type": "Procurement", "title": "Procurement Announcement", "body": "Published announcements, supporting documents, and procedural details under the relevant regulations." },
+            { "image": "/assets/orst/images/New-01.png", "type": "Results", "title": "Announcement of Results and Published Documents", "body": "Result information, attached documents, and details for interested parties." },
+            { "image": "/assets/orst/images/New-02.png", "type": "General", "title": "General Announcements from the Office", "body": "General news announcements, schedules, and information the public should know." }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "service-hub",
+      "id": "service-hub",
+      "eyebrow": "Digital Service Hub",
+      "heading": "Digital Public Services",
+      "lead": "Choose the service you need, submit a request, and track its status clearly.",
+      "viewAllLabel": "View all service guides →",
+      "viewAllUrl": "/en/orst/services",
+      "introLabel": "Online Service Center",
+      "introHeading": "Get started with a related service",
+      "introLead": "Designed so the public can easily choose a service, see the steps before starting, and know how to track progress after submitting.",
+      "steps": [
+        { "label": "Choose a service" },
+        { "label": "Fill in your information" },
+        { "label": "Get a tracking number" }
+      ],
+      "items": [
+        { "badge": "Inquiry", "time": "Replies by email", "title": "Academic Information Inquiry", "body": "Send questions about Thai language, terminology, language standards, and the Office's body of knowledge.", "buttonLabel": "Start an inquiry" },
+        { "badge": "Permission Request", "time": "Attachments accepted", "title": "Request Permission to Reprint a Publication", "body": "Submit a request to use content, books, print materials, or documents from the Office, with supporting documents.", "buttonLabel": "Submit a request" },
+        { "badge": "Feedback", "time": "Track status", "title": "Complaint / Suggestion", "body": "Report a service issue, give feedback, or raise a matter you'd like the Office to consider.", "buttonLabel": "Submit" },
+        { "badge": "Survey", "time": "Takes just a moment", "title": "Opinion Survey", "body": "Help us evaluate the website, services, and information channels to improve our service.", "buttonLabel": "Take the survey" }
+      ]
+    },
+    {
+      "type": "logo-marquee",
+      "id": "agency",
+      "eyebrow": "Connected Network",
+      "heading": "Related Agencies & Systems",
+      "lead": "Linking information sources and information systems that support the nation's body of knowledge.",
+      "viewAllLabel": "View all →",
+      "items": [
+        { "name": "Ministry of Culture", "image": "/assets/orst/images/Seal_of_the_Ministry_of_Culture_of_Thailand.svg" },
+        { "name": "National Library of Thailand", "image": "/assets/orst/images/NLT_LOGO.jpg" },
+        { "name": "Bureau of Fine Arts", "image": "/assets/orst/images/cropped-logo-with-bg-1.png" },
+        { "name": "NSTDA", "image": "/assets/orst/images/MHESRI.png" },
+        { "name": "TCI", "image": "/assets/orst/images/tci-logo.png" }
+      ]
+    },
+    {
+      "type": "faq",
+      "id": "faq",
+      "eyebrow": "FAQ",
+      "heading": "Frequently Asked Questions",
+      "lead": "Short answers to help you get started with the website and key services.",
+      "source": { "kind": "wp", "postType": "faq", "map": "faq" }
+    }
+  ]
+}

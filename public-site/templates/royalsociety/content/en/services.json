@@ -1,0 +1,53 @@
+{
+  "title": "Public Services",
+  "navKey": "services",
+  "blocks": [
+    {
+      "id": "services-hero",
+      "type": "page-hero",
+      "variant": "deep",
+      "eyebrow": "Public Services",
+      "heading": "Public Services",
+      "lead": "Every service channel offered by the Office of the Royal Society — for the public, schools, government agencies, and the press."
+    },
+    {
+      "id": "services-list",
+      "type": "card-grid",
+      "eyebrow": "Main Services",
+      "heading": "Choose the Service You Need",
+      "columns": "3",
+      "variant": "flat",
+      "linkLabel": "View details →",
+      "source": { "kind": "wp", "postType": "service", "map": "card" },
+      "items": [
+        { "title": "Academic Information Inquiry", "body": "Send a question about the Thai language, coined terminology, and related knowledge", "href": "/en/royalsociety/services" },
+        { "title": "Request Content Permission", "body": "Submit a request to use books, images, documents, or data from the Office", "href": "/en/royalsociety/services" },
+        { "title": "Download Forms", "body": "Commonly used forms for official correspondence", "href": "/en/royalsociety/services" }
+      ]
+    },
+    {
+      "id": "services-steps",
+      "type": "stats-steps",
+      "eyebrow": "Process",
+      "heading": "How to Submit a Request",
+      "lead": "The standard process for services that require document submission.",
+      "items": [
+        "Download and fully complete the form",
+        "Submit documents by email, post, or in person",
+        "Staff review and respond within 15 business days",
+        "Receive the reply through the channel you specified"
+      ]
+    },
+    {
+      "id": "services-faq",
+      "type": "faq",
+      "eyebrow": "FAQ",
+      "heading": "Frequently Asked Questions",
+      "source": { "kind": "wp", "postType": "faq", "map": "faq" },
+      "items": [
+        { "q": "How do I ask an academic question?", "a": "Send your question through the contact form or the public-services channel — staff will coordinate with the relevant expert and respond within 15 business days." },
+        { "q": "How do I request permission to use content?", "a": "Submit a request stating your intended use through the content-permission service." }
+      ]
+    }
+  ]
+}

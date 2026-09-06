@@ -23,10 +23,12 @@ export default function Featured({ home }: { home: any }) {
             {p.secondaryLabel && <a className="btn btn--ghost" href={p.secondaryUrl || "#"}>{p.secondaryLabel}</a>}
           </div>
         </div>
-        <div className="art">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={mediaUrl(p.image)} alt={p.title || ""} loading="lazy" />
-        </div>
+        {mediaUrl(p.image) && (
+          <div className="art">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={mediaUrl(p.image)} alt={p.title || ""} loading="lazy" />
+          </div>
+        )}
       </div>
     </section>
   );

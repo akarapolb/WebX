@@ -1,4 +1,5 @@
 import OrstIconSprite from "@/templates/orst/OrstIconSprite";
+import BreakingNewsBanner from "@/components/BreakingNewsBanner";
 
 // ORST's own design (Phase 11 full visual redesign) — separate stylesheet +
 // icon sprite from the gov-portal template, scoped to this segment only
@@ -19,7 +20,14 @@ import OrstIconSprite from "@/templates/orst/OrstIconSprite";
 export default function OrstLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Noto+Serif+Thai:wght@500;600;700&display=swap" />
+      {/* Self-hosted fonts (TOR gap audit — PageSpeed/Core Web Vitals; see
+          scripts/fetch-fonts.mjs's own comment) — was a render-blocking
+          cross-origin request to Google's own CDN on every page load,
+          now a same-origin static file. Preloading the one weight/subset
+          every page actually renders text in immediately (400 Thai) avoids
+          a flash of invisible/fallback text on first paint. */}
+      <link rel="preload" href="/fonts/ibm+plex+sans+thai-400-thai.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+      <link rel="stylesheet" href="/fonts/fonts.css" />
       <link rel="stylesheet" href="/assets/orst/css/tokens.css" />
       <link rel="stylesheet" href="/assets/orst/css/base.css" />
       <link rel="stylesheet" href="/assets/orst/css/blocks.css" />
@@ -28,6 +36,7 @@ export default function OrstLayout({ children }: { children: React.ReactNode }) 
       <link rel="stylesheet" href="/assets/orst/css/pages/contact.css" />
       <link rel="stylesheet" href="/assets/orst/css/pages/knowledge.css" />
       <OrstIconSprite />
+      <BreakingNewsBanner tenant="orst" />
       {children}
     </>
   );

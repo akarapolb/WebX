@@ -1,0 +1,116 @@
+{
+  "title": "หน้าหลัก",
+  "navKey": "home",
+  "blocks": [
+    {
+      "id": "home-hero",
+      "type": "home-hero",
+      "eyebrow": "สถาบันวิชาการของชาติด้านภาษาและสรรพวิชา",
+      "heading": "สถาบันหลักแห่งเครือข่ายทางปัญญาของชาติ"
+    },
+    {
+      "id": "trust-strip",
+      "type": "trust-strip",
+      "items": [
+        { "icon": "i-book", "title": "สถานที่บำรุงสรรพวิชา" },
+        { "icon": "i-shield", "title": "ขุมปัญญาของชาติ" },
+        { "icon": "i-people", "title": "นักปราชญ์ของพระราชา" },
+        { "icon": "i-access", "title": "ที่พึ่งพาของแผ่นดิน" }
+      ]
+    },
+    {
+      "id": "activities",
+      "type": "news-feed",
+      "eyebrow": "Latest Updates",
+      "heading": "ข่าวสารและกิจกรรมล่าสุด",
+      "lead": "ติดตามข่าวประชาสัมพันธ์ กิจกรรมทางวิชาการ และความเคลื่อนไหวสำคัญของราชบัณฑิตยสภา",
+      "viewAllLabel": "ดูข่าวทั้งหมด",
+      "viewAllUrl": "/royalsociety/activities",
+      "source": { "kind": "wp", "postType": "news", "map": "dated" },
+      "items": [
+        { "date": "2569-01-12", "title": "ราชบัณฑิตยสภาจัดประชุมวิชาการประจำปี", "body": "รวมนักวิชาการและผู้ทรงคุณวุฒิร่วมเสนอผลงานและแลกเปลี่ยนองค์ความรู้", "href": "/royalsociety/activities" },
+        { "date": "2569-01-04", "title": "เผยแพร่ศัพท์บัญญัติด้านปัญญาประดิษฐ์ฉบับใหม่", "body": "คณะกรรมการบัญญัติศัพท์ประกาศใช้คำศัพท์เทคโนโลยีชุดล่าสุด", "href": "/royalsociety/activities" }
+      ]
+    },
+    {
+      "id": "knowledge",
+      "type": "feature-directory",
+      "variant": "services",
+      "eyebrow": "Knowledge & Services",
+      "heading": "บริการและแหล่งความรู้สำคัญ",
+      "lead": "เครื่องมือค้นคว้า พจนานุกรม สารานุกรม ฐานข้อมูล และบริการวิชาการ",
+      "items": [
+        { "title": "สารานุกรม", "body": "องค์ความรู้ครอบคลุมหลายสาขาวิชา", "href": "/royalsociety/knowledge" },
+        { "title": "คลังความรู้", "body": "บทความ หนังสือ เอกสาร และสื่อความรู้", "href": "/royalsociety/knowledge" },
+        { "title": "มาตรฐานภาษาไทย", "body": "หลักเกณฑ์การใช้ภาษาไทยและคำแนะนำ", "href": "/royalsociety/knowledge" },
+        { "title": "ข้อมูลงานวิจัย", "body": "งานวิจัย บทความวิชาการ และรายงาน", "href": "/royalsociety/activities" },
+        { "title": "หนังสือและสิ่งพิมพ์", "body": "e-Book วารสาร เอกสารดาวน์โหลด", "href": "/royalsociety/publications" },
+        { "title": "บริการวิชาการ", "body": "คำปรึกษา อบรม และความร่วมมือทางวิชาการ", "href": "/royalsociety/services" }
+      ]
+    },
+    {
+      "id": "vision-mission",
+      "type": "vm-strip",
+      "items": ["ค้นคว้าวิจัยเพื่อเผยแพร่ ", "ส่งเสริมแลกเปลี่ยนความรู้", "พัฒนาอนุรักษ์", "บริการวิชาการ"]
+    },
+    {
+      "id": "recommended",
+      "type": "recommended-carousel",
+      "eyebrow": "Knowledge",
+      "heading": "องค์ความรู้",
+      "lead": "คัดสรรสิ่งพิมพ์ บทความ และองค์ความรู้สำคัญที่ประชาชนเข้าถึงได้ง่าย",
+      "viewAllLabel": "ดูทั้งหมด",
+      "viewAllUrl": "/royalsociety/publications",
+      "items": [
+        { "image": "/assets/royalsociety/images/recommend-01.jpg", "type": "สิ่งพิมพ์สำคัญ", "category": "พจนานุกรม", "title": "พจนานุกรมฉบับราชบัณฑิตยสถาน พ.ศ. ๒๕๕๔", "body": "แหล่งอ้างอิงคำ ความหมาย และการใช้ภาษาไทยที่เป็นมาตรฐาน", "href": "/royalsociety/publications", "linkLabel": "ดูรายละเอียด" },
+        { "image": "/assets/royalsociety/images/recommend-02.jpg", "type": "แนะนำ", "category": "สารานุกรม", "title": "สารานุกรมไทยสำหรับเยาวชนฯ", "body": "องค์ความรู้รอบด้านที่เหมาะสำหรับนักเรียน ครู และประชาชนทั่วไป", "href": "/royalsociety/publications", "linkLabel": "อ่านต่อ" },
+        { "image": "/assets/royalsociety/images/recommend-03.jpg", "type": "คู่มือภาษา", "category": "ภาษาไทย", "title": "มาตรฐานการเขียนและสะกดคำภาษาไทย", "body": "แนวทางการใช้ภาษาไทยอย่างถูกต้อง เหมาะกับการอ้างอิงในงานทางการ", "href": "/royalsociety/knowledge", "linkLabel": "เปิดอ่าน" },
+        { "image": "/assets/royalsociety/images/recommend-04.jpg", "type": "ฐานข้อมูล", "category": "ศัพท์บัญญัติ", "title": "ศัพท์บัญญัติและคำศัพท์วิชาการ", "body": "ค้นหาคำศัพท์เฉพาะทางและคำบัญญัติที่ใช้ในสาขาวิชาต่าง ๆ", "href": "/royalsociety/knowledge", "linkLabel": "ค้นคำศัพท์" },
+        { "image": "/assets/royalsociety/images/recommend-05.jpg", "type": "วารสาร", "category": "งานวิชาการ", "title": "วารสารราชบัณฑิตยสภา", "body": "บทความวิชาการและผลงานทางความรู้จากราชบัณฑิตและผู้ทรงคุณวุฒิ", "href": "/royalsociety/publications", "linkLabel": "ดูวารสาร" },
+        { "image": "/assets/royalsociety/images/recommend-06.jpg", "type": "สื่อความรู้", "category": "บรรยายวิชาการ", "title": "บรรยายวิชาการสำหรับประชาชน", "body": "สรุปองค์ความรู้จากกิจกรรม บรรยาย และเวทีแลกเปลี่ยนทางวิชาการ", "href": "/royalsociety/activities", "linkLabel": "ชมกิจกรรม" },
+        { "image": "/assets/royalsociety/images/recommend-07.jpg", "type": "บุคคลสำคัญ", "category": "ราชบัณฑิต", "title": "ประวัติราชบัณฑิตและภาคีสมาชิก", "body": "ทำความรู้จักบุคคลสำคัญ ผู้สร้างสรรค์องค์ความรู้ของประเทศ", "href": "/royalsociety/about#members", "linkLabel": "ดูข้อมูล" },
+        { "image": "/assets/royalsociety/images/recommend-08.jpg", "type": "ดาวน์โหลด", "category": "เอกสารเผยแพร่", "title": "เอกสารความรู้สำหรับประชาชน", "body": "เอกสารสรุปความรู้ คู่มือ และข้อมูลที่สามารถดาวน์โหลดเพื่อใช้อ้างอิง", "href": "/royalsociety/services", "linkLabel": "ดาวน์โหลด" }
+      ]
+    },
+    {
+      "id": "service-hub",
+      "type": "service-gateway",
+      "eyebrow": "Public Service",
+      "heading": "บริการประชาชน",
+      "lead": "ช่องทางสำหรับสอบถามข้อมูลทางวิชาการ ดาวน์โหลดเอกสาร ขออนุญาตใช้เนื้อหา และติดต่อประสานงานกับราชบัณฑิตยสภา",
+      "viewAllLabel": "บริการทั้งหมด",
+      "viewAllUrl": "/royalsociety/services",
+      "mainLabel": "บริการแนะนำ",
+      "mainTitle": "สอบถามข้อมูลทางวิชาการ",
+      "mainBody": "ส่งคำถามเกี่ยวกับภาษาไทย ศัพท์บัญญัติ คำทับศัพท์ ราชาศัพท์ และองค์ความรู้ที่เกี่ยวข้อง",
+      "mainActionLabel": "เริ่มสอบถาม",
+      "mainHref": "/royalsociety/services",
+      "items": [
+        { "label": "เอกสารบริการ", "title": "ดาวน์โหลดแบบฟอร์ม", "body": "รวมเอกสารและแบบฟอร์มสำหรับติดต่อราชการ", "href": "/royalsociety/services" },
+        { "label": "การอนุญาต", "title": "ขออนุญาตใช้เนื้อหา", "body": "ยื่นคำขอใช้หนังสือ ภาพ เอกสาร หรือข้อมูลของสำนักงาน", "href": "/royalsociety/services" },
+        { "label": "ติดต่อหน่วยงาน", "title": "ติดต่อราชการ", "body": "ดูช่องทางติดต่อ แผนที่ และข้อมูลสำหรับประสานงาน", "href": "/royalsociety/contact" }
+      ],
+      "processLabel": "เริ่มใช้บริการได้ง่าย",
+      "steps": ["เลือกบริการที่ต้องการ", "อ่านเงื่อนไขหรือเตรียมเอกสาร", "ส่งคำขอหรือติดต่อเจ้าหน้าที่"]
+    },
+    {
+      "id": "connected-network",
+      "type": "logo-marquee",
+      "eyebrow": "Connected Network",
+      "heading": "หน่วยงานและระบบที่เกี่ยวข้อง",
+      "lead": "เชื่อมโยงแหล่งข้อมูลและระบบสารสนเทศที่สนับสนุนองค์ความรู้ของชาติ",
+      "viewAllLabel": "ดูทั้งหมด",
+      "viewAllUrl": "#",
+      "items": [
+        { "name": "กระทรวงวัฒนธรรม", "image": "/assets/royalsociety/images/Seal_of_the_Ministry_of_Culture_of_Thailand.svg", "href": "#" },
+        { "name": "หอสมุดแห่งชาติ", "image": "/assets/royalsociety/images/NLT_LOGO.jpg", "href": "#" },
+        { "name": "สวทช.", "image": "/assets/royalsociety/images/MHESRI.png", "href": "#" },
+        { "name": "TCI", "image": "/assets/royalsociety/images/tci-logo.png", "href": "#" },
+        { "name": "สำนักศิลปกรรม", "image": "/assets/royalsociety/images/cropped-logo-with-bg-1.png", "href": "#" },
+        { "name": "ระบบสารสนเทศ", "image": "/assets/royalsociety/images/backoffice.jpg", "href": "#" },
+        { "name": "ฐานข้อมูลภาครัฐ", "image": "/assets/royalsociety/images/backoffice.jpg", "href": "#" },
+        { "name": "หน่วยงานที่เกี่ยวข้อง", "image": "/assets/royalsociety/images/backoffice.jpg", "href": "#" }
+      ]
+    }
+  ]
+}

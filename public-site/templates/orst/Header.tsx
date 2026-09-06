@@ -1,4 +1,7 @@
 import MobileMenuToggle from "./MobileMenuToggle";
+import AccessibilityTools from "./AccessibilityTools";
+import Picture from "@/components/Picture";
+import type { NavItem, NavMegaLink } from "@/lib/cms";
 
 // Ported from ORST Website/assets/js/components.js — renderHeader(),
 // renderDesktopNav(), renderMobileNav(), renderMegaMenu(), and the
@@ -36,13 +39,21 @@ import MobileMenuToggle from "./MobileMenuToggle";
 //      the one piece pulled into MobileMenuToggle.tsx, a tiny Client
 //      Component. Header itself stays a Server Component.
 //
+//   4. Topbar ก-/ก/ก+/"ความคมชัด" buttons — genuinely need client state (a
+//      font-size attribute + a body class, both persisted), so they're
+//      pulled into AccessibilityTools.tsx, sharing its logic with
+//      RoyalSociety's own equivalent via lib/useAccessibilityToolbar.ts
+//      (TOR gap audit — these rendered but had no onClick at all).
+//      "สำหรับผู้พิการทางสายตา" is now a plain label (was a non-functional
+//      `<button>`), matching RoyalSociety's own `.access-label` span.
+//
+//   5. Search round-button — used to open #search-modal (not part of this
+//      port) and was left rendered inert. Now a plain link to a real
+//      results page (app/orst/search) instead — see
+//      templates/orst/SearchResults.tsx (TOR gap audit).
+//
 // Also intentionally NOT ported here (out of scope for header/nav/mega-menu
 // porting, and meaningless without JS that doesn't exist yet in this repo):
-//   - Topbar accessibility buttons (ก+/ก-/ก, "ความคมชัด") and the
-//     "สำหรับผู้พิการทางสายตา" button: rendered inert (no onClick) — they
-//     mirror initSharedAccessibility() in components.js, not built here.
-//   - The search round-button (data-open-search): rendered inert — it used
-//     to open #search-modal, which isn't part of this port.
 //   - "สำหรับเจ้าหน้าที่" / "เข้าสู่ระบบ / สมัครสมาชิก": kept as "#"
 //     placeholders exactly as components.js had them (no real target yet).
 //
@@ -62,182 +73,55 @@ import MobileMenuToggle from "./MobileMenuToggle";
 // so links here use clean `/orst/...` paths instead. Update these once the
 // actual app/orst/* pages exist if the slugs end up different.
 
-type NavEntry = readonly [key: string, label: string, href: string];
-type MegaGroupLink = readonly [text: string, url: string, desc?: string];
-type MegaGroup = { heading: string; links: readonly MegaGroupLink[] };
-type MegaMenuEntry = {
-  title: string;
-  eyebrow: string;
-  description: string;
-  icon: string;
-  featured: readonly [label: string, url: string];
-  groups: readonly MegaGroup[];
-};
+// Nav content (flat items + mega-menu dropdowns) now comes from the
+// `navItems` prop — see lib/cms.ts's getNavItems/NavItem/NavMegaMenu and
+// webx-studio's NavManager.tsx for the editor. This const is only a safety
+// net for a not-yet-seeded environment, not a design to lean on (mirrors
+// components/Header.tsx's FALLBACK_NAV for the same reason).
+const FALLBACK_NAV: NavItem[] = [{ label: "หน้าหลัก", url: "/orst", openNewTab: false, order: 1 }];
 
-const navItems: readonly NavEntry[] = [
-  ["home", "หน้าหลัก", "/orst"],
-  ["dictionary", "พจนานุกรมและคำศัพท์", "/orst/dictionary"],
-  ["knowledge", "องค์ความรู้", "/orst/knowledge"],
-  ["publications", "สื่อและสิ่งพิมพ์", "/orst/publications"],
-  ["news", "ข่าวสารและกิจกรรม", "/orst/news"],
-  ["services", "บริการประชาชน", "/orst/services"],
-  ["about", "เกี่ยวกับเรา", "/orst/about"],
-  ["contact", "ติดต่อเรา", "/orst/contact"],
-];
+// A nav item's "active" state used to be keyed by its hardcoded array
+// position (["home", ...]); CMS rows have no such key, so `active` (still a
+// route slug, e.g. "dictionary", passed by each app/orst/**/page.tsx) is
+// compared against the URL an editor would realistically set for that page.
+function hrefForActiveKey(key: string): string {
+  return key === "home" ? "/orst" : "/orst/" + key;
+}
 
-const megaMenuData: Record<string, MegaMenuEntry> = {
-  dictionary: {
-    title: "พจนานุกรมและคำศัพท์",
-    eyebrow: "Language Services",
-    description: "ค้นคำศัพท์ ความหมาย ศัพท์บัญญัติ และหลักเกณฑ์การใช้ภาษาไทยจากแหล่งข้อมูลเดียว",
-    icon: "i-dictionary",
-    featured: ["เปิดพจนานุกรมออนไลน์", "/orst/dictionary"],
-    groups: [
-      {
-        heading: "บริการคำศัพท์",
-        links: [
-          ["พจนานุกรมออนไลน์", "/orst/dictionary", "ค้นความหมายและการใช้คำ"],
-          ["ศัพท์บัญญัติ", "#", "ศัพท์เฉพาะทางและคำมาตรฐาน"],
-          ["ค้นคำศัพท์ภาษาไทย", "#", "ค้นหาคำตามหมวดและคำใกล้เคียง"],
-        ],
-      },
-      {
-        heading: "ฐานข้อมูลที่เกี่ยวข้อง",
-        links: [
-          ["สารานุกรมและอนุกรมวิธาน", "#", "คลังความรู้และหมวดคำ"],
-          ["หลักเกณฑ์การใช้ภาษา", "#", "แนวทางการเขียนและการใช้ภาษา"],
-          ["คำถามที่พบบ่อยด้านภาษา", "#", "คำตอบสั้นสำหรับประชาชน"],
-        ],
-      },
-    ],
+// Bilingual EN (TOR gap — this header used to render a dead
+// `<span>ภาษา TH | EN</span>` with no href at all). Only these 4 pages
+// (home/about/contact/services) have a real English counterpart (see
+// app/en/orst/*'s own comments for why the others are out of scope) — a nav
+// link to any other page stays on its Thai URL even while browsing in
+// English, rather than 404ing or guessing at a translation that doesn't
+// exist. `active` is the same route-slug prop this file already threads
+// through for nav-highlighting.
+const BILINGUAL_SLUGS = new Set(["home", "about", "contact", "services"]);
+function localizeHref(url: string, locale: "th" | "en"): string {
+  if (locale !== "en" || !url.startsWith("/orst")) return url;
+  const slug = url === "/orst" ? "home" : url.replace(/^\/orst\//, "");
+  if (!BILINGUAL_SLUGS.has(slug)) return url;
+  return url === "/orst" ? "/en/orst" : "/en" + url;
+}
+function toggleHref(active: string | undefined, locale: "th" | "en"): string {
+  const slug = active && BILINGUAL_SLUGS.has(active) ? active : "home";
+  const th = slug === "home" ? "/orst" : "/orst/" + slug;
+  const en = slug === "home" ? "/en/orst" : "/en/orst/" + slug;
+  return locale === "en" ? th : en;
+}
+
+const STR = {
+  th: {
+    a11y: "สำหรับผู้พิการทางสายตา", contact: "ติดต่อเรา", staff: "สำหรับเจ้าหน้าที่",
+    login: "เข้าสู่ระบบ / สมัครสมาชิก", search: "ค้นหา", services: "บริการออนไลน์",
+    mainNav: "เมนูหลัก", mobileNav: "เมนูมือถือ", homeAria: "สำนักงานราชบัณฑิตยสภา หน้าแรก",
   },
-  knowledge: {
-    title: "องค์ความรู้",
-    eyebrow: "Knowledge Archive",
-    description: "เข้าสู่คลังปัญญาแห่งชาติ บทความ ฐานข้อมูล และองค์ความรู้สำหรับประชาชน",
-    icon: "i-book",
-    featured: ["เข้าสู่คลังองค์ความรู้", "/orst/knowledge"],
-    groups: [
-      {
-        heading: "ค้นหาและฐานข้อมูล",
-        links: [
-          ["คลังองค์ความรู้", "/orst/knowledge", "ค้นจากทุกฐานข้อมูล"],
-          ["บทความวิชาการ", "#", "บทความเผยแพร่และเอกสารอ้างอิง"],
-          ["องค์ความรู้สำหรับประชาชน", "#", "เนื้อหาเข้าใจง่ายสำหรับทุกกลุ่ม"],
-        ],
-      },
-      {
-        heading: "หมวดความรู้",
-        links: [
-          ["ภาษาไทย", "#", "คำศัพท์ การใช้ภาษา และหลักเกณฑ์"],
-          ["วิทยาศาสตร์", "#", "ศัพท์วิชาการและองค์ความรู้ร่วมสมัย"],
-          ["ศิลปกรรม", "#", "ศิลปะ วัฒนธรรม และวรรณคดี"],
-          ["สังคมศาสตร์", "#", "ชุมชน เศรษฐกิจ สังคม และนโยบาย"],
-        ],
-      },
-    ],
+  en: {
+    a11y: "Accessibility tools", contact: "Contact us", staff: "Staff login",
+    login: "Sign in / Register", search: "Search", services: "Online services",
+    mainNav: "Main menu", mobileNav: "Mobile menu", homeAria: "Office of the Royal Society home",
   },
-  publications: {
-    title: "สื่อและสิ่งพิมพ์",
-    eyebrow: "Publications & Media",
-    description: "รวมหนังสือ วารสาร e-Book สื่อดิจิทัล และเอกสารเผยแพร่ของสำนักงาน",
-    icon: "i-ebook",
-    featured: ["ดูสื่อและสิ่งพิมพ์", "/orst/publications"],
-    groups: [
-      {
-        heading: "สิ่งพิมพ์",
-        links: [
-          ["หนังสือและตำรา", "/orst/publications", "หนังสือวิชาการและเอกสารอ้างอิง"],
-          ["วารสารราชบัณฑิตยสภา", "#", "วารสารและบทความเผยแพร่"],
-          ["e-Book", "#", "อ่านออนไลน์หรือดาวน์โหลด"],
-        ],
-      },
-      {
-        heading: "สื่อดิจิทัล",
-        links: [
-          ["วิดีโอและสื่อมัลติมีเดีย", "#", "องค์ความรู้แบบรับชม"],
-          ["Infographic", "#", "สรุปความรู้เข้าใจง่าย"],
-          ["วิธีสั่งซื้อหนังสือ", "#", "ขั้นตอนและช่องทางชำระเงิน"],
-        ],
-      },
-    ],
-  },
-  news: {
-    title: "ข่าวสารและกิจกรรม",
-    eyebrow: "News & Events",
-    description: "ติดตามข่าวประชาสัมพันธ์ ประกาศ กิจกรรม และความเคลื่อนไหวล่าสุด",
-    icon: "i-megaphone",
-    featured: ["อ่านข่าวทั้งหมด", "/orst/news"],
-    groups: [
-      {
-        heading: "ข่าวสาร",
-        links: [
-          ["ข่าวประชาสัมพันธ์", "/orst/news", "ข่าวสารทั่วไป"],
-          ["ข่าวกิจกรรม", "#", "กิจกรรมและงานเผยแพร่"],
-          ["บทบรรยายทางวิชาการ", "#", "สื่อความรู้จากกิจกรรม"],
-        ],
-      },
-      {
-        heading: "ประกาศ",
-        links: [
-          ["ประกาศจัดซื้อจัดจ้าง", "#", "ประกาศและเอกสารที่เกี่ยวข้อง"],
-          ["ประกาศรับสมัครงาน", "#", "ข่าวสารงานบุคคล"],
-          ["ข่าวสารทางราชการ", "#", "ประกาศเผยแพร่ทั่วไป"],
-        ],
-      },
-    ],
-  },
-  services: {
-    title: "บริการประชาชน",
-    eyebrow: "Digital Services",
-    description: "รวมบริการออนไลน์ แบบฟอร์ม การติดตามสถานะ และช่องทางติดต่อเจ้าหน้าที่",
-    icon: "i-service",
-    featured: ["เข้าสู่บริการประชาชน", "/orst/services"],
-    groups: [
-      {
-        heading: "บริการออนไลน์",
-        links: [
-          ["สอบถามข้อมูลทางวิชาการ", "/orst/services", "ส่งคำถามและรับเลขติดตาม"],
-          ["ขออนุญาตใช้เนื้อหา", "#", "ยื่นคำขอและแนบเอกสาร"],
-          ["ร้องเรียน / เสนอแนะ", "#", "ส่งเรื่องและติดตามผล"],
-        ],
-      },
-      {
-        heading: "งานบริการ",
-        links: [
-          ["แบบฟอร์มออนไลน์", "#", "รวมแบบฟอร์มที่ใช้บ่อย"],
-          ["คำถามที่พบบ่อย", "#", "คำตอบเกี่ยวกับบริการ"],
-          ["คู่มือการใช้บริการ", "#", "ขั้นตอนและเอกสารประกอบ"],
-        ],
-      },
-    ],
-  },
-  about: {
-    title: "เกี่ยวกับเรา",
-    eyebrow: "About ORST",
-    description: "ข้อมูลสำนักงาน โครงสร้าง ผู้บริหาร ราชบัณฑิต ภาคีสมาชิก และข้อมูลหน่วยงาน",
-    icon: "i-shield",
-    featured: ["ข้อมูลสำนักงาน", "/orst/about"],
-    groups: [
-      {
-        heading: "ข้อมูลสำนักงาน",
-        links: [
-          ["ประวัติความเป็นมา", "#", "ข้อมูลและพัฒนาการของสำนักงาน"],
-          ["โครงสร้างองค์กร", "#", "หน่วยงานและภารกิจ"],
-          ["ผู้บริหาร", "#", "คณะผู้บริหารปัจจุบัน"],
-        ],
-      },
-      {
-        heading: "ราชบัณฑิตและบุคลากร",
-        links: [
-          ["ราชบัณฑิตและภาคีสมาชิก", "#", "รายชื่อและผลงาน"],
-          ["บุคลากร", "#", "ข้อมูลหน่วยงานและบุคลากร"],
-          ["รายงานและแผนปฏิบัติราชการ", "#", "ข้อมูลความโปร่งใสและผลการดำเนินงาน"],
-        ],
-      },
-    ],
-  },
-};
+} as const;
 
 // Icon symbols (i-eye, i-search, i-dictionary, i-book, i-ebook, i-megaphone,
 // i-service, i-shield) come from the global <OrstIconSprite/> already
@@ -250,7 +134,62 @@ function Icon({ id, className = "icon" }: { id: string; className?: string }) {
   );
 }
 
-export default function Header({ active }: { active?: string }) {
+// Unlimited-depth mega-menu links (TOR gap — the previous shape was
+// hardcoded to exactly group→links, 2 levels). A link with no `children`
+// renders exactly as before; one with children becomes a native
+// <details>/<summary> disclosure nested inside the group — zero JS, same
+// constraint as this file's existing hover/:focus-within mega-menu and
+// <details> mobile accordion (see this file's own top comment, points 1-2).
+function MegaLinkNode({ link, nodeKey }: { link: NavMegaLink; nodeKey: string }) {
+  const children = link.children || [];
+  if (!children.length) {
+    return (
+      <a className="mega-link" href={link.url}>
+        <span>
+          <strong>{link.text}</strong>
+          <small>{link.desc || ""}</small>
+        </span>
+        <em aria-hidden="true">→</em>
+      </a>
+    );
+  }
+  return (
+    <details className="mega-link-details">
+      <summary className="mega-link">
+        <span>
+          <strong>{link.text}</strong>
+          <small>{link.desc || ""}</small>
+        </span>
+        <em aria-hidden="true">›</em>
+      </summary>
+      <div className="mega-submenu">
+        {children.map((child, i) => (
+          <MegaLinkNode key={nodeKey + "-" + i} link={child} nodeKey={nodeKey + "-" + i} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function MobileMegaLinkNode({ link, nodeKey }: { link: NavMegaLink; nodeKey: string }) {
+  const children = link.children || [];
+  if (!children.length) return <a href={link.url}>{link.text}</a>;
+  return (
+    <details className="mobile-submenu-nested">
+      <summary>{link.text}</summary>
+      <div className="mobile-submenu-nested-body">
+        {children.map((child, i) => (
+          <MobileMegaLinkNode key={nodeKey + "-" + i} link={child} nodeKey={nodeKey + "-" + i} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+export default function Header({ active, navItems, locale = "th" }: { active?: string; navItems?: NavItem[]; locale?: "th" | "en" }) {
+  const nav = navItems && navItems.length ? navItems : FALLBACK_NAV;
+  const activeHref = active ? hrefForActiveKey(active) : "";
+  const s = STR[locale];
   return (
     <>
       {/* The CSS-only equivalents this comment used to inline here (mega-menu
@@ -268,54 +207,55 @@ export default function Header({ active }: { active?: string }) {
       <div className="topbar">
         <div className="container topbar-inner">
           <div className="topbar-group">
-            <button type="button"><Icon id="i-eye" /> สำหรับผู้พิการทางสายตา</button>
-            <button type="button">ก-</button>
-            <button type="button">ก</button>
-            <button type="button">ก+</button>
-            <button type="button">ความคมชัด</button>
+            <span><Icon id="i-eye" /> {s.a11y}</span>
+            <AccessibilityTools />
           </div>
           <div className="topbar-group topbar-right">
-            <a href="/orst/contact">ติดต่อเรา</a>
-            <a href="#">สำหรับเจ้าหน้าที่</a>
-            <span>ภาษา TH | EN</span>
-            <a href="#">เข้าสู่ระบบ / สมัครสมาชิก</a>
+            <a href={localizeHref("/orst/contact", locale)}>{s.contact}</a>
+            <a href="#">{s.staff}</a>
+            <a href={toggleHref(active, locale)} lang={locale === "en" ? "th" : "en"}>
+              {locale === "en" ? "TH" : "EN"}
+            </a>
+            <a href="#">{s.login}</a>
           </div>
         </div>
       </div>
 
       <header className="site-header" id="site-header">
         <div className="container header-inner">
-          <a className="brand brand-image" href="/orst" aria-label="สำนักงานราชบัณฑิตยสภา หน้าแรก">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+          <a className="brand brand-image" href={locale === "en" ? "/en/orst" : "/orst"} aria-label={s.homeAria}>
+            <Picture
               src="/assets/orst/images/logo.png"
               alt="สำนักงานราชบัณฑิตยสภา Office of the Royal Society"
               className="brand-logo"
             />
           </a>
 
-          <nav className="main-nav" aria-label="เมนูหลัก">
-            {navItems.map(([key, label, href]) => {
-              const data = megaMenuData[key];
-              const isActive = active === key;
+          <nav className="main-nav" aria-label={s.mainNav}>
+            {nav.map((n, i) => {
+              const data = n.megaMenu;
+              const isActive = !!activeHref && n.url === activeHref;
+              const href = localizeHref(n.url, locale);
+              const linkProps = { target: n.openNewTab ? "_blank" : undefined, rel: n.openNewTab ? "noopener noreferrer" : undefined };
 
               if (!data) {
                 return (
-                  <a key={key} className={isActive ? "active" : undefined} href={href}>
-                    {label}
+                  <a key={i} className={isActive ? "active" : undefined} href={href} {...linkProps}>
+                    {n.label}
                   </a>
                 );
               }
 
               return (
-                <div className="nav-mega-item" key={key}>
+                <div className="nav-mega-item" key={i}>
                   <a
                     className={isActive ? "active" : undefined}
                     href={href}
-                    data-mega={key}
+                    data-mega={i}
                     aria-haspopup="true"
+                    {...linkProps}
                   >
-                    {label}
+                    {n.label}
                     <span className="nav-caret" aria-hidden="true">
                       <svg viewBox="0 0 20 20">
                         <path d="M5.5 7.5 10 12l4.5-4.5"></path>
@@ -323,30 +263,26 @@ export default function Header({ active }: { active?: string }) {
                     </span>
                   </a>
                   <div className="mega-menu">
-                    <div className="mega-inner" role="region" aria-label={`เมนูย่อย ${data.title}`}>
+                    <div className="mega-inner" role="region" aria-label={`เมนูย่อย ${data.title || n.label}`}>
                       <div className="mega-feature">
                         <span className="mega-feature-icon">
-                          <Icon id={data.icon} className="icon-lg" />
+                          <Icon id={data.icon || ""} className="icon-lg" />
                         </span>
                         <span className="section-kicker">{data.eyebrow}</span>
                         <h3>{data.title}</h3>
                         <p>{data.description}</p>
-                        <a href={data.featured[1]}>
-                          {data.featured[0]} <span aria-hidden="true">→</span>
-                        </a>
+                        {data.featuredUrl && (
+                          <a href={data.featuredUrl}>
+                            {data.featuredLabel} <span aria-hidden="true">→</span>
+                          </a>
+                        )}
                       </div>
                       <div className="mega-groups">
-                        {data.groups.map((group) => (
-                          <div className="mega-group" key={group.heading}>
+                        {data.groups.map((group, gi) => (
+                          <div className="mega-group" key={gi}>
                             <h4>{group.heading}</h4>
-                            {group.links.map(([text, url, desc]) => (
-                              <a className="mega-link" href={url} key={text}>
-                                <span>
-                                  <strong>{text}</strong>
-                                  <small>{desc || ""}</small>
-                                </span>
-                                <em aria-hidden="true">→</em>
-                              </a>
+                            {group.links.map((l, li) => (
+                              <MegaLinkNode key={li} link={l} nodeKey={`${i}-${gi}-${li}`} />
                             ))}
                           </div>
                         ))}
@@ -359,39 +295,41 @@ export default function Header({ active }: { active?: string }) {
           </nav>
 
           <div className="header-actions">
-            <button className="round-btn" type="button" aria-label="ค้นหา">
-              <Icon id="i-search" /> <span>ค้นหา</span>
-            </button>
-            <a className="round-btn primary" href="/orst/services">บริการออนไลน์</a>
+            <a className="round-btn" href="/orst/search" aria-label={s.search}>
+              <Icon id="i-search" /> <span>{s.search}</span>
+            </a>
+            <a className="round-btn primary" href={localizeHref("/orst/services", locale)}>{s.services}</a>
             <MobileMenuToggle />
           </div>
         </div>
 
-        <nav id="mobile-menu" className="mobile-menu" aria-label="เมนูมือถือ">
-          {navItems.map(([key, label, href]) => {
-            const data = megaMenuData[key];
-            const isActive = active === key;
+        <nav id="mobile-menu" className="mobile-menu" aria-label={s.mobileNav}>
+          {nav.map((n, i) => {
+            const data = n.megaMenu;
+            const isActive = !!activeHref && n.url === activeHref;
+            const href = localizeHref(n.url, locale);
 
             if (!data) {
               return (
-                <a key={key} className={"mobile-link" + (isActive ? " active" : "")} href={href}>
-                  {label}<span>›</span>
+                <a key={i} className={"mobile-link" + (isActive ? " active" : "")} href={href}
+                  target={n.openNewTab ? "_blank" : undefined} rel={n.openNewTab ? "noopener noreferrer" : undefined}>
+                  {n.label}<span>›</span>
                 </a>
               );
             }
 
             return (
-              <details className="mobile-nav-group" key={key}>
+              <details className="mobile-nav-group" key={i}>
                 <summary className="mobile-accordion-btn">
-                  <span>{label}</span><span aria-hidden="true">+</span>
+                  <span>{n.label}</span><span aria-hidden="true">+</span>
                 </summary>
                 <div className="mobile-submenu">
-                  <a href={data.featured[1]}><strong>{data.featured[0]}</strong></a>
-                  {data.groups.map((group) => (
-                    <div className="mobile-submenu-group" key={group.heading}>
+                  {data.featuredUrl && <a href={data.featuredUrl}><strong>{data.featuredLabel}</strong></a>}
+                  {data.groups.map((group, gi) => (
+                    <div className="mobile-submenu-group" key={gi}>
                       <strong>{group.heading}</strong>
-                      {group.links.map(([text, url]) => (
-                        <a href={url} key={text}>{text}</a>
+                      {group.links.map((l, li) => (
+                        <MobileMegaLinkNode key={li} link={l} nodeKey={`m-${i}-${gi}-${li}`} />
                       ))}
                     </div>
                   ))}

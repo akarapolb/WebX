@@ -1,0 +1,98 @@
+{
+  "$schema": "../../blocks.schema.json",
+  "_note": "English counterpart of services.json — bracketed [...] placeholders mean the same as in the Thai version.",
+  "title": "Public Services",
+  "navKey": "services",
+  "description": "Forms, online services, academic inquiries, and complaint/suggestion channels.",
+  "blocks": [
+    {
+      "type": "page-hero",
+      "eyebrow": "Digital Service Hub",
+      "heading": "Public Services",
+      "lead": "Forms, online services, information inquiries, and complaint/suggestion channels.",
+      "breadcrumb": [
+        { "label": "Home", "href": "/en/orst" },
+        { "label": "Public Services" }
+      ]
+    },
+    {
+      "type": "card-grid",
+      "id": "online-services",
+      "variant": "alt",
+      "heading": "Online Services",
+      "lead": "Submit a request and track its status yourself.",
+      "columns": 3,
+      "items": [
+        {
+          "icon": "i-form",
+          "title": "Academic Information Inquiry",
+          "body": "Send a question about the Thai language and the Office's body of knowledge through an online form",
+          "meta": "Response within 5 business days",
+          "href": "#"
+        },
+        {
+          "icon": "i-file",
+          "title": "Request Permission to Reprint",
+          "body": "Submit a request to use the Office's content or publications",
+          "meta": "Review takes 15 business days",
+          "href": "#"
+        },
+        {
+          "icon": "i-people",
+          "title": "Request a Visit / Study Tour",
+          "body": "For schools and agencies wishing to arrange a study visit",
+          "meta": "Submit 10 business days in advance",
+          "href": "#"
+        }
+      ]
+    },
+    {
+      "type": "steps",
+      "id": "how-to",
+      "heading": "How to Use Our Services",
+      "items": [
+        { "title": "Choose the service you need", "body": "Check the requirements and documents needed for each service" },
+        { "title": "Fill in the online form", "body": "Complete the form fully and attach supporting documents" },
+        { "title": "Wait for review", "body": "A staff member will get back to you through the channel you provided" },
+        { "title": "Receive the outcome", "body": "Track the status using your request number" }
+      ]
+    },
+    {
+      "type": "link-list",
+      "id": "forms",
+      "variant": "alt",
+      "heading": "Downloadable Forms",
+      "items": [
+        { "title": "Academic Information Inquiry Form", "desc": "For sending questions about the Thai language and the Office's body of knowledge to staff", "tag": "PDF", "href": "#" },
+        { "title": "Content/Publication Permission Request Form", "desc": "Use this when you want to reprint or republish content", "tag": "DOCX", "href": "#" },
+        { "title": "Visit / Study Tour Request Form", "desc": "For schools and agencies wishing to arrange a study visit", "tag": "PDF", "href": "#" }
+      ]
+    },
+    {
+      "type": "feature-list",
+      "id": "channels",
+      "heading": "Complaint & Suggestion Channels",
+      "columns": 3,
+      "items": [
+        { "icon": "i-megaphone", "title": "Service Complaints", "body": "Submit via the online form or by phone — staff will act within 7 business days" },
+        { "icon": "i-shield", "title": "Report Misconduct", "body": "A confidential channel that protects the identity of the reporter by law" },
+        { "icon": "i-pen", "title": "Language Suggestions", "body": "Send suggestions about language use and terminology directly to the academic division" }
+      ]
+    },
+    {
+      "type": "notice",
+      "tone": "warn",
+      "title": "Please Note",
+      "body": "The Office does not charge any fee beyond its published rates. If you encounter a request for payment, please report it through our misconduct-reporting channel."
+    },
+    {
+      "type": "cta-band",
+      "heading": "Can't find the service you need?",
+      "body": "Contact our staff for further assistance",
+      "actions": [
+        { "label": "Contact us", "href": "/en/orst/contact" },
+        { "label": "FAQ", "href": "index.html#faq", "variant": "ghost" }
+      ]
+    }
+  ]
+}

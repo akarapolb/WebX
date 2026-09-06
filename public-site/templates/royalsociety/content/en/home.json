@@ -1,0 +1,119 @@
+{
+  "title": "The Nation's Central Hub of Intellectual Life",
+  "navKey": "home",
+  "blocks": [
+    {
+      "id": "home-hero",
+      "type": "home-hero",
+      "eyebrow": "The nation's academic institute for language and the sciences",
+      "heading": "The Nation's Central Hub of Intellectual Life"
+    },
+    {
+      "id": "trust-strip",
+      "type": "trust-strip",
+      "eyebrow": "Core Institutional Values",
+      "items": [
+        { "icon": "i-book", "title": "A home for scholarship" },
+        { "icon": "i-shield", "title": "The nation's reservoir of knowledge" },
+        { "icon": "i-people", "title": "The King's own scholars" },
+        { "icon": "i-access", "title": "The nation's trusted resource" }
+      ]
+    },
+    {
+      "id": "activities",
+      "type": "news-feed",
+      "eyebrow": "Latest Updates",
+      "heading": "Latest News & Activities",
+      "lead": "Follow announcements, academic activities, and key developments from the Royal Society of Thailand.",
+      "viewAllLabel": "View all news",
+      "viewAllUrl": "/royalsociety/activities",
+      "badgeLabel": "Latest News",
+      "readMoreLabel": "Read more",
+      "source": { "kind": "wp", "postType": "news", "map": "dated" },
+      "items": [
+        { "date": "2569-01-12", "title": "The Royal Society Holds Its Annual Academic Conference", "body": "Bringing together scholars and experts to present work and exchange knowledge.", "href": "/royalsociety/activities" },
+        { "date": "2569-01-04", "title": "New AI Terminology Published", "body": "The terminology committee announces the latest set of technology terms.", "href": "/royalsociety/activities" }
+      ]
+    },
+    {
+      "id": "knowledge",
+      "type": "feature-directory",
+      "variant": "services",
+      "eyebrow": "Knowledge & Services",
+      "heading": "Key Knowledge Resources & Services",
+      "lead": "Research tools, dictionaries, encyclopedias, databases, and academic services.",
+      "items": [
+        { "title": "Encyclopedia", "body": "Knowledge spanning many academic fields", "href": "/royalsociety/knowledge" },
+        { "title": "Knowledge Archive", "body": "Articles, books, documents, and knowledge media", "href": "/royalsociety/knowledge" },
+        { "title": "Thai Language Standards", "body": "Guidelines and recommendations for using Thai correctly", "href": "/royalsociety/knowledge" },
+        { "title": "Research Data", "body": "Research, academic articles, and reports", "href": "/royalsociety/activities" },
+        { "title": "Books & Publications", "body": "E-books, journals, and downloadable documents", "href": "/royalsociety/publications" },
+        { "title": "Academic Services", "body": "Consultation, training, and academic collaboration", "href": "/royalsociety/services" }
+      ]
+    },
+    {
+      "id": "vision-mission",
+      "type": "vm-strip",
+      "items": ["Research for public benefit", "Promote knowledge exchange", "Develop and preserve", "Academic services"]
+    },
+    {
+      "id": "recommended",
+      "type": "recommended-carousel",
+      "eyebrow": "Knowledge",
+      "heading": "Featured Knowledge",
+      "lead": "A curated selection of publications, articles, and knowledge resources the public can easily access.",
+      "viewAllLabel": "View all",
+      "viewAllUrl": "/royalsociety/publications",
+      "items": [
+        { "image": "/assets/royalsociety/images/recommend-01.jpg", "type": "Featured publication", "category": "Dictionary", "title": "Royal Institute Dictionary, B.E. 2554 (2011)", "body": "The standard reference for Thai word meanings, spelling, and usage.", "href": "/royalsociety/publications", "linkLabel": "View details" },
+        { "image": "/assets/royalsociety/images/recommend-02.jpg", "type": "Recommended", "category": "Encyclopedia", "title": "Thai Junior Encyclopedia", "body": "Broad-ranging knowledge suited for students, teachers, and the general public.", "href": "/royalsociety/publications", "linkLabel": "Read more" },
+        { "image": "/assets/royalsociety/images/recommend-03.jpg", "type": "Language guide", "category": "Thai language", "title": "Thai Writing & Spelling Standards", "body": "Guidance for correct Thai usage, suited for official reference.", "href": "/royalsociety/knowledge", "linkLabel": "Read" },
+        { "image": "/assets/royalsociety/images/recommend-04.jpg", "type": "Database", "category": "Coined terminology", "title": "Coined Terms & Technical Vocabulary", "body": "Search specialized terms and coined vocabulary used across academic fields.", "href": "/royalsociety/knowledge", "linkLabel": "Search terms" },
+        { "image": "/assets/royalsociety/images/recommend-05.jpg", "type": "Journal", "category": "Scholarship", "title": "Journal of the Royal Society of Thailand", "body": "Academic articles and scholarship from Fellows and distinguished experts.", "href": "/royalsociety/publications", "linkLabel": "View journal" },
+        { "image": "/assets/royalsociety/images/recommend-06.jpg", "type": "Knowledge media", "category": "Public lectures", "title": "Public Academic Lectures", "body": "Summaries of knowledge from activities, lectures, and academic forums.", "href": "/royalsociety/activities", "linkLabel": "Watch activities" },
+        { "image": "/assets/royalsociety/images/recommend-07.jpg", "type": "Notable figures", "category": "Fellows", "title": "Profiles of Fellows & Associate Members", "body": "Get to know the people behind the nation's body of knowledge.", "href": "/en/royalsociety/about#members", "linkLabel": "View profiles" },
+        { "image": "/assets/royalsociety/images/recommend-08.jpg", "type": "Downloads", "category": "Public documents", "title": "Public Knowledge Documents", "body": "Summaries, guides, and reference material available for download.", "href": "/en/royalsociety/services", "linkLabel": "Download" }
+      ]
+    },
+    {
+      "id": "service-hub",
+      "type": "service-gateway",
+      "eyebrow": "Public Service",
+      "heading": "Public Services",
+      "lead": "Channels for academic inquiries, document downloads, content-usage permission requests, and contacting the Royal Society.",
+      "viewAllLabel": "All services",
+      "viewAllUrl": "/en/royalsociety/services",
+      "mainLabel": "Featured service",
+      "mainTitle": "Academic Information Inquiry",
+      "mainBody": "Send questions about the Thai language, coined terminology, loanwords, royal vocabulary, and related knowledge.",
+      "mainActionLabel": "Start an inquiry",
+      "mainHref": "/en/royalsociety/services",
+      "items": [
+        { "label": "Service documents", "title": "Download Forms", "body": "Documents and forms for official correspondence", "href": "/en/royalsociety/services" },
+        { "label": "Permissions", "title": "Request Content Permission", "body": "Submit a request to use books, images, documents, or data from the Office", "href": "/en/royalsociety/services" },
+        { "label": "Contact", "title": "Official Contact", "body": "See contact channels, map, and coordination information", "href": "/en/royalsociety/contact" }
+      ],
+      "processLabel": "Getting started is easy",
+      "steps": ["Choose the service you need", "Read the conditions or prepare documents", "Submit your request or contact staff"]
+    },
+    {
+      "id": "connected-network",
+      "type": "logo-marquee",
+      "eyebrow": "Connected Network",
+      "heading": "Related Agencies & Systems",
+      "lead": "Linking information sources and information systems that support the nation's body of knowledge.",
+      "viewAllLabel": "View all",
+      "viewAllUrl": "#",
+      "items": [
+        { "name": "Ministry of Culture", "image": "/assets/royalsociety/images/Seal_of_the_Ministry_of_Culture_of_Thailand.svg", "href": "#" },
+        { "name": "National Library of Thailand", "image": "/assets/royalsociety/images/NLT_LOGO.jpg", "href": "#" },
+        { "name": "NSTDA", "image": "/assets/royalsociety/images/MHESRI.png", "href": "#" },
+        { "name": "TCI", "image": "/assets/royalsociety/images/tci-logo.png", "href": "#" },
+        { "name": "Bureau of Fine Arts", "image": "/assets/royalsociety/images/cropped-logo-with-bg-1.png", "href": "#" },
+        { "name": "Information System", "image": "/assets/royalsociety/images/backoffice.jpg", "href": "#" },
+        { "name": "Government Database", "image": "/assets/royalsociety/images/backoffice.jpg", "href": "#" },
+        { "name": "Related Agencies", "image": "/assets/royalsociety/images/backoffice.jpg", "href": "#" }
+      ]
+    }
+  ]
+}

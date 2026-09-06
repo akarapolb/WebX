@@ -1,10 +1,10 @@
 "use client";
 // Previously a bare <form> with no onSubmit — a real submit fell back to a
 // GET against the current URL, leaking the citizen's search query into the
-// address bar/history. Site search isn't built yet (no results page or
-// backend exists on the public site), so this stops the leak rather than
-// wire up a feature that doesn't exist — sending the query to the site's
-// own knowledge library is the closest honest destination available today.
+// address bar/history. Site search now exists for real (TOR gap audit —
+// see templates/royalsociety/SearchResults.tsx and lib/useSiteSearch.ts),
+// so this submits there instead of the old fallback redirect to the static
+// knowledge page.
 import { type FormEvent } from "react";
 import { RsIcon } from "./icons";
 
@@ -14,7 +14,7 @@ export default function MobileSearchForm() {
     const q = new FormData(e.currentTarget).get("q");
     const query = typeof q === "string" ? q.trim() : "";
     if (query && typeof window !== "undefined") {
-      window.location.href = "/royalsociety/knowledge?q=" + encodeURIComponent(query);
+      window.location.href = "/royalsociety/search?q=" + encodeURIComponent(query);
     }
   }
 

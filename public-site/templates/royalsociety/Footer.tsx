@@ -38,6 +38,8 @@
 // Client Component, same reasoning as Header.tsx's mobile-drawer toggle.
 import type { Tenant } from "@/lib/cms";
 import NewsletterForm from "./NewsletterForm";
+import ShareButtons from "@/components/ShareButtons";
+import Picture from "@/components/Picture";
 
 const SITE = {
   name: "ราชบัณฑิตยสภา",
@@ -103,7 +105,34 @@ const LEGAL_LINKS: readonly { label: string; href: string }[] = [
   { label: "แผนผังเว็บไซต์", href: "#" },
 ];
 
-export default function Footer({ tenant }: { tenant: Tenant | null }) {
+// Bilingual EN (TOR gap) — same known-bilingual-slugs + href-localizing
+// helper as Header.tsx (duplicated, matching this file's own established
+// per-tenant-duplication convention).
+function localizeHref(url: string, locale: "th" | "en"): string {
+  if (locale !== "en" || !url.startsWith("/royalsociety")) return url;
+  const slug = url === "/royalsociety" ? "home" : url.replace(/^\/royalsociety\//, "");
+  if (!new Set(["home", "about", "contact", "services"]).has(slug)) return url;
+  return url === "/royalsociety" ? "/en/royalsociety" : "/en" + url;
+}
+
+const STR = {
+  th: {
+    tagline: SITE.tagline, contact: "ติดต่อเรา", newsletterHeading: NEWSLETTER.heading, newsletterDesc: NEWSLETTER.desc,
+    newsletterPlaceholder: NEWSLETTER.placeholder, mapHeading: "แผนที่ตั้งสำนักงาน",
+    mapDesc: (name: string) => `ดูเส้นทางและตำแหน่งที่ตั้งของ${name}บน Google Maps`,
+    mapLink: "เปิดใน Google Maps", mapTitle: (name: string) => `แผนที่${name}`, copyright: SITE.copyright,
+  },
+  en: {
+    tagline: "Thailand's national institute for language and culture — knowledge in service of Thai society.",
+    contact: "Contact us", newsletterHeading: "Stay informed", newsletterDesc: "Get the latest news and events from the Royal Society.",
+    newsletterPlaceholder: "Your email", mapHeading: "Office location",
+    mapDesc: (name: string) => `View directions and the location of the ${name} on Google Maps`,
+    mapLink: "Open in Google Maps", mapTitle: (name: string) => `Map of ${name}`, copyright: "© 2026 The Royal Society. All rights reserved.",
+  },
+} as const;
+
+export default function Footer({ tenant, locale = "th" }: { tenant: Tenant | null; locale?: "th" | "en" }) {
+  const s = STR[locale];
   const mapQuery = encodeURIComponent(CONTACT.mapQuery);
   const mapSrc = `https://maps.google.com/maps?q=${mapQuery}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
   const mapLink = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
@@ -113,12 +142,12 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
 
   const columns = tenant?.footerColumns?.length
     ? tenant.footerColumns.map((c) => ({
-        heading: c.heading?.th || "",
-        links: (c.links || []).map((l) => ({ label: l.label?.th || "", href: l.url || "#" })),
+        heading: (c.heading as any)?.[locale] || c.heading?.th || "",
+        links: (c.links || []).map((l) => ({ label: (l.label as any)?.[locale] || l.label?.th || "", href: localizeHref(l.url || "#", locale) })),
       }))
     : FOOTER_COLUMNS.map((c) => ({
         heading: c.heading,
-        links: c.links.map((l) => ({ label: l.label, href: l.href })),
+        links: c.links.map((l) => ({ label: l.label, href: localizeHref(l.href, locale) })),
       }));
 
   const socials = tenant?.social?.length
@@ -134,11 +163,10 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
       <div className="container footer-main">
         <div>
           <div className="footer-brand">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="brand-mark" src={SITE.logo} alt={SITE.logoAlt} loading="eager" />
+            <Picture className="brand-mark" src={SITE.logo} alt={SITE.logoAlt} loading="eager" />
             <div>
               <h3>{SITE.name}</h3>
-              <p>{SITE.tagline}</p>
+              <p>{s.tagline}</p>
               <div className="socials">
                 {socials.map((item, i) => (
                   <a href={item.href} aria-label={item.label} key={item.label || i}>{item.symbol}</a>
@@ -160,7 +188,7 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
         ))}
 
         <div>
-          <h4>ติดต่อเรา</h4>
+          <h4>{s.contact}</h4>
           <ul>
             <li>{phone}</li>
             <li>{email}</li>
@@ -169,22 +197,22 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
         </div>
 
         <div>
-          <h4>{NEWSLETTER.heading}</h4>
-          <p>{NEWSLETTER.desc}</p>
-          <NewsletterForm placeholder={NEWSLETTER.placeholder} />
+          <h4>{s.newsletterHeading}</h4>
+          <p>{s.newsletterDesc}</p>
+          <NewsletterForm placeholder={s.newsletterPlaceholder} />
         </div>
       </div>
 
       <div className="container footer-map-row">
         <div className="footer-map-info">
-          <h4>แผนที่ตั้งสำนักงาน</h4>
-          <p>ดูเส้นทางและตำแหน่งที่ตั้งของ{SITE.name}บน Google Maps</p>
-          <a href={mapLink} target="_blank" rel="noopener">เปิดใน Google Maps<span>→</span></a>
+          <h4>{s.mapHeading}</h4>
+          <p>{s.mapDesc(SITE.name)}</p>
+          <a href={mapLink} target="_blank" rel="noopener">{s.mapLink}<span>→</span></a>
         </div>
         <div className="footer-map-box">
           <iframe
             src={mapSrc}
-            title={`แผนที่${SITE.name}`}
+            title={s.mapTitle(SITE.name)}
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
             allowFullScreen
@@ -193,7 +221,8 @@ export default function Footer({ tenant }: { tenant: Tenant | null }) {
       </div>
 
       <div className="container footer-bottom">
-        <span>{SITE.copyright}</span>
+        <span>{s.copyright}</span>
+        <ShareButtons />
         <div>
           {LEGAL_LINKS.map((link) => (
             <a href={link.href} key={link.label}>{link.label}</a>

@@ -9,7 +9,7 @@
 // against the current URL, putting name/email/phone/message straight into
 // the address bar, browser history, and the server access log. Now wired to
 // the same captcha-guarded public write path ORST's contact form uses.
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useCaptcha, STRAPI } from "@/lib/useCaptcha";
 
 const TOPICS = [
@@ -27,6 +27,26 @@ export default function ContactForm({ tenant }: { tenant: string }) {
   const { captcha, refreshCaptcha } = useCaptcha();
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
+  // A homepage promo card can now deep-link straight into the right topic
+  // (?topic=complaint etc. — TOR gap audit; these buttons used to have no
+  // href at all). Plain window.location.search rather than Next's own
+  // useSearchParams() — that hook requires a <Suspense> boundary around
+  // every caller under `output: "export"`, which would mean touching
+  // ContactPage.tsx too for one read-only query param.
+  //
+  // A lazy useState initializer here would only ever apply on a fresh
+  // client-only mount — this page ships pre-rendered (static export), so
+  // React hydrates it and reuses the SERVER's initial value (always "",
+  // window doesn't exist there) instead of re-running the initializer
+  // client-side. An effect that fires after hydration and sets the field
+  // imperatively is what actually reflects the real URL — found live
+  // testing the ORST/RoyalSociety homepage's new links, which landed with
+  // nothing preselected despite a correct ?topic= in the address bar.
+  const topicRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    const topic = new URLSearchParams(window.location.search).get("topic");
+    if (topic && topicRef.current) topicRef.current.value = topic;
+  }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -41,24 +61,43 @@ export default function ContactForm({ tenant }: { tenant: string }) {
       return;
     }
     const fd = new FormData(form);
-    const topicLabel = TOPICS.find((t) => t.value === fd.get("topic"))?.label || String(fd.get("topic") || "");
+    const topicValue = String(fd.get("topic") || "");
+    const topicLabel = TOPICS.find((t) => t.value === topicValue)?.label || topicValue;
     setStatus("sending");
     setError("");
+    // "ข้อร้องเรียน" specifically routes to api::complaint.complaint instead
+    // of the generic contact-message — that content type's own afterCreate
+    // lifecycle sends a real notification email to COMPLAINT_NOTIFY_EMAIL
+    // (TOR §4.4.1.2 4.7's "staff email notification" requirement), which
+    // contact-message has no lifecycle for at all. Every other topic keeps
+    // going to contact-messages, unchanged.
+    const isComplaint = topicValue === "complaint";
+    const endpoint = isComplaint
+      ? `${STRAPI}/api/complaints/submit?tenant=${encodeURIComponent(tenant)}`
+      : `${STRAPI}/api/contact-messages?tenant=${encodeURIComponent(tenant)}`;
+    const data = isComplaint
+      ? {
+          type: "รับเรื่องออนไลน์",
+          subject: fd.get("subject"),
+          detail: fd.get("message"),
+          anonymous: false,
+          name: fd.get("name"),
+          email: fd.get("email"),
+          phone: fd.get("phone") || undefined,
+          date: new Date().toISOString(),
+        }
+      : {
+          name: fd.get("name"),
+          email: fd.get("email"),
+          phone: fd.get("phone") || undefined,
+          subject: `[${topicLabel}] ${fd.get("subject")}`,
+          message: fd.get("message"),
+        };
     try {
-      const r = await fetch(`${STRAPI}/api/contact-messages?tenant=${encodeURIComponent(tenant)}`, {
+      const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: {
-            name: fd.get("name"),
-            email: fd.get("email"),
-            phone: fd.get("phone") || undefined,
-            subject: `[${topicLabel}] ${fd.get("subject")}`,
-            message: fd.get("message"),
-          },
-          captchaId: captcha.id,
-          captchaAnswer: fd.get("captchaAnswer"),
-        }),
+        body: JSON.stringify({ data, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
       });
       if (!r.ok) {
         const body = await r.json().catch(() => null);
@@ -97,7 +136,7 @@ export default function ContactForm({ tenant }: { tenant: string }) {
         </div>
         <div className="rs-field">
           <label htmlFor="ct-topic">ประเภทเรื่อง *</label>
-          <select id="ct-topic" name="topic" required defaultValue="">
+          <select id="ct-topic" name="topic" required defaultValue="" ref={topicRef}>
             <option value="">เลือกประเภทเรื่อง</option>
             {TOPICS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>

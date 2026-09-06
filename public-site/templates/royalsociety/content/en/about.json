@@ -1,0 +1,134 @@
+{
+  "title": "About the Royal Society of Thailand",
+  "navKey": "about",
+  "blocks": [
+    {
+      "id": "about-hero",
+      "type": "about-hero",
+      "eyebrow": "About the Organization",
+      "heading": "About the Royal Society of Thailand",
+      "subtitle": "The nation's central institution for language and culture",
+      "lead": "A gathering of the nation's foremost scholars, dedicated to researching, developing, preserving, and disseminating knowledge for the benefit of Thai society and the public.",
+      "action1Label": "Our History",
+      "action1Href": "#history",
+      "action2Label": "Mission & Mandate",
+      "action2Href": "#mission",
+      "image": "/assets/royalsociety/images/hero01.jpg"
+    },
+    {
+      "id": "about-intro",
+      "type": "intro-feature",
+      "eyebrow": "Institution Overview",
+      "heading": "From the Royal Society to the Office of the Royal Society",
+      "html": "<p>The evolution of a national academic institution, responsible for gathering, creating, and disseminating knowledge in language, science, and culture, so it can reach ever more of the public.</p>",
+      "highlightLabel": "Core Role",
+      "highlightText": "Connecting knowledge from distinguished scholars to Thai society in practical, usable forms.",
+      "items": [
+        { "label": "Origins", "title": "Rooted in the Work of the Royal Institute", "body": "The Royal Society traces its roots to the revival of the Royal Institute's work, with the aim of bringing together scholars to research and disseminate knowledge to the public." },
+        { "label": "Growth", "title": "Advancing Scholarship & the Thai Language", "body": "The organization's role has grown continuously — compiling dictionaries, coining terminology, producing encyclopedias, and setting standards for the Thai language." },
+        { "label": "Today", "title": "Connecting Knowledge to Society", "body": "The Office of the Royal Society supports the Society's mission through media, publications, databases, and academic services, so the public can access accurate knowledge." }
+      ]
+    },
+    {
+      "id": "history",
+      "type": "timeline",
+      "eyebrow": "Historical Timeline",
+      "heading": "A Historical Timeline",
+      "lead": "Key milestones reflecting the development of the Royal Society and its role in the nation's scholarship.",
+      "source": { "kind": "wp", "postType": "timeline", "map": "timeline" },
+      "items": [
+        { "year": "1926", "statusLabel": "Founding", "title": "The “Royal Institute” Is Established", "body": "King Prajadhipok graciously ordered the establishment of the Royal Institute on 19 April 1926 (B.E. 2469)." }
+      ]
+    },
+    {
+      "id": "mission",
+      "type": "mission-grid",
+      "eyebrow": "Mission & Public Value",
+      "heading": "Roles & Key Mandates",
+      "lead": "Creating knowledge, developing Thai-language standards, and providing academic services to the public — so that knowledge is accurate, trustworthy, and genuinely useful.",
+      "linkLabel": "View public services",
+      "linkHref": "/en/royalsociety/services",
+      "source": { "kind": "wp", "postType": "mission", "map": "mission" },
+      "items": [
+        { "icon": "i-book", "title": "Research & Scholarship", "body": "Promoting research across disciplines to develop knowledge that benefits the country" },
+        { "icon": "i-shield", "title": "Disseminate & Exchange Knowledge", "body": "Bringing academic work to the public through publications, digital media, databases, and academic activities" },
+        { "icon": "i-people", "title": "Develop & Preserve", "body": "Safeguarding academic, linguistic, artistic, and cultural heritage while keeping it contemporary" },
+        { "icon": "i-service", "title": "Academic Services", "body": "Providing reference information, terminology, standards, and guidance the public and agencies can put to practical use" }
+      ]
+    },
+    {
+      "id": "structure",
+      "type": "org-structure",
+      "eyebrow": "Organization",
+      "heading": "Organizational Structure",
+      "lead": "The Royal Society's operations connect the Council of Fellows with the Office, driving academic work and public service in a coordinated way.",
+      "image": "/assets/royalsociety/images/about-structure.png",
+      "councilLabel": "Council",
+      "councilTitle": "The Royal Society",
+      "councilBody": "Sets direction and academic policy, and approves regulations and key decisions relating to Fellows and the nation's scholarship.",
+      "officeLabel": "Office",
+      "officeTitle": "Office of the Royal Society",
+      "officeBody": "Provides academic and administrative support, publishes work, coordinates across bureaus, and delivers ongoing public services.",
+      "schoolsHeading": "Three Academic Bureaus",
+      "schoolsLead": "The key mechanisms driving knowledge across different fields.",
+      "source": { "kind": "wp", "postType": "org-unit", "map": "orgunit" },
+      "items": [
+        { "title": "Bureau of Social Sciences, Humanities and Politics", "body": "Knowledge in society, law, political science, and related fields" },
+        { "title": "Bureau of Science", "body": "Knowledge in science, technology, and related fields" },
+        { "title": "Bureau of Arts", "body": "Knowledge in art, culture, language, literature, and heritage" }
+      ]
+    },
+    {
+      "id": "members",
+      "type": "member-directory",
+      "eyebrow": "Fellows & Associate Members",
+      "heading": "Fellows & Associate Members",
+      "lead": "Distinguished scholars appointed as Fellows and Associate Members, who create the nation's body of knowledge.",
+      "source": { "kind": "wp", "postType": "member", "map": "directory" },
+      "items": []
+    },
+    {
+      "id": "knowledge-standards",
+      "type": "feature-directory",
+      "variant": "knowledge",
+      "eyebrow": "Knowledge Standards",
+      "heading": "Reference Work the Public Relies On",
+      "lead": "Key scholarship that helps set Thai-language standards and build the nation's knowledge base, for the public, agencies, and learners to use as reference.",
+      "featureLabel": "Most used",
+      "featureTitle": "Dictionary",
+      "featureBody": "Compiling and maintaining the dictionary as the standard for Thai usage — meaning, spelling, and correct use.",
+      "featureLinkLabel": "Search the dictionary",
+      "featureLinkUrl": "/royalsociety/knowledge",
+      "items": [
+        { "title": "Encyclopedia", "body": "Gathering knowledge across many fields for easy public access and study", "href": "/royalsociety/knowledge", "linkLabel": "Open the encyclopedia" },
+        { "title": "Coined Terminology", "body": "Compiling terms and definitions across academic fields for reference", "href": "/royalsociety/knowledge", "linkLabel": "Search coined terms" },
+        { "title": "Geographic Gazetteer", "body": "Standardizing place names and their correct spelling", "href": "/royalsociety/knowledge", "linkLabel": "View geographic data" },
+        { "title": "Thai Language Guidelines", "body": "Setting rules for usage, transliteration, and appropriate writing", "href": "/royalsociety/knowledge", "linkLabel": "Read the guidelines" },
+        { "title": "Academic Services", "body": "Disseminating knowledge through media, publications, databases, and public activities", "href": "/en/royalsociety/services", "linkLabel": "Use academic services" },
+        { "title": "Reference Database", "body": "Linking scholarship, terminology, books, and standardized data for research", "href": "/royalsociety/knowledge", "linkLabel": "Go to database" }
+      ]
+    },
+    {
+      "id": "transparency",
+      "type": "list-panel",
+      "eyebrow": "Transparency",
+      "heading": "Statutory Disclosure Information",
+      "lead": "Documents under the Integrity and Transparency Assessment (ITA) criteria.",
+      "source": { "kind": "wp", "postType": "document", "map": "document" },
+      "items": [
+        { "tag": "PDF", "title": "Annual Action Plan", "body": "[Fiscal year]", "href": "#" },
+        { "tag": "PDF", "title": "Annual Performance Report", "body": "[Fiscal year]", "href": "#" },
+        { "tag": "PDF", "title": "Budget Expenditure Plan", "body": "[Fiscal year]", "href": "#" },
+        { "tag": "PDF", "title": "Personal Data Protection Policy", "body": "Guidance under the Personal Data Protection Act", "href": "#" }
+      ]
+    },
+    {
+      "id": "contact-strip",
+      "type": "cta-band",
+      "eyebrow": "Contact",
+      "heading": "Office of the Royal Society",
+      "body": "120 Moo 3, Government Complex Commemorating His Majesty the King's 80th Birthday Anniversary, Building C, Thung Song Hong, Lak Si, Bangkok 10210",
+      "actions": [{ "label": "Contact us", "href": "/en/royalsociety/contact" }]
+    }
+  ]
+}

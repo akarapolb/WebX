@@ -1,21 +1,18 @@
 import { Icon } from "./IconSprite";
 import ThemeToggle from "./ThemeToggle";
-import type { Tenant } from "@/lib/cms";
+import type { NavItem, Tenant } from "@/lib/cms";
 
-const NAV = [
-  { label: "หน้าแรก", href: "/" },
-  { label: "บริการ", href: "#services" },
-  { label: "ข่าวสาร", href: "#news" },
-  { label: "บริการออนไลน์", href: "/complaint.html" },
-  { label: "เกี่ยวกับ สพร.", href: "/map.html" },
-];
+// A brand-new tenant with zero nav items configured yet — not a design to
+// lean on, just a safety net against a genuinely blank header. Real tenants
+// get a real starting set via strapi-cms's seedFlatNavItems, editable from
+// there on through webx-studio's Nav Manager (see Branding.tsx's Navigation
+// tab) — this is what closed the "hardcoded in source" gap that used to be
+// here.
+const FALLBACK_NAV: NavItem[] = [{ label: "หน้าแรก", url: "/", openNewTab: false, order: 1 }];
 
-// Deliberately simplified from the original mega-menu dropdowns (see the
-// Phase 4 plan) — same header bar, plain top-level links instead of the
-// full flyout content, which isn't tenant/CMS-driven and isn't the thing
-// this phase is proving.
-export default function Header({ tenant, logoAlt }: { tenant: Tenant; logoAlt: string }) {
+export default function Header({ tenant, logoAlt, navItems }: { tenant: Tenant; logoAlt: string; navItems?: NavItem[] }) {
   const logo = tenant.brand?.logoUrl || "/assets/image/logo-dga.webp";
+  const nav = navItems && navItems.length ? navItems : FALLBACK_NAV;
   return (
     <header className="site-header">
       <div className="bar">
@@ -24,8 +21,9 @@ export default function Header({ tenant, logoAlt }: { tenant: Tenant; logoAlt: s
           <img className="logo" src={logo} alt={logoAlt} width={150} height={46} />
         </a>
         <nav className="main-nav" aria-label="เมนูหลัก">
-          {NAV.map((n) => (
-            <a key={n.href} href={n.href} aria-current={n.href === "/" ? "page" : undefined}>{n.label}</a>
+          {nav.map((n, i) => (
+            <a key={i} href={n.url} aria-current={n.url === "/" ? "page" : undefined}
+              target={n.openNewTab ? "_blank" : undefined} rel={n.openNewTab ? "noopener noreferrer" : undefined}>{n.label}</a>
           ))}
         </nav>
         <div className="header-tools">

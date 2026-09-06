@@ -57,14 +57,23 @@
   background: var(--rs-primary-strong);
 }
 
+/* Deep teal on gold, not white on gold: white measured 2.91:1 here — a real
+   Lighthouse failure on the primary call-to-action, the worst possible
+   place for one. Dark-on-gold is 4.94:1 and is also what the sister ORST
+   tenant's own gold CTA already does (.block-cta .block-btn). */
 .rs-btn--gold {
   border-color: var(--rs-gold);
   background: var(--rs-gold);
-  color: #fff;
+  color: var(--rs-primary-strong);
 }
 
+/* Lifts to a lighter gold rather than darkening to --rs-gold-strong: with
+   dark teal text (above), darkening the fill would drop the hover state to
+   2.4:1. Lighter goes the other way — 6.02:1 — and "brighter on hover" is
+   the more natural affordance anyway. */
 .rs-btn--gold:hover {
-  background: var(--rs-gold-strong);
+  background: #c9a253;
+  border-color: #c9a253;
 }
 
 .rs-btn--ghost {
@@ -280,11 +289,14 @@
   border-top: 0;
 }
 
+/* Archival brown, not gold: the card already carries a gold rule and a gold
+   border, and a gold date on top of those left nothing for gold to actually
+   emphasise. Kept at 5.9:1 on the card surface, over the AA floor. */
 .rs-card__meta {
-  color: var(--rs-gold-strong);
-  font-size: 0.82rem;
+  color: var(--rs-archival);
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -506,6 +518,172 @@
 .rs-panel--deep p {
   color: rgba(255, 255, 255, 0.84);
 }
+
+/* Kranok-derived hairline device (ลายกระหนก, abstracted to a single flame-
+   leaf between two rules), used once per page on the closing CTA panel.
+   Spacing is margin, not padding: box-sizing is border-box globally
+   (02-base.css), so padding here would eat the declared height and clip the
+   device in half. Drawn as a data URI rather than an icon symbol so it
+   can't be caught by the 20px .icon sizing rule. */
+.rs-ornament {
+  display: block;
+  width: 190px;
+  height: 16px;
+  margin: 0 auto var(--rs-space-5);
+  background: center / 190px 16px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 190 16' fill='none' stroke='%23d8b566' stroke-width='1' stroke-linecap='round'%3E%3Cpath d='M0 8h68' opacity='.5'/%3E%3Cpath d='M122 8h68' opacity='.5'/%3E%3Cpath d='M95 1.5c5.5 3.2 5.5 9.8 0 13-5.5-3.2-5.5-9.8 0-13z'/%3E%3Cpath d='M86 8c2.6-2.6 5.2-2.6 7 0'/%3E%3Cpath d='M104 8c-2.6-2.6-5.2-2.6-7 0'/%3E%3Ccircle cx='79' cy='8' r='1'/%3E%3Ccircle cx='111' cy='8' r='1'/%3E%3C/svg%3E");
+}
+
+/* contact-info's optional Google Maps embed (TOR gap audit — ORST's own
+   contact-info already had this, RoyalSociety's didn't). A sibling of
+   .rs-panel rather than nested inside it so the iframe gets real height
+   without fighting the panel's own padding/gradient background. */
+.rs-contact-map {
+  margin-top: 20px;
+  border: 1px solid var(--rs-line-gold);
+  border-radius: var(--rs-radius-card);
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+
+.rs-contact-map iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* site search — templates/royalsociety/SearchResults.tsx (TOR gap audit) */
+
+.search-results-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
+
+.search-result-item { display: flex; flex-direction: column; gap: 4px; }
+
+.search-result-type {
+  font-size: 0.78rem;
+  color: var(--rs-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.search-result-item a { font-size: 1.05rem; font-weight: 500; text-decoration: none; }
+.search-result-item a:hover { text-decoration: underline; }
+
+/* "Share this page" — TOR gap audit, no share affordance existed anywhere */
+.wx-share { align-items: center; }
+.wx-share-label { color: rgba(255, 255, 255, 0.68); }
+.wx-share-btn {
+  display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3); color: rgba(255, 255, 255, 0.85) !important;
+  font-size: 0.82rem; background: none; cursor: pointer; font-family: inherit;
+  transition: border-color .15s ease, color .15s ease;
+}
+.wx-share-btn:hover { border-color: #fff; color: #fff !important; }
+
+/* Event calendar ("ปฏิทินกิจกรรม") — TOR gap audit, see components/EventCalendar.tsx */
+.wx-cal--loading { min-height: 420px; }
+.wx-cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--rs-space-3); margin-bottom: var(--rs-space-4); }
+.wx-cal-month { font-family: var(--rs-font-display); font-size: 1.1rem; color: var(--rs-primary); min-width: 12ch; }
+.wx-cal-nav {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line); background: var(--rs-surface);
+  color: var(--rs-primary); font-size: 1.1rem; cursor: pointer;
+}
+.wx-cal-nav:hover { border-color: var(--rs-primary); }
+.wx-cal-subscribe { margin-left: auto; font-size: .84rem; color: var(--rs-primary-soft); text-decoration: underline; text-underline-offset: 3px; }
+.wx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.wx-cal-weekday { text-align: center; font-size: .8rem; color: var(--rs-ink-faint); padding-bottom: var(--rs-space-2); }
+.wx-cal-cell {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; border-radius: var(--rs-radius-sm); border: 1px solid transparent; background: none;
+  font-family: inherit; color: var(--rs-ink); cursor: default;
+}
+.wx-cal-cell--empty { visibility: hidden; }
+.wx-cal-cell--has-events { cursor: pointer; background: rgba(6, 71, 63, 0.06); }
+.wx-cal-cell--has-events:hover { border-color: var(--rs-primary-soft); }
+.wx-cal-cell--today .wx-cal-cell-num { font-weight: 700; color: var(--rs-gold-strong); }
+.wx-cal-cell--selected { border-color: var(--rs-primary); background: rgba(6, 71, 63, 0.06); }
+.wx-cal-cell-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--rs-gold); }
+.wx-cal-day-panel { margin-top: var(--rs-space-5); padding: var(--rs-space-5); border-radius: var(--rs-radius-card); background: var(--rs-ground); border: 1px solid var(--rs-line); }
+.wx-cal-day-panel h3 { font-size: 1rem; color: var(--rs-primary); margin-bottom: var(--rs-space-3); }
+.wx-cal-day-panel ul { display: flex; flex-direction: column; gap: var(--rs-space-4); }
+.wx-cal-event { padding-top: var(--rs-space-3); border-top: 1px solid var(--rs-line); }
+.wx-cal-event:first-child { padding-top: 0; border-top: none; }
+.wx-cal-event-cat { display: inline-block; font-size: .74rem; padding: 2px 10px; border-radius: var(--rs-radius-pill); background: var(--rs-gold-soft); color: var(--rs-gold-strong); margin-bottom: var(--rs-space-2); }
+.wx-cal-event-title { display: block; color: var(--rs-ink); }
+.wx-cal-event-meta { display: flex; flex-wrap: wrap; gap: var(--rs-space-3); font-size: .84rem; color: var(--rs-ink-soft); margin-top: 4px; }
+.wx-cal-event-body { font-size: .9rem; color: var(--rs-ink-soft); margin-top: var(--rs-space-2); }
+.wx-cal-event-add {
+  margin-top: var(--rs-space-3); font-size: .82rem; padding: 6px 14px; border-radius: var(--rs-radius-pill);
+  border: 1px solid var(--rs-primary); color: var(--rs-primary); background: none; cursor: pointer; font-family: inherit;
+}
+.wx-cal-event-add:hover { background: rgba(6, 71, 63, 0.06); }
+.wx-cal-empty { color: var(--rs-ink-faint); font-size: .92rem; margin-top: var(--rs-space-4); }
+@media (max-width: 640px) {
+  .wx-cal-cell-num { font-size: .85rem; }
+  .wx-cal-subscribe { margin-left: 0; width: 100%; }
+}
+
+/* Member/scholar directory — TOR gap audit, see components/MemberDirectory.tsx */
+.wx-dir-controls { display: flex; flex-wrap: wrap; gap: var(--rs-space-3); align-items: center; margin-bottom: var(--rs-space-5); }
+.wx-dir-search {
+  flex: 1 1 240px; padding: 10px 16px; border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line);
+  background: var(--rs-surface); color: var(--rs-ink); font-family: inherit; font-size: .92rem;
+}
+.wx-dir-search:focus { outline: none; border-color: var(--rs-primary); }
+.wx-dir-tiers { display: flex; flex-wrap: wrap; gap: var(--rs-space-2); }
+.wx-dir-tier-btn {
+  padding: 6px 16px; border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line);
+  background: var(--rs-surface); color: var(--rs-ink-soft); font-size: .84rem; cursor: pointer; font-family: inherit;
+}
+.wx-dir-tier-btn.is-active { border-color: var(--rs-primary); background: rgba(6, 71, 63, 0.06); color: var(--rs-primary); }
+.wx-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--rs-space-5); }
+.wx-dir-card {
+  padding: var(--rs-space-5); border-radius: var(--rs-radius-card); background: var(--rs-surface);
+  border: 1px solid var(--rs-line); text-align: center; box-shadow: var(--rs-shadow-card);
+}
+.wx-dir-photo {
+  width: 88px; height: 88px; border-radius: 999px; margin: 0 auto var(--rs-space-3); overflow: hidden;
+  background: rgba(6, 71, 63, 0.06); display: flex; align-items: center; justify-content: center;
+}
+.wx-dir-photo img { width: 100%; height: 100%; object-fit: cover; }
+.wx-dir-photo-fallback { font-family: var(--rs-font-display); font-size: 1.6rem; color: var(--rs-primary); }
+.wx-dir-name { font-size: 1rem; color: var(--rs-ink); }
+.wx-dir-tier-badge {
+  display: inline-block; margin-top: var(--rs-space-2); font-size: .74rem; padding: 2px 10px; border-radius: var(--rs-radius-pill);
+  background: var(--rs-gold-soft); color: var(--rs-gold-strong);
+}
+.wx-dir-division { font-size: .84rem; color: var(--rs-ink-faint); margin-top: var(--rs-space-2); }
+.wx-dir-bio { font-size: .88rem; color: var(--rs-ink-soft); margin-top: var(--rs-space-3); }
+.wx-dir-empty { color: var(--rs-ink-faint); font-size: .92rem; }
+
+/* "Export this list" — TOR gap audit, every table's "ดาวน์โหลด" column was
+   plain unclickable text; see components/ListExport.tsx */
+.wx-export { display: flex; justify-content: flex-end; gap: var(--rs-space-2); margin-bottom: var(--rs-space-3); }
+.wx-export-btn {
+  padding: 6px 14px; border-radius: var(--rs-radius-pill); border: 1px solid var(--rs-line);
+  background: var(--rs-surface); color: var(--rs-ink-soft); font-size: .82rem; cursor: pointer; font-family: inherit;
+}
+.wx-export-btn:hover { border-color: var(--rs-primary); color: var(--rs-primary); }
+@media (max-width: 560px) { .wx-export { justify-content: flex-start; flex-wrap: wrap; } }
+
+/* Job listing + application e-form (TOR gap audit — see
+   components/JobApplicationForm.tsx's own file comment). */
+.wx-job-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--rs-space-4); }
+.wx-job-card h3 { margin: 0 0 var(--rs-space-2); color: var(--rs-primary); }
+.wx-job-meta { display: flex; flex-wrap: wrap; gap: var(--rs-space-2); font-size: .84rem; color: var(--rs-ink-soft); margin: var(--rs-space-2) 0; }
+.wx-job-meta span { background: var(--rs-surface-sunk, var(--rs-surface)); border-radius: var(--rs-radius-pill, 999px); padding: 2px 10px; }
+.wx-job-apply-form { max-width: 720px; }
+.wx-job-apply-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--rs-space-3); }
+.wx-job-apply-form .wx-field { display: flex; flex-direction: column; gap: 6px; margin-top: 0; }
+.wx-job-apply-form label { font-size: .86rem; font-weight: 600; color: var(--rs-ink); }
+.wx-job-apply-form input, .wx-job-apply-form select, .wx-job-apply-form textarea {
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rs-line); font: inherit; background: var(--rs-surface); color: var(--rs-ink);
+}
+.wx-job-apply-form textarea { min-height: 96px; resize: vertical; }
+.wx-job-apply-actions .wx-export-btn { background: var(--rs-primary); color: #fff; border-color: var(--rs-primary); padding: 10px 22px; }
+.wx-job-apply-actions .wx-export-btn:hover { background: var(--rs-primary); opacity: .9; }
+.wx-job-apply-done { padding: var(--rs-space-4); border-radius: 16px; background: var(--rs-surface-sunk, #eef4f2); color: var(--rs-primary); }
 
 /* ==========================================================================
  * 9. Rich text — .prose (WordPress content via dangerouslySetInnerHTML)
@@ -944,3 +1122,26 @@
     width: 100%;
   }
 }
+
+/* Breaking-news banner (TOR gap — fast-publish path, see components/
+   BreakingNewsBanner.tsx) — fetched live client-side, so it sits above
+   everything else regardless of the static page underneath it. */
+.wx-breaking { position: relative; z-index: var(--rs-z-header); }
+.wx-breaking-inner {
+  max-width: 1280px; margin: 0 auto; padding: var(--rs-space-3) var(--rs-container-pad);
+  display: flex; align-items: center; gap: var(--rs-space-3); flex-wrap: wrap;
+}
+.wx-breaking--info { background: #eaf3fb; color: #0b3d63; }
+.wx-breaking--warning { background: var(--rs-gold-soft); color: var(--rs-gold-strong); }
+.wx-breaking--critical { background: #fdeceb; color: #7a1d16; }
+.wx-breaking-badge {
+  display: inline-block; padding: 2px 10px; border-radius: var(--rs-radius-pill); font-size: .74rem; font-weight: 700;
+  background: rgba(0,0,0,0.12);
+}
+.wx-breaking-message { flex: 1 1 320px; font-size: .92rem; margin: 0; }
+.wx-breaking-link { font-size: .88rem; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.wx-breaking-close {
+  background: none; border: none; font-size: 1.2rem; line-height: 1; cursor: pointer; color: inherit;
+  padding: 2px 6px; opacity: .7;
+}
+.wx-breaking-close:hover { opacity: 1; }

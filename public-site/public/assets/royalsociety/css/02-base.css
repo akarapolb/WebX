@@ -70,13 +70,25 @@ h4 {
   color: var(--rs-primary);
   font-family: var(--rs-font-display);
   font-weight: 700;
-  line-height: 1.25;
+  line-height: var(--rs-leading-heading);
   letter-spacing: -0.01em;
 }
+
+/* Editorial display scale (01-tokens.css). `text-wrap: balance` earns more
+   here than it would in Latin: Thai has no inter-word spaces, so the
+   browser breaks on syllable boundaries and a two-line heading very easily
+   strands a single word on its own line. */
+h1 { font-size: var(--rs-display-xl); line-height: var(--rs-leading-display); }
+h2 { font-size: var(--rs-display-lg); }
+h3 { font-size: var(--rs-display-md); }
+h1, h2, h3 { text-wrap: balance; }
 
 p {
   margin: 0;
 }
+
+/* Figures that line up in columns shouldn't shift as their digits change. */
+.rs-table, .data-table, .rs-stat-value, .stat-number { font-variant-numeric: tabular-nums; }
 
 /* ==========================================================================
  * Layout primitives
@@ -113,7 +125,7 @@ p {
 }
 
 .section-head h2 {
-  font-size: clamp(1.9rem, 2.6vw, 2.6rem);
+  font-size: var(--rs-display-lg);
 }
 
 .section-head p {
@@ -130,25 +142,29 @@ p {
   display: inline-flex;
   align-items: center;
   gap: var(--rs-space-2);
-  padding-left: var(--rs-space-4);
+  padding-left: calc(var(--rs-space-5) + var(--rs-space-3));
   color: var(--rs-gold-strong);
   font-family: var(--rs-font-body);
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
+/* A longer 1px rule instead of the old 12px/2px tick: at hairline weight it
+   reads as an editorial rule rather than a UI marker, which is the register
+   shift this pass is after. Pinned to the first line (not vertically
+   centred) so a label that wraps at phone widths still has the rule leading
+   its text instead of floating against the middle of the block. */
 .eyebrow::before,
 .section-kicker::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 50%;
-  width: 12px;
-  height: 2px;
-  background: var(--rs-gold);
-  transform: translateY(-50%);
+  top: 0.62em;
+  width: 30px;
+  height: 1px;
+  background: var(--rs-rule-gold-strong);
 }
 
 .view-all {

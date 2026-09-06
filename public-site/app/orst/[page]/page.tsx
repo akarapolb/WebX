@@ -2,44 +2,45 @@ import { notFound } from "next/navigation";
 import Header from "@/templates/orst/Header";
 import Footer from "@/templates/orst/Footer";
 import Blocks from "@/templates/orst/Blocks";
-import KnowledgePage from "@/templates/orst/KnowledgePage";
-import ContactPage from "@/templates/orst/ContactPage";
 import aboutData from "@/templates/orst/content/about.json";
 import dictionaryData from "@/templates/orst/content/dictionary.json";
 import newsData from "@/templates/orst/content/news.json";
 import publicationsData from "@/templates/orst/content/publications.json";
 import servicesData from "@/templates/orst/content/services.json";
-import { getWpServices, getWpPublications, getWpNews, getWpPage, getWpFaqs, getWpResources, getWpTimeline, getWpMissionItems, getWpOrgUnits, getWpDocuments, getTenant, fmtDateTh, type WpEntry } from "@/lib/cms";
+import contactData from "@/templates/orst/content/contact.json";
+import knowledgeData from "@/templates/orst/content/knowledge.json";
+import careersData from "@/templates/orst/content/careers.json";
+// getWpTimeline/getWpOrgUnits are still fetched directly here (not through
+// resolveSources) for the "at-a-glance" block's cross-source aggregation —
+// see its own comment below for why that one stays bespoke. getWpOrgUnits
+// is ALSO fetched independently, once more, inside resolveSources for the
+// "structure" block's own items — a small, build-time-only duplication
+// (this route runs once per static export, not per request) traded for not
+// threading a shared cache between two independent mechanisms.
+import { getWpPage, getWpTimeline, getWpOrgUnits, getWpMembers, getJobs, getTenant, getNavItems } from "@/lib/cms";
+import { resolveSources } from "@/lib/blockSource";
+import { pageMetadata } from "@/lib/seo";
 
-// The 5 JSON-block-driven pages (source: content/pages/*.json, rendered via
-// templates/orst/Blocks.tsx) plus knowledge/contact, which are hand-written
-// in the source and have their own dedicated components.
+// The 7 JSON-block-driven pages (rendered via templates/orst/Blocks.tsx).
+// contact and knowledge both joined this list via full decomposition —
+// contact into contact-hero/contact-info/contact-form/card-grid (see
+// Blocks.tsx, content/contact.json); knowledge into stats-hero/card-grid
+// (content/knowledge.json), dropping its non-functional filter/search/
+// pagination chrome per an explicit product call (that page's own source
+// comments confirmed the "185,420 items" archive and its facet browser
+// were entirely decorative — no real filtering, no real data behind them).
+// ContactPage.tsx/KnowledgePage.tsx and their dedicated route branches are
+// gone. No hand-written ORST content pages remain.
 const BLOCK_PAGES: Record<string, { navKey: string; blocks: any[] }> = {
   about: aboutData as any,
   dictionary: dictionaryData as any,
   news: newsData as any,
   publications: publicationsData as any,
   services: servicesData as any,
+  contact: contactData as any,
+  knowledge: knowledgeData as any,
+  careers: careersData as any,
 };
-const HAND_WRITTEN_PAGES = new Set(["knowledge", "contact"]);
-
-/** Swap one block's static `items` for real WordPress content by block id —
- * everything else on the page (hero, steps, FAQ, ITA docs, etc.) stays the
- * static JSON exactly as ported. See the Phase 8 plan's scope boundary:
- * services/publications/news are the content types that actually became
- * WordPress custom post types; this is where that connects to the page. */
-function withItems(blocks: any[], blockId: string, items: any[]): any[] {
-  return blocks.map((b) => (b.id === blockId ? { ...b, items } : b));
-}
-function toCardItems(entries: WpEntry[], icon: string): any[] {
-  return entries.map((e) => ({ icon, title: e.title, body: e.excerpt, meta: fmtDateTh(e.date), href: "#" }));
-}
-function toFaqItems(entries: WpEntry[]): { q: string; a: string }[] {
-  return entries.map((e) => ({ q: e.title, a: e.excerpt }));
-}
-function toLinkItems(entries: WpEntry[], icon: string): any[] {
-  return entries.map((e) => ({ icon, title: e.title, desc: e.excerpt, meta: fmtDateTh(e.date), href: "#" }));
-}
 
 /** Merge arbitrary field overrides into one block by id — used for the
  * about page's rich-text ("html" override, replacing its placeholder
@@ -49,126 +50,111 @@ function withFields(blocks: any[], blockId: string, fields: Record<string, any>)
 }
 
 export function generateStaticParams() {
-  return [...Object.keys(BLOCK_PAGES), ...HAND_WRITTEN_PAGES].map((page) => ({ page }));
+  return Object.keys(BLOCK_PAGES).map((page) => ({ page }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ page: string }> }) {
+  const { page } = await params;
+  if (!BLOCK_PAGES[page]) return {};
+  const [wpPage, tenant, navItems] = await Promise.all([getWpPage("orst", page), getTenant("orst"), getNavItems("orst")]);
+  // Real nav label for this page as the fallback title — same Thai text a
+  // visitor already sees in the header, so no metadata-only copy to author.
+  const navLabel = navItems.find((n) => n.url === "/orst/" + page)?.label || page;
+  return pageMetadata({
+    tenant: "orst", tenantData: tenant, path: "/orst/" + page,
+    title: wpPage?.title, description: wpPage?.excerpt, imageUrl: wpPage?.imageUrl,
+    fallbackTitle: navLabel,
+  });
 }
 
 export default async function Page({ params }: { params: Promise<{ page: string }> }) {
   const { page } = await params;
 
-  if (page === "knowledge") {
-    const tenant = await getTenant("orst");
-    return (
-      <>
-        <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
-        <Header active="knowledge" />
-        <KnowledgePage />
-        <Footer tenant={tenant} />
-      </>
-    );
-  }
-  if (page === "contact") {
-    const tenant = await getTenant("orst");
-    return (
-      <>
-        <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
-        <Header active="contact" />
-        <ContactPage />
-        <Footer tenant={tenant} />
-      </>
-    );
-  }
-
   const data = BLOCK_PAGES[page];
   if (!data) return notFound();
 
-  let blocks = data.blocks;
-  if (page === "services") {
-    blocks = withItems(blocks, "online-services", toCardItems(await getWpServices("orst"), "i-form"));
-  } else if (page === "publications") {
-    // Real publications for orst top out at 3 entries — reused as-is for
-    // both the card-grid ("media") and this link-list ("journals"), same
-    // real data in two presentations, rather than a second fabricated list.
-    const pubs = await getWpPublications("orst");
-    blocks = withItems(blocks, "media", toCardItems(pubs, "i-video"));
-    blocks = withItems(blocks, "journals", toLinkItems(pubs, "i-journal"));
-  } else if (page === "news") {
-    // Real posts seeded for orst (see the Phase 10 news seed — genuine
-    // source-design content, not invented) sort newest-first; the 5 "news"
-    // items and 5 "announcement" items were seeded as two same-day batches
-    // with the announcement batch dated earlier, so a straight split lines
-    // up with the source's own news/announcement distinction without a
-    // separate taxonomy.
-    const posts = await getWpNews("orst");
-    blocks = withItems(blocks, "highlight", toCardItems(posts.slice(0, 5), "i-megaphone").map((it) => ({ ...it, tag: "ข่าวประชาสัมพันธ์" })));
-    blocks = withItems(blocks, "announcements", toLinkItems(posts.slice(5, 10), "i-file"));
-  } else if (page === "about") {
+  // The Visual Builder writes layout into WordPress (see wordpress/
+  // mu-plugins/acf-fields.php's group_page_layout + lib/cms.ts's
+  // parseBlocks) — prefer it over the static content/*.json this page was
+  // originally seeded from. Falls back to the repo JSON for one release
+  // after the seed migration (wordpress/seed-orst-layout.mjs) in case a
+  // deployment hasn't been migrated yet or WordPress is unreachable at
+  // build time; delete this fallback once every environment is confirmed
+  // migrated. `data.navKey` (route chrome, not layout) always comes from
+  // the static envelope regardless of where blocks came from.
+  const wpPage = await getWpPage("orst", page);
+  if (!wpPage?.blocks?.length) {
+    console.warn(`[orst/${page}] no WordPress-authored blocks — falling back to static content/${page}.json`);
+  }
+  let blocks = wpPage?.blocks?.length ? wpPage.blocks : data.blocks;
+
+  // Every block whose id used to be hardcoded here (online-services, media,
+  // journals, highlight, announcements, mission, structure, transparency,
+  // dictionary's services/faq) now carries its own `source` binding, seeded
+  // by wordpress/seed-orst-sources.mjs — see lib/blockSource.ts. One
+  // generic pass replaces what used to be a per-page if/else chain, and
+  // means a block can be renamed, duplicated, or moved to a different page
+  // in the Builder without silently losing its live content.
+  blocks = await resolveSources(blocks, "orst");
+
+  if (page === "about") {
     // Real narrative from wp:page slug "about" (sourced from the RoyalSociety
     // sister-design's About page — ORST's own about.json content was an
     // unfilled placeholder). RichText already supports raw HTML via `b.html`
     // (see Blocks.tsx), so just hand it the fetched content directly instead
     // of the static `paragraphs` placeholders — leave the block untouched
     // (bracketed placeholders and all) if the page hasn't been seeded yet.
-    const [aboutPage, missionItems, orgUnits, timeline, documents] = await Promise.all([
-      getWpPage("orst", "about"),
-      getWpMissionItems("orst"),
-      getWpOrgUnits("orst"),
-      getWpTimeline("orst"),
-      getWpDocuments("orst"),
-    ]);
-    if (aboutPage?.content) {
-      blocks = withFields(blocks, "overview", { html: aboutPage.content });
-    }
-
-    // Phase 10 — mission/structure are now genuine WordPress content types
-    // (wp:mission, wp:org-unit) instead of hardcoded JSX/JSON.
-    if (missionItems.length) {
-      blocks = withItems(blocks, "mission", missionItems.map((e) => ({
-        icon: e.acf?.icon || "i-service", title: e.title, body: e.excerpt,
-      })));
-    }
-    if (orgUnits.length) {
-      blocks = withItems(blocks, "structure", orgUnits.map((e) => ({
-        icon: "i-dictionary", title: e.title, body: e.excerpt, href: "#",
-      })));
+    // wpPage (fetched above, for the page's own layout) IS this page's own
+    // "about" WordPress post — reuse it instead of a second identical fetch.
+    //
+    // "overview" and "at-a-glance" stay bespoke (not a `source` binding):
+    // overview pulls a single field (this page's OWN content), not a list;
+    // at-a-glance aggregates across TWO different feeds (timeline + org
+    // units) into synthetic values no generic per-block source can express.
+    if (wpPage?.content) {
+      blocks = withFields(blocks, "overview", { html: wpPage.content });
     }
 
     // The "at-a-glance" facts are a summary of data already live on this
     // page (founding year and current-law year are the timeline's earliest/
-    // latest entries; bureau count is org-units' length) — derived rather
-    // than a 4th hand-authored content type for 3 numbers, so it can never
-    // drift out of sync with the timeline/structure it's summarizing.
+    // latest entries; bureau count is org-units' length; member count is
+    // the new wp:member directory's length — see components/
+    // MemberDirectory.tsx's own comment for why that field was previously
+    // an unfilled "[จำนวน]" placeholder) — derived rather than hand-authored
+    // numbers, so they can never drift out of sync with what they summarize.
+    // orgUnits is fetched again here (resolveSources already fetched it
+    // once for "structure") purely for its .length — see the import
+    // comment above for why that small duplication is acceptable.
+    const [orgUnits, timeline, members] = await Promise.all([getWpOrgUnits("orst"), getWpTimeline("orst"), getWpMembers("orst")]);
     blocks = withFields(blocks, "at-a-glance", { lead: "ข้อมูล ณ ปัจจุบัน" });
     if (timeline.length && orgUnits.length) {
-      blocks = withItems(blocks, "at-a-glance", [
-        { value: timeline[0].acf?.year || "", label: "ปีที่ก่อตั้ง", note: "สถาปนา" },
-        { value: timeline[timeline.length - 1].acf?.year || "", label: "พระราชบัญญัติฉบับปัจจุบัน", note: "กฎหมายปัจจุบัน" },
-        { value: orgUnits.length + " สำนัก", label: "สำนักวิชาการ", note: "โครงสร้างวิชาการ" },
-      ]);
+      blocks = withFields(blocks, "at-a-glance", {
+        items: [
+          { value: timeline[0].acf?.year || "", label: "ปีที่ก่อตั้ง", note: "สถาปนา" },
+          { value: timeline[timeline.length - 1].acf?.year || "", label: "พระราชบัญญัติฉบับปัจจุบัน", note: "กฎหมายปัจจุบัน" },
+          { value: orgUnits.length + " สำนัก", label: "สำนักวิชาการ", note: "โครงสร้างวิชาการ" },
+          ...(members.length ? [{ value: members.length + " ท่าน", label: "ราชบัณฑิตและภาคีสมาชิก", note: "รายชื่อทั้งหมด" }] : []),
+        ],
+      });
     }
-
-    // ITA transparency documents — real titles, honest empty tag/date/link
-    // until the real files exist (see wp:document's seed data and the
-    // Phase 9/10 "don't fabricate" line).
-    if (documents.length) {
-      blocks = withItems(blocks, "transparency", documents.map((e) => ({
-        title: e.title,
-        desc: e.excerpt,
-        tag: e.acf?.tag || "PDF",
-        meta: e.acf?.fiscal_year || undefined,
-        href: e.acf?.file_url || "#",
-      })));
-    }
-  } else if (page === "dictionary") {
-    blocks = withItems(blocks, "services", toCardItems(await getWpResources("orst"), "i-dictionary"));
-    blocks = withItems(blocks, "faq", toFaqItems((await getWpFaqs("orst")).slice(0, 4)));
   }
 
-  const tenant = await getTenant("orst");
+  if (page === "careers") {
+    // Real job/application e-forms (TOR gap audit) — see lib/cms.ts's
+    // getJobs and components/JobApplicationForm.tsx's own comments. `job` is
+    // a cross-engine Strapi type (like tenant/menu-item), so this fetches
+    // straight from Strapi rather than through resolveSources' WP-only
+    // fetchers.
+    const jobs = await getJobs("orst");
+    blocks = withFields(blocks, "job-listing", { jobs });
+  }
+
+  const [tenant, navItems] = await Promise.all([getTenant("orst"), getNavItems("orst")]);
 
   return (
     <>
       <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
-      <Header active={data.navKey} />
+      <Header active={data.navKey} navItems={navItems} />
       <main id="main-content">
         <div id="app-content">
           <Blocks blocks={blocks} />

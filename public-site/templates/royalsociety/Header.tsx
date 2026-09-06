@@ -1,7 +1,10 @@
 import { Fragment } from "react";
 import MobileMenuToggle from "./MobileMenuToggle";
 import MobileSearchForm from "./MobileSearchForm";
+import AccessibilityTools from "./AccessibilityTools";
 import { RsIcon } from "./icons";
+import Picture from "@/components/Picture";
+import type { NavItem as CmsNavItem, NavMegaLink } from "@/lib/cms";
 
 // Ported from RoyalSociety source's assets/js/01-config.js (window.RS_CONFIG:
 // site/contact/topbarLinks/nav/mega/footer) + assets/js/02-components.js
@@ -59,12 +62,24 @@ import { RsIcon } from "./icons";
 //      the drawer needs no JS at all — the source already used native
 //      `<details>/<summary>`, ported as-is.
 //
+//   4. Topbar ก-/ก/ก+/"ความคมชัด" buttons — same reasoning as point 3 (real
+//      client state: font-size attribute + a body class, both persisted).
+//      Pulled into AccessibilityTools.tsx, sharing its state logic with
+//      ORST's own equivalent controls via lib/useAccessibilityToolbar.ts
+//      (TOR gap audit — these rendered with correct ARIA labels but no
+//      onClick at all).
+//
+//   5. The "ค้นหา" (search) round button and the mobile drawer's search
+//      input — both used to open/submit to a search modal/results page
+//      that didn't exist in this port. Now real: the round button links to
+//      a results page (app/royalsociety/search), and MobileSearchForm.tsx
+//      submits there too instead of its old fallback redirect to
+//      /royalsociety/knowledge — see templates/royalsociety/SearchResults.tsx
+//      (TOR gap audit).
+//
 // Intentionally rendered inert (no onClick/behavior — matches source's own
-// `data-*` hooks that 03-accessibility.js / a search modal would normally
-// wire up, neither of which exists in this port):
-//   - Topbar buttons ก-/ก/ก+/"ความคมชัด" and the "สำหรับผู้พิการทางสายตา" label.
-//   - The "ค้นหา" (search) round button in header-actions.
-//   - The mobile drawer's search `<input type="search">`.
+// `data-*` hooks that 03-accessibility.js would normally wire up, which
+// doesn't exist in this port):
 //   - "สำหรับเจ้าหน้าที่" / "ภาษา TH | EN" / "เข้าสู่ระบบ / สมัครสมาชิก" — kept
 //     as "#" placeholders exactly as 01-config.js had them.
 //
@@ -83,96 +98,97 @@ import { RsIcon } from "./icons";
 // `.mega-group a:after { content: "→" }` in 03-layout.css, so link labels
 // below carry no arrow text of their own (adding one would double it up).
 
-type NavKey =
-  | "home"
-  | "about"
-  | "knowledge"
-  | "activities"
-  | "publications"
-  | "services"
-  | "contact";
+// Nav content (flat items + mega-menu dropdowns) now comes from the
+// `navItems` prop — see lib/cms.ts's getNavItems/NavItem/NavMegaMenu and
+// webx-studio's NavManager.tsx for the editor, and strapi-cms's
+// seed-royalsociety-nav.mjs for the one-off migration of this file's
+// original NAV/MEGA constants into that content type. This const is only a
+// safety net for a not-yet-seeded environment (mirrors ORST Header.tsx's
+// identical FALLBACK_NAV).
+const FALLBACK_NAV: CmsNavItem[] = [{ label: "หน้าหลัก", url: "/royalsociety", openNewTab: false, order: 1 }];
 
-type NavItem = { key: NavKey; label: string; href: string };
+// `active` (a route slug, e.g. "about") is compared against the URL an
+// editor would realistically set for that nav item — see ORST Header.tsx's
+// identical hrefForActiveKey for why (CMS rows have no stable "key" field).
+function hrefForActiveKey(key: string): string {
+  return key === "home" ? "/royalsociety" : "/royalsociety/" + key;
+}
 
-type MegaGroup = readonly [heading: string, links: readonly string[]];
+// Bilingual EN (TOR gap — TOPBAR_LINKS' "ภาษา TH | EN" used to be a dead
+// "#" placeholder). Only these 4 pages have a real English counterpart —
+// see app/en/royalsociety/*'s own comments for why the rest stay Thai-only.
+// A nav link to any other page keeps its Thai URL even while browsing in
+// English, rather than 404ing or guessing at a translation that doesn't exist.
+const BILINGUAL_SLUGS = new Set(["home", "about", "contact", "services"]);
+function localizeHref(url: string, locale: "th" | "en"): string {
+  if (locale !== "en" || !url.startsWith("/royalsociety")) return url;
+  const slug = url === "/royalsociety" ? "home" : url.replace(/^\/royalsociety\//, "");
+  if (!BILINGUAL_SLUGS.has(slug)) return url;
+  return url === "/royalsociety" ? "/en/royalsociety" : "/en" + url;
+}
+function toggleHref(active: string | undefined, locale: "th" | "en"): string {
+  const slug = active && BILINGUAL_SLUGS.has(active) ? active : "home";
+  const th = slug === "home" ? "/royalsociety" : "/royalsociety/" + slug;
+  const en = slug === "home" ? "/en/royalsociety" : "/en/royalsociety/" + slug;
+  return locale === "en" ? th : en;
+}
 
-type MegaEntry = {
-  kicker: string;
-  title: string;
-  desc: string;
-  cta: string;
-  groups: readonly MegaGroup[];
-};
+const STR = {
+  th: { a11y: "สำหรับผู้พิการทางสายตา", mainNav: "เมนูหลัก", search: "ค้นหา", services: "บริการออนไลน์", searchAria: "ค้นหาในเว็บไซต์", mobileMenuAria: "เมนูหลัก", closeAria: "ปิดเมนู" },
+  en: { a11y: "Accessibility tools", mainNav: "Main menu", search: "Search", services: "Online services", searchAria: "Search the website", mobileMenuAria: "Main menu", closeAria: "Close menu" },
+} as const;
 
-const NAV: readonly NavItem[] = [
-  { key: "home", label: "หน้าหลัก", href: "/royalsociety" },
-  { key: "about", label: "เกี่ยวกับราชบัณฑิตยสภา", href: "/royalsociety/about" },
-  { key: "knowledge", label: "องค์ความรู้", href: "/royalsociety/knowledge" },
-  { key: "activities", label: "งานวิชาการและกิจกรรม", href: "/royalsociety/activities" },
-  { key: "publications", label: "สื่อและสิ่งพิมพ์", href: "/royalsociety/publications" },
-  { key: "services", label: "บริการประชาชน", href: "/royalsociety/services" },
-  { key: "contact", label: "ติดต่อเรา", href: "/royalsociety/contact" },
-];
+// Unlimited-depth mega-menu links (TOR gap — the previous shape was
+// hardcoded to exactly group→links, 2 levels; see public-site/lib/cms.ts's
+// NavMegaLink comment). A link with no `children` renders exactly as
+// before (a plain <a>); one with children becomes a native
+// <details>/<summary> disclosure — zero JS, matching this component's own
+// existing CSS-only mega-menu (hover/:focus-within) and mobile accordion.
+function MegaLinkNode({ link, fallbackHref, nodeKey }: { link: NavMegaLink; fallbackHref: string; nodeKey: string }) {
+  const children = link.children || [];
+  if (!children.length) return <a href={link.url || fallbackHref}>{link.text}</a>;
+  return (
+    <details className="mega-link-details">
+      <summary>{link.text}</summary>
+      <div className="mega-submenu">
+        {children.map((child, i) => (
+          <MegaLinkNode key={nodeKey + "-" + i} link={child} fallbackHref={fallbackHref} nodeKey={nodeKey + "-" + i} />
+        ))}
+      </div>
+    </details>
+  );
+}
 
-const MEGA: Partial<Record<NavKey, MegaEntry>> = {
-  about: {
-    kicker: "Institution",
-    title: "เกี่ยวกับราชบัณฑิตยสภา",
-    desc: "ทำความรู้จักประวัติ บทบาท โครงสร้าง และบุคลากรของราชบัณฑิตยสภา",
-    cta: "ดูข้อมูลทั้งหมด",
-    groups: [
-      ["ข้อมูลองค์กร", ["ประวัติความเป็นมา", "ผู้บริหาร", "ราชบัณฑิตและภาคีสมาชิก", "โครงสร้างองค์กร"]],
-      ["สำนักและระเบียบ", ["สำนักธรรมศาสตร์และการเมือง", "สำนักวิทยาศาสตร์", "สำนักศิลปกรรม", "กฎ ระเบียบ และข้อบังคับ"]],
-    ],
-  },
-  knowledge: {
-    kicker: "Knowledge",
-    title: "องค์ความรู้",
-    desc: "ค้นหาคลังความรู้ คำศัพท์ บทความ สารานุกรม และฐานข้อมูลวิชาการ",
-    cta: "สำรวจองค์ความรู้",
-    groups: [
-      ["ค้นคว้าและฐานข้อมูล", ["คลังองค์ความรู้", "พจนานุกรมและคำศัพท์", "สารานุกรม", "ฐานข้อมูลวิชาการ"]],
-      ["เนื้อหาแนะนำ", ["บทความวิชาการ", "องค์ความรู้สำหรับประชาชน", "ภาษาไทย", "ศิลปกรรมและวัฒนธรรม"]],
-    ],
-  },
-  activities: {
-    kicker: "Academic Activities",
-    title: "งานวิชาการและกิจกรรม",
-    desc: "ติดตามโครงการ การประชุม บรรยายวิชาการ และข่าวกิจกรรมล่าสุด",
-    cta: "ดูงานวิชาการทั้งหมด",
-    groups: [
-      ["งานวิชาการ", ["โครงการและกิจกรรม", "การประชุมวิชาการ", "บรรยายวิชาการ", "รายงานประจำปี"]],
-      ["ข่าวและประกาศ", ["ข่าวกิจกรรม", "ประกาศ", "ปฏิทินกิจกรรม", "กิจกรรมเผยแพร่ความรู้"]],
-    ],
-  },
-  publications: {
-    kicker: "Media & Publications",
-    title: "สื่อและสิ่งพิมพ์",
-    desc: "เลือกอ่าน ดาวน์โหลด และรับชมสื่อความรู้จากราชบัณฑิตยสภา",
-    cta: "ดูสื่อทั้งหมด",
-    groups: [
-      ["สิ่งพิมพ์", ["E-Book", "หนังสือและตำรา", "วารสารราชบัณฑิตยสภา", "คลังเอกสาร"]],
-      ["สื่อดิจิทัล", ["Infographic", "สื่อวิดีโอ", "สื่อเสียง", "เอกสารดาวน์โหลด"]],
-    ],
-  },
-  services: {
-    kicker: "Public Services",
-    title: "บริการประชาชน",
-    desc: "รวมช่องทางบริการและข้อมูลสำหรับประชาชน หน่วยงาน และผู้ใช้บริการทั่วไป",
-    cta: "เริ่มใช้บริการ",
-    groups: [
-      ["บริการหลัก", ["สอบถามข้อมูลทางวิชาการ", "ขออนุญาตใช้เนื้อหา", "ดาวน์โหลดแบบฟอร์ม", "งานบริการออนไลน์"]],
-      ["ช่องทางสนับสนุน", ["ติดต่อราชการ", "คำถามที่พบบ่อย", "รับข้อเสนอแนะ", "คู่มือการใช้งาน"]],
-    ],
-  },
-};
+function MobileMegaLinkNode({ link, fallbackHref, nodeKey }: { link: NavMegaLink; fallbackHref: string; nodeKey: string }) {
+  const children = link.children || [];
+  if (!children.length) return <a href={link.url || fallbackHref}>{link.text}</a>;
+  return (
+    <details className="rs-mobile-links-nested">
+      <summary>{link.text}</summary>
+      <div>
+        {children.map((child, i) => (
+          <MobileMegaLinkNode key={nodeKey + "-" + i} link={child} fallbackHref={fallbackHref} nodeKey={nodeKey + "-" + i} />
+        ))}
+      </div>
+    </details>
+  );
+}
 
-const TOPBAR_LINKS: readonly { label: string; href: string }[] = [
-  { label: "ติดต่อเรา", href: "/royalsociety/contact" },
-  { label: "สำหรับเจ้าหน้าที่", href: "#" },
-  { label: "ภาษา TH | EN", href: "#" },
-  { label: "เข้าสู่ระบบ / สมัครสมาชิก", href: "#" },
-];
+function topbarLinks(locale: "th" | "en", active: string | undefined): readonly { label: string; href: string; hrefLang?: string }[] {
+  return locale === "en"
+    ? [
+        { label: "Contact us", href: localizeHref("/royalsociety/contact", locale) },
+        { label: "Staff login", href: "#" },
+        { label: "TH", href: toggleHref(active, locale), hrefLang: "th" },
+        { label: "Sign in / Register", href: "#" },
+      ]
+    : [
+        { label: "ติดต่อเรา", href: "/royalsociety/contact" },
+        { label: "สำหรับเจ้าหน้าที่", href: "#" },
+        { label: "EN", href: toggleHref(active, locale), hrefLang: "en" },
+        { label: "เข้าสู่ระบบ / สมัครสมาชิก", href: "#" },
+      ];
+}
 
 const SITE = {
   name: "ราชบัณฑิตยสภา",
@@ -180,7 +196,10 @@ const SITE = {
   logoAlt: "ตราราชบัณฑิตยสภา",
 };
 
-export default function Header({ active }: { active?: string }) {
+export default function Header({ active, navItems, locale = "th" }: { active?: string; navItems?: CmsNavItem[]; locale?: "th" | "en" }) {
+  const nav = navItems && navItems.length ? navItems : FALLBACK_NAV;
+  const activeHref = active ? hrefForActiveKey(active) : "";
+  const s = STR[locale];
   return (
     <div id="app-header">
       {/* CSS-only equivalent of components.js's mouseenter/focus/click-driven
@@ -195,22 +214,19 @@ export default function Header({ active }: { active?: string }) {
         }
       `}</style>
 
-      <div className="topbar" role="region" aria-label="เครื่องมือช่วยการเข้าถึง">
+      <div className="topbar" role="region" aria-label={s.a11y}>
         <div className="container topbar-inner">
           <div className="topbar-access">
-            <a className="skip-link-inline" href="#main-content">ข้ามไปยังเนื้อหา</a>
+            <a className="skip-link-inline" href="#main-content">{locale === "en" ? "Skip to content" : "ข้ามไปยังเนื้อหา"}</a>
             <span className="access-label">
               <RsIcon id="i-access" />
-              สำหรับผู้พิการทางสายตา
+              {s.a11y}
             </span>
-            <button className="top-tool" type="button" aria-label="ลดขนาดตัวอักษร">ก-</button>
-            <button className="top-tool" type="button" aria-label="ขนาดตัวอักษรปกติ">ก</button>
-            <button className="top-tool" type="button" aria-label="เพิ่มขนาดตัวอักษร">ก+</button>
-            <button className="top-tool contrast-tool" type="button" aria-pressed={false}>ความคมชัด</button>
+            <AccessibilityTools />
           </div>
           <div className="topbar-links">
-            {TOPBAR_LINKS.map((item) => (
-              <a href={item.href} key={item.label}>{item.label}</a>
+            {topbarLinks(locale, active).map((item) => (
+              <a href={item.href} lang={item.hrefLang} key={item.label}>{item.label}</a>
             ))}
           </div>
         </div>
@@ -218,41 +234,38 @@ export default function Header({ active }: { active?: string }) {
 
       <header className="site-header" id="site-header">
         <div className="container header-inner">
-          <a href="/royalsociety" className="brand" aria-label={`${SITE.name} หน้าหลัก`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="brand-logo-img" src={SITE.logo} alt={SITE.logoAlt} loading="eager" />
+          <a href={locale === "en" ? "/en/royalsociety" : "/royalsociety"} className="brand" aria-label={locale === "en" ? `${SITE.name} home` : `${SITE.name} หน้าหลัก`}>
+            <Picture className="brand-logo-img" src={SITE.logo} alt={SITE.logoAlt} loading="eager" />
             <span className="brand-text"><span className="brand-title">{SITE.name}</span></span>
           </a>
 
-          <nav className="main-nav" aria-label="เมนูหลัก">
-            {NAV.map((item) => {
-              const isActive = item.key === active;
-              const data = MEGA[item.key];
+          <nav className="main-nav" aria-label={s.mainNav}>
+            {nav.map((n, i) => {
+              const isActive = !!activeHref && n.url === activeHref;
+              const data = n.megaMenu;
               const currentPage = isActive ? "page" : undefined;
+              const href = localizeHref(n.url, locale);
+              const linkProps = { target: n.openNewTab ? "_blank" : undefined, rel: n.openNewTab ? "noopener noreferrer" : undefined };
 
               if (!data) {
                 return (
-                  <a
-                    key={item.key}
-                    className={isActive ? "active" : undefined}
-                    href={item.href}
-                    aria-current={currentPage}
-                  >
-                    {item.label}
+                  <a key={i} className={isActive ? "active" : undefined} href={href} aria-current={currentPage} {...linkProps}>
+                    {n.label}
                   </a>
                 );
               }
 
               return (
-                <Fragment key={item.key}>
+                <Fragment key={i}>
                   <a
                     className={isActive ? "active" : undefined}
-                    href={item.href}
-                    data-mega={item.key}
+                    href={href}
+                    data-mega={i}
                     aria-haspopup="true"
                     aria-current={currentPage}
+                    {...linkProps}
                   >
-                    <span>{item.label}</span>
+                    <span>{n.label}</span>
                     <span className="nav-caret" aria-hidden="true">
                       <svg viewBox="0 0 20 20"><path d="M6 7.5 10 11.5 14 7.5"></path></svg>
                     </span>
@@ -260,17 +273,17 @@ export default function Header({ active }: { active?: string }) {
                   <div className="mega-menu">
                     <div className="mega-inner">
                       <div className="mega-feature">
-                        <small>{data.kicker}</small>
-                        <h3>{data.title}</h3>
-                        <p>{data.desc}</p>
-                        <a href={item.href}>{data.cta} →</a>
+                        {data.eyebrow ? <small>{data.eyebrow}</small> : null}
+                        <h3>{data.title || n.label}</h3>
+                        {data.description ? <p>{data.description}</p> : null}
+                        {data.featuredUrl ? <a href={data.featuredUrl}>{data.featuredLabel} →</a> : null}
                       </div>
                       <div className="mega-groups">
-                        {data.groups.map(([heading, links]) => (
-                          <div className="mega-group" key={heading}>
-                            <h4>{heading}</h4>
-                            {links.map((label) => (
-                              <a href={item.href} key={label}>{label}</a>
+                        {data.groups.map((group, gi) => (
+                          <div className="mega-group" key={gi}>
+                            <h4>{group.heading}</h4>
+                            {group.links.map((l, li) => (
+                              <MegaLinkNode key={li} link={l} fallbackHref={n.url} nodeKey={`${i}-${gi}-${li}`} />
                             ))}
                           </div>
                         ))}
@@ -283,48 +296,49 @@ export default function Header({ active }: { active?: string }) {
           </nav>
 
           <div className="header-actions">
-            <button className="round-action search-action" type="button" aria-label="ค้นหาในเว็บไซต์">
+            <a className="round-action search-action" href="/royalsociety/search" aria-label={s.searchAria}>
               <RsIcon id="i-search" />
-              <span>ค้นหา</span>
-            </button>
-            <a className="round-action primary" href="/royalsociety/services">บริการออนไลน์</a>
+              <span>{s.search}</span>
+            </a>
+            <a className="round-action primary" href={localizeHref("/royalsociety/services", locale)}>{s.services}</a>
             <MobileMenuToggle />
           </div>
         </div>
       </header>
 
       <div className="rs-mobile-panel" id="rs-mobile-panel" aria-hidden="true">
-        <div className="rs-mobile-drawer" role="dialog" aria-modal="true" aria-label="เมนูหลัก">
+        <div className="rs-mobile-drawer" role="dialog" aria-modal="true" aria-label={s.mobileMenuAria}>
           <div className="rs-mobile-head">
-            <strong>เมนูหลัก</strong>
-            <button className="round-action" type="button" data-mobile-close aria-label="ปิดเมนู">
+            <strong>{s.mainNav}</strong>
+            <button className="round-action" type="button" data-mobile-close aria-label={s.closeAria}>
               <RsIcon id="i-x" />
             </button>
           </div>
           <MobileSearchForm />
           <div className="rs-mobile-acc">
-            {NAV.map((item) => {
-              const data = MEGA[item.key];
+            {nav.map((n, i) => {
+              const data = n.megaMenu;
+              const href = localizeHref(n.url, locale);
 
               if (!data) {
                 return (
-                  <a className="rs-mobile-direct" href={item.href} key={item.key}>
-                    {item.label}<span>→</span>
+                  <a className="rs-mobile-direct" href={href} key={i}>
+                    {n.label}<span>→</span>
                   </a>
                 );
               }
 
-              const flatLinks = data.groups.flatMap(([, links]) => links);
+              const flatLinks = data.groups.flatMap((g) => g.links);
 
               return (
-                <details key={item.key}>
+                <details key={i}>
                   <summary>
-                    {item.label}
+                    {n.label}
                     <RsIcon id="i-chevron" />
                   </summary>
                   <div className="rs-mobile-links">
-                    {flatLinks.map((label) => (
-                      <a href={item.href} key={label}>{label}</a>
+                    {flatLinks.map((l, li) => (
+                      <MobileMegaLinkNode key={li} link={l} fallbackHref={href} nodeKey={`m-${i}-${li}`} />
                     ))}
                   </div>
                 </details>

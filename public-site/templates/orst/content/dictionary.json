@@ -13,7 +13,7 @@
       "breadcrumb": [
         {
           "label": "หน้าหลัก",
-          "href": "index.html"
+          "href": "/orst"
         },
         {
           "label": "พจนานุกรมและคำศัพท์"
@@ -118,11 +118,11 @@
       "actions": [
         {
           "label": "สอบถามข้อมูลทางวิชาการ",
-          "href": "services.html"
+          "href": "/orst/services"
         },
         {
           "label": "ติดต่อเรา",
-          "href": "contact.html",
+          "href": "/orst/contact",
           "variant": "ghost"
         }
       ]
