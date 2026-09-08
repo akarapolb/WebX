@@ -91,6 +91,12 @@ const SCOPED = new Set([
 const WP_SCOPED = new Set([
   "wp:post", "wp:service", "wp:publication", "wp:faq", "wp:resource", "wp:page",
   "wp:timeline", "wp:mission", "wp:org-unit", "wp:document",
+  // Phase 7 — native WordPress polls/complaints/applications/breaking-news,
+  // replacing the Strapi-backed shared-service layer for orst/royalsociety
+  // (wordpress/mu-plugins/public-forms-*.php). wp:breaking-news specifically
+  // REPLACES the old BOOKKEEPING_UIDS routing below for a WordPress-engine
+  // session — see BREAKING_NEWS_UID's own comment.
+  "wp:poll", "wp:complaint", "wp:contact-message", "wp:job", "wp:application", "wp:breaking-news",
 ]);
 
 const TENANT_UID = "api::tenant.tenant";
@@ -101,10 +107,15 @@ const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
 const SSO_CREDENTIAL_UID = "api::sso-credential.sso-credential";
 const CUSTOM_ROLE_UID = "api::custom-role.custom-role";
 const MENU_ITEM_UID = "api::menu-item.menu-item";
-// Breaking-news banner — same reasoning as MENU_ITEM_UID directly above:
-// site-chrome content that always lives in Strapi regardless of a tenant's
-// content engine, so a WordPress-session admin (ORST/RoyalSociety) can
-// still manage it. See BreakingNewsManager.tsx.
+// Breaking-news banner — used to be routed the same way as MENU_ITEM_UID
+// (always Strapi, so a WordPress-session admin could still manage it via
+// bookkeeping credentials). Phase 7 reverses that: ORST/RoyalSociety
+// breaking-news now lives natively in WordPress (wp:breaking-news, added to
+// WP_SCOPED above) — BreakingNewsManager.tsx picks the uid by session
+// engine directly instead. This uid is kept only for DGA/PEA's own
+// Strapi-engine sessions, which resolve to strapiAdapter via activeAdapter()
+// regardless of BOOKKEEPING_UIDS membership — confirmed removing it here has
+// zero effect on them (see the Phase 7 plan's verification notes).
 const BREAKING_NEWS_UID = "api::breaking-news.breaking-news";
 const PAGE_VERSION_UID = "api::page-version.page-version";
 const PAGE_TEMPLATE_UID = "api::page-template.page-template";
@@ -134,7 +145,10 @@ const PAGE_TEMPLATE_UID = "api::page-template.page-template";
 // them too — WordPress has nowhere to keep one, so they live in Strapi for
 // every engine. Its own tenantKey string field (not a relation, same shape
 // as page-version's) is what scopes them per workspace; see Toolbox.tsx.
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, BREAKING_NEWS_UID]);
+// BREAKING_NEWS_UID deliberately NOT included here anymore (Phase 7) — see
+// its own comment above. It stays a plain SCOPED-only Strapi uid now,
+// exactly like complaint/application/contact-message always were.
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
 type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string> };

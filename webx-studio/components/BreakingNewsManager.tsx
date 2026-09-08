@@ -15,9 +15,24 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { useTenant } from "./TenantProvider";
 import { cms, CmsError } from "@/lib/cms";
 
-const UID = "api::breaking-news.breaking-news";
+// Phase 7 — native WordPress for ORST/RoyalSociety (wp:breaking-news);
+// DGA/PEA (Strapi-engine) keep using the original Strapi uid, unchanged. See
+// governance.ts's BREAKING_NEWS_UID/WP_SCOPED comments for the routing this
+// depends on.
+function uidFor(engine: "strapi" | "wordpress") {
+  return engine === "wordpress" ? "wp:breaking-news" : "api::breaking-news.breaking-news";
+}
+// wp:breaking-news's ACF field is "link_label" (snake_case, matching every
+// other ACF field name in this codebase), not Strapi's camelCase
+// "linkLabel" — normalized to the one Alert shape below right at the read
+// boundary so nothing else in this component needs to know which engine
+// it's talking to.
+function linkLabelOf(row: any): string {
+  return row.linkLabel || row.link_label || "อ่านเพิ่มเติม";
+}
 
 type Severity = "info" | "warning" | "critical";
 type Alert = { docId: string | null; active: boolean; severity: Severity; message: string; url: string; linkLabel: string };
@@ -26,6 +41,8 @@ const EMPTY: Alert = { docId: null, active: false, severity: "warning", message:
 
 export default function BreakingNewsManager({ tenantKey }: { tenantKey?: string }) {
   const { t } = useLang();
+  const { engine } = useTenant();
+  const UID = uidFor(engine);
   const [alert, setAlert] = useState<Alert>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
@@ -41,11 +58,11 @@ export default function BreakingNewsManager({ tenantKey }: { tenantKey?: string 
       setAlert(row
         ? {
             docId: String(row.documentId ?? row.id), active: !!row.active, severity: row.severity || "warning",
-            message: row.message || "", url: row.url || "", linkLabel: row.linkLabel || "อ่านเพิ่มเติม",
+            message: row.message || "", url: row.url || "", linkLabel: linkLabelOf(row),
           }
         : EMPTY);
     } catch {}
-  }, [tenantKey]);
+  }, [tenantKey, UID]);
   useEffect(() => { load(); }, [load]);
 
   async function save(patch: Partial<Alert>) {
@@ -53,7 +70,12 @@ export default function BreakingNewsManager({ tenantKey }: { tenantKey?: string 
     setAlert(next);
     setBusy(true); setMsg(null);
     try {
-      const payload = { active: next.active, severity: next.severity, message: next.message, url: next.url, linkLabel: next.linkLabel };
+      // WordPress's ACF field is "link_label" (snake_case); Strapi's is
+      // "linkLabel" (camelCase) — send whichever key this engine's adapter
+      // actually understands rather than a value it would silently drop.
+      const payload = engine === "wordpress"
+        ? { active: next.active, severity: next.severity, message: next.message, url: next.url, link_label: next.linkLabel }
+        : { active: next.active, severity: next.severity, message: next.message, url: next.url, linkLabel: next.linkLabel };
       let docId = next.docId;
       if (docId) {
         await cms.entries.update(UID, docId, payload);

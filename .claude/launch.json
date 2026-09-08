@@ -22,8 +22,8 @@
     },
     {
       "name": "public-site",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8095", "--directory", "public-site/out"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "public-site/out", "-l", "8095"],
       "port": 8095
     }
   ]

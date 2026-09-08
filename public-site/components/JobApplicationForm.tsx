@@ -1,32 +1,23 @@
 "use client";
 // Real job-application e-form (TOR gap audit — orst/royalsociety had no job
-// listings or application form anywhere on the public site, even though the
-// backend content types (api::job.job / api::application.application) —
-// including a real "track your application by reference number" flow and a
-// resume field — already existed for gov-portal and were sitting unused).
-// Same captcha-guarded public-write pattern as ContactInteractive.tsx.
-//
-// Resume upload is deliberately NOT wired up here: `application.resume` is
-// an optional media field, but attaching a real file would require granting
-// the Public role Strapi's `plugin::upload.content-api.upload` action —
-// letting ANY anonymous visitor POST arbitrary files to the server, a much
-// broader capability than this one form, and a real attack-surface decision
-// that shouldn't be made silently as a side effect of one feature. Left for
-// a deliberate follow-up if the org wants it; a citizen without a resume
-// attachment can still apply — the field is optional in the schema.
+// listings or application form anywhere on the public site). Originally
+// wired to Strapi's public write path with resume upload deliberately left
+// unwired (would have required granting the Public role a broad anonymous
+// file-upload capability — a real attack-surface decision, see this file's
+// git history for the fuller reasoning). Phase 7 moved application storage
+// natively into WordPress (wordpress/mu-plugins/public-forms-api.php), whose
+// submit route runs entirely in trusted server PHP — no public REST upload
+// capability needed — so resume upload is now safe to add for real, and the
+// reference number is generated server-side (dropping the old client-side
+// refNumber() helper, which could collide or be spoofed).
 import { useState, type FormEvent } from "react";
-import { useCaptcha, STRAPI } from "@/lib/useCaptcha";
+import { useCaptcha, WORDPRESS } from "@/lib/useCaptcha";
 import type { JobPosting } from "@/lib/cms";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
-function refNumber(tenant: string): string {
-  const now = new Date();
-  return `${tenant.toUpperCase()}-APP-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}-${Math.floor(Math.random() * 900000 + 100000)}`;
-}
-
 export default function JobApplicationForm({ tenant, jobs }: { tenant: string; jobs: JobPosting[] }) {
-  const { captcha, refreshCaptcha } = useCaptcha();
+  const { captcha, refreshCaptcha } = useCaptcha("wordpress");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
   const [ref, setRef] = useState("");
@@ -43,25 +34,28 @@ export default function JobApplicationForm({ tenant, jobs }: { tenant: string; j
     const fd = new FormData(form);
     const jobId = String(fd.get("jobId") || "");
     const position = jobs.find((j) => j.jobId === jobId)?.title || jobId;
-    const newRef = refNumber(tenant);
     setStatus("sending");
     setError("");
     try {
-      const r = await fetch(`${STRAPI}/api/applications?tenant=${encodeURIComponent(tenant)}`, {
+      const body = new FormData();
+      body.set("jobId", jobId);
+      body.set("position", position);
+      body.set("name", String(fd.get("name") || ""));
+      body.set("email", String(fd.get("email") || ""));
+      if (fd.get("phone")) body.set("phone", String(fd.get("phone")));
+      if (fd.get("note")) body.set("note", String(fd.get("note")));
+      body.set("captchaId", captcha.id);
+      body.set("captchaAnswer", String(fd.get("captchaAnswer") || ""));
+      const resume = fd.get("resume");
+      if (resume instanceof File && resume.size > 0) body.set("resume", resume);
+
+      const r = await fetch(`${WORDPRESS}/webx/v1/applications?tenant=${encodeURIComponent(tenant)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: {
-            ref: newRef, jobId, position,
-            name: fd.get("name"), email: fd.get("email"), phone: fd.get("phone") || undefined,
-            note: fd.get("note") || undefined, stage: 0, date: new Date().toISOString(),
-          },
-          captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer"),
-        }),
+        body,
       });
       if (!r.ok) {
-        const body = await r.json().catch(() => null);
-        const wrongCaptcha = body?.error?.name === "CaptchaError";
+        const respBody = await r.json().catch(() => null);
+        const wrongCaptcha = respBody?.code === "captcha_error";
         setStatus("error");
         setError(wrongCaptcha
           ? "คำตอบยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่"
@@ -69,7 +63,8 @@ export default function JobApplicationForm({ tenant, jobs }: { tenant: string; j
         void refreshCaptcha();
         return;
       }
-      setRef(newRef);
+      const j = await r.json();
+      setRef(j?.data?.ref || "");
       setStatus("sent");
       form.reset();
       void refreshCaptcha();
@@ -116,6 +111,11 @@ export default function JobApplicationForm({ tenant, jobs }: { tenant: string; j
       <div className="wx-field" style={{ marginTop: 14 }}>
         <label htmlFor="ja-note">ข้อความเพิ่มเติม</label>
         <textarea id="ja-note" name="note" placeholder="ประสบการณ์ที่เกี่ยวข้อง หรือข้อมูลเพิ่มเติมที่ต้องการแจ้ง" />
+      </div>
+
+      <div className="wx-field" style={{ marginTop: 14 }}>
+        <label htmlFor="ja-resume">แนบเรซูเม่ (PDF, ไม่เกิน 5MB)</label>
+        <input id="ja-resume" name="resume" type="file" accept="application/pdf,.pdf,.doc,.docx" />
       </div>
 
       <div className="wx-field" style={{ marginTop: 14 }}>

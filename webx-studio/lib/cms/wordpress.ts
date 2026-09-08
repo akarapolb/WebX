@@ -16,15 +16,53 @@
 //    expect Strapi's "published"/draft-with-no-status convention, so reads
 //    normalize "publish" -> "published" + a synthesized publishedAt.
 import "server-only";
+import crypto from "crypto";
 import type {
   CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, MediaAssetList, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
 import { sessionToken } from "../strapi";
-import { WORDPRESS_URL } from "../config";
+import { WORDPRESS_URL, WEBX_WP_PII_KEY } from "../config";
 import { genTempPassword } from "./genPassword";
 
 const BASE = WORDPRESS_URL;
+
+// Phase 7 — decrypt-on-read counterpart to wordpress/mu-plugins/
+// pii-crypto.php's webx_pii_encrypt() (same algorithm, same iv.ciphertext.
+// authTag wire format). WordPress encrypts on write (in the public
+// webx/v1/* submit routes — see that file); this is the only place that
+// needs to decrypt, mirroring Strapi's own transparent afterFindOne/
+// afterFindMany decryption so FormsInbox/EntryEditor never see ciphertext.
+const PII_ALGO = "aes-256-gcm";
+function looksEncrypted(v: unknown): v is string {
+  if (typeof v !== "string") return false;
+  const parts = v.split(".");
+  return parts.length === 3 && parts.every((p) => p.length > 0 && /^[A-Za-z0-9+/]+=*$/.test(p));
+}
+function decryptPii(value: string): string {
+  if (!looksEncrypted(value)) return value; // legacy/plaintext row, or genuinely empty — never throw on those
+  if (!WEBX_WP_PII_KEY) throw new Error("WEBX_WP_PII_KEY not configured");
+  const key = Buffer.from(WEBX_WP_PII_KEY, "base64");
+  if (key.length !== 32) throw new Error("WEBX_WP_PII_KEY must decode (base64) to exactly 32 bytes");
+  const [ivB64, ctB64, tagB64] = value.split(".");
+  const decipher = crypto.createDecipheriv(PII_ALGO, key, Buffer.from(ivB64, "base64"));
+  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+}
+// Which uid+field pairs carry PII that needs decrypting on the way out —
+// matches exactly the fields public-forms-api.php encrypts on submit.
+const PII_FIELDS: Record<string, string[]> = {
+  "wp:complaint": ["name", "email", "phone"],
+  "wp:application": ["name", "email", "phone"],
+};
+function decryptPiiFields(uid: string, entry: any): any {
+  const fields = PII_FIELDS[uid];
+  if (!fields || !entry) return entry;
+  for (const f of fields) {
+    if (typeof entry[f] === "string" && entry[f]) entry[f] = decryptPii(entry[f]);
+  }
+  return entry;
+}
 
 // Phase 8 — was hardcoded to exactly one type (wp:post); services and
 // publications for the new ORST/RoyalSociety tenants are real WordPress
@@ -49,6 +87,21 @@ const POST_TYPES: Record<string, { restBase: string; name: string }> = {
   "wp:mission": { restBase: "mission-item", name: "Mission Item" },
   "wp:org-unit": { restBase: "org-unit", name: "Org Unit" },
   "wp:document": { restBase: "document", name: "Document" },
+  // Phase 3 gap — event/member exist as real WP post types (see
+  // custom-post-types.php) but were never registered here, so webx-studio's
+  // generic content browser couldn't manage them. Closed in passing while
+  // adding Phase 7's own new types below (same one-line-per-type cost).
+  "wp:event": { restBase: "event", name: "Event" },
+  "wp:member": { restBase: "member", name: "Member" },
+  // Phase 7 — native WordPress polls/complaints/applications/breaking-news,
+  // replacing the Strapi-backed shared-service layer these previously ran
+  // on for orst/royalsociety (see wordpress/mu-plugins/public-forms-*.php).
+  "wp:poll": { restBase: "poll", name: "Poll" },
+  "wp:complaint": { restBase: "complaint", name: "Complaint" },
+  "wp:contact-message": { restBase: "contact-message", name: "Contact Message" },
+  "wp:job": { restBase: "job", name: "Job" },
+  "wp:application": { restBase: "application", name: "Application" },
+  "wp:breaking-news": { restBase: "breaking-news", name: "Breaking News Alert" },
 };
 function resolvePostType(uid: string): { restBase: string; name: string } {
   const t = POST_TYPES[uid];
@@ -72,6 +125,14 @@ const ACF_FIELDS: Record<string, string[]> = {
   "wp:resource": ["icon"],
   "wp:faq": ["icon"],
   "wp:page": ["blocks"],
+  // Phase 7 — field names match each CPT's ACF group 1:1 (see
+  // wordpress/mu-plugins/public-forms-acf.php).
+  "wp:poll": ["question", "options", "active", "total_votes"],
+  "wp:complaint": ["ref", "type", "subject", "agency", "detail", "anonymous", "name", "email", "phone", "stage", "date", "steps", "attachment"],
+  "wp:contact-message": ["email", "phone", "subject", "message", "handled"],
+  "wp:job": ["jobId", "deptKey", "typeKey", "openings", "dept", "type", "location", "salary", "deadline", "summary", "responsibilities", "qualifications", "benefits"],
+  "wp:application": ["ref", "jobId", "position", "name", "email", "phone", "note", "stage", "date", "resume", "extra"],
+  "wp:breaking-news": ["active", "severity", "message", "url", "link_label"],
 };
 function splitAcfFields(uid: string, data: Record<string, any>): Record<string, any> {
   const acfKeys = ACF_FIELDS[uid];
@@ -93,7 +154,13 @@ function splitAcfFields(uid: string, data: Record<string, any>): Record<string, 
 // Strapi dynamic zone returns. Encode/decode right at this boundary so
 // nothing above this module (or public-site's parseBlocks, its own mirror
 // of this same string<->array boundary) ever sees the wire format.
-const ACF_JSON_FIELDS: Record<string, string[]> = { "wp:page": ["blocks"] };
+const ACF_JSON_FIELDS: Record<string, string[]> = {
+  "wp:page": ["blocks"],
+  "wp:poll": ["options"],
+  "wp:complaint": ["steps"],
+  "wp:job": ["responsibilities", "qualifications", "benefits"],
+  "wp:application": ["extra"],
+};
 
 function encodeJsonFields(uid: string, data: Record<string, any>): Record<string, any> {
   const keys = ACF_JSON_FIELDS[uid];
@@ -198,7 +265,7 @@ export async function ensureWtenantTerm(key: string): Promise<void> {
 function normalizePost(p: any, terms?: typeof wtenantCache, uid?: string): any {
   const published = p.status === "publish";
   const wtenantId: number | undefined = Array.isArray(p.wtenant) ? p.wtenant[0] : undefined;
-  return decodeJsonFields(uid || "", {
+  return decryptPiiFields(uid || "", decodeJsonFields(uid || "", {
     // Phase 10 — spread ACF values in first so the fixed fields below always
     // win on key collision, and so EntryEditor's plain value-shape heuristic
     // (lib/cms/wordpress.ts callers never see "acf" as a nested object) can
@@ -216,7 +283,7 @@ function normalizePost(p: any, terms?: typeof wtenantCache, uid?: string): any {
     updatedAt: p.modified,
     slug: p.slug,
     tenantKey: wtenantId != null ? terms?.byId.get(wtenantId) ?? null : null,
-  });
+  }));
 }
 
 // governance.ts's tenantStamp() sends {tenant: "<key>"} (a plain string, its

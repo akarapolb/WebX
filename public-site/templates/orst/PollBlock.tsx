@@ -1,17 +1,24 @@
 "use client";
-// A real, working poll — Strapi already has a full public vote backend
-// (api::poll.poll, GET /api/polls/:id + POST /api/polls/:id/vote, no
-// captcha needed) that no block anywhere ever rendered (TOR gap audit —
-// ORST's own homepage promised "แบบสำรวจความคิดเห็น" with a dead button).
-// Split out as its own client component, same reason ContactFormBlock.tsx
-// is: Blocks.tsx itself has no "use client" of its own.
+// A real, working poll. Originally built against a Strapi public vote
+// backend; Phase 7 moved poll storage natively into WordPress for ORST
+// (wordpress/mu-plugins/public-forms-post-types.php's `poll` CPT +
+// public-forms-api.php's vote route) — still no captcha needed, matching
+// the original Strapi route's own behavior (poll voting was never in
+// captcha-guard.ts's GUARDED set either). Split out as its own client
+// component, same reason ContactFormBlock.tsx is: Blocks.tsx itself has no
+// "use client" of its own.
 import { useEffect, useState } from "react";
 import type { Block } from "./Blocks";
 
-const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
+const WORDPRESS = (process.env.NEXT_PUBLIC_WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
 
 type Option = { label: string; votes: number };
 type PollData = { question: string; options: Option[]; totalVotes: number };
+
+function parsePollAcf(acf: any): PollData {
+  const options = typeof acf?.options === "string" ? (JSON.parse(acf.options || "[]") as Option[]) : (acf?.options || []);
+  return { question: acf?.question || "", options, totalVotes: Number(acf?.total_votes || 0) };
+}
 
 export default function PollBlock({ b }: { b: Block }) {
   const [poll, setPoll] = useState<PollData | null>(null);
@@ -22,13 +29,13 @@ export default function PollBlock({ b }: { b: Block }) {
     if (!b.pollId) { setStatus("error"); return; }
     // Already-voted state is per-browser only (localStorage), not per-user —
     // same trust level as any anonymous public poll; the backend itself
-    // doesn't dedupe voters either (see poll.vote's own comment).
+    // doesn't dedupe voters either (see the vote route's own comment).
     const key = `webx-poll-voted-${b.pollId}`;
     const savedVote = localStorage.getItem(key);
-    fetch(`${STRAPI}/api/polls/${b.pollId}?tenant=${encodeURIComponent(b.tenant || "orst")}`)
+    fetch(`${WORDPRESS}/wp/v2/poll/${b.pollId}?_fields=id,acf`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((j) => {
-        setPoll(j.data);
+        setPoll(parsePollAcf(j.acf));
         if (savedVote != null) setVoted(Number(savedVote));
         setStatus("ready");
       })
@@ -39,14 +46,14 @@ export default function PollBlock({ b }: { b: Block }) {
     if (!b.pollId || voted != null) return;
     setVoted(index); // optimistic — a failed vote just leaves the count stale, not worth a rollback UI for a poll
     try {
-      const r = await fetch(`${STRAPI}/api/polls/${b.pollId}/vote?tenant=${encodeURIComponent(b.tenant || "orst")}`, {
+      const r = await fetch(`${WORDPRESS}/webx/v1/polls/${b.pollId}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ optionIndex: index }),
       });
       if (r.ok) {
         const j = await r.json();
-        setPoll(j.data);
+        setPoll({ question: j.data.question, options: j.data.options, totalVotes: j.data.totalVotes });
         localStorage.setItem(`webx-poll-voted-${b.pollId}`, String(index));
       }
     } catch {}

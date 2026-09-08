@@ -33,6 +33,16 @@ export const SSO_PENDING_TTL = Number(process.env.WEBX_SSO_PENDING_TTL || 600); 
 // Strapi passwords at rest (see lib/cms/governance.ts's ssoLogin).
 // Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 export const WEBX_ENCRYPTION_KEY = process.env.WEBX_ENCRYPTION_KEY || "";
+// AES-256-GCM key for wordpress/mu-plugins/pii-crypto.php's PII-at-rest
+// encryption (complaint/application name/email/phone on WordPress-engine
+// tenants, Phase 7) — read here only to DECRYPT on the way out to
+// webx-studio's own UI (FormsInbox, etc); the WordPress side does its own
+// encrypting on write. Deliberately a separate key from WEBX_ENCRYPTION_KEY
+// above and from Strapi's own PII_ENCRYPTION_KEY (different security
+// domain each) — must match the WordPress container's own WEBX_WP_PII_KEY
+// exactly, or decryption fails with a bad-auth-tag error, not silent
+// garbage.
+export const WEBX_WP_PII_KEY = process.env.WEBX_WP_PII_KEY || "";
 // Shared secret for governance.ts's internal cross-tenant ownership lookup
 // (strapi-cms/src/api/internal) — must match Strapi's WEBX_INTERNAL_SECRET.
 export const STRAPI_INTERNAL_SECRET = process.env.STRAPI_INTERNAL_SECRET || "";

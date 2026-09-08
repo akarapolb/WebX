@@ -1,15 +1,31 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { useTenant } from "./TenantProvider";
 import { cms, CmsError } from "@/lib/cms";
 
 type Row = Record<string, any>;
-const TABS = [
-  { uid: "api::complaint.complaint", key: "f.complaint" },
-  { uid: "api::application.application", key: "f.application" },
-  { uid: "api::contact-message.contact-message", key: "f.contact" },
-];
+// Phase 7 — engine-aware: a WordPress-engine session (ORST/RoyalSociety) now
+// has these natively in WordPress (wp:complaint/wp:application/
+// wp:contact-message), not Strapi. Was previously silently broken for those
+// sessions (hardcoded Strapi uids the wordpress adapter didn't recognize —
+// swallowed by the catch block below into an always-empty "no submissions"
+// list). DGA/PEA (Strapi-engine) keep using the same uids as before,
+// unchanged.
+function tabsFor(engine: "strapi" | "wordpress") {
+  return engine === "wordpress"
+    ? [
+        { uid: "wp:complaint", key: "f.complaint" },
+        { uid: "wp:application", key: "f.application" },
+        { uid: "wp:contact-message", key: "f.contact" },
+      ]
+    : [
+        { uid: "api::complaint.complaint", key: "f.complaint" },
+        { uid: "api::application.application", key: "f.application" },
+        { uid: "api::contact-message.contact-message", key: "f.contact" },
+      ];
+}
 
 function subjectOf(e: Row): string {
   for (const k of ["subject", "ref", "name", "fullname", "title"]) if (typeof e[k] === "string" && e[k].trim()) return e[k];
@@ -23,6 +39,8 @@ function fmt(s?: string) { try { return s ? new Date(s).toLocaleString() : "—"
 
 export default function FormsInbox() {
   const { t } = useLang();
+  const { engine } = useTenant();
+  const TABS = useMemo(() => tabsFor(engine), [engine]);
   const [tab, setTab] = useState(TABS[0].uid);
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -42,6 +60,10 @@ export default function FormsInbox() {
     finally { setLoading(false); }
   }, [t]);
 
+  // Re-pick a valid tab (and reload) whenever the engine itself changes —
+  // e.g. switching workspace from a WordPress-engine tenant to a
+  // Strapi-engine one while already on this page.
+  useEffect(() => { setTab(TABS[0].uid); }, [TABS]);
   useEffect(() => { load(tab); }, [tab, load]);
 
   return (

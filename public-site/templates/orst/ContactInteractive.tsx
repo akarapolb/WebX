@@ -1,19 +1,18 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { useCaptcha, STRAPI } from "@/lib/useCaptcha";
+import { useCaptcha, WORDPRESS } from "@/lib/useCaptcha";
 
 /* =============================================================================
    ContactInteractive.tsx — the genuinely-JS-dependent slivers of ContactPage.tsx
    -----------------------------------------------------------------------------
    ContactForm used to be a pure UI mock — preventDefault(), a canned "sent"
    message, form.reset() — with nothing sent anywhere (ported faithfully from
-   a source that documented the same gap in its own HANDOFF.md). Strapi
-   already has a full public write path for exactly this
-   (api::contact-message.contact-message, seeded with Public create
-   permission — strapi-cms/src/seed/seed.ts) plus a captcha guard in front of
-   it (src/middlewares/captcha-guard.ts) that neither this form nor
-   RoyalSociety's ever called. This now does both for real. */
+   a source that documented the same gap in its own HANDOFF.md). Originally
+   wired to Strapi's public write path; Phase 7 moved complaint/contact-message
+   storage natively into WordPress (wordpress/mu-plugins/public-forms-api.php)
+   — same captcha-guarded shape, same routing-by-topic logic, different base
+   URL and a WP-flavored error-code check. */
 
 export function CopyButton({ text, label, copiedLabel = "คัดลอกแล้ว", className = "mini-action" }: {
   text: string;
@@ -48,7 +47,7 @@ type Status = "idle" | "sending" | "sent" | "error";
  * checkbox), while this component owns the captcha lifecycle and the
  * actual submit. */
 export function ContactForm({ tenant, children }: { tenant: string; children: (captchaField: ReactNode) => ReactNode }) {
-  const { captcha, refreshCaptcha } = useCaptcha();
+  const { captcha, refreshCaptcha } = useCaptcha("wordpress");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
 
@@ -67,16 +66,15 @@ export function ContactForm({ tenant, children }: { tenant: string; children: (c
     const fd = new FormData(form);
     setStatus("sending");
     setError("");
-    // "ร้องเรียน / เสนอแนะ" specifically routes to api::complaint.complaint
-    // instead of the generic contact-message — that content type's own
-    // afterCreate lifecycle sends a real notification email to
-    // COMPLAINT_NOTIFY_EMAIL (TOR §4.4.1.2 4.7's "staff email notification"
-    // requirement), which contact-message has no lifecycle for at all.
-    // Every other subject keeps going to contact-messages, unchanged.
+    // "ร้องเรียน / เสนอแนะ" specifically routes to the complaint CPT instead
+    // of the generic contact-message one — only complaint sends a real
+    // staff-notification email (TOR §4.4.1.2 4.7's "staff email
+    // notification" requirement). Every other subject keeps going to
+    // contact-messages, unchanged.
     const isComplaint = fd.get("subject") === "complaint";
     const endpoint = isComplaint
-      ? `${STRAPI}/api/complaints/submit?tenant=${encodeURIComponent(tenant)}`
-      : `${STRAPI}/api/contact-messages?tenant=${encodeURIComponent(tenant)}`;
+      ? `${WORDPRESS}/webx/v1/complaints/submit?tenant=${encodeURIComponent(tenant)}`
+      : `${WORDPRESS}/webx/v1/contact-messages?tenant=${encodeURIComponent(tenant)}`;
     const data = isComplaint
       ? {
           type: "รับเรื่องออนไลน์",
@@ -99,11 +97,11 @@ export function ContactForm({ tenant, children }: { tenant: string; children: (c
       const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
+        body: JSON.stringify({ ...data, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
       });
       if (!r.ok) {
         const body = await r.json().catch(() => null);
-        const wrongCaptcha = body?.error?.name === "CaptchaError";
+        const wrongCaptcha = body?.code === "captcha_error";
         setStatus("error");
         setError(wrongCaptcha
           ? "คำตอบยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่"

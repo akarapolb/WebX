@@ -87,24 +87,33 @@ export async function getTenant(key: string): Promise<Tenant | null> {
 }
 
 /** Job/application e-forms (TOR gap audit — orst/royalsociety had no job
- * listings or application form anywhere; the backend content types
- * (api::job.job / api::application.application) already existed for
- * gov-portal but had no real postings tied to either tenant). `job` is a
- * Strapi content type (cross-engine, same as `tenant`/`menu-item` — a
- * WordPress-engine tenant's own PAGE content lives in WordPress, but its
- * shared bookkeeping types still live in Strapi). */
+ * listings or application form anywhere). Originally a Strapi content type,
+ * shared cross-engine; Phase 7 moved job postings natively into WordPress
+ * for orst/royalsociety (wordpress/mu-plugins/public-forms-post-types.php's
+ * `job` CPT) — read via the same getWpEntries() helper every other WP
+ * content type here already uses, not a bespoke fetch. */
 export type JobPosting = {
   documentId: string; jobId: string; title: string; dept?: string; type?: string;
   location?: string; salary?: string; deadline?: string; summary?: string;
   responsibilities?: string[]; qualifications?: string[]; benefits?: string[];
 };
+function parseJsonArray(raw: any): string[] | undefined {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  try { const v = JSON.parse(raw); return Array.isArray(v) ? v : undefined; } catch { return undefined; }
+}
 export async function getJobs(tenant: string): Promise<JobPosting[]> {
-  const rows = await get<any[]>("jobs?sort=deadline:asc&pagination[pageSize]=50", tenant);
-  return (rows || []).map((r) => ({
-    documentId: r.documentId, jobId: r.jobId, title: r.title || "", dept: r.dept, type: r.type,
-    location: r.location, salary: r.salary, deadline: r.deadline, summary: r.summary,
-    responsibilities: r.responsibilities, qualifications: r.qualifications, benefits: r.benefits,
-  }));
+  const rows = await getWpEntries(tenant, "job");
+  return rows
+    .map((r) => ({
+      documentId: String(r.id), jobId: r.acf?.jobId || String(r.id), title: r.title || "",
+      dept: r.acf?.dept, type: r.acf?.type, location: r.acf?.location, salary: r.acf?.salary,
+      deadline: r.acf?.deadline, summary: r.acf?.summary,
+      responsibilities: parseJsonArray(r.acf?.responsibilities),
+      qualifications: parseJsonArray(r.acf?.qualifications),
+      benefits: parseJsonArray(r.acf?.benefits),
+    }))
+    .sort((a, b) => String(a.deadline || "").localeCompare(String(b.deadline || "")));
 }
 
 function stripHtml(s?: string): string {

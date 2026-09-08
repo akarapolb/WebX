@@ -75,6 +75,29 @@ services:
       # webx-studio/.env.local for the sync hook's rebuild call to actually
       # authenticate.)
       WEBX_SCHEDULER_SECRET: ${WEBX_SCHEDULER_SECRET:-dev-scheduler-secret}
+      # Phase 7 (native WordPress polls/complaints/applications/breaking-news)
+      # — mu-plugins/pii-crypto.php's AES-256-GCM key. Deliberately separate
+      # from Strapi's own PII_ENCRYPTION_KEY and webx-studio's
+      # WEBX_ENCRYPTION_KEY (different security domain, same rationale
+      # strapi-cms/src/utils/pii-crypto.ts's own header comment gives). The
+      # fallback below is an obvious dev-only placeholder — generate a real
+      # one with `openssl rand -base64 32` for any shared/persistent
+      # environment, since data encrypted under one key can't be decrypted
+      # after it changes.
+      WEBX_WP_PII_KEY: ${WEBX_WP_PII_KEY:-8T3GXAx5LOM96ftKURajyBAnzlIHzeqXq+o2jRUYxes=}
+      # mu-plugins/smtp-mail.php — same env var names strapi-cms/config/
+      # plugins.ts's email plugin already reads, so one shared SMTP_* set in
+      # the host's own env configures both engines' outbound mail identically.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@orst.go.th}
+      # mu-plugins/public-forms-api.php's fallback staff-notify address when
+      # a tenant has no entry in Settings → WebX Forms yet (wp-admin) — same
+      # env var name the old Strapi-era complaint lifecycle already used.
+      COMPLAINT_NOTIFY_EMAIL: ${COMPLAINT_NOTIFY_EMAIL:-}
     volumes:
       - wp-content-data:/var/www/html
     ports:

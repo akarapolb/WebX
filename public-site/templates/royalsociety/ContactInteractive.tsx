@@ -10,7 +10,7 @@
 // the address bar, browser history, and the server access log. Now wired to
 // the same captcha-guarded public write path ORST's contact form uses.
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useCaptcha, STRAPI } from "@/lib/useCaptcha";
+import { useCaptcha, WORDPRESS } from "@/lib/useCaptcha";
 
 const TOPICS = [
   { value: "academic", label: "สอบถามข้อมูลทางวิชาการ" },
@@ -24,7 +24,7 @@ const TOPICS = [
 type Status = "idle" | "sending" | "sent" | "error";
 
 export default function ContactForm({ tenant }: { tenant: string }) {
-  const { captcha, refreshCaptcha } = useCaptcha();
+  const { captcha, refreshCaptcha } = useCaptcha("wordpress");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
   // A homepage promo card can now deep-link straight into the right topic
@@ -65,16 +65,15 @@ export default function ContactForm({ tenant }: { tenant: string }) {
     const topicLabel = TOPICS.find((t) => t.value === topicValue)?.label || topicValue;
     setStatus("sending");
     setError("");
-    // "ข้อร้องเรียน" specifically routes to api::complaint.complaint instead
-    // of the generic contact-message — that content type's own afterCreate
-    // lifecycle sends a real notification email to COMPLAINT_NOTIFY_EMAIL
-    // (TOR §4.4.1.2 4.7's "staff email notification" requirement), which
-    // contact-message has no lifecycle for at all. Every other topic keeps
-    // going to contact-messages, unchanged.
+    // "ข้อร้องเรียน" specifically routes to the complaint CPT instead of the
+    // generic contact-message one — only complaint sends a real
+    // staff-notification email (TOR §4.4.1.2 4.7's "staff email
+    // notification" requirement). Every other topic keeps going to
+    // contact-messages, unchanged.
     const isComplaint = topicValue === "complaint";
     const endpoint = isComplaint
-      ? `${STRAPI}/api/complaints/submit?tenant=${encodeURIComponent(tenant)}`
-      : `${STRAPI}/api/contact-messages?tenant=${encodeURIComponent(tenant)}`;
+      ? `${WORDPRESS}/webx/v1/complaints/submit?tenant=${encodeURIComponent(tenant)}`
+      : `${WORDPRESS}/webx/v1/contact-messages?tenant=${encodeURIComponent(tenant)}`;
     const data = isComplaint
       ? {
           type: "รับเรื่องออนไลน์",
@@ -97,11 +96,11 @@ export default function ContactForm({ tenant }: { tenant: string }) {
       const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
+        body: JSON.stringify({ ...data, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
       });
       if (!r.ok) {
         const body = await r.json().catch(() => null);
-        const wrongCaptcha = body?.error?.name === "CaptchaError";
+        const wrongCaptcha = body?.code === "captcha_error";
         setStatus("error");
         setError(wrongCaptcha
           ? "คำตอบยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่"
