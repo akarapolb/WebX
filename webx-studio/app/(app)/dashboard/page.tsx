@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import { useLang } from "@/components/LangProvider";
@@ -8,20 +9,41 @@ import { cms } from "@/lib/cms";
 
 const SERIES = [42, 55, 48, 63, 58, 71, 66, 80, 76, 88, 82, 95];
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-const HEALTH: [string, string][] = [
-  ["API latency (p95)", "84 ms"], ["Edge cache hit", "98.7%"], ["SSL / TLS", "Valid · A+"],
-  ["Last backup", "3h ago"], ["DR replication", "In sync"],
-];
+type PubStatus = { building: boolean; lastBuiltAt: string | null };
 
 export default function Dashboard() {
   const { t, lang } = useLang();
   const { currentKey, engine } = useTenant();
   const [email, setEmail] = useState<string | null>(null);
   const [counts, setCounts] = useState<{ articles?: number; services?: number; submissions?: number }>({});
+  // Real checks, not fabricated ones — the same two live reachability
+  // probes Status.tsx itself uses. This panel used to hardcode "SSL/TLS:
+  // Valid · A+", "DR replication: In sync", "Edge cache hit: 98.7%" etc.
+  // unconditionally with zero backing data source at all — a genuine
+  // credibility risk for a government-facing product to be presenting as
+  // fact. Dropped what this app can't honestly compute rather than fake
+  // it; kept (and made real) what it can.
+  const [svc, setSvc] = useState<{ k: string; up: boolean }[]>([]);
+  const [pub, setPub] = useState<PubStatus | null>(null);
   const mx = Math.max(...SERIES);
 
   useEffect(() => {
     cms.auth.me().then((u) => setEmail(u?.email ?? null)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const checks = await Promise.all([
+        cms.schema.listContentTypes().then(() => true).catch(() => false),
+        fetch("/api/strapi/sitemap.xml").then((r) => r.ok).catch(() => false),
+      ]);
+      const p = await fetch("/api/cms/public-site/status").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (!alive) return;
+      setSvc([{ k: "bff", up: true }, { k: "strapi", up: checks[0] }, { k: "delivery", up: checks[1] }]);
+      setPub(p);
+    })();
+    return () => { alive = false; };
   }, []);
 
   const count = useCallback(async (uid: string): Promise<number | undefined> => {
@@ -57,11 +79,19 @@ export default function Dashboard() {
   }, [count, engine]);
 
   const nf = (n?: number) => (typeof n === "number" ? n.toLocaleString() : "—");
+  const relTime = (iso: string) => {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 60) return mins + (lang === "th" ? " นาทีที่แล้ว" : "m ago");
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return hrs + (lang === "th" ? " ชม.ที่แล้ว" : "h ago");
+    return Math.round(hrs / 24) + (lang === "th" ? " วันที่แล้ว" : "d ago");
+  };
+  const pubVal = pub?.building ? t("st.rebuilding") : pub?.lastBuiltAt ? relTime(pub.lastBuiltAt) : "—";
   const KPIS = [
-    { key: "kpi.content", icon: "doc", val: nf(counts.articles), real: true },
-    { key: "kpi.services", icon: "layout", val: nf(counts.services), real: true },
-    { key: "kpi.submissions", icon: "inbox", val: nf(counts.submissions), real: true },
-    { key: "kpi.uptime", icon: "code", val: "99.98%", real: false },
+    { key: "kpi.content", icon: "doc", val: nf(counts.articles) },
+    { key: "kpi.services", icon: "layout", val: nf(counts.services) },
+    { key: "kpi.submissions", icon: "inbox", val: nf(counts.submissions) },
+    { key: "st.publicSite", icon: "code", val: pubVal },
   ];
 
   return (
@@ -96,7 +126,7 @@ export default function Dashboard() {
           <div className="kpi" key={k.key}>
             <div className="lab"><Icon name={k.icon} />{t(k.key)}</div>
             <div className="val mono">{k.val}</div>
-            <div className="dl up">{k.real ? "● live" : "30d"}</div>
+            <div className="dl up">● live</div>
           </div>
         ))}
       </div>
@@ -108,13 +138,20 @@ export default function Dashboard() {
           <div className="bar-x">{MONTHS.map((m, i) => <span key={i}>{m}</span>)}</div>
         </div>
         <div className="panel">
-          <div className="panel-h"><h3>{t("dash.health")}</h3></div>
-          {HEALTH.map(([l, v]) => (
-            <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid var(--line)" }}>
-              <span style={{ color: "var(--ink2)", fontSize: 13 }}>{l}</span>
-              <span className="badge b-ok"><span className="dot" />{v}</span>
+          <div className="panel-h"><h3>{t("dash.health")}</h3><Link href="/status" className="sub">{t("dash.fullStatus")} →</Link></div>
+          {svc.length === 0 && <span className="muted" style={{ fontSize: 13 }}>{t("dash.checking")}</span>}
+          {svc.map((s) => (
+            <div key={s.k} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid var(--line)" }}>
+              <span style={{ color: "var(--ink2)", fontSize: 13 }}>{t("st." + s.k)}</span>
+              <span className={"badge " + (s.up ? "b-ok" : "b-warn")}><span className="dot" />{s.up ? t("st.up") : t("st.down")}</span>
             </div>
           ))}
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0" }}>
+            <span style={{ color: "var(--ink2)", fontSize: 13 }}>{t("st.publicSite")}</span>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {pub?.building ? t("st.rebuilding") : pub?.lastBuiltAt ? new Date(pub.lastBuiltAt).toLocaleString() : t("st.neverBuilt")}
+            </span>
+          </div>
         </div>
       </div>
 

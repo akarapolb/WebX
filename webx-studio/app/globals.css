@@ -70,10 +70,6 @@ svg{display:block;width:18px;height:18px;flex:none}
 .nav a.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:3px;background:var(--accent)}
 .nav a svg{width:17px;height:17px;opacity:.9}
 .nav a .kn{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--sb-mut);border:1px solid var(--sb-line);border-radius:5px;padding:0 5px}
-.sb-foot{padding:12px;border-top:1px solid var(--sb-line)}
-.upsell{background:var(--sb-on);border:1px solid var(--sb-line);border-radius:var(--r);padding:12px}
-.upsell b{font-size:12.5px;color:var(--sb-ink)}.upsell p{font-size:11px;color:var(--sb-mut);margin:3px 0 9px}
-.upsell button{width:100%;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:12px;padding:7px;border-radius:var(--r-sm);border:none}
 
 .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
 .tb{height:56px;flex:none;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 18px;background:var(--bg2)}
@@ -715,6 +711,12 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 @media (max-width:720px){
   .page{padding:18px}
   .tb-hamburger{display:grid}
+  /* below 720px the topbar has too many controls for the search button's
+     placeholder text + ⌘K hint to share space with — it used to overflow
+     into a wrapped, floating-looking box (found live). Collapses to an
+     icon-only square, matching every other topbar icon button's size. */
+  .searchbtn{flex:none;width:36px;height:36px;padding:0;justify-content:center;max-width:none}
+  .searchbtn .ph,.searchbtn .kbd{display:none}
   /* below 720px the sidebar used to just display:none with nothing to
      replace it — a phone-width admin lost every nav link entirely (TOR
      §4.4.1.1(2) requires the admin stay usable on mobile) */
@@ -725,4 +727,14 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
   }
   .sb-close{display:grid}
   .sb-backdrop.show{display:block;position:fixed;inset:0;background:rgba(8,10,16,.55);z-index:55}
+}
+@media (max-width:480px){
+  /* even with the search button collapsed, the tenant-status pill + avatar
+     still don't fit next to the notification/theme/lang/security/logout
+     controls at phone width (found live — real horizontal scroll). Both are
+     purely informational: connection status is already shown in the sidebar
+     and on Dashboard, and the avatar's only content is a hover tooltip,
+     unreachable on touch — safe to drop first. */
+  .tb{gap:6px;padding:0 14px}
+  .demo-pill,.avatar{display:none}
 }

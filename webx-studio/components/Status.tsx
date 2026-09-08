@@ -5,13 +5,8 @@ import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 import { cms } from "@/lib/cms";
 
-// Status & Observability — live service checks, SLA per plan, tenant-isolation
-// posture, and a recent-activity feed (from the audit log). Read-only.
-const SLA = [
-  { plan: "Free", target: "Best-effort", dr: "—" },
-  { plan: "Pro", target: "99.9%", dr: "Daily backup" },
-  { plan: "Enterprise", target: "99.95%", dr: "DR site · RTO/RPO" },
-];
+// Status & Observability — live service checks, tenant-isolation posture,
+// and a recent-activity feed (from the audit log). Read-only.
 const shortType = (c?: string) => String(c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
 
 type PubStatus = { building: boolean; lastBuiltAt: string | null; lastError: string | null };
@@ -90,14 +85,6 @@ export default function Status() {
               <span className={"badge " + (s.up ? "b-ok" : "b-warn")} style={{ marginLeft: "auto" }}><span className="dot" />{s.up ? t("st.up") : t("st.down")}</span>
             </div>
           ))}
-        </div>
-
-        <div className="panel" style={{ flex: "1 1 280px" }}>
-          <h3 style={{ margin: "0 0 10px" }}>{t("st.sla")}</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={{ padding: "4px 0" }}>Plan</th><th>{t("st.slaTarget")}</th><th>{t("st.slaDr")}</th></tr></thead>
-            <tbody>{SLA.map((r) => <tr key={r.plan} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: "6px 0" }}><b>{r.plan}</b></td><td className="mono">{r.target}</td><td className="muted">{r.dr}</td></tr>)}</tbody>
-          </table>
         </div>
       </div>
 

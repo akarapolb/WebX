@@ -912,7 +912,14 @@ export async function seedOrstRoyalSocietyTenants(strapi: any) {
     {
       key: "orst", name: "สำนักงานราชบัณฑิตยสภา",
       active: true, engine: "wordpress", publicTemplate: "orst",
-      adminEmails: [] as string[],
+      // A dev/demo seed placeholder, matching royalsociety/nbtc's own
+      // convention right below — not a real person. Left empty before
+      // (see git history), which meant no account could ever resolve as
+      // "the ORST admin": Billing/Compliance/Content Audit/AI Search/
+      // Content Browse/Onboarding all treat an unresolved tenant as
+      // unscoped, and a real deployment should replace this with whoever
+      // actually administers orst.go.th before go-live.
+      adminEmails: ["orst-editor@orst.local"],
       plan: "enterprise", seats: 3, subscriptionStatus: "active",
       brand: { primaryColor: "#073b34", orgName: { th: "สำนักงานราชบัณฑิตยสภา", en: "Office of the Royal Society of Thailand" } },
       contact: { phone: "0 2141 1728", email: "saraban@orst.go.th", address: { th: "ศูนย์ราชการเฉลิมพระเกียรติฯ อาคารซี ถนนแจ้งวัฒนะ เขตหลักสี่ กรุงเทพมหานคร 10210" } },

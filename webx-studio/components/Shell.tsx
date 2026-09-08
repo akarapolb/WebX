@@ -100,13 +100,6 @@ export default function Shell({
           ))}
         </nav>
 
-        <div className="sb-foot">
-          <div className="upsell">
-            <b>{t("up.title")}</b>
-            <p>{t("up.sub")}</p>
-            <button onClick={() => router.push("/branding")}>{t("up.btn")}</button>
-          </div>
-        </div>
       </aside>
 
       <div className="main">
