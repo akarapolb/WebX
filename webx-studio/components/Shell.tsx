@@ -59,7 +59,6 @@ export default function Shell({
         <div className="sb-top">
           <div className="ten">
             <div className="ten-row">
-              <div className="brand-mark" title="WebX Studio">W</div>
               <button className="ten-btn" onClick={() => setTenOpen((o) => !o)}>
                 <span className="ten-dot">{current?.name?.[0]?.toUpperCase() ?? "W"}</span>
                 <span className="ten-meta"><b>{current?.name}</b><span>{current?.plan}</span></span>
