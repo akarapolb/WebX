@@ -57,17 +57,16 @@ export default function Shell({
       <div className={sbOpen ? "sb-backdrop show" : "sb-backdrop"} onClick={() => setSbOpen(false)} />
       <aside className={sbOpen ? "sb open" : "sb"}>
         <div className="sb-top">
-          <div className="brand">
-            <div className="brand-mark">W</div>
-            <div className="brand-name">WebX Studio<small>Multi-tenant CMS</small></div>
-            <button className="ic-btn sb-close" title="Close menu" onClick={() => setSbOpen(false)}><Icon name="close" /></button>
-          </div>
           <div className="ten">
-            <button className="ten-btn" onClick={() => setTenOpen((o) => !o)}>
-              <span className="ten-dot">{current?.name?.[0]?.toUpperCase() ?? "W"}</span>
-              <span className="ten-meta"><b>{current?.name}</b><span>{current?.plan}</span></span>
-              <Icon name="chevron" />
-            </button>
+            <div className="ten-row">
+              <div className="brand-mark" title="WebX Studio">W</div>
+              <button className="ten-btn" onClick={() => setTenOpen((o) => !o)}>
+                <span className="ten-dot">{current?.name?.[0]?.toUpperCase() ?? "W"}</span>
+                <span className="ten-meta"><b>{current?.name}</b><span>{current?.plan}</span></span>
+                <Icon name="chevron" />
+              </button>
+              <button className="ic-btn sb-close" title="Close menu" onClick={() => setSbOpen(false)}><Icon name="close" /></button>
+            </div>
             {tenOpen && (
               <div className="ten-pop">
                 {tenants.map((tn) => (

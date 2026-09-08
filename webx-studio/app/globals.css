@@ -47,12 +47,15 @@ svg{display:block;width:18px;height:18px;flex:none}
 .shell{display:flex;height:100vh}
 .sb{width:248px;flex:none;background:var(--sb);border-right:1px solid var(--sb-line);display:flex;flex-direction:column;color:var(--sb-ink2)}
 .sb-top{padding:14px 16px 8px}
-.brand{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .brand-mark{width:30px;height:30px;border-radius:var(--r-sm);background:var(--accent);display:grid;place-items:center;font-weight:700;color:var(--on-accent);font-size:15px;box-shadow:0 6px 16px -8px var(--accent)}
-.brand-name{font-weight:700;font-size:15px;letter-spacing:-.01em;color:var(--sb-ink);line-height:1.1}
-.brand-name small{display:block;font-size:10px;color:var(--sb-mut);font-weight:500;letter-spacing:.04em}
 .ten{position:relative}
-.ten-btn{width:100%;display:flex;align-items:center;gap:10px;background:var(--sb-on);border:1px solid var(--sb-line);border-radius:var(--r);padding:9px 10px;transition:background var(--t);color:inherit}
+.ten-row{display:flex;align-items:center;gap:8px}
+/* the tenant switcher used to sit under its own separate "WebX Studio"
+   brand row (mark + name + subtitle) — two stacked blocks eating real
+   vertical space. The mark now rides inline with the switcher itself,
+   at the size the switcher's own row already sets (found live). */
+.ten-row .brand-mark{width:26px;height:26px;font-size:13px;flex:none}
+.ten-btn{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:var(--sb-on);border:1px solid var(--sb-line);border-radius:var(--r);padding:9px 10px;transition:background var(--t);color:inherit}
 .ten-btn:hover{background:color-mix(in srgb,var(--sb-on) 70%,var(--sb-ink) 10%)}
 .ten-dot{width:22px;height:22px;border-radius:7px;background:var(--accent);flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--on-accent)}
 .ten-meta{flex:1;text-align:left;min-width:0}
