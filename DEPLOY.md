@@ -166,7 +166,8 @@ starting value the way a poll question or a job posting has.
 
 `public-site` is a separate static export (`output: "export"`, built with
 `npm run build`, deployed to its own static host — not part of the Docker
-Compose stack above). Two of its env vars matter specifically for the
+Compose stack above). See `public-site/.env.example` (copy to `.env.local`,
+gitignored — not committed). Two of its env vars matter specifically for the
 orst/royalsociety delivery, which is genuinely **two different production
 domains** (`www.orst.go.th`, `www.royalsociety.go.th`), not one site with two
 paths:
@@ -180,3 +181,7 @@ paths:
   (or `localhost` in dev).
 - `PUBLIC_SITE_URL` — shared fallback for any tenant without its own var
   above (fine for a single-domain staging deploy), and the local dev default.
+- `NEXT_PUBLIC_WORDPRESS_URL` / `NEXT_PUBLIC_STUDIO_ORIGIN` — WordPress REST
+  API base and the Visual Builder preview's allowed parent origin. Both
+  default to the standard local dev setup (`localhost:8081`/`localhost:3000`)
+  so local dev needs no `.env.local` at all; set both for a real deployment.
