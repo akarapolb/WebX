@@ -85,13 +85,14 @@ function Login() {
           </div>
           <p className="sub">Enter the 6-digit code from your authenticator app, or a recovery code.</p>
           <p className="auth-err">{err}</p>
-          <div className="fld">
+          <div className="fld ic">
             <label htmlFor="mfaCode">Code</label>
+            <Icon name="hash" />
             <input id="mfaCode" type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus required
               value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} placeholder="000000" />
           </div>
           <button className="btn btn--p" type="submit" disabled={busy}>
-            {busy ? "Verifying…" : "Verify  →"}
+            {busy ? "Verifying…" : <>Verify <Icon name="arrow" className="ic-arrow" /></>}
           </button>
           <div className="auth-foot">
             <Icon name="shield" /> Two-factor authentication
@@ -116,30 +117,30 @@ function Login() {
             <div className="sub" style={{ textAlign: "center", marginBottom: 14 }}>or sign in with a password</div>
           </>
         )}
-        <div role="tablist" aria-label="Backend" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        <div className="auth-seg" role="tablist" aria-label="Backend">
           {ENGINES.map((e) => (
             <button key={e.id} type="button" role="tab" aria-selected={engine === e.id}
-              onClick={() => { setEngine(e.id); setErr(""); }}
-              className={"btn " + (engine === e.id ? "btn--p" : "btn--g")}
-              style={{ flex: 1, padding: "6px 0" }}>
+              onClick={() => { setEngine(e.id); setErr(""); }}>
               {e.label}
             </button>
           ))}
         </div>
         <p className="sub">{cfg.sub}</p>
         <p className="auth-err">{err}</p>
-        <div className="fld">
+        <div className="fld ic">
           <label htmlFor="email">{cfg.idLabel}</label>
+          <Icon name={engine === "wordpress" ? "user" : "mail"} />
           <input id="email" type={cfg.idType} autoComplete="username" required value={email}
             onChange={(e) => setEmail(e.target.value)} placeholder={cfg.idPlaceholder} />
         </div>
-        <div className="fld">
+        <div className="fld ic">
           <label htmlFor="password">{cfg.pwLabel}</label>
+          <Icon name="lock" />
           <input id="password" type="password" autoComplete="current-password" required value={password}
             onChange={(e) => setPassword(e.target.value)} placeholder={cfg.pwPlaceholder} />
         </div>
         <button className="btn btn--p" type="submit" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in  →"}
+          {busy ? "Signing in…" : <>Sign in <Icon name="arrow" className="ic-arrow" /></>}
         </button>
         <div className="auth-foot">
           <Icon name="shield" /> Secured with httpOnly session · token never touches the browser
