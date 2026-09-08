@@ -7,8 +7,11 @@ import { useTenant } from "./TenantProvider";
 type Result = { type?: string; title?: string; snippet?: string; url?: string };
 type Source = { title?: string; type?: string; url?: string } | string;
 
-const CHIPS_EN = ["How do I request a digital certificate?", "What is the EA standard?", "Where is the Open Data portal?"];
-const CHIPS_TH = ["ขอใบรับรองดิจิทัลอย่างไร?", "มาตรฐาน EA คืออะไร?", "พอร์ทัล Open Data อยู่ที่ไหน?"];
+// Generic, tenant-neutral examples — these used to be DGA-specific jargon
+// ("digital certificate", "EA standard", "Open Data portal"), which made no
+// sense as suggested questions on any other agency's own content.
+const CHIPS_EN = ["What services do you offer?", "How do I contact this office?", "Where can I find the latest news?"];
+const CHIPS_TH = ["มีบริการอะไรบ้าง?", "ติดต่อหน่วยงานนี้ได้อย่างไร?", "ข่าวสารล่าสุดดูได้ที่ไหน?"];
 
 export default function AISearch() {
   const { t, lang } = useLang();

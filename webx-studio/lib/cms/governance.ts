@@ -119,6 +119,27 @@ const MENU_ITEM_UID = "api::menu-item.menu-item";
 const BREAKING_NEWS_UID = "api::breaking-news.breaking-news";
 const PAGE_VERSION_UID = "api::page-version.page-version";
 const PAGE_TEMPLATE_UID = "api::page-template.page-template";
+// Review rows reference their target entry only by opaque documentRef +
+// contentType strings (see api::review.review's own schema) and their own
+// tenant relation, so — like consent-log — no WordPress-side equivalent is
+// needed: a review of a "wp:mission" entry is just as representable here as
+// one of an "api::article.article" entry. assertReviewApprovedIfEngaged's
+// own publish-gate check (below) already reads this via strapiBookkeeping
+// and is correctly engine-agnostic; what wasn't was ReviewBoard.tsx and
+// EntryEditor.tsx's "submit for review" action, both of which call this uid
+// through the CALLING session's own adapter — silently broken for any
+// WordPress-engine session (found live: "Could not load reviews (HTTP
+// 400)"), since WordPress's adapter has no way to resolve an "api::" uid.
+const REVIEW_UID = "api::review.review";
+// Cookie-consent records are written directly to Strapi by public-site
+// regardless of the tenant's own engine (see public-site/components/
+// CookieConsent.tsx's own comment — it just posts ?tenant=<key> against
+// Strapi's consent-logs API, which already accepts any real tenant key,
+// WordPress-engine ones included). There is no WordPress-side equivalent
+// and none is needed — this only ever needs bookkeeping-style read access
+// so a WordPress-engine admin's Cookie Consent page isn't stuck 400ing on
+// an "api::" uid its own session's adapter can never resolve.
+const CONSENT_LOG_UID = "api::consent-log.consent-log";
 // Every uid the Users/Field Access/Audit Log/Releases pages read or write —
 // always Strapi-hosted regardless of which engine THIS session authenticated
 // against (Phase 5's module header). Without this, a WordPress-session admin
@@ -148,7 +169,7 @@ const PAGE_TEMPLATE_UID = "api::page-template.page-template";
 // BREAKING_NEWS_UID deliberately NOT included here anymore (Phase 7) — see
 // its own comment above. It stays a plain SCOPED-only Strapi uid now,
 // exactly like complaint/application/contact-message always were.
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID]);
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
 type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string> };
@@ -1452,8 +1473,15 @@ export const governed = {
         const crp = await resolveCustomRolePermissions(user, eff, uid);
         if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
       }
-      if (WP_SCOPED.has(uid) && eff) {
-        const filter = [...(query?.filter || []), { field: "tenant.key", op: "eq" as const, value: eff.key }];
+      if (WP_SCOPED.has(uid)) {
+        // No "eff -> pass through unfiltered" fallthrough — found live: a
+        // WordPress admin whose own tenant hadn't resolved (e.g. no roster
+        // match) saw every OTHER tenant's content unfiltered when browsing
+        // Content, the opposite of media.list's own deliberate fail-closed
+        // behavior for the identical "no tenant resolved" case (see
+        // media-meta's controller). An unmatched sentinel key here becomes
+        // wordpress.ts's own wtenant=-1 "match nothing" case, same as there.
+        const filter = [...(query?.filter || []), { field: "tenant.key", op: "eq" as const, value: eff?.key ?? "__unscoped__" }];
         return cms.entries.list<T>(uid, { ...query, filter });
       }
       return cms.entries.list<T>(uid, query);
@@ -1560,11 +1588,11 @@ export const governed = {
 // an engaged review, not require one for every publish everywhere.
 // strapiBookkeeping (not activeAdapter/withContentAdapter) is deliberate:
 // Review is Strapi-hosted data regardless of which engine the CALLING
-// session is on — same reasoning as page-version/page-template — and the
-// existing client-side `cms.entries.list("api::review.review", ...)` call in
-// EntryEditor.tsx routes through the session's own activeAdapter() instead,
-// which would silently break for a WordPress-engine session; this check
-// deliberately doesn't inherit that gap. Fails OPEN on a lookup error (e.g.
+// session is on — same reasoning as page-version/page-template. This check
+// was always correctly engine-agnostic; ReviewBoard.tsx/EntryEditor.tsx's
+// own reads and writes weren't, until REVIEW_UID joined BOOKKEEPING_UIDS
+// above (see that constant's comment) — same fix, same reasoning. Fails
+// OPEN on a lookup error (e.g.
 // the scheduler token being briefly unavailable) — blocking every publish
 // because a status check itself failed would be a far worse regression than
 // the bypass this closes.
