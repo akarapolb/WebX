@@ -100,6 +100,44 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
           theme activate webx-theme
         ```
 
+### WordPress engine — seeding real content (ORST / RoyalSociety)
+
+A fresh WordPress install (via `bootstrap.sh` above) only gets an empty
+database — the mu-plugins register the content *types* (pages, polls,
+jobs, members, events, ...), but none of the real ORST/RoyalSociety
+content exists yet until someone runs the seed scripts under
+`wordpress/seed-*.mjs`. These are one-off migration scripts, not part of
+the app itself — each talks to the running WordPress instance's own REST
+API (same `WORDPRESS_URL` / `WORDPRESS_SCHEDULER_USERNAME` /
+`WORDPRESS_SCHEDULER_APP_PASSWORD` webx-studio itself uses, read from the
+environment or `webx-studio/.env.local`), so they work against any real
+deployment, not just this dev machine. All are safe to re-run — each one
+either matches-and-updates an existing row instead of duplicating it, or
+explicitly no-ops if its target already exists.
+
+Run once, in this order, against a fresh install (skip any tenant you're
+not deploying):
+
+```bash
+node wordpress/seed-orst-layout.mjs          # ORST's real pages (home/about/contact/services/...)
+node wordpress/seed-royalsociety-layout.mjs  # RoyalSociety's real pages
+node wordpress/seed-orst-sources.mjs         # binds live-data sources (services, FAQs, ...) to ORST's blocks
+node wordpress/seed-events.mjs               # sample event-calendar entries, both tenants
+node wordpress/seed-members.mjs              # sample Fellows/Associate Members directory, both tenants
+node wordpress/seed-royalsociety-documents.mjs  # RoyalSociety's ITA transparency documents
+node wordpress/seed-event-calendar-blocks.mjs   # wires the event-calendar block into both tenants' pages (needs the two layout scripts + seed-events.mjs first)
+node wordpress/seed-member-directory-blocks.mjs # wires the member-directory block into both tenants' about pages (needs the two layout scripts + seed-members.mjs first)
+node wordpress/seed-en-content-blocks.mjs       # English-language block content (bilingual EN)
+node wordpress/seed-public-forms.mjs            # the real homepage poll (ORST) + real job postings (both tenants' careers pages)
+```
+
+`seed-public-forms.mjs` needs `seed-orst-layout.mjs` to have already run
+(it patches the poll block on ORST's already-seeded homepage) — everything
+else about it is self-contained. It deliberately never seeds
+complaint/application/contact-message/breaking-news rows — those are
+citizen-submitted or admin-authored at runtime, not content with a real
+starting value the way a poll question or a job posting has.
+
 ## DGA / government on-prem notes
 
 - Self-host path **A** keeps everything inside the agency network — no third-party
