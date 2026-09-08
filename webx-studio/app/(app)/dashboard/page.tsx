@@ -25,26 +25,36 @@ export default function Dashboard() {
   }, []);
 
   const count = useCallback(async (uid: string): Promise<number | undefined> => {
-    const filter = currentKey && currentKey !== "workspace" ? [{ field: "tenant.key", op: "eq" as const, value: currentKey }] : undefined;
+    // tenant.key filtering is a Strapi-side relation field — WordPress
+    // tenant-scoping happens adapter-side via the wtenant taxonomy, not a
+    // filter this route understands, so only apply it for Strapi uids.
+    const filter = engine !== "wordpress" && currentKey && currentKey !== "workspace"
+      ? [{ field: "tenant.key", op: "eq" as const, value: currentKey }] : undefined;
     try {
       const { total } = await cms.entries.list(uid, { page: 1, pageSize: 1, filter });
       return total;
     } catch { return undefined; }
-  }, [currentKey]);
+  }, [currentKey, engine]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [a, s, c1, c2, c3] = await Promise.all([
-        count("api::article.article"), count("api::service.service"),
-        count("api::complaint.complaint"), count("api::application.application"), count("api::contact-message.contact-message"),
-      ]);
+      // Strapi and WordPress engines use different content-type uids for the
+      // same concepts (api::article.article vs wp:post, etc. — see
+      // lib/cms/wordpress.ts's POST_TYPES) — querying the wrong engine's uids
+      // always 400s, which used to be swallowed silently, leaving every
+      // WordPress-engine tenant's (ORST/RoyalSociety/NBTC) dashboard KPIs
+      // stuck on "—" forever despite being labeled "live".
+      const uids = engine === "wordpress"
+        ? ["wp:post", "wp:service", "wp:complaint", "wp:application", "wp:contact-message"]
+        : ["api::article.article", "api::service.service", "api::complaint.complaint", "api::application.application", "api::contact-message.contact-message"];
+      const [a, s, c1, c2, c3] = await Promise.all(uids.map(count));
       if (!alive) return;
       const sub = [c1, c2, c3].filter((n) => typeof n === "number").reduce((x, n) => x + (n as number), 0);
       setCounts({ articles: a, services: s, submissions: [c1, c2, c3].some((n) => n != null) ? sub : undefined });
     })();
     return () => { alive = false; };
-  }, [count]);
+  }, [count, engine]);
 
   const nf = (n?: number) => (typeof n === "number" ? n.toLocaleString() : "—");
   const KPIS = [

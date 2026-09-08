@@ -7,21 +7,14 @@ import NavManager from "./NavManager";
 import FooterEditor from "./FooterEditor";
 import BreakingNewsManager from "./BreakingNewsManager";
 
-const SWATCHES = ["#6E8BFF", "#8B5CF6", "#14B8A6", "#EE5020", "#F59E0B", "#10B981"];
+const SWATCHES = ["#2F54EB", "#8B5CF6", "#14B8A6", "#EE5020", "#F59E0B", "#10B981"];
 const TMPLS = [{ key: "classic", en: "Classic", th: "คลาสสิก" }, { key: "split", en: "Split", th: "สปลิต" }, { key: "editorial", en: "Editorial", th: "เอดิทอเรียล" }];
-
-function applyAccent(hex: string) {
-  const r = document.documentElement;
-  r.style.setProperty("--accent", hex);
-  r.style.setProperty("--accent2", hex);
-  if (/^#[0-9a-fA-F]{6}$/.test(hex)) r.style.setProperty("--accent-soft", hex + "29");
-}
 
 export default function Branding() {
   const { t, lang } = useLang();
   const { currentKey, current } = useTenant();
   const [tab, setTab] = useState<"appearance" | "nav" | "footer" | "breaking">("appearance");
-  const [color, setColor] = useState("#6E8BFF");
+  const [color, setColor] = useState("#2F54EB");
   const [tmpl, setTmpl] = useState("classic");
   const [wm, setWm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -39,15 +32,15 @@ export default function Branding() {
         const j = await fetch("/api/strapi/api/console/context").then((r) => (r.ok ? r.json() : null));
         const list = j?.tenants ?? j?.data?.tenants ?? [];
         const tn = list.find((x: any) => x.key === currentKey) ?? list[0];
-        const c = tn?.brand?.primaryColor || tn?.brand?.color || "#6E8BFF";
-        setColor(c); applyAccent(c);
+        const c = tn?.brand?.primaryColor || tn?.brand?.color || "#2F54EB";
+        setColor(c);
         setTmpl(tn?.template?.key || "classic");
         setWm(Boolean(tn?.watermark?.enabled));
       } catch {}
     })();
   }, [currentKey]);
 
-  function pick(c: string) { setColor(c); applyAccent(c); }
+  function pick(c: string) { setColor(c); }
 
   async function save() {
     setSaving(true); setMsg(null);
@@ -85,7 +78,11 @@ export default function Branding() {
       {tab === "appearance" && msg && <div className="panel" style={{ marginBottom: 14 }}><span className={"badge " + (msg.ok ? "b-ok" : "b-warn")}><span className="dot" />{msg.ok ? "OK" : "!"}</span><span style={{ marginLeft: 10, color: msg.ok ? "var(--ok)" : "var(--bad)", fontWeight: 600 }}>{msg.t}</span></div>}
 
       {tab === "appearance" && (
-        <div className="brand-grid">
+        // The public site's own colour lives in --psite-accent, scoped to this
+        // subtree — never the admin's own --accent, which every WebX Studio
+        // page shares. Setting the tenant's colour here must not re-theme the
+        // surrounding admin chrome (buttons, nav, avatar) as a side effect.
+        <div className="brand-grid" style={{ "--psite-accent": color } as React.CSSProperties}>
           <div>
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-h"><h3>{t("br.accent")}</h3></div>
@@ -102,7 +99,7 @@ export default function Branding() {
               <div className="tmpls">
                 {TMPLS.map((tm) => (
                   <div key={tm.key} className={"tmpl" + (tmpl === tm.key ? " on" : "")} onClick={() => setTmpl(tm.key)}>
-                    <div className="tmpl-pv"><i style={{ height: 10, width: "50%" }} /><i style={{ height: 6, width: "80%" }} /><i style={{ height: 6, width: "65%" }} /><i style={{ height: 14, width: "40%", marginTop: "auto", background: "var(--accent)" }} /></div>
+                    <div className="tmpl-pv"><i style={{ height: 10, width: "50%" }} /><i style={{ height: 6, width: "80%" }} /><i style={{ height: 6, width: "65%" }} /><i style={{ height: 14, width: "40%", marginTop: "auto", background: "var(--psite-accent)" }} /></div>
                     <b>{lang === "th" ? tm.th : tm.en}</b>
                   </div>
                 ))}

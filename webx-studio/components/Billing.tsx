@@ -26,7 +26,13 @@ export default function Billing() {
   const load = useCallback(async () => {
     setErr(""); setMsg(null);
     try {
-      const { data } = await cms.entries.list<any>(TEN, { pageSize: 1, filter: [{ field: "key", op: "eq", value: key || "dga" }] });
+      // no "|| dga" fallback — that silently showed a DIFFERENT real
+      // tenant's billing/plan info for any session whose own tenant hasn't
+      // resolved yet (found live: an ORST session with no roster match saw
+      // DGA's plan/seat data). An empty key legitimately matches nothing,
+      // which the existing tn=null / usage=0 fallback below already handles.
+      if (!key) { setTenant(null); setUsage({ content: 0, seats: 0 }); return; }
+      const { data } = await cms.entries.list<any>(TEN, { pageSize: 1, filter: [{ field: "key", op: "eq", value: key }] });
       const tn = data[0] || null;
       setTenant(tn);
       const seats = Array.isArray(tn?.adminEmails) ? tn.adminEmails.length : 0;

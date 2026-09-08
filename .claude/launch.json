@@ -25,6 +25,13 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "public-site/out", "-l", "8095"],
       "port": 8095
+    },
+    {
+      "name": "public-site-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "public-site",
+      "port": 3100
     }
   ]
 }

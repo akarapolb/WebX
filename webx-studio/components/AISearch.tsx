@@ -23,7 +23,11 @@ export default function AISearch() {
   const [indexing, setIndexing] = useState(false);
   const [idxMsg, setIdxMsg] = useState("");
 
-  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "dga";
+  // no "|| dga" fallback — silently searched/reindexed a DIFFERENT real
+  // tenant's content for any session whose own tenant hasn't resolved yet
+  // (found live: the suggested-question chips are also DGA-specific text —
+  // see CHIPS_EN/CHIPS_TH above, a separate content gap left as-is here).
+  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   async function run(query: string) {
     const term = query.trim();

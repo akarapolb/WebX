@@ -3,24 +3,31 @@
    Tokens drive theme (light/dark) + per-tenant accent swap.
    ============================================================ */
 :root{
-  --sans:'Inter','Kanit',system-ui,sans-serif;
-  --mono:'JetBrains Mono',ui-monospace,monospace;
-  --accent:#6E8BFF; --accent2:#A36BFF; --accent-soft:#6E8BFF29;
-  --r-sm:8px; --r:12px; --r-lg:18px; --r-xl:26px;
-  --t:.32s cubic-bezier(.2,.7,.2,1);
-  --ok:#3DD68C; --warn:#F0A33B; --bad:#F2766B;
+  /* IBM Plex Sans Thai carries both scripts, so there is no per-language face swap */
+  --sans:'IBM Plex Sans Thai','Kanit',system-ui,sans-serif;
+  --mono:'IBM Plex Mono','JetBrains Mono',ui-monospace,monospace;
+  /* one accent, no gradient — --accent2 kept as an alias so no rule breaks */
+  --accent:#2F54EB; --accent2:var(--accent); --accent-soft:#2F54EB1F; --on-accent:#FFFFFF;
+  --r-sm:8px; --r:10px; --r-lg:14px; --r-xl:20px;
+  --t:.22s cubic-bezier(.2,.7,.2,1);
+  --ok:#1F8A4C; --warn:#A16A0B; --bad:#C0392B;
 }
 html[data-theme="dark"]{
-  --bg:#0A0B0F; --bg2:#0E1016; --panel:#121420; --panel2:#171a28; --sunk:#0c0e15;
-  --line:#1f2433; --line2:#2a3042; --ink:#EAEDF6; --ink2:#AEB6CB; --mut:#737d96;
-  --shadow:0 18px 50px -22px rgba(0,0,0,.8),0 2px 8px -4px rgba(0,0,0,.6); --sb:#0C0D13;
+  --bg:#0F1117; --bg2:#141821; --panel:#161A23; --panel2:#1B202B; --sunk:#0B0D12;
+  --line:#242A38; --line2:#313848; --ink:#E6E9F0; --ink2:#B3B9C9; --mut:#7E869B;
+  --shadow:0 18px 50px -22px rgba(0,0,0,.8),0 2px 8px -4px rgba(0,0,0,.6);
+  --accent:#7A96FF; --accent-soft:#7A96FF29; --on-accent:#0F1117;
+  --ok:#5FC08F; --warn:#E5B567; --bad:#F2877F;
+  /* rail */
+  --sb:#12151D; --sb-ink:#E1E5EE; --sb-ink2:#AEB6CB; --sb-mut:#7F889E; --sb-line:rgba(255,255,255,.07); --sb-on:rgba(122,150,255,.14);
 }
 html[data-theme="light"]{
-  --bg:#F6F7FB; --bg2:#FFFFFF; --panel:#FFFFFF; --panel2:#FAFBFE; --sunk:#F1F3F9;
-  --line:#E7EAF1; --line2:#DDE2EC; --ink:#11131A; --ink2:#454B5C; --mut:#7B829A;
-  --shadow:0 16px 40px -24px rgba(20,24,46,.30),0 2px 6px -3px rgba(20,24,46,.12); --sb:#0C0D13;
+  --bg:#F5F7FB; --bg2:#FFFFFF; --panel:#FFFFFF; --panel2:#F8FAFE; --sunk:#EEF2F9;
+  --line:#E4E8F1; --line2:#D4DAE7; --ink:#141826; --ink2:#4A5166; --mut:#7C849A;
+  --shadow:0 14px 34px -22px rgba(20,30,60,.30),0 1px 3px -1px rgba(20,30,60,.12);
+  /* rail is white in light mode — the tool, not a dark app chrome */
+  --sb:#FFFFFF; --sb-ink:#242A3B; --sb-ink2:#4A5166; --sb-mut:#8A91A6; --sb-line:#E4E8F1; --sb-on:#EAEFFF;
 }
-html[lang="th"]{ --sans:'Kanit','Inter',system-ui,sans-serif; }
 html[lang="th"] body{ line-height:1.6; }
 
 *{box-sizing:border-box}
@@ -33,40 +40,40 @@ button:focus-visible,a:focus-visible,select:focus-visible,[tabindex]:focus-visib
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 svg{display:block;width:18px;height:18px;flex:none}
 .mono{font-family:var(--mono);font-feature-settings:"tnum" 1}
-.gw{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.gw{color:var(--accent)}
 ::selection{background:var(--accent);color:#fff}
 
 /* shell */
 .shell{display:flex;height:100vh}
-.sb{width:248px;flex:none;background:var(--sb);border-right:1px solid var(--line);display:flex;flex-direction:column;color:#cfd5e6}
+.sb{width:248px;flex:none;background:var(--sb);border-right:1px solid var(--sb-line);display:flex;flex-direction:column;color:var(--sb-ink2)}
 .sb-top{padding:16px 16px 12px}
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.brand-mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;color:#fff;font-size:15px;box-shadow:0 0 0 1px rgba(255,255,255,.10),0 8px 20px -8px var(--accent)}
-.brand-name{font-weight:700;font-size:15px;letter-spacing:-.01em;color:#fff;line-height:1.1}
-.brand-name small{display:block;font-size:10px;color:#7e879e;font-weight:500;letter-spacing:.04em}
+.brand-mark{width:30px;height:30px;border-radius:var(--r-sm);background:var(--accent);display:grid;place-items:center;font-weight:800;color:var(--on-accent);font-size:15px;box-shadow:0 6px 16px -8px var(--accent)}
+.brand-name{font-weight:700;font-size:15px;letter-spacing:-.01em;color:var(--sb-ink);line-height:1.1}
+.brand-name small{display:block;font-size:10px;color:var(--sb-mut);font-weight:500;letter-spacing:.04em}
 .ten{position:relative}
-.ten-btn{width:100%;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:9px 10px;transition:background var(--t);color:inherit}
-.ten-btn:hover{background:rgba(255,255,255,.08)}
-.ten-dot{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--accent2));flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
+.ten-btn{width:100%;display:flex;align-items:center;gap:10px;background:var(--sb-on);border:1px solid var(--sb-line);border-radius:var(--r);padding:9px 10px;transition:background var(--t);color:inherit}
+.ten-btn:hover{background:color-mix(in srgb,var(--sb-on) 70%,var(--sb-ink) 10%)}
+.ten-dot{width:22px;height:22px;border-radius:7px;background:var(--accent);flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--on-accent)}
 .ten-meta{flex:1;text-align:left;min-width:0}
-.ten-meta b{display:block;font-size:12.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ten-meta span{font-size:10px;color:#7e879e}
+.ten-meta b{display:block;font-size:12.5px;color:var(--sb-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ten-meta span{font-size:10px;color:var(--sb-mut)}
 .ten-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:6px;box-shadow:var(--shadow);z-index:30}
 .ten-item{width:100%;display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;transition:background var(--t);color:var(--ink);background:none;border:none;text-align:left;font-family:inherit;cursor:pointer}
 .ten-item:hover{background:var(--panel2)}
 .ten-item b{font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ten-item .ten-check{font-size:10px;color:var(--mut);margin-left:auto;flex:none}
 .nav{flex:1;overflow:auto;padding:8px 10px}
-.nav-h{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#5d6680;padding:14px 8px 6px;font-weight:600}
-.nav a{display:flex;align-items:center;gap:11px;padding:8.5px 10px;border-radius:9px;color:#aeb6cb;font-size:13.5px;font-weight:500;transition:all var(--t);margin-bottom:1px;position:relative}
-.nav a:hover{background:rgba(255,255,255,.05);color:#fff}
-.nav a.on{background:linear-gradient(90deg,var(--accent-soft),transparent);color:#fff}
+.nav-h{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--sb-mut);padding:14px 8px 6px;font-weight:600}
+.nav a{display:flex;align-items:center;gap:11px;padding:8.5px 10px;border-radius:var(--r-sm);color:var(--sb-ink2);font-size:13.5px;font-weight:500;transition:all var(--t);margin-bottom:1px;position:relative}
+.nav a:hover{background:var(--sb-on);color:var(--sb-ink)}
+.nav a.on{background:var(--sb-on);color:var(--sb-ink)}
 .nav a.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:3px;background:var(--accent)}
 .nav a svg{width:17px;height:17px;opacity:.9}
-.nav a .kn{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:#5d6680;border:1px solid rgba(255,255,255,.08);border-radius:5px;padding:0 5px}
-.sb-foot{padding:12px;border-top:1px solid var(--line)}
-.upsell{background:linear-gradient(135deg,rgba(110,139,255,.14),rgba(163,107,255,.10));border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}
-.upsell b{font-size:12.5px;color:#fff}.upsell p{font-size:11px;color:#9aa3bb;margin:3px 0 9px}
-.upsell button{width:100%;background:#fff;color:#11131a;font-weight:700;font-size:12px;padding:7px;border-radius:8px;border:none}
+.nav a .kn{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--sb-mut);border:1px solid var(--sb-line);border-radius:5px;padding:0 5px}
+.sb-foot{padding:12px;border-top:1px solid var(--sb-line)}
+.upsell{background:var(--sb-on);border:1px solid var(--sb-line);border-radius:var(--r);padding:12px}
+.upsell b{font-size:12.5px;color:var(--sb-ink)}.upsell p{font-size:11px;color:var(--sb-mut);margin:3px 0 9px}
+.upsell button{width:100%;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:12px;padding:7px;border-radius:var(--r-sm);border:none}
 
 .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
 .tb{height:56px;flex:none;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 18px;background:var(--bg2)}
@@ -83,7 +90,7 @@ svg{display:block;width:18px;height:18px;flex:none}
 .lang-tg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .demo-pill{display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;letter-spacing:.05em;color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 40%,transparent);background:color-mix(in srgb,var(--ok) 12%,transparent);border-radius:999px;padding:4px 10px}
 .demo-pill i{width:6px;height:6px;border-radius:50%;background:var(--ok)}
-.avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff}
+.avatar{width:34px;height:34px;border-radius:var(--r);background:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--on-accent)}
 
 .page{flex:1;overflow:auto;padding:26px 30px 60px}
 .vh{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
@@ -97,7 +104,7 @@ svg{display:block;width:18px;height:18px;flex:none}
 
 .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:9px 15px;border-radius:10px;transition:all var(--t);border:1px solid transparent;white-space:nowrap}
 .btn svg{width:15px;height:15px}
-.btn--p{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 8px 22px -10px var(--accent)}
+.btn--p{background:var(--accent);color:var(--on-accent);box-shadow:0 8px 22px -10px var(--accent)}
 .btn--p:hover{transform:translateY(-1px)}
 .btn--g{background:var(--panel);border-color:var(--line2);color:var(--ink)}
 .btn--g:hover{background:var(--panel2)}
@@ -225,14 +232,18 @@ svg{display:block;width:18px;height:18px;flex:none}
 .psite-bar{height:34px;background:var(--sunk);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 12px}
 .psite-bar i{width:9px;height:9px;border-radius:50%;background:var(--line2)}
 .psite-url{margin-left:8px;font-family:var(--mono);font-size:10.5px;color:var(--mut)}
-.psite-nav{height:42px;background:var(--accent);display:flex;align-items:center;padding:0 16px;gap:14px}
+/* the live-preview mockup shows the TENANT's public-site colour — its own
+   token, --psite-accent (set inline by Branding.tsx), never the admin's own
+   --accent. The two must stay independent or picking a site colour re-themes
+   the surrounding admin chrome as a side effect (found live — see Branding.tsx). */
+.psite-nav{height:42px;background:var(--psite-accent,var(--accent));display:flex;align-items:center;padding:0 16px;gap:14px}
 .psite-nav b{color:#fff;font-weight:700;font-size:13px}
 .psite-nav span{color:rgba(255,255,255,.85);font-size:10.5px}
-.psite-hero{padding:26px 18px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 16%,var(--panel)),var(--panel));text-align:center;position:relative}
+.psite-hero{padding:26px 18px;background:linear-gradient(135deg,color-mix(in srgb,var(--psite-accent,var(--accent)) 16%,var(--panel)),var(--panel));text-align:center;position:relative}
 .psite-hero h4{font-size:18px;font-weight:800;margin:0}
 .psite-hero p{font-size:11.5px;color:var(--ink2);margin:6px 0 12px}
-.psite-hero .pbtn{display:inline-block;background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:7px 16px;border-radius:8px}
-.wm.on .psite-hero::after{content:attr(data-wm);position:absolute;font-size:38px;font-weight:800;color:var(--accent);opacity:.08;transform:rotate(-18deg);pointer-events:none;letter-spacing:.1em;top:30%;left:30%}
+.psite-hero .pbtn{display:inline-block;background:var(--psite-accent,var(--accent));color:#fff;font-size:11px;font-weight:700;padding:7px 16px;border-radius:8px}
+.wm.on .psite-hero::after{content:attr(data-wm);position:absolute;font-size:38px;font-weight:800;color:var(--psite-accent,var(--accent));opacity:.08;transform:rotate(-18deg);pointer-events:none;letter-spacing:.1em;top:30%;left:30%}
 .color-in{display:flex;align-items:center;gap:10px;margin-top:12px}
 .color-in input[type=color]{width:42px;height:34px;border:1px solid var(--line2);border-radius:8px;background:none;cursor:pointer;padding:2px}
 .color-in input[type=text]{width:120px;background:var(--sunk);border:1px solid var(--line2);border-radius:8px;padding:8px 10px;font-family:var(--mono);font-size:13px;color:var(--ink)}

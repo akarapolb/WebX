@@ -19,7 +19,9 @@ type PubStatus = { building: boolean; lastBuiltAt: string | null; lastError: str
 export default function Status() {
   const { t } = useLang();
   const { currentKey } = useTenant();
-  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "dga";
+  // no "|| dga" fallback — silently showed a DIFFERENT real tenant's audit
+  // feed for any session whose own tenant hasn't resolved yet.
+  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "";
   const [svc, setSvc] = useState<{ k: string; up: boolean }[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

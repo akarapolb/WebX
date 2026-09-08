@@ -17,7 +17,9 @@ export default function ContentAudit() {
   const [aiUsed, setAiUsed] = useState(false);
   const [err, setErr] = useState("");
   const [filter, setFilter] = useState("");
-  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "dga";
+  // no "|| dga" fallback — silently audited a DIFFERENT real tenant's
+  // content for any session whose own tenant hasn't resolved yet.
+  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "";
 
   async function run() {
     setRunning(true); setErr(""); setFindings([]); setScanned(null); setFilter("");

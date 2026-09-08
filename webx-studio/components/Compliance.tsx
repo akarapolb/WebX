@@ -13,7 +13,9 @@ type Dim = { key: string; status: "pass" | "warn"; detail: string; href: string 
 export default function Compliance() {
   const { t } = useLang();
   const { currentKey } = useTenant();
-  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "dga";
+  // no "|| dga" fallback — silently scored a DIFFERENT real tenant's
+  // compliance posture for any session whose own tenant hasn't resolved yet.
+  const tenant = currentKey && currentKey !== "workspace" ? currentKey : "";
   const [dims, setDims] = useState<Dim[]>([]);
   const [scanned, setScanned] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +26,10 @@ export default function Compliance() {
     try {
       const [audit, compliance] = await Promise.all([
         fetch("/api/ai/audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenant }) }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch("/api/cms/compliance?tenant=" + encodeURIComponent(tenant)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        // an empty tenant legitimately 404s (resolveTenantByKey finds no
+        // match) — skip the call rather than let a routine "unscoped
+        // session" case show up as a console error every load.
+        tenant ? fetch("/api/cms/compliance?tenant=" + encodeURIComponent(tenant)).then((r) => (r.ok ? r.json() : null)).catch(() => null) : Promise.resolve(null),
       ]);
       const findings: any[] = audit?.findings || [];
       const pdpa = findings.filter((f) => String(f.dimension).includes("PDPA")).length;

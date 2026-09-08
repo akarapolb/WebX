@@ -1015,9 +1015,14 @@ export default function VisualBuilder() {
         if (r.ok) { const d = (await r.json()).data; if (d?.heading) block = { __component: "block.hero", kicker: d.kicker || "AI", heading: d.heading, subheading: d.subheading || "", ctaLabel: d.ctaLabel || (lang === "th" ? "เริ่มใช้งาน" : "Get started"), ctaUrl: "#" }; }
       } catch {}
       if (!block) {
-        const tn = tenantKey || "dga";
-        const j = await fetch("/api/strapi/api/ai/answer?q=" + encodeURIComponent(p) + "&tenant=" + encodeURIComponent(tn) + "&locale=" + lang).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-        const ans = j?.data?.answer || "";
+        // no "|| dga" fallback — grounding an AI-generated hero in a
+        // DIFFERENT real tenant's content for an unscoped session was worse
+        // than no grounding at all, so skip grounding entirely rather than
+        // substitute the wrong tenant (ans stays "" and the ungrounded copy
+        // below is used, same as a real LiteLLM failure already handled).
+        const ans = tenantKey
+          ? await fetch("/api/strapi/api/ai/answer?q=" + encodeURIComponent(p) + "&tenant=" + encodeURIComponent(tenantKey) + "&locale=" + lang).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => j?.data?.answer || "")
+          : "";
         block = { __component: "block.hero", kicker: "AI", heading: p, subheading: ans || (lang === "th" ? "เพิ่มรายละเอียดที่นี่" : "Add details here"), ctaLabel: lang === "th" ? "เริ่มใช้งาน" : "Get started", ctaUrl: "#" };
       }
       pushUndo(blocks);
@@ -2121,7 +2126,10 @@ export default function VisualBuilder() {
             previewLoading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.loading")}</div> :
             <div className="vb-frame" style={{ maxWidth: DEVW[device], margin: device === "desktop" ? undefined : "0 auto" }}>
               {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th"}</span><span className="vb-dev-tag">{device}</span></div>}
-              <RealPreview blocks={blocks} homeData={previewHomeData} customTypes={Object.fromEntries(customTypes.map((c) => [c.key, c]))} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))} collectionData={collectionData} tenant={tenantKey || "dga"}
+              {/* no "|| dga" fallback — RealPreview's tenant prop is already
+                  optional; substituting a DIFFERENT real tenant risked
+                  rendering a wrong-agency preview for an unscoped session. */}
+              <RealPreview blocks={blocks} homeData={previewHomeData} customTypes={Object.fromEntries(customTypes.map((c) => [c.key, c]))} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))} collectionData={collectionData} tenant={tenantKey || undefined}
                 {...(previewMode ? {} : {
                   active, onSelect: setActive,
                   onFieldChange: updateBlockField,

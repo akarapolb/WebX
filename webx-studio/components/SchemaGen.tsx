@@ -2,33 +2,71 @@
 import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import { useTenant } from "./TenantProvider";
 import { cms, CmsError } from "@/lib/cms";
 
 // Productizes Schema.org / JSON-LD (GEO/AEO) + meta into WebX: pick a content
 // type + entry → generate the right structured data from its fields, optionally
 // AI-write the meta description / answer block, preview, and copy.
 type Entry = { documentId?: string; id?: number; title?: string; name?: string; question?: string; slug?: string; excerpt?: string; description?: string; answer?: string; body?: string; updatedAt?: string; publishDate?: string; categoryLabel?: string };
-const TYPES = [
+const TEN = "api::tenant.tenant";
+// Strapi and WordPress use different content-type uids for the same concepts
+// (found live: this whole feature 400'd for every WordPress-engine tenant —
+// ORST/RoyalSociety/NBTC — since it only ever queried Strapi's own uids).
+const STRAPI_TYPES = [
   { uid: "api::article.article", label: "Article → NewsArticle", schema: "NewsArticle" },
   { uid: "api::service.service", label: "Service → GovernmentService", schema: "GovernmentService" },
   { uid: "api::faq.faq", label: "FAQ → FAQPage", schema: "FAQPage" },
+];
+const WP_TYPES = [
+  { uid: "wp:post", label: "Post → NewsArticle", schema: "NewsArticle" },
+  { uid: "wp:service", label: "Service → GovernmentService", schema: "GovernmentService" },
+  { uid: "wp:faq", label: "FAQ → FAQPage", schema: "FAQPage" },
 ];
 const stripHtml = (s: any) => String(s || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const titleOf = (e: Entry) => e.title || e.name || e.question || "";
 
 export default function SchemaGen() {
   const { t } = useLang();
+  const { currentKey, engine } = useTenant();
+  const TYPES = engine === "wordpress" ? WP_TYPES : STRAPI_TYPES;
   const [uid, setUid] = useState(TYPES[0].uid);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [sel, setSel] = useState<string>("");
-  const [base, setBase] = useState("https://www.dga.or.th");
-  const [org, setOrg] = useState("สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)");
+  // No hardcoded org/URL default — these used to be literally DGA's own
+  // (https://www.dga.or.th, สำนักงานพัฒนารัฐบาลดิจิทัล) regardless of which
+  // tenant was editing, so an unwary ORST/RoyalSociety/etc. editor could
+  // publish JSON-LD schema markup claiming to be a different real agency.
+  // Prefilled below from the actual current tenant's own record instead.
+  const [base, setBase] = useState("");
+  const [org, setOrg] = useState("");
   const [jsonld, setJsonld] = useState("");
   const [meta, setMeta] = useState("");
   const [err, setErr] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const schema = TYPES.find((x) => x.uid === uid)!.schema;
+  const key = currentKey && currentKey !== "workspace" ? currentKey : "";
+
+  useEffect(() => {
+    if (!key) return;
+    cms.entries.list<any>(TEN, { pageSize: 1, filter: [{ field: "key", op: "eq", value: key }] })
+      .then((r) => {
+        const tn = r.data[0];
+        if (!tn) return;
+        setOrg(tn.brand?.orgName?.th || tn.name || "");
+        // domains commonly lists dev entries (localhost, 127.0.0.1, x.localhost)
+        // alongside the real public one — prefer a real-looking domain over
+        // picking domains[0] blindly (found live: DGA's own list put
+        // "localhost" first, so this schema markup would have claimed
+        // https://localhost as the article's own site).
+        const list = Array.isArray(tn.domains) ? tn.domains : tn.domains ? [tn.domains] : [];
+        const domain = list.find((d: string) => d && !/localhost|^127\.|^0\.0\.0\.0/i.test(d)) || list[0];
+        if (domain) setBase("https://" + String(domain).replace(/^https?:\/\//, ""));
+      }).catch(() => {});
+  }, [key]);
+
+  useEffect(() => { setUid(TYPES[0].uid); }, [engine]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     setErr(""); setEntries([]); setSel(""); setJsonld(""); setMeta("");
@@ -131,10 +169,10 @@ export default function SchemaGen() {
           </label>
         )}
         <label style={{ flex: "1 1 180px" }}><div className="muted" style={{ fontSize: 12 }}>{t("sg.base")}</div>
-          <input className="rv-assignee" style={{ width: "100%" }} value={base} onChange={(e) => setBase(e.target.value)} />
+          <input className="rv-assignee" style={{ width: "100%" }} placeholder="https://www.example.go.th" value={base} onChange={(e) => setBase(e.target.value)} />
         </label>
         <label style={{ flex: "1 1 180px" }}><div className="muted" style={{ fontSize: 12 }}>{t("sg.org")}</div>
-          <input className="rv-assignee" style={{ width: "100%" }} value={org} onChange={(e) => setOrg(e.target.value)} />
+          <input className="rv-assignee" style={{ width: "100%" }} placeholder="ชื่อหน่วยงาน" value={org} onChange={(e) => setOrg(e.target.value)} />
         </label>
       </div>
 
