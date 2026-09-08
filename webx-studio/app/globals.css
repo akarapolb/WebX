@@ -46,16 +46,18 @@ svg{display:block;width:18px;height:18px;flex:none}
 /* shell */
 .shell{display:flex;height:100vh}
 .sb{width:248px;flex:none;background:var(--sb);border-right:1px solid var(--sb-line);display:flex;flex-direction:column;color:var(--sb-ink2)}
-.sb-top{padding:14px 16px 8px}
+/* top padding matches the topbar's own 8px centering offset for its
+   40px-tall search button (56px bar, centered) so the tenant switcher
+   lines up with it across the sidebar/main-content divide (found live). */
+.sb-top{padding:8px 16px 8px}
 .brand-mark{width:30px;height:30px;border-radius:var(--r-sm);background:var(--accent);display:grid;place-items:center;font-weight:700;color:var(--on-accent);font-size:15px;box-shadow:0 6px 16px -8px var(--accent)}
 .ten{position:relative}
 .ten-row{display:flex;align-items:center;gap:8px}
-.ten-btn{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:var(--sb);border:1px solid var(--sb-line);border-radius:var(--r);padding:9px 10px;transition:background var(--t);color:inherit}
+.ten-btn{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:var(--sb);border:1px solid var(--sb-line);border-radius:var(--r);padding:8px 10px;transition:background var(--t);color:inherit}
 .ten-btn:hover{background:color-mix(in srgb,var(--sb-on) 70%,var(--sb-ink) 10%)}
 .ten-dot{width:22px;height:22px;border-radius:7px;background:var(--accent);flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--on-accent)}
 .ten-meta{flex:1;text-align:left;min-width:0}
 .ten-meta b{display:block;font-size:12.5px;color:var(--sb-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ten-meta span{font-size:10px;color:var(--sb-mut)}
 .ten-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:6px;box-shadow:var(--shadow);z-index:30}
 .ten-item{width:100%;display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;transition:background var(--t);color:var(--ink);background:none;border:none;text-align:left;font-family:inherit;cursor:pointer}
 .ten-item:hover{background:var(--panel2)}

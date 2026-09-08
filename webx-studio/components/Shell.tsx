@@ -61,7 +61,7 @@ export default function Shell({
             <div className="ten-row">
               <button className="ten-btn" onClick={() => setTenOpen((o) => !o)}>
                 <span className="ten-dot">{current?.name?.[0]?.toUpperCase() ?? "W"}</span>
-                <span className="ten-meta"><b>{current?.name}</b><span>{current?.plan}</span></span>
+                <span className="ten-meta"><b>{current?.name}</b></span>
                 <Icon name="chevron" />
               </button>
               <button className="ic-btn sb-close" title="Close menu" onClick={() => setSbOpen(false)}><Icon name="close" /></button>
