@@ -893,6 +893,60 @@ export async function seedJobs(strapi: any) {
   strapi.log.info(`[seed] seeded ${jobs.length} jobs (th+en) ✔`);
 }
 
+/* ---------- ORST / RoyalSociety tenant records (fresh-clone gap) —
+   these two WordPress-engine tenants only ever existed in this project's
+   own dev database; seedTenants() above's own `want` list has only ever
+   had dga/pea, so a genuinely fresh clone's Strapi never created either
+   tenant record at all. That silently broke everything downstream for a
+   new environment: seedOrstRoyalSocietyJobs() below just logs "tenant not
+   found" and skips both, public-site's own /api/tenants/keys and
+   /api/tenants/resolve have nothing to serve, and the WordPress side has
+   no wtenant term to create in the first place (see
+   wordpress/seed-tenants.mjs, which must run before any other WordPress
+   seed script). Field values below are this project's own real tenant
+   records, queried directly from the running instance — not reconstructed
+   from memory — so `domains: null` and ORST's empty `adminEmails` are the
+   genuine current values, not an oversight in this seed. */
+export async function seedOrstRoyalSocietyTenants(strapi: any) {
+  const want = [
+    {
+      key: "orst", name: "สำนักงานราชบัณฑิตยสภา",
+      active: true, engine: "wordpress", publicTemplate: "orst",
+      adminEmails: [] as string[],
+      plan: "enterprise", seats: 3, subscriptionStatus: "active",
+      brand: { primaryColor: "#073b34", orgName: { th: "สำนักงานราชบัณฑิตยสภา", en: "Office of the Royal Society of Thailand" } },
+      contact: { phone: "0 2141 1728", email: "saraban@orst.go.th", address: { th: "ศูนย์ราชการเฉลิมพระเกียรติฯ อาคารซี ถนนแจ้งวัฒนะ เขตหลักสี่ กรุงเทพมหานคร 10210" } },
+      template: { preset: "a", background: "#fbf7ef" },
+      footerColumns: [
+        { heading: { th: "บริการหลัก" }, links: [{ label: { th: "พจนานุกรม" }, url: "/orst/dictionary" }, { label: { th: "ศัพท์บัญญัติ" }, url: "#" }, { label: { th: "คำทับศัพท์" }, url: "#" }, { label: { th: "ราชาศัพท์" }, url: "#" }] },
+        { heading: { th: "องค์ความรู้" }, links: [{ label: { th: "คลังองค์ความรู้" }, url: "/orst/knowledge" }, { label: { th: "E-Book และสิ่งพิมพ์" }, url: "/orst/publications" }, { label: { th: "วารสาร" }, url: "#" }, { label: { th: "สื่อมัลติมีเดีย" }, url: "#" }] },
+        { heading: { th: "ข่าวและบริการ" }, links: [{ label: { th: "ข่าวและประกาศ" }, url: "/orst/news" }, { label: { th: "บริการออนไลน์" }, url: "/orst/services" }, { label: { th: "แบบฟอร์มออนไลน์" }, url: "#" }, { label: { th: "คำถามที่พบบ่อย" }, url: "#" }] },
+      ],
+    },
+    {
+      key: "royalsociety", name: "ราชบัณฑิตยสภา",
+      active: true, engine: "wordpress", publicTemplate: "royalsociety",
+      adminEmails: ["royalsociety-editor@royalsociety.local"],
+      plan: "enterprise", seats: 3, subscriptionStatus: "active",
+      brand: { primaryColor: "#06473f", orgName: { th: "ราชบัณฑิตยสภา", en: "Royal Society of Thailand" } },
+      contact: { phone: "0 2481 0347", email: "saraban@royalsociety.go.th", officeHours: "จันทร์ - ศุกร์ 08:30 - 16:30 น.", address: { th: "เลขที่ ๑๒๐ หมู่ ๓ ศูนย์ราชการเฉลิมพระเกียรติ ๘๐ พรรษา ๕ ธันวาคม ๒๕๕๐ อาคารซี แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพมหานคร ๑๐๒๑๐" } },
+      social: [{ label: "Facebook", url: "#" }, { label: "YouTube", url: "#" }, { label: "Instagram", url: "#" }, { label: "X", url: "#" }],
+      template: { preset: "a", background: "#fbf7ef" },
+      footerColumns: [
+        { heading: { th: "ลิงก์ด่วน" }, links: [{ label: { th: "เกี่ยวกับราชบัณฑิตยสภา" }, url: "/royalsociety/about" }, { label: { th: "คลังองค์ความรู้" }, url: "/royalsociety/knowledge" }, { label: { th: "สิ่งพิมพ์" }, url: "/royalsociety/publications" }, { label: { th: "แผนผังเว็บไซต์" }, url: "#" }] },
+        { heading: { th: "บริการยอดนิยม" }, links: [{ label: { th: "สืบค้นพจนานุกรม" }, url: "#" }, { label: { th: "ดาวน์โหลดแบบฟอร์ม" }, url: "#" }, { label: { th: "ส่งคำถาม / ข้อเสนอแนะ" }, url: "#" }, { label: { th: "บริการออนไลน์" }, url: "/royalsociety/services" }] },
+      ],
+    },
+  ];
+  for (const t of want) {
+    const exists = await strapi.documents("api::tenant.tenant").findMany({ filters: { key: t.key }, limit: 1 });
+    if (!exists.length) {
+      await strapi.documents("api::tenant.tenant").create({ data: t });
+      strapi.log.info(`[seed] tenant '${t.key}' created`);
+    }
+  }
+}
+
 /* ---------- ตำแหน่งงานว่าง ORST/RoyalSociety (TOR gap audit — "e-forms
    สำหรับสมัครงาน" ไม่เคยมีอยู่จริงสำหรับสอง tenant นี้เลย ทั้งที่ backend
    api::job.job / api::application.application มีอยู่แล้วและเปิด public

@@ -102,13 +102,24 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
 
 ### WordPress engine — seeding real content (ORST / RoyalSociety)
 
-A fresh WordPress install (via `bootstrap.sh` above) only gets an empty
-database — the mu-plugins register the content *types* (pages, polls,
-jobs, members, events, ...), but none of the real ORST/RoyalSociety
-content exists yet until someone runs the seed scripts under
-`wordpress/seed-*.mjs`. These are one-off migration scripts, not part of
-the app itself — each talks to the running WordPress instance's own REST
-API (same `WORDPRESS_URL` / `WORDPRESS_SCHEDULER_USERNAME` /
+Two separate layers of "empty on a fresh clone," fixed two separate ways:
+
+**1. The tenant records themselves.** ORST and RoyalSociety's Strapi
+`Tenant` rows (name/brand/contact/engine:"wordpress"/...) now seed
+**automatically** on every Strapi boot (`seedOrstRoyalSocietyTenants` in
+`strapi-cms/src/index.ts`'s `bootstrap()`, same as DGA/PEA's own tenant
+rows) — nothing to run by hand for this part. This closes a real gap: before
+this existed, a fresh clone's Strapi never created either tenant at all
+(the older `seedTenants()` only ever listed dga/pea), which silently broke
+everything downstream — no `/api/tenants/keys` entry, no jobs, nothing.
+
+**2. WordPress's own content.** A fresh WordPress install (via
+`bootstrap.sh` above) only gets an empty database — the mu-plugins register
+the content *types* (pages, polls, jobs, members, events, ...), but none of
+the real ORST/RoyalSociety content exists yet until someone runs the seed
+scripts under `wordpress/seed-*.mjs`. These are one-off migration scripts,
+not part of the app itself — each talks to the running WordPress instance's
+own REST API (same `WORDPRESS_URL` / `WORDPRESS_SCHEDULER_USERNAME` /
 `WORDPRESS_SCHEDULER_APP_PASSWORD` webx-studio itself uses, read from the
 environment or `webx-studio/.env.local`), so they work against any real
 deployment, not just this dev machine. All are safe to re-run — each one
@@ -116,9 +127,11 @@ either matches-and-updates an existing row instead of duplicating it, or
 explicitly no-ops if its target already exists.
 
 Run once, in this order, against a fresh install (skip any tenant you're
-not deploying):
+not deploying) — **make sure Strapi has booted at least once first**, so
+step 1 above has already created the tenant records these scripts look up:
 
 ```bash
+node wordpress/seed-tenants.mjs              # the `wtenant` taxonomy terms — every script below needs these to exist first
 node wordpress/seed-orst-layout.mjs          # ORST's real pages (home/about/contact/services/...)
 node wordpress/seed-royalsociety-layout.mjs  # RoyalSociety's real pages
 node wordpress/seed-orst-sources.mjs         # binds live-data sources (services, FAQs, ...) to ORST's blocks

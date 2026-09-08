@@ -2,7 +2,7 @@ import type { Core } from '@strapi/strapi';
 import { errors } from '@strapi/utils';
 import {
   ensureThaiLocale, ensurePublicPermissions, seedContent, seedJobs, seedOrstRoyalSocietyJobs, seedDemos,
-  seedTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
+  seedTenants, seedOrstRoyalSocietyTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
   ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB, seedCmsCore,
   seedScheduler, ensureEditorPublishPermissions, seedFlatNavItems, ensurePageBuilderEditorPermissions, ensureBlockTypeFieldPermissions,
 } from './seed/seed';
@@ -202,6 +202,7 @@ export default {
     try {
       await ensureThaiLocale(strapi);
       await seedTenants(strapi);
+      await seedOrstRoyalSocietyTenants(strapi);
       await seedContent(strapi);
       await seedJobs(strapi);
       await seedOrstRoyalSocietyJobs(strapi);
