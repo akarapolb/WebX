@@ -5,15 +5,18 @@ import SiteFooter from "./SiteFooter";
 import { t, localePath, type Locale } from "@/lib/i18n";
 import { SIGNUP_URL, CONTACT_URL } from "@/lib/config";
 
-function Frame({ src, alt, url, dark }: { src: string; alt: string; url: string; dark?: boolean }) {
+function Frame({ src, alt, url, eager }: { src: string; alt: string; url: string; eager?: boolean }) {
   return (
     <div className="frame">
       <div className="frame-bar"><i /><i /><i /><span>{url}</span></div>
-      <img src={src} alt={alt} width={1440} height={900} loading={dark ? "eager" : "lazy"} />
+      <img src={src} alt={alt} width={1440} height={900} loading={eager ? "eager" : "lazy"} />
     </div>
   );
 }
 
+// Section order is deliberate: what WebX is and does (hero, stats, features,
+// tour, engines, agents) before where it's been proven (compliance), then
+// how to start (how, pricing, cta).
 export default function Home({ locale }: { locale: Locale }) {
   const s = t(locale);
   const pricing = localePath(locale, "/pricing");
@@ -34,7 +37,7 @@ export default function Home({ locale }: { locale: Locale }) {
               <div className="hero-note">{s.hero.note}</div>
             </div>
             <div>
-              <Frame src="/shots/dashboard.webp" alt={s.hero.shotAlt} url="studio.webx.io/dashboard" dark />
+              <Frame src="/shots/dashboard.webp" alt={s.hero.shotAlt} url="studio.webx.io/dashboard" eager />
               <div className="frame-cap">{s.hero.shotCap}</div>
             </div>
           </div>
@@ -64,8 +67,8 @@ export default function Home({ locale }: { locale: Locale }) {
             </div>
             <div className="tour" style={{ marginTop: 28 }}>
               <figure>
-                <Frame src="/shots/builder.webp" alt={s.features.items[0].t} url="studio.webx.io/builder" />
-                <figcaption><b>{s.features.items[0].t}</b>{s.features.items[0].d}</figcaption>
+                <Frame src="/shots/builder.webp" alt={s.features.items[1].t} url="studio.webx.io/builder" />
+                <figcaption><b>{s.features.items[1].t}</b>{s.features.items[1].d}</figcaption>
               </figure>
               <figure>
                 <Frame src="/shots/analytics.webp" alt={s.features.items[7].t} url="studio.webx.io/analytics" />
@@ -75,21 +78,7 @@ export default function Home({ locale }: { locale: Locale }) {
           </div>
         </section>
 
-        <section className="sec sec--sunk" id="gov">
-          <div className="wrap gov">
-            <div className="sec-h">
-              <div className="eyebrow">{s.gov.eyebrow}</div>
-              <h2>{s.gov.h2}</h2>
-              <p className="lead">{s.gov.sub}</p>
-              <a href={CONTACT_URL} className="btn btn-g">{s.gov.cta} <Icon name="arrow" className="ic-arrow" /></a>
-            </div>
-            <ul className="checks">
-              {s.gov.items.map((x) => <li key={x}><Icon name="tick" /><span>{x}</span></li>)}
-            </ul>
-          </div>
-        </section>
-
-        <section className="sec" id="engines">
+        <section className="sec sec--sunk" id="engines">
           <div className="wrap">
             <div className="sec-h">
               <div className="eyebrow">{s.engines.eyebrow}</div>
@@ -120,7 +109,21 @@ export default function Home({ locale }: { locale: Locale }) {
           </div>
         </section>
 
-        <section className="sec" id="how">
+        <section className="sec" id="compliance">
+          <div className="wrap gov">
+            <div className="sec-h">
+              <div className="eyebrow">{s.compliance.eyebrow}</div>
+              <h2>{s.compliance.h2}</h2>
+              <p className="lead">{s.compliance.sub}</p>
+              <a href={CONTACT_URL} className="btn btn-g">{s.compliance.cta} <Icon name="arrow" className="ic-arrow" /></a>
+            </div>
+            <ul className="checks">
+              {s.compliance.items.map((x) => <li key={x}><Icon name="tick" /><span>{x}</span></li>)}
+            </ul>
+          </div>
+        </section>
+
+        <section className="sec sec--sunk" id="how">
           <div className="wrap">
             <div className="sec-h">
               <div className="eyebrow">{s.how.eyebrow}</div>
@@ -138,7 +141,7 @@ export default function Home({ locale }: { locale: Locale }) {
           </div>
         </section>
 
-        <section className="sec sec--sunk" id="pricing">
+        <section className="sec" id="pricing">
           <div className="wrap">
             <div className="sec-h">
               <div className="eyebrow">{s.pricingTeaser.eyebrow}</div>

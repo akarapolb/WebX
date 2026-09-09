@@ -12,8 +12,8 @@ export default function SiteHeader({ locale, path }: { locale: Locale; path: "/"
   const hash = (h: string) => (home === "/" ? "/" : home + "/") + "#" + h;
   const links = [
     { href: hash("features"), l: s.nav.features },
-    { href: hash("gov"), l: s.nav.gov },
     { href: hash("engines"), l: s.nav.engines },
+    { href: hash("compliance"), l: s.nav.compliance },
     { href: localePath(locale, "/pricing"), l: s.nav.pricing },
   ];
   const alt = localePath(otherLocale(locale), path);

@@ -25,7 +25,7 @@ export default function SiteFooter({ locale, path }: { locale: Locale; path: "/"
           <div>
             <h4>{s.footer.company}</h4>
             <ul>
-              <li><Link href={hash("gov")}>{s.nav.gov}</Link></li>
+              <li><Link href={hash("compliance")}>{s.nav.compliance}</Link></li>
               <li><a href={LOGIN_URL}>{s.footer.signin}</a></li>
             </ul>
           </div>
