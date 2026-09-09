@@ -37,3 +37,9 @@ Thumbs.db
 
 # production compose env (never commit)
 /.env
+
+# Next.js / marketing-site (static export output + env)
+marketing-site/.next/
+marketing-site/out/
+marketing-site/.env.local
+marketing-site/tsconfig.tsbuildinfo

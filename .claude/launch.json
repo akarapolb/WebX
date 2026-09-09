@@ -32,6 +32,13 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "public-site",
       "port": 3100
+    },
+    {
+      "name": "marketing-site",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "-p", "3200"],
+      "cwd": "marketing-site",
+      "port": 3200
     }
   ]
 }
