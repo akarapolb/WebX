@@ -234,7 +234,7 @@ svg{display:block;width:18px;height:18px;flex:none}
 
 /* AI search */
 .ss-box{display:flex;gap:10px;margin-bottom:16px}
-.ss-box input{flex:1;background:var(--panel);border:1px solid var(--line2);border-radius:13px;padding:14px 18px;font-size:15px;color:var(--ink);font-family:inherit}
+.ss-box input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line2);border-radius:13px;padding:14px 18px;font-size:15px;color:var(--ink);font-family:inherit}
 .ss-box input:focus{outline:none;border-color:var(--accent)}
 .ss-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
 .ss-chip{font-size:12.5px;color:var(--ink2);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 14px;transition:all var(--t)}
@@ -772,6 +772,14 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
   .ed-review,.ovfoot{flex-wrap:wrap}
   .ed-review > span{flex:1 1 200px}
   .ovfoot .sp{flex:1 1 200px}
+  /* AI Search's box is input + 2 buttons in a nowrap row — the buttons'
+     text doesn't shrink, so the input (already at its own browser-
+     enforced minimum) had nowhere left to give, and "Search" ran off
+     past the visible page, reachable only by scrolling the whole page
+     sideways (found live). Input takes its own full line, buttons
+     share the row below. */
+  .ss-box{flex-wrap:wrap}
+  .ss-box input{flex:1 1 100%}
 }
 @media (max-width:480px){
   /* even with the search button collapsed, the tenant-status pill + avatar
