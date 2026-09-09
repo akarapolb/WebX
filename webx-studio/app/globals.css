@@ -129,6 +129,12 @@ svg{display:block;width:18px;height:18px;flex:none}
 .bar-x{display:flex;gap:8px;margin-top:8px}
 .bar-x span{flex:1;text-align:center;font-size:10px;color:var(--mut);font-family:var(--mono)}
 
+/* a .tbl wider than its .panel (narrow viewport, or just a wide table)
+   used to overflow the whole .page, so reaching a cut-off column (e.g.
+   UsersTable's own "Remove" button) meant scrolling the ENTIRE page
+   sideways — found live at 375px. Contain the scroll to the panel
+   itself instead, across all 8 call sites in one rule. */
+.panel:has(.tbl){overflow-x:auto}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
 .tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:600;padding:0 12px 11px;border-bottom:1px solid var(--line)}
 .tbl td{padding:13px 12px;border-bottom:1px solid var(--line);color:var(--ink2)}
