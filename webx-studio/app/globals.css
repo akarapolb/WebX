@@ -722,7 +722,7 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .rt-area p{margin:0 0 .6em}.rt-area ul,.rt-area ol{margin:0 0 .6em 1.3em}
 .rt-area a{color:var(--accent)}
 
-@media (max-width:1080px){ .kpis{grid-template-columns:repeat(2,1fr)} .two{grid-template-columns:1fr} .cgrid{grid-template-columns:1fr} }
+@media (max-width:1080px){ .kpis{grid-template-columns:repeat(2,1fr)} .two{grid-template-columns:1fr} .cgrid{grid-template-columns:1fr} .brand-grid{grid-template-columns:1fr} }
 /* hamburger + drawer are always in the DOM (hidden by these two rules on
    desktop) so Shell.tsx doesn't need to know the viewport width itself */
 .tb-hamburger{display:none}
@@ -747,6 +747,25 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
   }
   .sb-close{display:grid}
   .sb-backdrop.show{display:block;position:fixed;inset:0;background:rgba(8,10,16,.55);z-index:55}
+  /* NavManager's per-link rows pack 3 text inputs + a checkbox label +
+     icon buttons into one flex:1 nowrap row — fine on desktop, but at
+     phone width the fixed-size controls alone (drag handle, "open in
+     new tab" label, delete button) leave too little room for 3 shrunk
+     inputs to stay usable (found live). Let the row wrap instead of
+     forcing everything onto one line; each input keeps a real minimum
+     width so it's still comfortable to type into. */
+  .nav-item-row{flex-wrap:wrap}
+  .nav-item-row input{flex:1 1 140px;min-width:140px}
+  /* EntryEditor's review-status bar and footer action bar are both
+     nowrap flex rows mixing a status label with 2-3 non-wrapping
+     buttons — the buttons never shrink (their text doesn't wrap), so
+     the flex algorithm sacrificed the label instead, squeezing it down
+     to ~50px and wrapping it one word per line (found live). Let both
+     rows wrap; the label keeps a real minimum width so it still reads
+     as a sentence, and the buttons drop to their own line(s) below. */
+  .ed-review,.ovfoot{flex-wrap:wrap}
+  .ed-review > span{flex:1 1 200px}
+  .ovfoot .sp{flex:1 1 200px}
 }
 @media (max-width:480px){
   /* even with the search button collapsed, the tenant-status pill + avatar

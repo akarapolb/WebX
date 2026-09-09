@@ -88,7 +88,11 @@ function addLinkAt(links: MegaLink[], path: number[]): MegaLink[] {
   });
 }
 
-const fieldStyle = { flex: 1, background: "var(--panel)", border: "1px solid var(--line2)", borderRadius: 9, padding: "9px 11px", fontSize: 13, color: "var(--ink)" } as const;
+// minWidth:0 overrides the browser's default flex-item auto-minimum,
+// which otherwise refuses to shrink an <input> below its intrinsic
+// content width — without it, 3 flex:1 fields in one narrow row (found
+// live at 375px) just balloon the row to ~840px instead of sharing it.
+const fieldStyle = { flex: 1, minWidth: 0, background: "var(--panel)", border: "1px solid var(--line2)", borderRadius: 9, padding: "9px 11px", fontSize: 13, color: "var(--ink)" } as const;
 
 // Recursively renders one link plus its own children (unlimited depth) —
 // `path` is this link's position within its group's links tree (see the
@@ -109,7 +113,7 @@ function LinkEditor({
 }) {
   return (
     <div style={{ paddingLeft: 12 + 16 * depth }}>
-      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+      <div className="nav-item-row" style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
         <input style={{ ...fieldStyle, flex: 1 }} placeholder={t("nv.mega.linktext")}
           value={link.text} onChange={(e) => onChangeLocal(path, { text: e.target.value })} onBlur={onCommit} />
         <input style={{ ...fieldStyle, flex: 1 }} placeholder={t("nv.mega.linkurl")}
@@ -262,7 +266,7 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
 
       {items.map((it, i) => (
         <div key={it.docId} style={{ marginBottom: 10 }}>
-          <div className={"panel" + (dragI === i ? " drag" : "")} style={{ background: "var(--sunk)", display: "flex", alignItems: "center", gap: 10 }}
+          <div className={"panel nav-item-row" + (dragI === i ? " drag" : "")} style={{ background: "var(--sunk)", display: "flex", alignItems: "center", gap: 10 }}
             draggable onDragStart={() => setDragI(i)} onDragEnd={() => setDragI(-1)}
             onDragOver={(e) => e.preventDefault()} onDrop={() => { reorder(dragI, i); setDragI(-1); }}>
             <div className="vb-grip" title="drag to reorder"><Icon name="drag" /></div>
