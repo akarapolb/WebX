@@ -658,7 +658,21 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .vb-ai input:focus{outline:none}
 .vb-ai-btn{flex:none;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;font-family:inherit}
 .vb-ai-btn:disabled{opacity:.5}
-@media (max-width:1080px){ .vb2,.vb2.tbx-open{grid-template-columns:1fr} .vb-tbpane,.vb-insp{position:static;max-height:none} }
+@media (max-width:1080px){
+  .vb2,.vb2.tbx-open{grid-template-columns:1fr}
+  .vb-tbpane,.vb-insp{position:static;max-height:none}
+  /* below 1080px the 3 panes stack in one column instead of sitting
+     side by side — the desktop order (toolbox, canvas, inspector) then
+     meant scrolling past the ENTIRE block library before ever seeing
+     the page you're editing (found live at 375px: the canvas sat ~2000px
+     down). Canvas first so you see your page immediately, then the
+     blocks/properties panel (the actual editing workhorse — selecting
+     and adjusting a block), then the toolbox for adding new ones last,
+     since that's the least frequent action. */
+  .vb2 .vb-stage{order:1}
+  .vb2 .vb-insp{order:2}
+  .vb2 .vb-tbpane{order:3}
+}
 
 /* command palette */
 .cmdk{position:fixed;top:14vh;left:50%;transform:translateX(-50%);width:min(620px,94vw);background:var(--panel);border:1px solid var(--line2);border-radius:16px;z-index:80;box-shadow:0 40px 90px -30px rgba(0,0,0,.7);animation:cmdk-in .2s}
