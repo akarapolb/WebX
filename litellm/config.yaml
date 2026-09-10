@@ -16,6 +16,11 @@ model_list:
     litellm_params:
       model: ollama/llama3.1
       api_base: http://localhost:11434
+  - model_name: webx-kimi               # Moonshot AI Kimi K3 — agentic/tool-calling flagship
+    litellm_params:
+      model: moonshot/kimi-k3
+      api_key: os.environ/MOONSHOT_API_KEY
+      api_base: https://api.moonshot.ai/v1   # this key is on the international platform, not api.moonshot.cn
   - model_name: webx-embed              # RAG embeddings (keep one model per index)
     litellm_params:
       model: openai/text-embedding-3-small
