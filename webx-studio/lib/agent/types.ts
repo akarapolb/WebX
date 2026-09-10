@@ -39,6 +39,13 @@ export type AgentRunContext = {
   lang: "en" | "th";
   ref: AgentContextRef;
   signal?: AbortSignal;
+  /** The tenant's own publicTemplate ("gov-portal"|"orst"|"royalsociety",
+   * governance.ts's AgentPolicy.dialect) and content engine — the
+   * page-building tools (tools.ts) need both: dialect to translate a
+   * page's stored blocks through blockDialect.ts's toBuilder/toWire, engine
+   * to pick "wp:page" vs the Strapi page/landing uids. */
+  dialect: string;
+  engine: "strapi" | "wordpress";
 };
 
 // ---- SSE wire events (app/api/agent/run/route.ts emits these; the client's

@@ -85,12 +85,12 @@ function interpolate(bt: BlockTypeDef, props: Record<string, any>): string {
 function editRoot(edit?: EditBag) {
   if (!edit) return {};
   return {
-    className: "pvb-editable" + (edit.active ? " pvb-sel" : ""),
+    className: "pvb-editable" + (edit.active ? " pvb-sel" : "") + (edit.agentDraft ? " pvb-agent-draft" : ""),
     onClick: (e: any) => { e.stopPropagation(); edit.onSelect(); },
   };
 }
 function cls(base: string, edit?: EditBag) {
-  return edit ? base + " pvb-editable" + (edit.active ? " pvb-sel" : "") : base;
+  return edit ? base + " pvb-editable" + (edit.active ? " pvb-sel" : "") + (edit.agentDraft ? " pvb-agent-draft" : "") : base;
 }
 
 function HeroBlock({ b, edit }: { b: any; edit?: EditBag }) {
@@ -761,6 +761,16 @@ export default function PreviewBlocks({
   return (
     <>
       {list.map((b, i) => {
+        // WebX Agent (Phase 8) — agentDraft rides the same EditBag every
+        // block already threads to cls()/editRoot() for its root className
+        // (see those two helpers in blocks.tsx), so a block just applied
+        // from an agent proposal (VisualBuilder.tsx's applyAgentProposal
+        // marks it __agent) gets .pvb-agent-draft on its real root element
+        // without any individual block component needing to know about it.
+        // Only set while edit is present (onSelect passed) — matches
+        // .pvb-sel's own existing edit-only precedent; previewMode already
+        // strips all such affordances. See RealPreview.tsx's EDITOR_CSS for
+        // the matching rule (globals.css never loads inside this iframe).
         const edit: EditBag | undefined = onSelect ? {
           index: i,
           active: active === i,
@@ -769,6 +779,7 @@ export default function PreviewBlocks({
           onImagePick: (path, file) => onImagePick?.(i, path, file),
           onArrayAdd: (path, item) => onArrayAdd?.(i, path, item),
           onArrayRemove: (path, k) => onArrayRemove?.(i, path, k),
+          agentDraft: !!b.__agent,
         } : undefined;
         switch (b.__component) {
           case "block.hero": return <HeroBlock key={i} b={b} edit={edit} />;

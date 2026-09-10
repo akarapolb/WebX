@@ -37,6 +37,8 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
     threadId: "thread-1",
     lang: "en",
     ref: { kind: "none" },
+    dialect: "gov-portal",
+    engine: "strapi",
     ...overrides,
   };
 }
@@ -248,5 +250,113 @@ describe("availableTools / executeTool (lib/agent/tools.ts) — the actual enfor
     const r = await executeTool(ctx({ level: "suggest" }), "write_draft_fields", JSON.stringify({ uid: "api::article.article", id: "1", fields: { body: "x".repeat(9000) } }));
     assert.equal(r.ok, false);
     assert.match(r.summary, /too large/);
+  });
+});
+
+describe("page-building tools (lib/agent/tools.ts) — Phase 8 follow-up", () => {
+  test("list_block_types is a pure read — works at \"read\" level with no network call, returns real gov-portal catalog entries", async () => {
+    const r = await executeTool(ctx({ level: "read", dialect: "gov-portal" }), "list_block_types", "{}");
+    assert.equal(r.ok, true);
+    const comps = (r.data as any[]).map((t) => t.comp);
+    assert.ok(comps.includes("block.hero"), "gov-portal's own block.hero should be listed");
+    assert.ok(!comps.includes("orst.page-hero"), "a different tenant's dialect-specific types should not leak in");
+  });
+  test("list_block_types filters to the ORST dialect plus the shared wp-* vocabulary", async () => {
+    const r = await executeTool(ctx({ level: "read", dialect: "orst" }), "list_block_types", "{}");
+    const comps = (r.data as any[]).map((t) => t.comp);
+    assert.ok(comps.includes("orst.page-hero"));
+    assert.ok(comps.includes("table"), "GENERIC_TYPES' shared wp-dialect vocabulary should be included for orst");
+    assert.ok(!comps.includes("block.hero"), "gov-portal-only types should not appear for a WP-dialect tenant");
+  });
+
+  test("insert_blocks rejects block.embed outright, regardless of level", async () => {
+    const r = await executeTool(
+      ctx({ level: "draft_submit" }), "insert_blocks",
+      JSON.stringify({ uid: "api::page.page", id: "1", at: 0, blocks: [{ comp: "block.embed", fields: { html: "<p>hi</p>" } }] })
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /not available to the agent/);
+  });
+  test("insert_blocks rejects a block whose field content looks like a script injection", async () => {
+    const r = await executeTool(
+      ctx({ level: "draft_submit" }), "insert_blocks",
+      JSON.stringify({ uid: "api::page.page", id: "1", at: 0, blocks: [{ comp: "block.richtext", fields: { body: "<script>alert(1)</script>" } }] })
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /disallowed script-like text/);
+  });
+  test("insert_blocks rejects a javascript: URL hidden in an unrelated field", async () => {
+    const r = await executeTool(
+      ctx({ level: "draft_submit" }), "insert_blocks",
+      JSON.stringify({ uid: "api::page.page", id: "1", at: 0, blocks: [{ comp: "block.cta-banner", fields: { buttonUrl: "javascript:alert(1)" } }] })
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /disallowed script-like text/);
+  });
+  test("insert_blocks rejects an unknown block type before any write is attempted", async () => {
+    const r = await executeTool(
+      ctx({ level: "draft_submit" }), "insert_blocks",
+      JSON.stringify({ uid: "api::page.page", id: "1", at: 0, blocks: [{ comp: "block.does-not-exist", fields: {} }] })
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /Unknown block type/);
+  });
+  test("insert_blocks rejects a non-page uid — use write_draft_fields for entries instead", async () => {
+    const r = await executeTool(
+      ctx({ level: "draft_submit" }), "insert_blocks",
+      JSON.stringify({ uid: "api::article.article", id: "1", at: 0, blocks: [{ comp: "block.hero", fields: {} }] })
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /is not a page/);
+  });
+
+  test("insert_blocks at \"suggest\" level downgrades to a \"blocks\" proposal (no network call), filling in the block type's own defaults", async () => {
+    const r = await executeTool(
+      ctx({ level: "suggest" }), "insert_blocks",
+      JSON.stringify({ uid: "api::page.page", id: "1", at: 2, blocks: [{ comp: "block.hero", fields: { heading: "Custom heading" } }] })
+    );
+    assert.equal(r.ok, true);
+    assert.ok(r.proposal, "should return a proposal, not perform a write");
+    assert.equal(r.proposal!.kind, "blocks");
+    assert.equal(r.proposal!.at, 2);
+    assert.equal(r.proposal!.blocks?.length, 1);
+    const block = r.proposal!.blocks![0];
+    assert.equal(block.__component, "block.hero");
+    assert.equal(block.heading, "Custom heading"); // explicit field wins
+    assert.equal(block.ctaLabel, "Get started"); // block.hero's own def fills in the rest
+  });
+  test("replace_block at \"suggest\" level proposes via the replace index, not at", async () => {
+    const r = await executeTool(
+      ctx({ level: "suggest" }), "replace_block",
+      JSON.stringify({ uid: "api::page.page", id: "1", index: 3, comp: "block.richtext", fields: {} })
+    );
+    assert.equal(r.ok, true);
+    assert.equal(r.proposal!.replace, 3);
+    assert.equal(r.proposal!.at, undefined);
+  });
+  test("remove_block at \"suggest\" level proposes an empty blocks array at the replace index", async () => {
+    const r = await executeTool(ctx({ level: "suggest" }), "remove_block", JSON.stringify({ uid: "api::page.page", id: "1", index: 1 }));
+    assert.equal(r.ok, true);
+    assert.equal(r.proposal!.replace, 1);
+    assert.deepEqual(r.proposal!.blocks, []);
+  });
+  test("applyLocally downgrades insert_blocks on the exact same open page to a proposal (no network call)", async () => {
+    const r = await executeTool(
+      ctx({ level: "draft", ref: { kind: "page", uid: "api::page.page", docId: "1", applyLocally: true } }), "insert_blocks",
+      JSON.stringify({ uid: "api::page.page", id: "1", at: 0, blocks: [{ comp: "block.hero", fields: {} }] })
+    );
+    assert.equal(r.ok, true);
+    assert.ok(r.proposal, "applyLocally should downgrade the page write to a proposal");
+  });
+
+  test("insert_blocks/replace_block/remove_block are only offered at \"suggest\"+; get_page_blocks/list_block_types are offered at \"read\"", () => {
+    const readNames = availableTools(ctx({ level: "read" })).map((t) => t.name);
+    assert.ok(readNames.includes("get_page_blocks"));
+    assert.ok(readNames.includes("list_block_types"));
+    assert.ok(!readNames.includes("insert_blocks"));
+    const suggestNames = availableTools(ctx({ level: "suggest" })).map((t) => t.name);
+    assert.ok(suggestNames.includes("insert_blocks"));
+    assert.ok(suggestNames.includes("replace_block"));
+    assert.ok(suggestNames.includes("remove_block"));
   });
 });

@@ -3,23 +3,89 @@
 // field-policy stripping, the item plan cap, and audit logging are ALL
 // inherited automatically; nothing here re-implements or bypasses any of it.
 //
-// Scope note (Milestone 1 — backend foundation): this registry covers
-// content-entry tools only (read/search/audit/write-draft/translate/submit).
-// Page-building tools (get_page_blocks, insert_blocks, list_block_types, …)
-// are a deliberate follow-up — they need lib/blockCatalog.ts extracted from
-// the live VisualBuilder.tsx first, which is a higher-risk edit to a large,
-// already-shipped editor best done alongside its own UI wiring (Milestone 2),
-// not rushed into this backend-only pass.
+// Covers both content-entry tools (read/search/audit/write-draft/translate/
+// submit) and page-building tools (get_page_blocks/insert_blocks/
+// replace_block/remove_block/list_block_types — added once
+// lib/blockCatalog.ts existed to share VisualBuilder.tsx's own block-type
+// catalog without a second copy).
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { governed, listGovernableContentTypes } from "@/lib/cms/governance";
 import { CmsError } from "@/lib/cms/types";
 import { structured } from "@/lib/llm";
+import { toBuilder, toWire, type Dialect } from "@/lib/blockDialect";
+import { ALL_TYPES, metaOf } from "@/lib/blockCatalog";
 import { auditEntry } from "./auditRules";
 import { untrustedBlock } from "./prompts";
 import { levelAtLeast, type AgentRunContext, type ToolDef, type ToolMode, type AgentProposal } from "./types";
 
 const REVIEW_UID = "api::review.review";
+const PAGE_VERSION_UID = "api::page-version.page-version";
+// The 3 page-shaped content types VisualBuilder.tsx itself edits (governance.ts's
+// own PAGE_LIKE_UIDS is module-private — see that file's header note on why
+// every cross-cutting concern lives directly in governance.ts rather than a
+// separate module reaching into its internals; this one small set is
+// data, not a governance decision, so a local copy here is the right call,
+// not an exception to that rule).
+const PAGE_UIDS = new Set(["api::page.page", "api::landing.landing", "wp:page"]);
+// block.embed is a real, deliberate escape hatch for a HUMAN editor (raw
+// HTML/CSS/JS, gated by governance.ts's own embedCode custom-role
+// permission) — never for the agent, regardless of the calling human's own
+// embedCode grant. governed.update's embedCode check reflects the HUMAN's
+// permission, not "should the agent specifically be allowed to inject
+// arbitrary script" — a materially different question this rejects outright.
+const BLOCK_TYPE_DENY = /embed/i;
+// A basic script-content heuristic applied to every string value in a
+// block the agent is about to write — defense in depth alongside
+// governed.update's own embedCode gate and the block.embed type-level
+// block above, in case some OTHER field (e.g. a rich-text body) could
+// otherwise carry a script-like payload onto a live public page.
+const UNSAFE_BLOCK_STRING = /<script[\s>]|javascript:|on(?:error|load|click|mouseover|focus)\s*=/i;
+
+// AgentRunContext.dialect is a plain string (governance.ts's AgentPolicy.dialect
+// comes straight from the tenant's own free-form publicTemplate field, never
+// validated against the 3-value union) — cast at the one seam that needs the
+// literal type, same convention VisualBuilder.tsx's own `as Dialect` casts
+// already use for the identical field.
+const dialectOf = (ctx: AgentRunContext): Dialect => ctx.dialect as Dialect;
+
+function assertPageUid(uid: string) {
+  if (!PAGE_UIDS.has(uid)) throw new CmsError(`"${uid}" is not a page — use write_draft_fields/create_draft_entry for content entries.`, 400);
+}
+function assertSafeBlockContent(v: any): void {
+  if (typeof v === "string") {
+    if (UNSAFE_BLOCK_STRING.test(v)) throw new CmsError("Block content contains disallowed script-like text.", 400);
+    return;
+  }
+  if (Array.isArray(v)) { v.forEach(assertSafeBlockContent); return; }
+  if (v && typeof v === "object") { for (const vv of Object.values(v)) assertSafeBlockContent(vv); }
+}
+/** Builds one full block object from a model-supplied {comp, fields} pair —
+ * validated against the real catalog and merged onto that type's own `def`
+ * template (same shape VisualBuilder.tsx's own add()/addAt() construct),
+ * rather than trusting the model to hand-assemble a byte-perfect block. */
+function buildBlock(comp: string, fields: Record<string, any>): Record<string, any> {
+  if (BLOCK_TYPE_DENY.test(comp)) throw new CmsError(`Block type "${comp}" is not available to the agent.`, 403);
+  const meta = metaOf(comp);
+  if (!meta) throw new CmsError(`Unknown block type "${comp}". Call list_block_types first.`, 400);
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) throw new CmsError("fields must be an object", 400);
+  const block = { __component: comp, ...JSON.parse(JSON.stringify(meta.def || {})), ...fields };
+  assertSafeBlockContent(block);
+  return block;
+}
+/** A page-version snapshot BEFORE the agent's own edit — the exact same
+ * safety net VisualBuilder.tsx's own saveVersion() creates before a human's
+ * save, labelled so it's identifiable in the History panel. Never blocks
+ * the real edit it's protecting if the snapshot itself fails. */
+async function snapshotPageVersion(ctx: AgentRunContext, uid: string, id: string, title: string, blocks: any[]): Promise<void> {
+  try {
+    await governed.create(PAGE_VERSION_UID, {
+      documentRef: id, contentType: uid, tenantKey: ctx.tenantKey,
+      label: "agent:" + ctx.runId, data: { title, blocks },
+    });
+  } catch { /* best-effort safety net, not a precondition for the edit */ }
+}
+const MAX_BLOCKS_RETURNED = 40;
 
 // The level a tool's own `mode` requires to be OFFERED to the model at all.
 // "draft" tools still get downgraded to a proposal at exactly "suggest" (or
@@ -225,6 +291,130 @@ const TOOLS: ToolDef[] = [
         documentRef: args.id, contentType: args.uid, title, stage: "in_review", requestedBy: ctx.user.email || "agent", history: [entry],
       });
       return { summary: "Submitted for review", data: { reviewId: String(created?.documentId ?? created?.id ?? "") } };
+    },
+  },
+
+  // ---- page-building tools ----
+  {
+    name: "list_block_types",
+    mode: "read",
+    description: "List the page-section block types available for this workspace's own site design, each with a sample field shape. Call this before insert_blocks/replace_block if you don't already know which block types exist.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    async run(ctx) {
+      const types = ALL_TYPES.filter((ty: any) => (ty.tpl || "gov-portal") === ctx.dialect || (ty.generic && (ctx.dialect === "orst" || ctx.dialect === "royalsociety")));
+      const data = types.map((ty: any) => ({ comp: ty.comp, category: ty.cat, sampleFields: ty.def }));
+      return { summary: `${data.length} block type(s) for "${ctx.dialect}"`, data };
+    },
+  },
+  {
+    name: "get_page_blocks",
+    mode: "read",
+    description: "Read a page's current blocks (sections) in order, each with its index and field values. Use the index to target replace_block/remove_block.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const blocks = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx)).map((b: any, index: number) => ({ index, ...b }));
+      const truncated = blocks.length > MAX_BLOCKS_RETURNED;
+      return {
+        summary: `${blocks.length} block(s)` + (truncated ? ` (showing first ${MAX_BLOCKS_RETURNED})` : ""),
+        data: { title: titleOf(e), blocks: truncated ? blocks.slice(0, MAX_BLOCKS_RETURNED) : blocks },
+      };
+    },
+  },
+  {
+    name: "insert_blocks",
+    mode: "draft",
+    description: "Insert one or more new blocks (sections) into a page at a given position. Provide each block's type (from list_block_types) and field values — fields you don't set get that type's own sensible defaults. When an editor is already open for this exact page, this returns a proposal for a human to apply instead of writing directly.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "at", "blocks"],
+      properties: {
+        uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" },
+        at: { type: "integer", minimum: 0, description: "Position to insert at — 0 inserts before the first existing block." },
+        blocks: {
+          type: "array", minItems: 1, maxItems: 6,
+          items: { type: "object", additionalProperties: false, required: ["comp"], properties: { comp: { type: "string" }, fields: { type: "object" } } },
+        },
+      },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const newBlocks = args.blocks.map((b: any) => buildBlock(b.comp, b.fields || {}));
+      if (shouldPropose(ctx)) {
+        return {
+          summary: `Proposed inserting ${newBlocks.length} block(s) at position ${args.at}`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Insert ${newBlocks.length} block(s)`, blocks: newBlocks, at: args.at },
+        };
+      }
+      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      const at = Math.max(0, Math.min(args.at, current.length));
+      const next = [...current.slice(0, at), ...newBlocks, ...current.slice(at)];
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
+      await governed.update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Inserted ${newBlocks.length} block(s) at position ${at}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "replace_block",
+    mode: "draft",
+    description: "Replace one existing block on a page (by its index from get_page_blocks) with a new block.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "comp"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 }, comp: { type: "string" }, fields: { type: "object" } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const newBlock = buildBlock(args.comp, args.fields || {});
+      if (shouldPropose(ctx)) {
+        return {
+          summary: `Proposed replacing block ${args.index}`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Replace block ${args.index}`, blocks: [newBlock], replace: args.index },
+        };
+      }
+      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const next = current.map((b: any, i: number) => (i === args.index ? newBlock : b));
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
+      await governed.update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Replaced block ${args.index}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "remove_block",
+    mode: "draft",
+    description: "Remove one existing block from a page by its index (from get_page_blocks).",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      if (shouldPropose(ctx)) {
+        return {
+          summary: `Proposed removing block ${args.index}`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Remove block ${args.index}`, blocks: [], replace: args.index },
+        };
+      }
+      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const next = current.filter((_: any, i: number) => i !== args.index);
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
+      await governed.update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Removed block ${args.index}`, data: { uid: args.uid, id: args.id } };
     },
   },
 ];

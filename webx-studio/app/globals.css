@@ -411,6 +411,13 @@ html[data-theme="dark"] .vb-canvas{background:#0f1117}
 .vbk-tools button{width:24px;height:24px;border-radius:5px;border:none;background:transparent;color:var(--bg);font-size:12px;display:grid;place-items:center}
 .vbk-tools button:hover:not(:disabled){background:rgba(125,125,125,.25)}
 .vbk-tools button:disabled{opacity:.3}.vbk-tools svg{width:13px;height:13px}
+/* a block applied from a WebX Agent proposal (applyAgentProposal in
+   VisualBuilder.tsx) — stays tagged until the page is actually saved (the
+   __agent marker itself is stripped from the save payload, never from the
+   canvas state, so the tag is the human's own visual "this came from the
+   agent, still unsaved" cue). */
+.vbk-wrap.ag-draft{border-color:var(--accent);border-style:dashed}
+.ag-draft-tag{position:absolute;top:6px;left:6px;z-index:5;background:var(--accent);color:var(--on-accent);font-size:10.5px;font-weight:700;letter-spacing:.02em;padding:3px 8px;border-radius:999px}
 .vbk-hero{padding:54px 26px;text-align:center;background:radial-gradient(120% 130% at 50% 0%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 60%),#14151c;color:#fff}
 .vbk-kicker{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:color-mix(in srgb,var(--accent) 55%,transparent);padding:5px 12px;border-radius:999px;margin-bottom:14px}
 .vbk-hero h2{font-size:30px;font-weight:700;letter-spacing:-.02em;margin:0 0 12px;line-height:1.1}

@@ -63,7 +63,7 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     user: input.user as any, tenantKey: input.policy.tenantKey, level: input.policy.level,
     allowedTools: input.policy.tools, allowedContentTypes: input.policy.contentTypes,
     model: input.policy.model, runId: input.runId, threadId: input.threadId, lang: input.lang,
-    ref: input.ref, signal: input.signal,
+    ref: input.ref, signal: input.signal, dialect: input.policy.dialect, engine: input.policy.engine,
   };
 
   emit({ type: "run_started", runId: input.runId, threadId: input.threadId, level: ctx.level, model: ctx.model || "default" });

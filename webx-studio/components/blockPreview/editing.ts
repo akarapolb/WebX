@@ -12,4 +12,8 @@ export type EditBag = {
   onImagePick: (path: Path, file: File) => void;
   onArrayAdd: (path: Path, item: any) => void;
   onArrayRemove: (path: Path, i: number) => void;
+  /** True for a block just applied from a WebX Agent proposal (Phase 8) —
+   * read by cls()/editRoot() in blocks.tsx to add .pvb-agent-draft to every
+   * block's root element without touching each block component. */
+  agentDraft?: boolean;
 };

@@ -114,6 +114,74 @@ test.describe("WebX Agent — docked panel + workspace (mocked backend)", () => 
     await expect(page.getByText("Open this item to apply")).toBeVisible();
   });
 
+  test("a 'blocks' proposal applies to the open Visual Builder page, tags the block, and Undo removes it", async ({ page }) => {
+    // Mocks the Builder's own data calls too (list + get on api::landing.landing)
+    // so this stays a pure client-state test like the rest of the suite —
+    // no real Strapi content needed, just a page that opens with zero blocks
+    // so the proposal's own insert is the only thing that adds one.
+    //
+    // The canvas itself is components/blockPreview/RealPreview.tsx's
+    // same-origin srcDoc iframe (the real primary editing surface for a
+    // gov-portal-dialect tenant, which is what the scheduler session below
+    // resolves to) — Playwright doesn't pierce iframes by default, so every
+    // canvas-side assertion goes through a frameLocator instead of `page`.
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "" } }));
+    await page.route("**/api/agent/threads", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/cms/entries/api%3A%3Alanding.landing?**", (route) => route.fulfill({
+      json: { data: [{ documentId: "mockpage1", title: "Mock Landing" }], total: 1, pageCount: 1 },
+    }));
+    await page.route("**/api/cms/entries/api%3A%3Alanding.landing/mockpage1**", (route) => route.fulfill({
+      json: { blocks: [] },
+    }));
+    await page.route("**/api/agent/run", (route) => route.fulfill({
+      status: 200, contentType: "text/event-stream",
+      body: sse([
+        { type: "run_started", runId: "r3", threadId: "t3", level: "draft", model: "" },
+        { type: "tool_call", id: "c1", name: "insert_blocks", args: {} },
+        { type: "tool_result", id: "c1", ok: true, summary: "Proposed 1 block(s)" },
+        {
+          type: "proposal", proposal: {
+            id: "p3", kind: "blocks", target: { uid: "api::landing.landing", id: "mockpage1" },
+            title: "Block changes",
+            blocks: [{ __component: "block.hero", heading: "Agent Heading", subheading: "x", ctaLabel: "Go" }],
+            at: 0,
+          },
+        },
+        { type: "done", runId: "r3" },
+      ]),
+    }));
+
+    // Wide viewport: with the agent panel open, .vb2 stacks the canvas
+    // below the block-list aside under ~1180px of remaining width (see
+    // Shell.tsx/globals.css's .ag-open rules) — the default 1280x720
+    // viewport plus a 400px docked panel leaves the canvas scrolled out of
+    // the initial layout rather than side-by-side with it.
+    await page.setViewportSize({ width: 1800, height: 1000 });
+    await page.goto(WEBX_STUDIO + "/builder");
+    const canvas = page.frameLocator('iframe[title="Real preview"]');
+    await expect(canvas.locator(".pvb-agent-draft")).toHaveCount(0, { timeout: 15_000 }); // mock page loaded, zero blocks
+
+    await page.getByTestId("agent-toggle").click();
+    await page.getByTestId("agent-composer").fill("Add a hero block");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByText("Block changes")).toBeVisible({ timeout: 10_000 });
+    const applyBtn = page.getByRole("button", { name: "Apply" });
+    await expect(applyBtn).toBeEnabled({ timeout: 10_000 }); // targetMatches: same uid+docId as the open page
+    await applyBtn.click();
+
+    await expect(canvas.locator(".pvb-agent-draft")).toHaveCount(1, { timeout: 10_000 });
+    await expect(canvas.locator(".home-hero")).toBeVisible(); // the actual inserted block, not just the tag
+
+    // Exact match: the Builder's own global Ctrl+Z undo button is ALSO
+    // named "Undo" (as "Undo (Ctrl+Z)"), disabled and unrelated to this
+    // proposal's own dedicated undo — see applyAgentProposal's own comment
+    // on why they're deliberately two different mechanisms.
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(canvas.locator(".pvb-agent-draft")).toHaveCount(0);
+    await expect(canvas.locator(".home-hero")).toHaveCount(0);
+  });
+
   test("policy \"off\" hides the toggle entirely and shows the empty state with no composer", async ({ page, context }) => {
     await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "off", reason: "plan" } }));
     // At level "off", Shell.tsx's topbar toggle and AgentPanel's own FAB

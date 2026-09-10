@@ -551,6 +551,7 @@ export const DICT: Record<string, Entry> = {
   "vb.diffremoved": { en: "removed", th: "ลบ" },
   "vb.diffchanged": { en: "changed", th: "แก้ไข" },
   "vb.diffreplaced": { en: "replaced", th: "แทนที่" },
+  "vb.agentdraft": { en: "Agent draft", th: "ร่างโดยเอเจนต์" },
   "vb.ab": { en: "A/B Test", th: "ทดสอบ A/B" },
   "vb.abenable": { en: "Enable A/B test (serve variant A or B per visitor)", th: "เปิดทดสอบ A/B (สุ่มเสิร์ฟ A หรือ B ต่อผู้เข้าชม)" },
   "vb.absplit": { en: "Traffic split", th: "สัดส่วนทราฟฟิก" },

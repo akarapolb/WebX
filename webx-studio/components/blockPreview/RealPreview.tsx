@@ -50,6 +50,12 @@ const EDITOR_CSS = `
 .pvb-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:50vh;padding:40px;text-align:center;color:#8a8f9c;font-family:system-ui,sans-serif}
 .pvb-empty b{color:#3f4451;font-size:15px}
 .pvb-empty span{font-size:13px}
+/* a block just applied from a WebX Agent proposal (blocks.tsx's
+   PreviewBlocks marks it .pvb-agent-draft when b.__agent is set) — a
+   distinct violet, not the #3b82f6 selection blue above, so a drafted
+   block stays visually identifiable even while also selected. */
+.pvb-agent-draft{outline:2px dashed #7c3aed!important;outline-offset:2px;position:relative}
+.pvb-agent-draft::before{content:"Agent draft";position:absolute;top:6px;left:6px;z-index:6;background:#7c3aed;color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.02em;padding:3px 8px;border-radius:999px;font-family:system-ui,sans-serif;pointer-events:none}
 `;
 
 // Built once, not derived from props — changing an iframe's srcDoc forces a

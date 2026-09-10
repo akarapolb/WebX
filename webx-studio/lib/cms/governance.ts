@@ -1322,7 +1322,19 @@ export function clampAgentLevel(a: AgentLevel, b: AgentLevel): AgentLevel { retu
  * is an intersection filter, never additive. `reason` is set only when
  * level is "off", for the empty-state UI to explain why (Free plan vs. a
  * workspace admin never having turned it on vs. AGENT_ENABLED=0). */
-export type AgentPolicy = { level: AgentLevel; tools: string[] | null; contentTypes: string[] | null; tenantKey: string | null; model: string; reason?: "disabled" | "unscoped" | "plan" | "not_granted" };
+export type AgentPolicy = {
+  level: AgentLevel; tools: string[] | null; contentTypes: string[] | null; tenantKey: string | null; model: string;
+  reason?: "disabled" | "unscoped" | "plan" | "not_granted";
+  /** The tenant's own publicTemplate/engine — lib/agent/tools.ts's
+   * page-building tools (get_page_blocks/insert_blocks/replace_block/
+   * remove_block/list_block_types) need this to translate a page's stored
+   * blocks through blockDialect.ts's toBuilder/toWire (a no-op for
+   * "gov-portal", the only dialect every pre-Phase-8 Strapi tenant has) and
+   * to pick the right page uid ("wp:page" vs "api::page.page"/
+   * "api::landing.landing"). Defaults match VisualBuilder.tsx's own
+   * fallbacks for an unresolved/pre-existing tenant. */
+  dialect: string; engine: "strapi" | "wordpress";
+};
 
 /** Resolved fresh on every call — cheap (rides the existing 30s tenant cache
  * and 15s custom-role cache, no extra network round trip beyond those) — so
@@ -1330,7 +1342,7 @@ export type AgentPolicy = { level: AgentLevel; tools: string[] | null; contentTy
  * run, and a workspace admin flipping the level to "off" mid-run takes
  * effect on the very next tool call. */
 export async function resolveAgentPolicy(user: CurrentUser): Promise<AgentPolicy> {
-  const empty: AgentPolicy = { level: "off", tools: null, contentTypes: null, tenantKey: null, model: "" };
+  const empty: AgentPolicy = { level: "off", tools: null, contentTypes: null, tenantKey: null, model: "", dialect: "gov-portal", engine: "strapi" };
   if (process.env.AGENT_ENABLED === "0") return { ...empty, reason: "disabled" };
   const eff = await resolveEffectiveTenant(user.email);
   // Unscoped/super-admin sessions (the scheduler, ops/support staff) have no
@@ -1338,7 +1350,9 @@ export async function resolveAgentPolicy(user: CurrentUser): Promise<AgentPolicy
   // conservative rather than defaulting an unscoped, cross-tenant-reach
   // session to some ambient autonomy level.
   if (!eff) return { ...empty, reason: "unscoped" };
-  if (eff.plan === "free" || !eff.plan) return { ...empty, tenantKey: eff.key, reason: "plan" };
+  const dialect = eff.publicTemplate || "gov-portal";
+  const engine = eff.engine || "strapi";
+  if (eff.plan === "free" || !eff.plan) return { ...empty, tenantKey: eff.key, dialect, engine, reason: "plan" };
 
   const tenantAgent = (eff.features || {}).agent || {};
   let level: AgentLevel = isAgentLevel(tenantAgent.level) ? tenantAgent.level : "off";
@@ -1362,7 +1376,7 @@ export async function resolveAgentPolicy(user: CurrentUser): Promise<AgentPolicy
     }
   }
   const model = tenantAgent.model || (tenantAgent.local ? "webx-local" : "");
-  return { level, tools, contentTypes, tenantKey: eff.key, model, reason: level === "off" ? reason : undefined };
+  return { level, tools, contentTypes, tenantKey: eff.key, model, dialect, engine, reason: level === "off" ? reason : undefined };
 }
 
 /** Workspace-default settings form (AgentSettings.tsx) reads/writes only
