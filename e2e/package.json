@@ -7,7 +7,9 @@
     "test:public": "playwright test tests/public-site.spec.ts",
     "test:studio": "playwright test tests/studio-roundtrip.spec.ts",
     "test:users": "playwright test tests/user-management.spec.ts",
-    "test:wp-admin": "playwright test tests/wp-admin.spec.ts"
+    "test:wp-admin": "playwright test tests/wp-admin.spec.ts",
+    "test:agent": "playwright test tests/agent.spec.ts",
+    "test:agent-panel": "playwright test tests/agent-panel.spec.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",

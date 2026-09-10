@@ -128,13 +128,23 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
             break;
           case "tool_call": {
             const step: ToolStep = { id: d.id, name: d.name, pending: true };
+            // The id must be settled and the ref mutated HERE, outside the
+            // setMessages updater — an updater function must be pure (React
+            // 18 StrictMode double-invokes it in dev to enforce exactly
+            // this), and mutating toolsMsgId.current from inside one is not
+            // pure: found live via e2e/tests/agent-panel.spec.ts under
+            // `next dev` (StrictMode on) — the double-invoke's first call
+            // added the tools message and set the ref; its second call then
+            // saw the ref already set and tried to update an existing
+            // message that, from that call's own (pre-first-call) snapshot
+            // of `m`, doesn't exist yet — a silent no-op that dropped the
+            // tools message from the committed state entirely.
+            if (!toolsMsgId.current) toolsMsgId.current = nid();
+            const gid = toolsMsgId.current;
             setMessages((m) => {
-              if (toolsMsgId.current) {
-                return m.map((x) => (x.kind === "tools" && x.id === toolsMsgId.current ? { ...x, steps: [...x.steps, step] } : x));
-              }
-              const id = nid();
-              toolsMsgId.current = id;
-              return [...m, { kind: "tools", id, steps: [step] }];
+              const idx = m.findIndex((x) => x.kind === "tools" && x.id === gid);
+              if (idx === -1) return [...m, { kind: "tools", id: gid, steps: [step] }];
+              return m.map((x, i) => (i === idx ? { ...x, steps: [...(x as Extract<ChatMsg, { kind: "tools" }>).steps, step] } : x));
             });
             break;
           }

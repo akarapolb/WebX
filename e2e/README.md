@@ -31,6 +31,8 @@ npm run test:public         # public-site rendering + nav-overlap regression che
 npm run test:studio         # WebX Studio round trip (needs WP_ADMIN_APP_PASSWORD)
 npm run test:users          # user management + rebuild-now (needs STRAPI_SCHEDULER_PASSWORD)
 npm run test:wp-admin       # WordPress admin direct edit (needs WP_ADMIN_PASSWORD)
+npm run test:agent-panel    # WebX Agent docked panel + workspace UI (mocked backend, needs STRAPI_SCHEDULER_PASSWORD only)
+npm run test:agent          # WebX Agent real backend run (needs DGA_EDITOR_PASSWORD + a running mock-litellm — see Suite 5)
 ```
 
 ## Suite 1 — public-site rendering
@@ -70,6 +72,71 @@ npm run test:wp-admin
 
 Logs directly into `/wp-admin`, edits an Org Unit's excerpt through WordPress's own edit screen (not through WebX Studio at all), and verifies the change via REST — confirming the Phase 10 content types are genuinely editable by an admin who never opens WebX Studio, not just through it.
 
+## Suite 5 — WebX Agent, real backend run
+
+Exercises the actual Phase 8 backend contract end to end: `POST /api/agent/run`'s
+SSE event stream, the agent's own tool-calling turn loop actually writing a
+real draft field through `governed.update`, and audit attribution
+(`actor:"agent"`, `action:"agent_update"`). Needs a real **tenant-scoped**
+session — the scheduler account used elsewhere in this suite always resolves
+to autonomy level `"off"` (reason `"unscoped"`) by design (see
+`governance.ts`'s `resolveAgentPolicy`), so it can never exercise a real run.
+
+```bash
+export STRAPI_SCHEDULER_PASSWORD="the scheduler account's password"   # also needed here, to flip dga's plan/policy and verify results directly
+export DGA_EDITOR_PASSWORD="dga-editor@dga.local's password"          # strapi-cms/src/seed/seed.ts's own seeded dga tenant editor
+```
+
+Also needs the **already-running** webx-studio dev server to have been
+started with `LITELLM_URL` pointing at `e2e/mock-litellm.mjs` — env vars in
+`lib/llm.ts` are read once at module load, not per request, so this can't be
+injected per-test-run the way credentials above can:
+
+```bash
+# from webx-studio/, before starting the dev server for this suite:
+echo "LITELLM_URL=http://localhost:4010" >> .env.local   # or edit the existing empty line
+npm run dev
+```
+
+```bash
+npm run test:agent
+```
+
+The test itself starts/stops `mock-litellm.mjs` (a tiny scripted
+OpenAI-`/chat/completions`-compatible server — no real model, deterministic:
+turn 1 always calls `write_draft_fields` against a real seeded dga article,
+turn 2 always ends the run) and temporarily bumps dga's plan + agent
+autonomy level via the Strapi admin API so the run isn't blocked by either
+gate — reverting both, and the article's own title, in `afterAll` regardless
+of pass/fail. Revert `LITELLM_URL` back to empty (or remove the line) and
+restart the dev server once you're done — leaving a mock LLM wired into a
+normal dev session means every other AI feature (translate, per-field ✦
+actions, `list_reviews`-style admin flows) would also start talking to the
+mock instead of degrading gracefully or hitting a real model.
+
+## Suite 6 — WebX Agent, docked panel + workspace UI
+
+Pure UI coverage of `components/agent/*` (the docked panel, the `/agent`
+full-page workspace) via `page.route()` mocks of every `/api/agent/*` call —
+no LiteLLM, no `mock-litellm.mjs`, no tenant plan/policy setup, and it runs
+against whatever the currently logged-in session's OWN tenant happens to be
+(irrelevant, since nothing agent-related hits the real backend). Only needs
+`STRAPI_SCHEDULER_PASSWORD` (for the login itself — `middleware.ts` gates
+every route on a session cookie regardless of what's mocked).
+
+```bash
+export STRAPI_SCHEDULER_PASSWORD="the scheduler account's password"
+npm run test:agent-panel
+```
+
+Covers: the topbar toggle + ⌘/Ctrl+J + open-state persistence across a
+reload (`localStorage["webx_agent_open"]`), a streamed assistant reply
+rendering from a canned SSE body, a tool-call + proposal rendering with
+Apply correctly disabled when no matching editor is open (`targetMatches()`
+in `AgentProvider.tsx`), the `"off"` empty state hiding the toggle/FAB
+entirely, and the `/agent` workspace hydrating a mocked thread list plus its
+Settings tab.
+
 ## Config
 
-`WP_ADMIN_USER`, `PUBLIC_SITE_URL`, `WEBX_STUDIO_URL`, `STRAPI_URL`, `WORDPRESS_URL` are all overridable via env vars (see `tests/_helpers.ts`) — the defaults match this repo's standard local dev ports.
+`WP_ADMIN_USER`, `PUBLIC_SITE_URL`, `WEBX_STUDIO_URL`, `STRAPI_URL`, `WORDPRESS_URL`, `DGA_EDITOR_EMAIL`, `MOCK_LITELLM_PORT` are all overridable via env vars (see `tests/_helpers.ts`) — the defaults match this repo's standard local dev ports and seeded accounts.

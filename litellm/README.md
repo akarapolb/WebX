@@ -27,3 +27,24 @@ so no content leaves the perimeter.
 
 If LITELLM_URL is unset, WebX AI features degrade gracefully (fall back to their
 non-LLM behavior) — nothing breaks without keys.
+
+## WebX Agent (Phase 8) — tool-calling requirement
+
+The WebX Agent (webx-studio/lib/agent/*) is the one caller that needs real
+OpenAI-shaped tool-calling (`tools`/`tool_choice` in the request,
+`message.tool_calls` in the response) — `lib/llm.ts`'s `generate()`/
+`structured()` don't need this, only `chat()` does. Every model above
+supports it through LiteLLM's own translation layer, but depth of support
+still varies by provider: `webx-default` (Claude) and `webx-local`
+(recent Llama/Qwen builds via Ollama) are the most reliable; a fallback
+model swapped in via `router_settings.fallbacks` should be verified for
+tool-calling specifically before relying on it for agent traffic, not just
+for plain generation — a model that silently ignores `tools` and answers in
+prose instead will make the agent's own turn loop treat every message as
+final text (see `lib/agent/runtime.ts`'s `chat()` call), not a hard error,
+so a bad fallback here fails quietly rather than loudly.
+
+`e2e/mock-litellm.mjs` stands in for a real LiteLLM proxy in
+`e2e/tests/agent.spec.ts` — a tiny scripted `/chat/completions` server, no
+real model calls, kept in sync with this same request/response shape. See
+`e2e/README.md`'s own Suite 5 section for how to run it.

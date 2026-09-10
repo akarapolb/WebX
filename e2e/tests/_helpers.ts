@@ -33,3 +33,19 @@ export const WP_ADMIN_APP_PASSWORD = process.env.WP_ADMIN_APP_PASSWORD || "";
 // one Strapi login this repo already guarantees exists in any dev setup.
 export const STRAPI_SCHEDULER_EMAIL = process.env.STRAPI_SCHEDULER_EMAIL || "scheduler@webx.local";
 export const STRAPI_SCHEDULER_PASSWORD = process.env.STRAPI_SCHEDULER_PASSWORD || "";
+
+// The seeded dga tenant editor (strapi-cms/src/seed/seed.ts, dga's own
+// adminEmails) — agent.spec.ts needs a real TENANT-SCOPED session, not the
+// scheduler above: governance.ts's resolveAgentPolicy always resolves an
+// unscoped/super-admin session to level "off" (reason "unscoped") by
+// design, since there's no single workspace whose admin could have granted
+// it a policy — the scheduler account can never exercise a real agent run.
+export const DGA_EDITOR_EMAIL = process.env.DGA_EDITOR_EMAIL || "dga-editor@dga.local";
+export const DGA_EDITOR_PASSWORD = process.env.DGA_EDITOR_PASSWORD || "";
+
+// e2e/mock-litellm.mjs's own port — agent.spec.ts starts that process
+// itself, but the ALREADY-RUNNING webx-studio dev server must have been
+// started with LITELLM_URL pointing at this same port (env vars in
+// lib/llm.ts are read once at module load, not per-request — see
+// e2e/README.md's Suite 5 section for the exact startup command).
+export const MOCK_LITELLM_PORT = Number(process.env.MOCK_LITELLM_PORT || 4010);
