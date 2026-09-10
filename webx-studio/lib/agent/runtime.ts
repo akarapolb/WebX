@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { chat, type Msg } from "@/lib/llm";
 import { withAgentActor, recordAgentRunStart, type AgentPolicy } from "@/lib/cms/governance";
 import { systemPrompt } from "./prompts";
-import { availableTools, toolSpecs, executeTool } from "./tools";
+import { availableTools, toolSpecs, executeTool, capResult } from "./tools";
 import type { AgentContextRef, AgentEvent, AgentRunContext } from "./types";
 
 const MAX_TURNS = 12;
@@ -124,7 +124,20 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
       else if (r.ok && r.data?.uid && r.data?.id) applied.push({ uid: r.data.uid, id: r.data.id });
       emit({ type: "tool_result", id: call.id, ok: r.ok, summary: r.summary, data: r.proposal ? undefined : r.data });
       if (r.proposal) emit({ type: "proposal", proposal: r.proposal });
-      messages.push({ role: "tool", tool_call_id: call.id, name: call.function.name, content: JSON.stringify({ ok: r.ok, summary: r.summary, proposal: r.proposal ? { id: r.proposal.id, kind: r.proposal.kind } : undefined }) });
+      // r.data (entry ids, search-result rows, etc.) was silently dropped
+      // here before — the model only ever saw `summary`, never the actual
+      // data a tool call like create_draft_entry/search_content returns.
+      // Found live: the model created a page fine, then had no way to learn
+      // its own new page's id for the insert_blocks call that should have
+      // followed, and had to stop and ask the human for it instead of
+      // chaining the two calls itself. capResult (same cap tools.ts already
+      // applies to `summary` alone) keeps this bounded — the UI's own
+      // emit() above is uncapped and unaffected, this only shrinks what the
+      // MODEL sees in its own conversation history.
+      messages.push({
+        role: "tool", tool_call_id: call.id, name: call.function.name,
+        content: capResult(JSON.stringify({ ok: r.ok, summary: r.summary, data: r.proposal ? undefined : r.data, proposal: r.proposal ? { id: r.proposal.id, kind: r.proposal.kind } : undefined })),
+      });
     }
   }
 

@@ -118,7 +118,26 @@ function shouldPropose(ctx: AgentRunContext): boolean {
   return (ref.kind === "page" || ref.kind === "entry") && Boolean(ref.applyLocally);
 }
 
+// Strapi's real uids are always "api::<singular>.<singular>"; WordPress's
+// are always "wp:<slug>". Cheap, no network call — but it catches a real
+// failure mode found live: the model sees list_content_types return
+// {"uid":"api::page.page", ...} and then, on the very next call, guesses a
+// SHORTENED form ("page") for search_content instead of copying the exact
+// string. Without this check that reaches Strapi and 404s with a bare "list
+// failed" — no signal for what went wrong — and the model just keeps
+// guessing different short forms turn after turn (observed: 8 guesses in a
+// row — "page", "pages", "site_page", "web_page", "gov_page",
+// "content_page" — before the run gave up, having never once retried
+// list_content_types' own exact string it already had). This message is
+// specific enough that the model corrects on the very next turn instead.
+const CONTENT_TYPE_UID_RE = /^(api::[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*|wp:[a-z][a-z0-9-]*)$/;
 function assertContentTypeAllowed(ctx: AgentRunContext, uid: string) {
+  if (!CONTENT_TYPE_UID_RE.test(uid)) {
+    throw new CmsError(
+      `"${uid}" is not a valid content-type uid. Use the EXACT "uid" string a prior list_content_types call returned (e.g. "api::page.page", "api::landing.landing", "wp:page") — never a shortened, guessed, or pluralized form.`,
+      400
+    );
+  }
   if (ctx.allowedContentTypes && !ctx.allowedContentTypes.includes(uid)) {
     throw new CmsError(`The agent is not allowed to work with ${uid} in this workspace.`, 403);
   }
@@ -438,7 +457,11 @@ export function toolSpecs(ctx: AgentRunContext) {
 }
 
 const MAX_RESULT_BYTES = 8 * 1024;
-function capResult(s: string): string {
+// Exported too — runtime.ts reuses this same cap on the full
+// {ok,summary,data,proposal} payload it sends back to the MODEL (not the
+// UI, which gets the uncapped r.data via its own emit() call; the two are
+// deliberately capped independently — see that call site's own comment).
+export function capResult(s: string): string {
   return s.length > MAX_RESULT_BYTES ? s.slice(0, MAX_RESULT_BYTES) + "\n…(truncated)" : s;
 }
 

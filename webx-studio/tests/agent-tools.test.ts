@@ -251,6 +251,23 @@ describe("availableTools / executeTool (lib/agent/tools.ts) — the actual enfor
     assert.equal(r.ok, false);
     assert.match(r.summary, /too large/);
   });
+  // Found live: the model sees list_content_types return an exact
+  // "api::page.page"-shaped uid, then on the very next call guesses a
+  // shortened form ("page") instead — which used to reach Strapi and 404
+  // with a bare "list failed", giving no signal to self-correct, so the
+  // model just kept guessing different short forms turn after turn. This
+  // must reject before any network call, with a message specific enough to
+  // self-correct from.
+  test("a shortened/guessed content-type uid (not the real api::x.x or wp:x shape) is rejected before any network call", async () => {
+    const r = await executeTool(ctx({ level: "read" }), "search_content", JSON.stringify({ uid: "page" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /not a valid content-type uid/);
+    assert.match(r.summary, /api::page\.page/);
+  });
+  test("a real, correctly-shaped uid is not rejected by the shape check itself", async () => {
+    const r = await executeTool(ctx({ level: "suggest" }), "create_draft_entry", JSON.stringify({ uid: "wp:page", fields: { title: "Draft" } }));
+    assert.equal(r.ok, true); // downgraded to a proposal at "suggest" — proves the shape check let "wp:page" through
+  });
 });
 
 describe("page-building tools (lib/agent/tools.ts) — Phase 8 follow-up", () => {
