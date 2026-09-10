@@ -4,6 +4,7 @@ import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { cookies } from "next/headers";
 import { STRAPI_URL, SESSION_COOKIE, ENGINE_COOKIE } from "./config";
+import type { CurrentUser } from "./cms/types";
 
 // Lets a caller with no incoming request/cookies (the Phase 5 release
 // scheduler — see lib/cms/governance.ts's processDueReleases, which has no
@@ -23,11 +24,27 @@ export async function sessionToken(): Promise<string | null> {
   return jar.get(SESSION_COOKIE)?.value ?? null;
 }
 
+/** A background agent job acting as its owner (lib/cms/governance.ts's
+ * runAsJobOwner). There is no request, cookie or session in the worker, so
+ * the identity comes from here, the token from withServiceToken (the
+ * scheduler's), and governance.ts fails closed on anything outside the
+ * owner's tenant. */
+export type ActingSession = { engine: "strapi" | "wordpress"; tenantKey: string; email: string; user: CurrentUser; jobId: string };
+const actingStore = new AsyncLocalStorage<ActingSession>();
+export function withActingSession<T>(acting: ActingSession, fn: () => Promise<T>): Promise<T> {
+  return actingStore.run(acting, fn);
+}
+export function actingSession(): ActingSession | undefined {
+  return actingStore.getStore();
+}
+
 /** Which engine this session's token authenticates against — set at login
  * (app/api/auth/login/route.ts) from the target tenant's own engine field,
  * not a global switch (Phase 6). Defaults to "strapi" for older sessions
  * created before this cookie existed. */
 export async function sessionEngine(): Promise<"strapi" | "wordpress"> {
+  const acting = actingStore.getStore();
+  if (acting) return acting.engine;
   const jar = await cookies();
   return jar.get(ENGINE_COOKIE)?.value === "wordpress" ? "wordpress" : "strapi";
 }

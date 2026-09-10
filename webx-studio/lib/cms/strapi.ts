@@ -8,7 +8,7 @@ import type {
   CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, MediaAssetList, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
-import { sessionToken } from "../strapi";
+import { actingSession, sessionToken } from "../strapi";
 import { STRAPI_URL } from "../config";
 import { genTempPassword } from "./genPassword";
 
@@ -20,7 +20,12 @@ async function authHeaders(extra?: Record<string, string>): Promise<Record<strin
   // Tags every request this adapter makes as WebX-governed, so Strapi's own
   // documents.use() hook skips its own audit-log write for it (governance.ts
   // writes that row instead) — see strapi-cms/src/index.ts.
-  return { Authorization: "Bearer " + token, "X-WebX-Governed": "1", ...(extra || {}) };
+  // A background job runs on the scheduler's token, which Strapi doesn't
+  // scope; naming the owner lets strapi-cms's hook scope and field-police the
+  // write as them (strapi-cms/src/index.ts's actingIdentity).
+  const acting = actingSession();
+  const actingHeaders: Record<string, string> = acting ? { "X-WebX-Acting-Email": acting.email, "X-WebX-Acting-Tenant": acting.tenantKey } : {};
+  return { Authorization: "Bearer " + token, "X-WebX-Governed": "1", ...actingHeaders, ...(extra || {}) };
 }
 
 /** Strapi's own file shape (from /upload or /api/media-meta) -> MediaAsset.
@@ -250,6 +255,18 @@ export const strapiAdapter: CmsAdapter = {
         id: u.id, firstname: u.firstname, lastname: u.lastname, email: u.email,
         isActive: u.isActive, roles: (u.roles || []).map((x: any) => x.name).filter(Boolean),
       }));
+    },
+    async findUserByEmail(email: string): Promise<AdminUser | null> {
+      const r = await fetch(BASE + "/admin/users?pageSize=20&_q=" + encodeURIComponent(email), { headers: await authHeaders(), cache: "no-store" });
+      if (!r.ok) throw new CmsError("findUserByEmail failed", r.status);
+      const j = await json(r);
+      const list: any[] = j?.data?.results ?? j?.results ?? [];
+      const u = list.find((x: any) => String(x.email || "").toLowerCase() === email.toLowerCase());
+      if (!u) return null;
+      return {
+        id: u.id, firstname: u.firstname, lastname: u.lastname, email: u.email,
+        isActive: u.isActive, roles: (u.roles || []).map((x: any) => x.name).filter(Boolean),
+      };
     },
     // Strapi has no single-call "create with password" — POST /admin/users
     // creates an INACTIVE user with no password accepted at all (its own

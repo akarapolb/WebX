@@ -979,6 +979,16 @@ export const DICT: Record<string, Entry> = {
   "ag.planStatus_skipped": { en: "Skipped", th: "ข้าม" },
   "ag.question": { en: "The agent needs your input", th: "agent ต้องการคำตอบจากคุณ" },
   "ag.answerHint": { en: "Pick an option or type your answer below.", th: "เลือกตัวเลือก หรือพิมพ์คำตอบด้านล่าง" },
+  "as.background": { en: "Background jobs", th: "งานเบื้องหลัง" },
+  "as.backgroundHint": {
+    en: "Let editors hand longer work to the agent and close the tab. Jobs run as the editor who started them, within this autonomy level, and stop if that editor loses access.",
+    th: "ให้ผู้แก้ไขส่งงานที่ใช้เวลานานให้ agent ทำต่อได้แม้ปิดหน้าเว็บ งานทำในนามผู้ที่เริ่มงาน ภายในระดับสิทธิ์นี้ และหยุดเมื่อผู้นั้นหมดสิทธิ์",
+  },
+  "as.schedules": { en: "Scheduled jobs", th: "งานตามกำหนดเวลา" },
+  "as.schedulesHint": {
+    en: "Let editors repeat a job daily, weekly or monthly. Requires background jobs.",
+    th: "ให้ผู้แก้ไขตั้งงานให้ทำซ้ำรายวัน รายสัปดาห์ หรือรายเดือน ต้องเปิดงานเบื้องหลังก่อน",
+  },
   "ag.fieldsProposal": { en: "field change(s)", th: "การเปลี่ยนแปลงฟิลด์" },
   "ag.toolsWorking": { en: "Working…", th: "กำลังทำงาน…" },
   "ag.toolsUsed": { en: "Used tools", th: "ใช้เครื่องมือ" },

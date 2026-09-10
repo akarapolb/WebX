@@ -171,6 +171,10 @@ export interface CmsAdapter {
     listRoles(): Promise<{ id: any; name: string }[]>;
     /** Throws CmsError on a non-2xx response. */
     listUsers(): Promise<AdminUser[]>;
+    /** The account with exactly this email, or null — how a background job
+     * re-checks that its owner still exists and is active. Throws CmsError on
+     * a non-2xx response. */
+    findUserByEmail(email: string): Promise<AdminUser | null>;
     /** Creates a real, immediately-usable account with a generated
      * temp password — never emailed, returned once to the caller.
      * Throws CmsError on a non-2xx response from either backend call. */

@@ -471,6 +471,76 @@ export interface ApiAbEventAbEvent extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiAgentJobAgentJob extends Struct.CollectionTypeSchema {
+  collectionName: 'agent_jobs';
+  info: {
+    description: 'WebX Agent background job (webx-studio lib/agent/jobs). Claimed, heartbeated, checkpointed and finished only through the secret-protected /api/internal/agent-jobs/* endpoints, each a compare-and-set on the lease token; never written through the generic entries route.';
+    displayName: 'Agent Job';
+    pluralName: 'agent-jobs';
+    singularName: 'agent-job';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    attempts: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    budget: Schema.Attribute.JSON;
+    cancelRequestedAt: Schema.Attribute.DateTime;
+    checkpoint: Schema.Attribute.JSON;
+    checkpointSeq: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    crashCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    crashSeq: Schema.Attribute.Integer;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    engine: Schema.Attribute.String & Schema.Attribute.DefaultTo<'strapi'>;
+    events: Schema.Attribute.JSON;
+    eventSeq: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    finishedAt: Schema.Attribute.DateTime;
+    goal: Schema.Attribute.Text;
+    heartbeatAt: Schema.Attribute.DateTime;
+    idempotencyKey: Schema.Attribute.String;
+    lang: Schema.Attribute.String & Schema.Attribute.DefaultTo<'en'>;
+    lastError: Schema.Attribute.Text;
+    lastSliceAt: Schema.Attribute.DateTime;
+    leaseExpiresAt: Schema.Attribute.DateTime;
+    leaseOwner: Schema.Attribute.String;
+    leaseToken: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::agent-job.agent-job'
+    > &
+      Schema.Attribute.Private;
+    notBefore: Schema.Attribute.DateTime;
+    onQuestion: Schema.Attribute.String & Schema.Attribute.DefaultTo<'wait'>;
+    outcome: Schema.Attribute.String;
+    ownerEmail: Schema.Attribute.String & Schema.Attribute.Required;
+    ownerUserId: Schema.Attribute.String & Schema.Attribute.Required;
+    params: Schema.Attribute.JSON;
+    pauseRequestedAt: Schema.Attribute.DateTime;
+    pendingAnswer: Schema.Attribute.Text;
+    policySnapshot: Schema.Attribute.JSON;
+    priority: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    progress: Schema.Attribute.JSON;
+    publishedAt: Schema.Attribute.DateTime;
+    requiredLevel: Schema.Attribute.String & Schema.Attribute.Required;
+    result: Schema.Attribute.JSON;
+    runState: Schema.Attribute.String & Schema.Attribute.DefaultTo<'queued'>;
+    scheduleId: Schema.Attribute.String;
+    startedAt: Schema.Attribute.DateTime;
+    stateReason: Schema.Attribute.String;
+    template: Schema.Attribute.String;
+    tenantKey: Schema.Attribute.String & Schema.Attribute.Required;
+    threadId: Schema.Attribute.String;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    tokensUsed: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiAgentThreadAgentThread extends Struct.CollectionTypeSchema {
   collectionName: 'agent_threads';
   info: {
@@ -3065,6 +3135,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::ab-event.ab-event': ApiAbEventAbEvent;
+      'api::agent-job.agent-job': ApiAgentJobAgentJob;
       'api::agent-thread.agent-thread': ApiAgentThreadAgentThread;
       'api::application.application': ApiApplicationApplication;
       'api::article.article': ApiArticleArticle;

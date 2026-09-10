@@ -506,6 +506,14 @@ export const wordpressAdapter: CmsAdapter = {
         id: u.id, firstname: u.name, lastname: "", email: u.email, isActive: true, roles: u.roles || [],
       }));
     },
+    async findUserByEmail(email: string): Promise<AdminUser | null> {
+      const r = await fetch(BASE + "/wp/v2/users?context=edit&per_page=20&search=" + encodeURIComponent(email), { headers: await authHeaders(), cache: "no-store" });
+      if (!r.ok) throw new CmsError("findUserByEmail failed", r.status);
+      const list = (await json(r)) || [];
+      const u = list.find((x: any) => String(x.email || "").toLowerCase() === email.toLowerCase());
+      // WordPress has no deactivated state; an account that exists can sign in.
+      return u ? { id: u.id, firstname: u.name, lastname: "", email: u.email, isActive: true, roles: u.roles || [] } : null;
+    },
     // WordPress, unlike Strapi, supports a real single-call "create with
     // password" — POST /wp/v2/users with a password in the body creates a
     // login-ready account immediately (wp_insert_user() under the hood;

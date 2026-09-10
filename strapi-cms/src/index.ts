@@ -100,12 +100,48 @@ async function effectiveTenant(strapi: any) {
   return null;
 }
 
+const SCHEDULER_EMAIL = (process.env.STRAPI_SCHEDULER_EMAIL || 'scheduler@webx.local').toLowerCase();
+
+function requestHeader(reqCtx: any, name: string): string {
+  const v = reqCtx?.get ? reqCtx.get(name) : reqCtx?.request?.header?.[name];
+  return typeof v === 'string' ? v : '';
+}
+
+/**
+ * webx-studio's background agent jobs call Strapi with the scheduler service
+ * account (a Super Admin) and name the job's owner in X-WebX-Acting-Email and
+ * X-WebX-Acting-Tenant. webx-studio enforces the owner's scope itself; this is
+ * the backstop. The headers are honoured only from the scheduler account, and
+ * only to narrow: the owner must belong to the named tenant, and the write is
+ * then scoped and field-policed as that owner. From anyone else they are
+ * ignored, since their own session already scopes them.
+ */
+async function actingIdentity(strapi: any, reqCtx: any): Promise<{ email: string; tenant: any; user: any } | null> {
+  const email = requestHeader(reqCtx, 'x-webx-acting-email').toLowerCase();
+  const tenantKey = requestHeader(reqCtx, 'x-webx-acting-tenant');
+  if (!email && !tenantKey) return null;
+  if (String(reqCtx?.state?.user?.email || '').toLowerCase() !== SCHEDULER_EMAIL) return null;
+  const tenant = email ? await adminTenantFor(strapi, email) : null;
+  if (!tenant || tenant.key !== tenantKey) throw new errors.ForbiddenError('The acting user does not belong to this workspace.');
+  const user = await strapi.db.query('admin::user').findOne({ where: { email }, populate: ['roles'] });
+  if (!user || user.isActive === false) throw new errors.ForbiddenError('The acting user is not an active account.');
+  return { email, tenant, user };
+}
+
 /** ล้างข้อมูล log/version/event ที่เก่ากว่า 90 วัน (กันตารางบวม) */
 async function cleanupOldRecords(strapi: any) {
-  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const day = 24 * 60 * 60 * 1000;
+  const cutoff = new Date(Date.now() - 90 * day).toISOString();
   for (const uid of ['api::audit-log.audit-log', 'api::ab-event.ab-event', 'api::page-version.page-version', 'api::agent-thread.agent-thread']) {
     try { await strapi.db.query(uid).deleteMany({ where: { createdAt: { $lt: cutoff } } }); } catch (e) { /* noop */ }
   }
+  // Agent jobs: finished jobs are kept 90 days; their checkpoints (the bulk of a row) only 7.
+  try {
+    const finished = { $in: ['done', 'failed', 'cancelled'] };
+    const jobs = strapi.db.query('api::agent-job.agent-job');
+    await jobs.deleteMany({ where: { runState: finished, finishedAt: { $lt: new Date(Date.now() - 90 * day) } } });
+    await jobs.updateMany({ where: { runState: finished, finishedAt: { $lt: new Date(Date.now() - 7 * day) }, checkpoint: { $notNull: true } }, data: { checkpoint: null } });
+  } catch (e) { /* noop */ }
 }
 
 // Scheduled-release publishing used to live here (processDueReleases, a
@@ -126,8 +162,10 @@ export default {
       if (!SCOPED.has(context.uid)) return next();
       const action = context.action;
       const reqCtx: any = (strapi as any).requestContext?.get?.();
-      const adminEmail = reqCtx?.state?.user?.email;
-      const eff = await effectiveTenant(strapi);
+      const acting = await actingIdentity(strapi, reqCtx);
+      const adminEmail = acting ? acting.email : reqCtx?.state?.user?.email;
+      const adminUser = acting ? acting.user : reqCtx?.state?.user;
+      const eff = acting ? acting.tenant : await effectiveTenant(strapi);
       context.params = context.params || {};
 
       // Custom-role action gate — deny before anything else runs. Super
@@ -163,7 +201,7 @@ export default {
 
       // Field-level RBAC — strip ฟิลด์ที่ role นี้ห้ามเขียน ก่อนบันทึกจริง
       if ((action === 'create' || action === 'update') && adminEmail && context.params?.data) {
-        try { context.params.data = await stripPolicyFields(strapi, reqCtx?.state?.user, context.uid, context.params.data); } catch (e) { /* fail-open */ }
+        try { context.params.data = await stripPolicyFields(strapi, adminUser, context.uid, context.params.data); } catch (e) { /* fail-open */ }
         if (crp && (crp.hidden.length || crp.readonly.length)) {
           const forbidden = new Set<string>([...crp.hidden, ...crp.readonly]);
           const out: any = {};

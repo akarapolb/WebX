@@ -30,9 +30,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./wordpress";
 import { CmsError } from "./types";
-import type { CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
+import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
-import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
+import { evaluateJobOwner } from "@/lib/agent/jobs/owner";
+import { controlJob, type JobControlAction } from "@/lib/agent/jobs/store.server";
+import type { AgentJobRow, JobOwner, JobPolicy, OwnerRefusal } from "@/lib/agent/jobs/types";
+import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine, actingSession, withActingSession } from "../strapi";
 import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
 import { genTempPassword } from "./genPassword";
@@ -142,6 +145,9 @@ const REVIEW_UID = "api::review.review";
 // custom-role/field-policy/audit-log — and only ever written via
 // lib/agent/threads.ts's own owner+tenant-filtered functions.
 const AGENT_THREAD_UID = "api::agent-thread.agent-thread";
+// Background agent jobs (Phase 9): same kind of per-owner bookkeeping as
+// threads, written by workers only through strapi-cms's lease endpoints.
+const AGENT_JOB_UID = "api::agent-job.agent-job";
 // Cookie-consent records are written directly to Strapi by public-site
 // regardless of the tenant's own engine (see public-site/components/
 // CookieConsent.tsx's own comment — it just posts ?tenant=<key> against
@@ -180,7 +186,7 @@ const CONSENT_LOG_UID = "api::consent-log.consent-log";
 // BREAKING_NEWS_UID deliberately NOT included here anymore (Phase 7) — see
 // its own comment above. It stays a plain SCOPED-only Strapi uid now,
 // exactly like complaint/application/contact-message always were.
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID]);
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID, AGENT_JOB_UID]);
 /** The three BOOKKEEPING_UIDS blocked outright from the generic entries
  * route's WRITE side (assertBookkeepingWriteAllowed, below) — each needs a
  * dedicated writer with its own ownership/ordering logic the generic path
@@ -202,7 +208,7 @@ const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEA
  * the uid Milestone 1/2 actually added, and because CustomRoles.tsx never
  * exercises the generic route in the first place (blocking it would be
  * inert, not protective). */
-const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, AUDIT_UID, AGENT_THREAD_UID]);
+const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, AUDIT_UID, AGENT_THREAD_UID, AGENT_JOB_UID]);
 /** BOOKKEEPING_UIDS that carry a real `tenant` RELATION (not a plain
  * tenantKey string) and are ALSO in Strapi's own SCOPED set
  * (strapi-cms/src/index.ts) for the non-bookkeeping case — meaning a
@@ -254,7 +260,7 @@ function withTenantFilter(existing: EntryQuery["filter"] | undefined, field: str
  * custom-role have the SAME kind of gap today (pre-existing, not introduced
  * by this change) but can't be closed the same way without a dedicated
  * bypass read path first — out of scope here, flagged separately. */
-const GENERIC_ROUTE_READ_BLOCKED_UIDS = new Set([AGENT_THREAD_UID]);
+const GENERIC_ROUTE_READ_BLOCKED_UIDS = new Set([AGENT_THREAD_UID, AGENT_JOB_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
 // `features` is the pre-existing free-form per-tenant JSON bag ("unset = all
@@ -308,6 +314,14 @@ async function refreshTenantCache(): Promise<typeof tenantCache> {
   return tenantCache;
 }
 async function resolveEffectiveTenant(email?: string): Promise<Tenant | null> {
+  const acting = actingSession();
+  if (acting) {
+    // A background job: its owner's own tenant, never unscoped (fail closed).
+    if (!email || email.toLowerCase() !== acting.email.toLowerCase()) throw new CmsError("Background jobs act only as their owner.", 403);
+    const tenant = await resolveTenantByKey(acting.tenantKey);
+    if (!tenant) throw new CmsError("This job's workspace no longer exists.", 403);
+    return tenant;
+  }
   if (!email) return null;
   const { byEmail } = await refreshTenantCache();
   return byEmail.get(email.toLowerCase()) || null;
@@ -329,7 +343,7 @@ function invalidateTenantCache(): void {
  * console/context endpoint of their own to ask). Null for an unscoped/super
  * admin, same as resolveEffectiveTenant. */
 export async function resolveMyTenant(): Promise<Tenant | null> {
-  const user = await (await activeAdapter()).auth.me();
+  const user = await currentUser();
   if (!user?.email) return null;
   return resolveEffectiveTenant(user.email);
 }
@@ -541,6 +555,7 @@ export async function getTenantSsoConfig(tenantKey: string): Promise<{ enabled: 
 export async function saveTenantSsoConfig(tenantKey: string, input: {
   enabled: boolean; issuerUrl?: string; clientId?: string; clientSecret?: string; realm?: string;
 }): Promise<void> {
+  assertNotActing("change single sign-on");
   const caller = await requireUser();
   const eff = await resolveEffectiveTenant(caller.email);
   assertCanActOnTenant(eff, tenantKey);
@@ -878,6 +893,7 @@ export async function getContentTypeSchema(uid: string): Promise<ContentTypeSche
 }
 
 export async function saveCustomRole(tenantKey: string, input: CustomRoleInput): Promise<any> {
+  assertNotActing("change roles");
   const caller = await requireUser();
   const eff = await resolveEffectiveTenant(caller.email);
   assertCanActOnTenant(eff, tenantKey);
@@ -908,6 +924,7 @@ export async function saveCustomRole(tenantKey: string, input: CustomRoleInput):
 }
 
 export async function deleteCustomRole(tenantKey: string, roleKey: string): Promise<void> {
+  assertNotActing("change roles");
   const caller = await requireUser();
   const eff = await resolveEffectiveTenant(caller.email);
   assertCanActOnTenant(eff, tenantKey);
@@ -936,6 +953,7 @@ export async function deleteCustomRole(tenantKey: string, roleKey: string): Prom
 
 /** null = unassign. */
 export async function assignCustomRole(tenantKey: string, email: string, roleKey: string | null): Promise<void> {
+  assertNotActing("change roles");
   const caller = await requireUser();
   const eff = await resolveEffectiveTenant(caller.email);
   assertCanActOnTenant(eff, tenantKey);
@@ -1252,7 +1270,14 @@ async function trueOwnerOf(uid: string, id: string): Promise<string | null> {
 }
 
 async function tenantGuard(uid: string, id: string, eff: Tenant | null, adapter: CmsAdapter): Promise<void> {
-  if (!eff) return;
+  // A background job runs on the scheduler's unscoped credential, so it fails
+  // closed: an owner that can't be confirmed as the job's tenant is a
+  // refusal, where an interactive session falls back to Strapi's own hook.
+  const acting = Boolean(actingSession());
+  if (!eff) {
+    if (acting) throw new CmsError("Cross-tenant operation not permitted", 403);
+    return;
+  }
   if (uid.startsWith("wp:")) {
     // No internal-endpoint workaround needed here (contrast trueOwnerOf
     // above): WordPress has no competing scoping hook of its own hiding
@@ -1260,12 +1285,13 @@ async function tenantGuard(uid: string, id: string, eff: Tenant | null, adapter:
     // call already sees the entry's real tenant.
     if (!WP_SCOPED.has(uid)) return;
     const row: any = await adapter.entries.get(uid, id);
-    if (row?.tenantKey && row.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+    const otherTenant = acting ? row?.tenantKey !== eff.key : Boolean(row?.tenantKey && row.tenantKey !== eff.key);
+    if (otherTenant) throw new CmsError("Cross-tenant operation not permitted", 403);
     return;
   }
   if (!SCOPED.has(uid)) return;
   const owner = await trueOwnerOf(uid, id);
-  if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  if (acting ? owner !== eff.key : owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
 }
 
 /** BOOKKEEPING_UIDS (governance.ts:110) writes always execute under the
@@ -1401,10 +1427,32 @@ async function writeAudit(action: string, uid: string, entryId: any, user: Curre
   } catch { /* don't let audit failure break the underlying write */ }
 }
 
+/** The signed-in user, or a background job's owner (lib/strapi.ts's acting session). */
+async function currentUser(): Promise<CurrentUser | null> {
+  const acting = actingSession();
+  if (acting) return acting.user;
+  return (await activeAdapter()).auth.me();
+}
+
 export async function requireUser(): Promise<CurrentUser> {
-  const user = await (await activeAdapter()).auth.me();
+  const user = await currentUser();
   if (!user) throw new CmsError("Unauthenticated", 401);
   return user;
+}
+
+/** In a background job, governed.* reaches only tenant content, plus the review
+ * and page-version rows the agent's tools file. Returns the acting session. */
+function assertActingUid(uid: string) {
+  const acting = actingSession();
+  if (acting && !SCOPED.has(uid) && !WP_SCOPED.has(uid) && uid !== REVIEW_UID && uid !== PAGE_VERSION_UID) {
+    throw new CmsError("This content type is not available to background jobs.", 403);
+  }
+  return acting;
+}
+
+/** For what a background job must never do, whatever its owner may. */
+export function assertNotActing(what: string): void {
+  if (actingSession()) throw new CmsError(`Background jobs cannot ${what}.`, 403);
 }
 
 // ---------- WebX Agent policy (Phase 8) ----------
@@ -1493,7 +1541,11 @@ export async function resolveAgentPolicy(user: CurrentUser): Promise<AgentPolicy
  * this — the tenant-wide default; a per-role override is edited alongside
  * that role's other permissions in CustomRoles.tsx, under the same
  * reserved "__agent" key resolveAgentPolicy reads above. */
-export type AgentTenantSettings = { level: AgentLevel; tools?: string[]; contentTypes?: string[]; model?: string; local?: boolean };
+export type AgentTenantSettings = {
+  level: AgentLevel; tools?: string[]; contentTypes?: string[]; model?: string; local?: boolean;
+  /** Background jobs and schedules (Phase 9): off until a workspace admin turns them on. */
+  background?: boolean; schedules?: boolean;
+};
 
 export async function getAgentPolicy(tenantKey: string): Promise<AgentTenantSettings> {
   const caller = await requireUser();
@@ -1507,10 +1559,12 @@ export async function getAgentPolicy(tenantKey: string): Promise<AgentTenantSett
     tools: Array.isArray(a.tools) ? a.tools : undefined,
     contentTypes: Array.isArray(a.contentTypes) ? a.contentTypes : undefined,
     model: a.model || undefined, local: Boolean(a.local),
+    background: Boolean(a.background), schedules: Boolean(a.schedules),
   };
 }
 
 export async function saveAgentPolicy(tenantKey: string, input: AgentTenantSettings): Promise<void> {
+  assertNotActing("change the agent's settings");
   const caller = await requireUser();
   const eff = await resolveEffectiveTenant(caller.email);
   assertCanActOnTenant(eff, tenantKey);
@@ -1528,7 +1582,10 @@ export async function saveAgentPolicy(tenantKey: string, input: AgentTenantSetti
   if (!isAgentLevel(input.level)) throw new CmsError("Invalid autonomy level", 400);
   const features = {
     ...(target.features || {}),
-    agent: { level: input.level, tools: input.tools, contentTypes: input.contentTypes, model: input.model, local: Boolean(input.local) },
+    agent: {
+      level: input.level, tools: input.tools, contentTypes: input.contentTypes, model: input.model, local: Boolean(input.local),
+      background: Boolean(input.background), schedules: Boolean(input.schedules),
+    },
   };
   await strapiBookkeeping(() => strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { features }));
   invalidateTenantCache();
@@ -1585,6 +1642,181 @@ export async function recordAgentRunStart(user: CurrentUser, runId: string): Pro
       actor: "agent", targetRef: runId,
     }));
   } catch { /* metering only — never block a run over this */ }
+}
+
+// ---------- Agent background jobs (Phase 9) ----------
+// Jobs are Strapi bookkeeping (AGENT_JOB_UID, blocked from the generic entries
+// route like agent threads). Workers change them only through strapi-cms's
+// lease endpoints (lib/agent/jobs/store.server.ts). People create and read
+// them here, and cancel/pause/resume/answer through the same compare-and-set
+// endpoint. A job's owner and the workspace's administrators (members without
+// a custom role, the same rule saveAgentPolicy uses) can see and control it,
+// so an admin can stop a departed colleague's job; anyone else gets a 404.
+
+function jobPolicyOf(p: AgentPolicy): JobPolicy {
+  return { level: p.level, tools: p.tools, contentTypes: p.contentTypes, model: p.model, dialect: p.dialect, engine: p.engine, tenantKey: p.tenantKey };
+}
+
+/** A job as the browser sees it: no checkpoint, lease or saved policy. */
+function agentJobView(row: any): any {
+  if (!row || typeof row !== "object") return row;
+  const { checkpoint, events, leaseToken, leaseOwner, policySnapshot, crashSeq, ...rest } = row;
+  return rest;
+}
+
+const isWorkspaceAdmin = (eff: Tenant, email?: string) => !(eff.customRoleAssignments || {})[(email || "").toLowerCase()];
+
+async function loadJobForCaller(id: string, user: CurrentUser): Promise<any> {
+  const eff = await resolveEffectiveTenant(user.email);
+  const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_JOB_UID, id)).catch(() => null);
+  const isOwner = (row?.ownerEmail || "").toLowerCase() === (user.email || "").toLowerCase();
+  if (!row || !eff || row.tenantKey !== eff.key || !(isOwner || isWorkspaceAdmin(eff, user.email))) throw new CmsError("Unknown job", 404);
+  return row;
+}
+
+async function countJobs(tenantKey: string, runState: string): Promise<number> {
+  const { total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_JOB_UID, {
+    pageSize: 1, filter: [{ field: "tenantKey", op: "eq", value: tenantKey }, { field: "runState", op: "eq", value: runState }],
+  }));
+  return total;
+}
+
+export type AgentJobInput = {
+  title?: string; goal: string; template?: string; params?: Record<string, any>;
+  threadId?: string; lang?: "en" | "th"; budget?: { maxTokens?: number; maxMinutes?: number };
+};
+
+export async function createAgentJob(input: AgentJobInput): Promise<any> {
+  assertNotActing("create background jobs");
+  const user = await requireUser();
+  const eff = await resolveEffectiveTenant(user.email);
+  if (!eff) throw new CmsError("Background jobs run inside a workspace.", 403);
+  const policy = await resolveAgentPolicy(user);
+  if (policy.level === "off") throw new CmsError("The agent is not available in this workspace.", 403);
+  const limits = planLimit(eff.plan);
+  if (!limits.agentConcurrentJobs) throw new CmsError("Background jobs need a paid plan.", 403);
+  if (!eff.features?.agent?.background) {
+    throw new CmsError("Background jobs are turned off for this workspace. A workspace administrator can turn them on in Agent settings.", 403);
+  }
+  const goal = String(input.goal ?? "").trim();
+  if (!goal) throw new CmsError("Describe what the job should do.", 400);
+  if (goal.length > 8000) throw new CmsError("The job description is too long (8,000 characters at most).", 400);
+
+  const unfinished = (await countJobs(eff.key, "queued")) + (await countJobs(eff.key, "running")) + (await countJobs(eff.key, "paused"));
+  if (unfinished >= limits.agentQueuedJobs) {
+    throw new CmsError(`This workspace already has ${unfinished} unfinished background jobs, the most its plan allows. Wait for some to finish or cancel them.`, 429);
+  }
+  await checkAgentRunBudget(user);
+
+  const within = (asked: number | undefined, max: number) => (asked && asked > 0 ? Math.min(asked, max) : max);
+  const created: any = await strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_JOB_UID, {
+    tenantKey: eff.key, ownerEmail: user.email, ownerUserId: String(user.id), engine: eff.engine || "strapi",
+    threadId: input.threadId || null, template: input.template || "custom",
+    title: String(input.title || goal).trim().slice(0, 120), goal, params: input.params ?? null,
+    lang: input.lang === "th" ? "th" : "en", requiredLevel: policy.level, policySnapshot: jobPolicyOf(policy), onQuestion: "wait",
+    runState: "queued", attempts: 0, checkpointSeq: 0, eventSeq: 0, tokensUsed: 0,
+    budget: { maxTokens: within(input.budget?.maxTokens, limits.agentJobTokenBudget), maxMinutes: within(input.budget?.maxMinutes, limits.agentJobMaxMinutes) },
+  }));
+  await recordAgentRunStart(user, `job:${created?.documentId}`);
+  await writeAudit("agent_job_create", AGENT_JOB_UID, created?.documentId ?? null, user, eff.key);
+  return agentJobView(created);
+}
+
+export async function listAgentJobs(): Promise<any[]> {
+  const user = await requireUser();
+  const eff = await resolveEffectiveTenant(user.email);
+  if (!eff) return [];
+  const filter: NonNullable<EntryQuery["filter"]> = [{ field: "tenantKey", op: "eq", value: eff.key }];
+  if (!isWorkspaceAdmin(eff, user.email)) filter.push({ field: "ownerEmail", op: "eq", value: user.email || "" });
+  const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_JOB_UID, { filter, sort: "createdAt:DESC", pageSize: 100 }));
+  return data.map(agentJobView);
+}
+
+export async function getAgentJob(id: string): Promise<any> {
+  const user = await requireUser();
+  return agentJobView(await loadJobForCaller(id, user));
+}
+
+/** Events after `after` (their seq), for polling, with the job's current state. */
+export async function getAgentJobEvents(id: string, after: number): Promise<{ events: any[]; job: any }> {
+  const user = await requireUser();
+  const row = await loadJobForCaller(id, user);
+  const events = (Array.isArray(row.events) ? row.events : []).filter((e: any) => Number(e?.seq) > after);
+  return { events, job: agentJobView(row) };
+}
+
+const JOB_ACTIONS: JobControlAction[] = ["cancel", "pause", "resume", "answer"];
+const JOB_ACTION_DONE: Record<JobControlAction, string> = { cancel: "cancelled", pause: "paused", resume: "resumed", answer: "answered" };
+const JOB_STATE_TEXT: Record<string, string> = {
+  queued: "is waiting to run", running: "is running", paused: "is paused", done: "has finished", failed: "has failed", cancelled: "was cancelled",
+};
+
+export async function controlAgentJob(id: string, action: string, answer?: string): Promise<any> {
+  assertNotActing("change background jobs");
+  if (!JOB_ACTIONS.includes(action as JobControlAction)) throw new CmsError("Unknown action", 404);
+  const user = await requireUser();
+  const row = await loadJobForCaller(id, user);
+  const r = await controlJob(row.documentId, action as JobControlAction, answer);
+  if (!r.ok) {
+    const state = JOB_STATE_TEXT[r.job?.runState ?? row.runState] ?? `is ${row.runState}`;
+    throw new CmsError(`This job ${state}, so it can't be ${JOB_ACTION_DONE[action as JobControlAction]}.`, 409);
+  }
+  await writeAudit(`agent_job_${action}`, AGENT_JOB_UID, row.documentId, user, row.tenantKey);
+  return r.job;
+}
+
+/** For the jobs indicator: active, waiting for an answer, and failed in the last week. */
+export async function agentJobsSummary(): Promise<{ active: number; waiting: number; failed: number }> {
+  const jobs = await listAgentJobs();
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return {
+    active: jobs.filter((j) => j.runState === "queued" || j.runState === "running").length,
+    waiting: jobs.filter((j) => j.runState === "paused" && j.stateReason === "needs_input").length,
+    failed: jobs.filter((j) => j.runState === "failed" && Date.parse(j.finishedAt || j.updatedAt || "") > weekAgo).length,
+  };
+}
+
+/** Each workspace's concurrent-job limit for the worker's claim: 0 unless background jobs are on and the plan allows them. */
+export async function agentJobCaps(): Promise<{ caps: Record<string, number>; defaultCap: number }> {
+  const { byKey } = await refreshTenantCache();
+  const caps: Record<string, number> = {};
+  for (const [key, t] of byKey) caps[key] = t.features?.agent?.background ? planLimit(t.plan).agentConcurrentJobs : 0;
+  return { caps, defaultCap: 0 };
+}
+
+/**
+ * Runs `fn` as a background job's owner, or says why the job may no longer
+ * act as them (lib/agent/jobs/owner.ts). Checked before every slice: the
+ * tenant is re-read, the owner looked up again by email (same account id,
+ * still active), and their live policy combined with the one saved when the
+ * job was created. Inside `fn` there is no session: the scheduler's
+ * credential authenticates, the acting session supplies the identity, and
+ * governed.* fails closed on anything outside the owner's tenant.
+ */
+export async function runAsJobOwner<T>(
+  job: AgentJobRow, fn: (owner: JobOwner) => Promise<T>,
+): Promise<{ ok: true; value: T } | { ok: false; reason: OwnerRefusal }> {
+  invalidateTenantCache();
+  const tenant = await resolveTenantByKey(job.tenantKey);
+  const engine = tenant?.engine === "wordpress" ? "wordpress" : "strapi";
+  const account: AdminUser | null = tenant ? await withEngineAdapter(engine, (a) => a.auth.findUserByEmail(job.ownerEmail)) : null;
+  const user: CurrentUser | null = account ? { id: account.id, email: account.email, roles: account.roles, isSuperAdmin: false } : null;
+  const live = user ? await resolveAgentPolicy(user) : null;
+  const verdict = evaluateJobOwner(job, {
+    tenant: tenant ? { key: tenant.key, engine, plan: tenant.plan, adminEmails: tenant.adminEmails, features: tenant.features } : null,
+    account: account ? { id: account.id, email: account.email, active: account.isActive !== false } : null,
+    livePolicy: live && live.level !== "off" ? jobPolicyOf(live) : null,
+  });
+  if (!verdict.ok) return verdict;
+  if (!user?.email) return { ok: false, reason: "owner_revoked" };
+  const token = engine === "wordpress" ? await schedulerWpToken() : await schedulerStrapiToken();
+  if (!token) throw new CmsError("No service credential is configured for background jobs", 500);
+  const policy = { ...verdict.policy, model: verdict.policy.model || process.env.LITELLM_MODEL || "webx-default" };
+  const owner: JobOwner = { user, policy, lang: job.lang === "th" ? "th" : "en" };
+  const value = await withServiceToken(token, () =>
+    withActingSession({ engine, tenantKey: job.tenantKey, email: user.email!, user, jobId: job.documentId }, () =>
+      withAgentActor(`job:${job.documentId}`, () => fn(owner))));
+  return { ok: true, value };
 }
 
 // ---------- Agent threads (Phase 8) ----------
@@ -1752,7 +1984,7 @@ async function withContentAdapter<T>(uid: string, fn: (adapter: CmsAdapter) => P
 export const governed = {
   schema: { listContentTypes: async () => (await activeAdapter()).schema.listContentTypes() },
   auth: {
-    me: async () => (await activeAdapter()).auth.me(),
+    me: async () => currentUser(),
     // listRoles/listUsers/create all take the target WORKSPACE explicitly —
     // resolving engine from that tenant, not from this session's own login,
     // so switching the workspace selector to e.g. a WordPress tenant while
@@ -1781,6 +2013,7 @@ export const governed = {
       return all.filter((u) => roster.has((u.email || "").toLowerCase()));
     },
     async create(tenantKey: string, input: NewUserInput) {
+      assertNotActing("manage users");
       const caller = await requireUser();
       const eff = await resolveEffectiveTenant(caller.email);
       assertCanActOnTenant(eff, tenantKey);
@@ -1831,6 +2064,7 @@ export const governed = {
       return result;
     },
     async remove(tenantKey: string, input: { id: any; email: string }): Promise<RemoveUserResult> {
+      assertNotActing("manage users");
       const caller = await requireUser();
       const eff = await resolveEffectiveTenant(caller.email);
       assertCanActOnTenant(eff, tenantKey);
@@ -1875,6 +2109,7 @@ export const governed = {
     // strapi-cms/src/api/media-meta) but resolving it once here, uniformly,
     // is simpler than duplicating resolveEffectiveTenant per call site.
     async upload(file: File): Promise<MediaAsset> {
+      assertNotActing("upload media");
       const user = await requireUser();
       const eff = await resolveEffectiveTenant(user.email);
       return (await activeAdapter()).media.upload(file, eff?.key);
@@ -1885,11 +2120,13 @@ export const governed = {
       return (await activeAdapter()).media.list({ ...opts, tenantKey: eff?.key });
     },
     async update(id: string, patch: { caption?: string | null; alt?: string | null; tags?: string | null }): Promise<MediaAsset> {
+      assertNotActing("change media");
       const user = await requireUser();
       const eff = await resolveEffectiveTenant(user.email);
       return (await activeAdapter()).media.update(id, patch, eff?.key);
     },
     async remove(id: string): Promise<void> {
+      assertNotActing("delete media");
       const user = await requireUser();
       const eff = await resolveEffectiveTenant(user.email);
       return (await activeAdapter()).media.remove(id, eff?.key);
@@ -1897,6 +2134,7 @@ export const governed = {
   },
 
   async list<T = any>(uid: string, query?: EntryQuery): Promise<EntryList<T>> {
+    const acting = assertActingUid(uid);
     if (GENERIC_ROUTE_READ_BLOCKED_UIDS.has(uid)) {
       throw new CmsError("This content type must be managed through its own screen, not read directly.", 403);
     }
@@ -1912,7 +2150,7 @@ export const governed = {
     // custom-role view check and any eff-based filter for every bookkeeping
     // type's reads. activeAdapter() here always reflects the genuine
     // ambient session, bookkeeping override or not.
-    const user = await (await activeAdapter()).auth.me();
+    const user = await currentUser();
     const eff = user ? await resolveEffectiveTenant(user.email) : null;
     if (user) {
       const crp = await resolveCustomRolePermissions(user, eff, uid);
@@ -1986,17 +2224,24 @@ export const governed = {
         const filter = withTenantFilter(query?.filter, "key", "eq", eff.key);
         return cms.entries.list<T>(uid, { ...query, filter });
       }
+      if (acting && SCOPED.has(uid)) {
+        // A background job's token is the scheduler's, which Strapi's hook
+        // only narrows via the acting headers; filter here too (fail closed).
+        const filter = withTenantFilter(query?.filter, "tenant.key", "eq", eff?.key ?? "__no_tenant__");
+        return cms.entries.list<T>(uid, { ...query, filter });
+      }
       return cms.entries.list<T>(uid, query);
     });
   },
   async get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null> {
+    const acting = assertActingUid(uid);
     if (GENERIC_ROUTE_READ_BLOCKED_UIDS.has(uid)) {
       throw new CmsError("This content type must be managed through its own screen, not read directly.", 403);
     }
     // See governed.list's own comment just above on why this is resolved
     // via activeAdapter() and not the (possibly bookkeeping-overridden) `cms`
     // the withContentAdapter callback receives.
-    const user = await (await activeAdapter()).auth.me();
+    const user = await currentUser();
     const eff = user ? await resolveEffectiveTenant(user.email) : null;
     if (user) {
       const crp = await resolveCustomRolePermissions(user, eff, uid);
@@ -2006,7 +2251,11 @@ export const governed = {
     }
     return withContentAdapter(uid, async (cms) => {
       const result: any = await cms.entries.get<T>(uid, id, opts);
-      if (WP_SCOPED.has(uid) && result && eff && result.tenantKey && result.tenantKey !== eff.key) {
+      if (acting && result && SCOPED.has(uid) && (await trueOwnerOf(uid, id)) !== eff?.key) {
+        // Fail closed: an entry a background job can't confirm as its tenant's is not returned.
+        throw new CmsError("Cross-tenant operation not permitted", 403);
+      }
+      if (WP_SCOPED.has(uid) && result && eff && (acting ? result.tenantKey !== eff.key : result.tenantKey && result.tenantKey !== eff.key)) {
         throw new CmsError("Cross-tenant operation not permitted", 403);
       }
       if (uid === REVIEW_UID && result && eff) {
@@ -2044,6 +2293,7 @@ export const governed = {
     });
   },
   async create<T = any>(uid: string, data: Record<string, any>): Promise<T> {
+    assertActingUid(uid);
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
     await assertBookkeepingWriteAllowed(uid, null, eff, user);
@@ -2064,6 +2314,7 @@ export const governed = {
     return result;
   },
   async update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T> {
+    assertActingUid(uid);
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
     await assertBookkeepingWriteAllowed(uid, id, eff, user);
@@ -2083,6 +2334,7 @@ export const governed = {
     return result;
   },
   async remove(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
+    assertNotActing("delete content");
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
     await assertBookkeepingWriteAllowed(uid, id, eff, user);
@@ -2095,10 +2347,12 @@ export const governed = {
     await writeAudit("delete", uid, id, user, eff?.key ?? null);
   },
   async publish(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
+    assertNotActing("publish content");
     const user = await requireUser();
     await doPublish(uid, id, user, opts);
   },
   async unpublish(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
+    assertNotActing("unpublish content");
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
     const crp = await resolveCustomRolePermissions(user, eff, uid);

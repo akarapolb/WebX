@@ -21,7 +21,10 @@ const LEVEL_DESC_KEY: Record<AgentLevel, string> = {
   off: "as.descOff", read: "as.descRead", suggest: "as.descSuggest", draft: "as.descDraft", draft_submit: "as.descDraftSubmit",
 };
 
-type Settings = { level: AgentLevel; tools?: string[]; contentTypes?: string[]; model?: string; local?: boolean };
+type Settings = {
+  level: AgentLevel; tools?: string[]; contentTypes?: string[]; model?: string; local?: boolean;
+  background?: boolean; schedules?: boolean;
+};
 
 export default function AgentSettings() {
   const { t } = useLang();
@@ -33,6 +36,8 @@ export default function AgentSettings() {
   const [level, setLevel] = useState<AgentLevel>("off");
   const [local, setLocal] = useState(false);
   const [model, setModel] = useState("");
+  const [background, setBackground] = useState(false);
+  const [schedules, setSchedules] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
 
@@ -47,6 +52,8 @@ export default function AgentSettings() {
       setLevel(LEVELS.includes(s.level) ? s.level : "off");
       setLocal(Boolean(s.local));
       setModel(s.model || "");
+      setBackground(Boolean(s.background));
+      setSchedules(Boolean(s.schedules));
     } catch { setErr("Cannot reach the backend."); }
     finally { setLoading(false); }
   }, [tenant]);
@@ -57,7 +64,7 @@ export default function AgentSettings() {
     try {
       const r = await fetch("/api/agent/policy?tenant=" + encodeURIComponent(tenant), {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ level, local, model: model.trim() || undefined }),
+        body: JSON.stringify({ level, local, model: model.trim() || undefined, background, schedules: background && schedules }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { setMsg({ t: j.error || "Save failed", ok: false }); return; }
@@ -92,6 +99,22 @@ export default function AgentSettings() {
           <span><b style={{ textDecoration: "line-through" }}>{t("as.publish")}</b><small>{t("as.publishNote")}</small></span>
         </label>
       </div>
+
+      <label className="vb-fld" style={{ marginBottom: 14 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" checked={background} onChange={(e) => setBackground(e.target.checked)} data-testid="as-background" />
+          {t("as.background")}
+        </span>
+        <small className="muted">{t("as.backgroundHint")}</small>
+      </label>
+
+      <label className="vb-fld" style={{ marginBottom: 14, opacity: background ? 1 : 0.55 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" checked={background && schedules} disabled={!background} onChange={(e) => setSchedules(e.target.checked)} data-testid="as-schedules" />
+          {t("as.schedules")}
+        </span>
+        <small className="muted">{t("as.schedulesHint")}</small>
+      </label>
 
       <label className="vb-fld" style={{ marginBottom: 14 }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>

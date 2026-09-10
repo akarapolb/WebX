@@ -40,6 +40,13 @@ export default (_config: any, _ctx: any) => {
   return async (ctx: any, next: any) => {
     if (ctx.method === 'POST') {
       const p = ctx.path || '';
+      // webx-studio's own service calls (the agent worker heartbeats and
+      // checkpoints every few seconds per job) all come from one container IP
+      // and would share the public 60-per-minute bucket with every form post.
+      const internalSecret = process.env.WEBX_INTERNAL_SECRET;
+      if (p.indexOf('/api/internal/') === 0 && internalSecret && ctx.request.header['x-internal-secret'] === internalSecret) {
+        return next();
+      }
       const ip = ctx.request.ip || 'unknown';
       let ok = true;
       if (p === '/admin/login' || p === '/admin/forgot-password' || p === '/api/mfa/verify') {

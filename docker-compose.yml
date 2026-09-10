@@ -113,6 +113,15 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # WebX Agent background jobs: this process runs a worker (see
+      # webx-studio/.env.example). Jobs are leased in Strapi, so replicas are safe.
+      AGENT_WORKER_ENABLED: ${AGENT_WORKER_ENABLED:-1}
+      AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-3}
+      AGENT_SLICE_TURNS: ${AGENT_SLICE_TURNS:-8}
+    # On stop, running job slices finish their current turn and go back to the
+    # queue (the worker waits up to 20s); anything slower is reclaimed after
+    # its lease expires.
+    stop_grace_period: 30s
     ports:
       - "${WEBX_PORT:-3000}:3000"
 
