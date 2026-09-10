@@ -35,10 +35,12 @@ import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "
 import { parseCheckpoint } from "@/lib/agent/engine/checkpoint";
 import { evaluateJobOwner } from "@/lib/agent/jobs/owner";
 import {
-  bulkCreateGoal, bulkCreatePlan, isTemplateKey, parseTemplateParams, requiredLevelFor, templateTitle, TemplateError,
+  bulkCreateGoal, bulkCreatePlan, isTemplateKey, parseTemplateParams, requiredLevelFor, templateTitle, TemplateError, TEMPLATES,
   type DirectItem, type TemplateKey,
 } from "@/lib/agent/jobs/templates";
-import { controlJob, type JobControlAction } from "@/lib/agent/jobs/store.server";
+import { advanceSchedule, controlJob, disableSchedule, dueSchedules, type JobControlAction } from "@/lib/agent/jobs/store.server";
+import { authorizationUntil, runScheduleTick, type Prepared, type TickReport } from "@/lib/agent/jobs/schedules";
+import { nextOccurrence, parseRecurrence, RecurrenceError, type Recurrence } from "@/lib/agent/recurrence";
 import type { AgentJobRow, JobOwner, JobPolicy, OwnerRefusal } from "@/lib/agent/jobs/types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine, actingSession, withActingSession } from "../strapi";
 import { wordpressLogin } from "../wordpress";
@@ -153,6 +155,7 @@ const AGENT_THREAD_UID = "api::agent-thread.agent-thread";
 // Background agent jobs (Phase 9): same kind of per-owner bookkeeping as
 // threads, written by workers only through strapi-cms's lease endpoints.
 const AGENT_JOB_UID = "api::agent-job.agent-job";
+const AGENT_SCHEDULE_UID = "api::agent-schedule.agent-schedule";
 // Cookie-consent records are written directly to Strapi by public-site
 // regardless of the tenant's own engine (see public-site/components/
 // CookieConsent.tsx's own comment — it just posts ?tenant=<key> against
@@ -191,7 +194,7 @@ const CONSENT_LOG_UID = "api::consent-log.consent-log";
 // BREAKING_NEWS_UID deliberately NOT included here anymore (Phase 7) — see
 // its own comment above. It stays a plain SCOPED-only Strapi uid now,
 // exactly like complaint/application/contact-message always were.
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID, AGENT_JOB_UID]);
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID, AGENT_JOB_UID, AGENT_SCHEDULE_UID]);
 /** The three BOOKKEEPING_UIDS blocked outright from the generic entries
  * route's WRITE side (assertBookkeepingWriteAllowed, below) — each needs a
  * dedicated writer with its own ownership/ordering logic the generic path
@@ -213,7 +216,7 @@ const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEA
  * the uid Milestone 1/2 actually added, and because CustomRoles.tsx never
  * exercises the generic route in the first place (blocking it would be
  * inert, not protective). */
-const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, AUDIT_UID, AGENT_THREAD_UID, AGENT_JOB_UID]);
+const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, AUDIT_UID, AGENT_THREAD_UID, AGENT_JOB_UID, AGENT_SCHEDULE_UID]);
 /** BOOKKEEPING_UIDS that carry a real `tenant` RELATION (not a plain
  * tenantKey string) and are ALSO in Strapi's own SCOPED set
  * (strapi-cms/src/index.ts) for the non-bookkeeping case — meaning a
@@ -265,7 +268,7 @@ function withTenantFilter(existing: EntryQuery["filter"] | undefined, field: str
  * custom-role have the SAME kind of gap today (pre-existing, not introduced
  * by this change) but can't be closed the same way without a dedicated
  * bypass read path first — out of scope here, flagged separately. */
-const GENERIC_ROUTE_READ_BLOCKED_UIDS = new Set([AGENT_THREAD_UID, AGENT_JOB_UID]);
+const GENERIC_ROUTE_READ_BLOCKED_UIDS = new Set([AGENT_THREAD_UID, AGENT_JOB_UID, AGENT_SCHEDULE_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
 // `features` is the pre-existing free-form per-tenant JSON bag ("unset = all
@@ -1708,10 +1711,16 @@ async function jobPreconditions(user: CurrentUser): Promise<{ eff: Tenant; polic
 }
 
 /** The panel's status check: the caller's agent policy, and whether this workspace runs background jobs. */
-export async function resolveAgentStatus(user: CurrentUser): Promise<AgentPolicy & { background: boolean }> {
+export async function resolveAgentStatus(user: CurrentUser): Promise<AgentPolicy & { background: boolean; schedules: boolean }> {
   const policy = await resolveAgentPolicy(user);
   const eff = policy.level === "off" ? null : await resolveEffectiveTenant(user.email);
-  return { ...policy, background: Boolean(eff?.features?.agent?.background && planLimit(eff.plan).agentConcurrentJobs) };
+  const limits = eff ? planLimit(eff.plan) : null;
+  const agent = eff?.features?.agent;
+  return {
+    ...policy,
+    background: Boolean(agent?.background && limits?.agentConcurrentJobs),
+    schedules: Boolean(agent?.background && agent?.schedules && limits?.agentSchedules),
+  };
 }
 
 // Job templates (lib/agent/jobs/templates.ts). Parameters are checked and the
@@ -1974,27 +1983,260 @@ export async function agentJobCaps(): Promise<{ caps: Record<string, number>; de
 export async function runAsJobOwner<T>(
   job: AgentJobRow, fn: (owner: JobOwner) => Promise<T>,
 ): Promise<{ ok: true; value: T } | { ok: false; reason: OwnerRefusal }> {
+  const { engine, user, verdict } = await checkOwner(job);
+  if (!verdict.ok) return verdict;
+  if (!user?.email) return { ok: false, reason: "owner_revoked" };
+  const policy = { ...verdict.policy, model: verdict.policy.model || process.env.LITELLM_MODEL || "webx-default" };
+  const owner: JobOwner = { user, policy, lang: job.lang === "th" ? "th" : "en" };
+  const value = await actAsOwner(engine, job.tenantKey, user, job.documentId, `job:${job.documentId}`, () => fn(owner));
+  return { ok: true, value };
+}
+
+type OwnedRow = Pick<AgentJobRow, "tenantKey" | "ownerEmail" | "ownerUserId" | "engine" | "requiredLevel" | "policySnapshot">;
+
+/** Whether a job or schedule may still act as its owner, with the facts that decided it (lib/agent/jobs/owner.ts). */
+async function checkOwner(row: OwnedRow) {
   invalidateTenantCache();
-  const tenant = await resolveTenantByKey(job.tenantKey);
-  const engine = tenant?.engine === "wordpress" ? "wordpress" : "strapi";
-  const account: AdminUser | null = tenant ? await withEngineAdapter(engine, (a) => a.auth.findUserByEmail(job.ownerEmail)) : null;
+  const tenant = await resolveTenantByKey(row.tenantKey);
+  const engine: "strapi" | "wordpress" = tenant?.engine === "wordpress" ? "wordpress" : "strapi";
+  const account: AdminUser | null = tenant ? await withEngineAdapter(engine, (a) => a.auth.findUserByEmail(row.ownerEmail)) : null;
   const user: CurrentUser | null = account ? { id: account.id, email: account.email, roles: account.roles, isSuperAdmin: false } : null;
   const live = user ? await resolveAgentPolicy(user) : null;
-  const verdict = evaluateJobOwner(job, {
+  const verdict = evaluateJobOwner(row, {
     tenant: tenant ? { key: tenant.key, engine, plan: tenant.plan, adminEmails: tenant.adminEmails, features: tenant.features } : null,
     account: account ? { id: account.id, email: account.email, active: account.isActive !== false } : null,
     livePolicy: live && live.level !== "off" ? jobPolicyOf(live) : null,
   });
-  if (!verdict.ok) return verdict;
-  if (!user?.email) return { ok: false, reason: "owner_revoked" };
+  return { tenant, engine, user, verdict };
+}
+
+/** Runs `fn` in an acting session: the scheduler's credential authenticates, the owner's identity and tenant apply. */
+async function actAsOwner<T>(engine: "strapi" | "wordpress", tenantKey: string, user: CurrentUser, jobId: string, actorRef: string, fn: () => Promise<T>): Promise<T> {
   const token = engine === "wordpress" ? await schedulerWpToken() : await schedulerStrapiToken();
   if (!token) throw new CmsError("No service credential is configured for background jobs", 500);
-  const policy = { ...verdict.policy, model: verdict.policy.model || process.env.LITELLM_MODEL || "webx-default" };
-  const owner: JobOwner = { user, policy, lang: job.lang === "th" ? "th" : "en" };
-  const value = await withServiceToken(token, () =>
-    withActingSession({ engine, tenantKey: job.tenantKey, email: user.email!, user, jobId: job.documentId }, () =>
-      withAgentActor(`job:${job.documentId}`, () => fn(owner))));
-  return { ok: true, value };
+  return withServiceToken(token, () =>
+    withActingSession({ engine, tenantKey, email: user.email!, user, jobId }, () => withAgentActor(actorRef, fn)));
+}
+
+// ---------- Agent schedules (Phase 9, M6) ----------
+// A schedule starts a template job on a recurrence (lib/agent/recurrence.ts),
+// with its owner's authority for AUTHORIZATION_DAYS after they last saved or
+// turned it on. People manage schedules here; the scheduler's tick advances
+// them through strapi-cms's compare-and-set endpoints
+// (processAgentScheduleTick). The owner and the workspace's administrators can
+// see a schedule. Only the owner can change it or turn it on, since that
+// authorizes it again as them; an administrator can turn it off or delete it.
+
+export type AgentScheduleInput = {
+  name?: string; template?: string; params?: Record<string, any>; recurrence?: unknown; lang?: "en" | "th"; enabled?: boolean;
+};
+
+/** A schedule as the browser sees it: no saved policy or tick bookkeeping. */
+function agentScheduleView(row: any): any {
+  if (!row || typeof row !== "object") return row;
+  const { policySnapshot, runSeq, countedJobId, ...rest } = row;
+  return rest;
+}
+
+async function loadScheduleForCaller(id: string, user: CurrentUser): Promise<{ row: any; eff: Tenant; isOwner: boolean }> {
+  const eff = await resolveEffectiveTenant(user.email);
+  const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_SCHEDULE_UID, id)).catch(() => null);
+  const isOwner = (row?.ownerEmail || "").toLowerCase() === (user.email || "").toLowerCase();
+  if (!row || !eff || row.tenantKey !== eff.key || !(isOwner || isWorkspaceAdmin(eff, user.email))) throw new CmsError("Unknown schedule", 404);
+  return { row, eff, isOwner };
+}
+
+/** Everything a job needs, plus schedules turned on and a plan that includes them. */
+async function schedulePreconditions(user: CurrentUser) {
+  const pre = await jobPreconditions(user);
+  if (!pre.limits.agentSchedules) throw new CmsError("Schedules need a paid plan.", 403);
+  if (!pre.eff.features?.agent?.schedules) {
+    throw new CmsError("Schedules are turned off for this workspace. A workspace administrator can turn them on in Agent settings.", 403);
+  }
+  return pre;
+}
+
+/** The same checks as starting the job now; the parameters are stored without listed entries, which each run lists again. */
+async function checkSchedule(eff: Tenant, policy: AgentPolicy, input: AgentScheduleInput, lang: "en" | "th") {
+  if (!isTemplateKey(input.template) || !TEMPLATES[input.template].schedulable) throw new CmsError("This kind of job can't be scheduled.", 400);
+  let recurrence: Recurrence;
+  try {
+    recurrence = parseRecurrence(input.recurrence);
+  } catch (e) {
+    if (e instanceof RecurrenceError) throw new CmsError(e.message, 400);
+    throw e;
+  }
+  const job = await expandJob(eff, policy, input.template, input.params, lang);
+  const params: Record<string, any> = { ...parseTemplateParams(input.template, input.params) };
+  if (input.template !== "custom" && input.params?.sinceLastRun) params.sinceLastRun = true;
+  return { recurrence, job, params };
+}
+
+async function countActiveSchedules(tenantKey: string): Promise<number> {
+  const { total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_SCHEDULE_UID, {
+    pageSize: 1, filter: [{ field: "tenantKey", op: "eq", value: tenantKey }, { field: "enabled", op: "eq", value: true }],
+  }));
+  return total;
+}
+
+export async function listAgentSchedules(): Promise<any[]> {
+  const user = await requireUser();
+  const eff = await resolveEffectiveTenant(user.email);
+  if (!eff) return [];
+  const filter: NonNullable<EntryQuery["filter"]> = [{ field: "tenantKey", op: "eq", value: eff.key }];
+  if (!isWorkspaceAdmin(eff, user.email)) filter.push({ field: "ownerEmail", op: "eq", value: user.email || "" });
+  const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_SCHEDULE_UID, { filter, sort: "createdAt:DESC", pageSize: 100 }));
+  return data.map(agentScheduleView);
+}
+
+export async function createAgentSchedule(input: AgentScheduleInput): Promise<any> {
+  assertNotActing("create schedules");
+  const user = await requireUser();
+  const { eff, policy, limits } = await schedulePreconditions(user);
+  const lang = input.lang === "th" ? "th" : "en";
+  const { recurrence, job, params } = await checkSchedule(eff, policy, input, lang);
+  const active = await countActiveSchedules(eff.key);
+  if (active >= limits.agentSchedules) throw new CmsError(`This workspace already has ${active} active schedules, the most its plan allows.`, 429);
+  const now = Date.now();
+  const created: any = await strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_SCHEDULE_UID, {
+    tenantKey: eff.key, ownerEmail: user.email, ownerUserId: String(user.id), engine: eff.engine || "strapi",
+    name: String(input.name || job.title).trim().slice(0, 120), template: job.template, params, lang, recurrence,
+    enabled: true, nextRunAt: new Date(nextOccurrence(recurrence, now)).toISOString(), runSeq: 0, consecutiveFailures: 0,
+    authorizedAt: new Date(now).toISOString(), authorizedUntil: authorizationUntil(now),
+    requiredLevel: job.requiredLevel, policySnapshot: jobPolicyOf(policy),
+  }));
+  await writeAudit("agent_schedule_create", AGENT_SCHEDULE_UID, created?.documentId ?? null, user, eff.key);
+  return agentScheduleView(created);
+}
+
+/**
+ * `{ enabled: false }` alone turns a schedule off (its owner or a workspace
+ * administrator). Anything else is the owner saving it, which also turns it
+ * on and authorizes it for another AUTHORIZATION_DAYS.
+ */
+export async function updateAgentSchedule(id: string, input: AgentScheduleInput): Promise<any> {
+  assertNotActing("change schedules");
+  const user = await requireUser();
+  const { row, eff, isOwner } = await loadScheduleForCaller(id, user);
+  const seq = (Number(row.runSeq) || 0) + 1;
+
+  if (input.enabled === false && Object.keys(input).every((k) => k === "enabled")) {
+    const patch = { enabled: false, disabledReason: "user", disabledAt: new Date().toISOString(), runSeq: seq };
+    await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_SCHEDULE_UID, row.documentId, patch));
+    await writeAudit("agent_schedule_disable", AGENT_SCHEDULE_UID, row.documentId, user, eff.key);
+    return agentScheduleView({ ...row, ...patch });
+  }
+
+  if (!isOwner) throw new CmsError("Only the person who created this schedule can change it or turn it on.", 403);
+  const { policy, limits } = await schedulePreconditions(user);
+  const merged: AgentScheduleInput = {
+    name: input.name ?? row.name, template: input.template ?? row.template, params: input.params ?? row.params ?? {},
+    recurrence: input.recurrence ?? row.recurrence, lang: input.lang ?? row.lang,
+  };
+  const lang = merged.lang === "th" ? "th" : "en";
+  const { recurrence, job, params } = await checkSchedule(eff, policy, merged, lang);
+  if (!row.enabled) {
+    const active = await countActiveSchedules(eff.key);
+    if (active >= limits.agentSchedules) throw new CmsError(`This workspace already has ${active} active schedules, the most its plan allows.`, 429);
+  }
+  const now = Date.now();
+  const patch = {
+    name: String(merged.name || job.title).trim().slice(0, 120), template: job.template, params, lang, recurrence,
+    enabled: true, nextRunAt: new Date(nextOccurrence(recurrence, now)).toISOString(), runSeq: seq,
+    consecutiveFailures: row.enabled ? Number(row.consecutiveFailures) || 0 : 0, disabledReason: null, disabledAt: null,
+    authorizedAt: new Date(now).toISOString(), authorizedUntil: authorizationUntil(now),
+    requiredLevel: job.requiredLevel, policySnapshot: jobPolicyOf(policy),
+  };
+  await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_SCHEDULE_UID, row.documentId, patch));
+  await writeAudit("agent_schedule_update", AGENT_SCHEDULE_UID, row.documentId, user, eff.key);
+  return agentScheduleView({ ...row, ...patch });
+}
+
+export async function deleteAgentSchedule(id: string): Promise<void> {
+  assertNotActing("delete schedules");
+  const user = await requireUser();
+  const { row, eff } = await loadScheduleForCaller(id, user);
+  await strapiBookkeeping(() => strapiAdapter.entries.remove(AGENT_SCHEDULE_UID, row.documentId));
+  await writeAudit("agent_schedule_delete", AGENT_SCHEDULE_UID, row.documentId, user, eff.key);
+}
+
+/** "Run now": the owner starts the schedule's job at once. The schedule's own timing is unchanged. */
+export async function runAgentScheduleNow(id: string): Promise<any> {
+  assertNotActing("start jobs");
+  const user = await requireUser();
+  const { row, isOwner } = await loadScheduleForCaller(id, user);
+  if (!isOwner) throw new CmsError("Only the person who created this schedule can run it.", 403);
+  return createAgentJob({ template: row.template, params: row.params || {}, lang: row.lang === "th" ? "th" : "en", title: row.name });
+}
+
+/** The scheduler's tick: starts due schedules' jobs, and skips or turns off the rest (lib/agent/jobs/schedules.ts). */
+export async function processAgentScheduleTick(): Promise<TickReport> {
+  const owners = new Map<string, Awaited<ReturnType<typeof checkOwner>>>();
+  return runScheduleTick({
+    now: () => Date.now(),
+    due: () => dueSchedules(),
+    async owner(s) {
+      const checked = await checkOwner(s);
+      owners.set(s.documentId, checked);
+      const t = checked.tenant;
+      return { verdict: checked.verdict, schedulesOn: Boolean(t?.features?.agent?.schedules && planLimit(t.plan).agentSchedules) };
+    },
+    async lastJob(jobId) {
+      const j: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_JOB_UID, jobId)).catch(() => null);
+      return j ? { runState: j.runState, outcome: j.outcome } : null;
+    },
+    async prepare(s, policy) {
+      const { tenant, engine, user } = owners.get(s.documentId) ?? (await checkOwner(s));
+      if (!tenant || !user?.email) return { disable: "owner_revoked" };
+      const limits = planLimit(tenant.plan);
+      const lang = s.lang === "th" ? "th" : "en";
+      const params: Record<string, any> = { ...(s.params || {}) };
+      if (params.sinceLastRun && s.lastRunAt) params.updatedSince = s.lastRunAt;
+      const ref = `schedule:${s.documentId}`;
+      return actAsOwner(engine, s.tenantKey, user, ref, ref, async (): Promise<Prepared> => {
+        let job: ExpandedJob;
+        try {
+          job = await expandJob(tenant, policy, s.template, params, lang);
+        } catch (e) {
+          // The owner can no longer run this job as saved: its level, tools or content types.
+          if (e instanceof CmsError && (e.status === 400 || e.status === 403)) return { disable: "policy_changed" };
+          throw e;
+        }
+        if (job.template !== "custom" && !job.count) return { skip: "nothing_to_do" };
+        const unfinished = (await countJobs(tenant.key, "queued")) + (await countJobs(tenant.key, "running")) + (await countJobs(tenant.key, "paused"));
+        if (unfinished >= limits.agentQueuedJobs) return { skip: "plan_limit" };
+        try {
+          await checkAgentRunBudget(user);
+        } catch (e) {
+          if (e instanceof CmsError) return { skip: "plan_limit" };
+          throw e;
+        }
+        return {
+          job: {
+            tenantKey: tenant.key, ownerEmail: s.ownerEmail, ownerUserId: s.ownerUserId, engine, template: job.template,
+            title: s.name || job.title, goal: job.goal, params: job.params, lang, requiredLevel: job.requiredLevel,
+            policySnapshot: policy, onQuestion: "auto", budget: { maxTokens: limits.agentJobTokenBudget, maxMinutes: limits.agentJobMaxMinutes },
+          },
+        };
+      });
+    },
+    advance: (s, patch) => advanceSchedule(s.documentId, patch),
+    disable: (s, reason, patch) => disableSchedule(s.documentId, reason, patch),
+    async onStarted(s, jobId) {
+      const owner = owners.get(s.documentId)?.user;
+      if (!owner) return;
+      await recordAgentRunStart(owner, `job:${jobId}`);
+      await writeAudit("agent_schedule_run", AGENT_SCHEDULE_UID, s.documentId, owner, s.tenantKey);
+    },
+    async onDisabled(s, reason) {
+      try {
+        await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
+          action: "agent_schedule_auto_disable", contentType: AGENT_SCHEDULE_UID, entryId: s.documentId,
+          adminEmail: s.ownerEmail, tenantKey: s.tenantKey, at: new Date().toISOString(), actor: "system", targetRef: reason,
+        }));
+      } catch { /* audit only */ }
+    },
+  });
 }
 
 // ---------- Agent threads (Phase 8) ----------

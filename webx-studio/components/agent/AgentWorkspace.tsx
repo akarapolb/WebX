@@ -1,9 +1,10 @@
 "use client";
 // The full-page agent workspace: /agent (chat), /agent/jobs and
-// /agent/jobs/:id (background jobs), and the agent's settings. It shares the
-// live conversation with the docked panel (AgentProvider is one global
-// provider; MessageList/Composer from shared.tsx are the same components), so
-// a run started in the panel keeps streaming here and vice versa.
+// /agent/jobs/:id (background jobs), /agent/schedules, and the agent's
+// settings. It shares the live conversation with the docked panel
+// (AgentProvider is one global provider; MessageList/Composer from shared.tsx
+// are the same components), so a run started in the panel keeps streaming
+// here and vice versa.
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,9 +15,13 @@ import { LEVEL_KEY, REASON_KEY, CapabilitiesPopover, MessageList, Composer } fro
 import AgentSettings from "./AgentSettings";
 import JobDetail from "./jobs/JobDetail";
 import JobsView from "./jobs/JobsView";
+import SchedulesView from "./jobs/SchedulesView";
 
 type ThreadRow = { id: number; documentId?: string; title?: string; runState?: string; updatedAt?: string; context?: any };
-type Tab = "chat" | "jobs" | "settings";
+type View = "chat" | "jobs" | "schedules";
+type Tab = View | "settings";
+
+const ROUTE: Record<View, string> = { chat: "/agent", jobs: "/agent/jobs", schedules: "/agent/schedules" };
 
 function fmt(iso?: string, lang?: string) {
   if (!iso) return "";
@@ -120,7 +125,7 @@ function RunSidebar({ t }: { t: (k: string) => string }) {
   );
 }
 
-export default function AgentWorkspace({ view = "chat", jobId }: { view?: "chat" | "jobs"; jobId?: string }) {
+export default function AgentWorkspace({ view = "chat", jobId }: { view?: View; jobId?: string }) {
   const { t, lang } = useLang();
   const agent = useAgent();
   const router = useRouter();
@@ -129,23 +134,30 @@ export default function AgentWorkspace({ view = "chat", jobId }: { view?: "chat"
   const policy = agent.policy;
   const showEmpty = policy && policy.level === "off";
 
-  // Chat and Jobs are routes (a job's page has its own URL); Settings is a tab on either.
+  // Chat, Jobs and Schedules are routes (a job's page has its own URL); Settings is a tab on any of them.
   function openTab(next: Tab) {
     if (next === "settings" || (next === view && !(next === "jobs" && jobId))) {
       setTab(next);
       return;
     }
-    router.push(next === "jobs" ? "/agent/jobs" : "/agent");
+    router.push(ROUTE[next]);
   }
+
+  const tabButton = (key: Tab, icon: string, label: string) => (
+    <button className={tab === key ? "on" : ""} aria-pressed={tab === key} onClick={() => openTab(key)} data-testid={"agent-tab-" + key}>
+      <Icon name={icon} />{label}
+    </button>
+  );
 
   return (
     <div className="agw">
       <div className="vh">
         <div><h1>{t("nav.agent")}</h1><p>{t("aw.sub")}</p></div>
         <div className="agw-tabs seg">
-          <button className={tab === "chat" ? "on" : ""} aria-pressed={tab === "chat"} onClick={() => openTab("chat")} data-testid="agent-tab-chat"><Icon name="msg" />{t("aw.tabChat")}</button>
-          <button className={tab === "jobs" ? "on" : ""} aria-pressed={tab === "jobs"} onClick={() => openTab("jobs")} data-testid="agent-tab-jobs"><Icon name="activity" />{t("aw.tabJobs")}</button>
-          <button className={tab === "settings" ? "on" : ""} aria-pressed={tab === "settings"} onClick={() => openTab("settings")}><Icon name="lock" />{t("aw.tabSettings")}</button>
+          {tabButton("chat", "msg", t("aw.tabChat"))}
+          {tabButton("jobs", "activity", t("aw.tabJobs"))}
+          {tabButton("schedules", "calendar", t("aw.tabSchedules"))}
+          {tabButton("settings", "lock", t("aw.tabSettings"))}
         </div>
       </div>
 
@@ -162,6 +174,8 @@ export default function AgentWorkspace({ view = "chat", jobId }: { view?: "chat"
         </div>
       ) : tab === "jobs" ? (
         jobId ? <JobDetail id={jobId} /> : <JobsView onOpenSettings={() => setTab("settings")} />
+      ) : tab === "schedules" ? (
+        <SchedulesView onOpenSettings={() => setTab("settings")} />
       ) : (
         <div className="agw-body">
           <ThreadList t={t} lang={lang} />

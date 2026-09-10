@@ -151,6 +151,39 @@ complaint/application/contact-message/breaking-news rows — those are
 citizen-submitted or admin-authored at runtime, not content with a real
 starting value the way a poll question or a job posting has.
 
+## WebX Agent background jobs and schedules
+
+Background jobs (the Jobs tab on `/agent`) run inside the `webx` processes
+themselves, so there is nothing extra to deploy for them:
+
+- Each `webx` process starts a worker when it boots (`webx-studio/instrumentation.ts`)
+  unless `AGENT_WORKER_ENABLED=0`. Jobs are leased in Strapi, so several
+  replicas can share one database; `AGENT_WORKER_CONCURRENCY` (default 3) is
+  the number of jobs one process runs at a time.
+- Workers reach Strapi's `/api/internal/agent-jobs/*` endpoints with the
+  shared internal secret (`STRAPI_INTERNAL_SECRET`), and act as each job's
+  owner through the `STRAPI_SCHEDULER_*` service account.
+- On `docker compose stop`, running jobs finish their current turn and go
+  back to the queue (`stop_grace_period: 30s`). Anything slower is picked up
+  again once its lease expires.
+
+Schedules (recurring jobs, the Schedules tab) need a tick. The
+`agent-scheduler` service in `docker-compose.yml` calls
+`POST /api/internal/agent/tick` with `WEBX_SCHEDULER_SECRET` every
+`AGENT_SCHEDULER_INTERVAL_SECONDS` (default 60). On another platform, point
+any cron at that endpoint about once a minute; overlapping ticks are safe,
+because a schedule only advances by compare-and-set. The tick also wakes the
+worker in whichever `webx` process answers it.
+
+Both stay off in every workspace until a workspace administrator turns on
+**Background jobs**, and separately **Schedules**, in Agent settings, and the
+plan must include them (`webx-studio/lib/plans.ts`). A schedule runs as the
+person who saved it for 90 days, then turns itself off until they turn it on
+again. It also turns off if they lose access to the workspace, if the agent's
+permissions drop below what the job needs, or after three failed runs in a
+row. Strapi deletes finished jobs after 90 days (their checkpoints after 7)
+and turned-off schedules after 180.
+
 ## DGA / government on-prem notes
 
 - Self-host path **A** keeps everything inside the agency network — no third-party

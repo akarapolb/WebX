@@ -541,6 +541,60 @@ export interface ApiAgentJobAgentJob extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiAgentScheduleAgentSchedule
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'agent_schedules';
+  info: {
+    description: 'A recurring WebX Agent background job (webx-studio lib/agent/jobs/schedules.ts). The tick advances it only through the secret-protected /api/internal/agent-schedules/* endpoints, each a compare-and-set on runSeq; never written through the generic entries route.';
+    displayName: 'Agent Schedule';
+    pluralName: 'agent-schedules';
+    singularName: 'agent-schedule';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    authorizedAt: Schema.Attribute.DateTime;
+    authorizedUntil: Schema.Attribute.DateTime;
+    budget: Schema.Attribute.JSON;
+    consecutiveFailures: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
+    countedJobId: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    disabledAt: Schema.Attribute.DateTime;
+    disabledReason: Schema.Attribute.String;
+    enabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    engine: Schema.Attribute.String & Schema.Attribute.DefaultTo<'strapi'>;
+    lang: Schema.Attribute.String & Schema.Attribute.DefaultTo<'en'>;
+    lastJobId: Schema.Attribute.String;
+    lastRunAt: Schema.Attribute.DateTime;
+    lastSkipReason: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::agent-schedule.agent-schedule'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    nextRunAt: Schema.Attribute.DateTime;
+    ownerEmail: Schema.Attribute.String & Schema.Attribute.Required;
+    ownerUserId: Schema.Attribute.String & Schema.Attribute.Required;
+    params: Schema.Attribute.JSON;
+    policySnapshot: Schema.Attribute.JSON;
+    publishedAt: Schema.Attribute.DateTime;
+    recurrence: Schema.Attribute.JSON & Schema.Attribute.Required;
+    requiredLevel: Schema.Attribute.String & Schema.Attribute.Required;
+    runSeq: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    template: Schema.Attribute.String & Schema.Attribute.Required;
+    tenantKey: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiAgentThreadAgentThread extends Struct.CollectionTypeSchema {
   collectionName: 'agent_threads';
   info: {
@@ -3136,6 +3190,7 @@ declare module '@strapi/strapi' {
       'admin::user': AdminUser;
       'api::ab-event.ab-event': ApiAbEventAbEvent;
       'api::agent-job.agent-job': ApiAgentJobAgentJob;
+      'api::agent-schedule.agent-schedule': ApiAgentScheduleAgentSchedule;
       'api::agent-thread.agent-thread': ApiAgentThreadAgentThread;
       'api::application.application': ApiApplicationApplication;
       'api::article.article': ApiArticleArticle;

@@ -1092,6 +1092,13 @@ textarea.agj-in{resize:vertical;line-height:1.5}
 .agj-ind.bad i{background:var(--bad);animation:none}
 .agj-ind b{font-variant-numeric:tabular-nums}
 
+.agj-form-top{margin-top:0;padding-top:0;border-top:none}
+.agj-seg{align-self:flex-start}
+.agj-time{display:flex;align-items:center;gap:6px}
+.agj-time .agj-in{width:auto;min-width:64px}
+.agj-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.agj-sch-note{display:block;max-width:220px;margin-top:4px;font-size:11.5px;line-height:1.4;color:var(--mut)}
+
 @media (prefers-reduced-motion:reduce){ .agj-st.run i,.agj-ind i{animation:none} }
 @media (max-width:1180px){ .agj-tpls{grid-template-columns:repeat(2,minmax(0,1fr))} .agj-detail{grid-template-columns:1fr} .agj-side{position:static} }
 @media (max-width:720px){ .agj-tpls,.agj-form{grid-template-columns:1fr} .agj-ind span{display:none} .agj-ev{grid-template-columns:56px 10px minmax(0,1fr)} }

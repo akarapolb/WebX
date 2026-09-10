@@ -11,5 +11,8 @@ export default {
     { method: 'POST', path: '/internal/agent-jobs/checkpoint', handler: 'agent-jobs.checkpoint', config: { auth: false } },
     { method: 'POST', path: '/internal/agent-jobs/finish', handler: 'agent-jobs.finish', config: { auth: false } },
     { method: 'POST', path: '/internal/agent-jobs/control', handler: 'agent-jobs.control', config: { auth: false } },
+    { method: 'POST', path: '/internal/agent-schedules/due', handler: 'agent-schedules.due', config: { auth: false } },
+    { method: 'POST', path: '/internal/agent-schedules/advance', handler: 'agent-schedules.advance', config: { auth: false } },
+    { method: 'POST', path: '/internal/agent-schedules/disable', handler: 'agent-schedules.disable', config: { auth: false } },
   ],
 };

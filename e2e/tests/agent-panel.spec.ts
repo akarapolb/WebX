@@ -447,4 +447,60 @@ test.describe("WebX Agent — docked panel + workspace (mocked backend)", () => 
     await expect(page.getByTestId("agent-job-detail")).toContainText("Audit every news entry");
     expect(fromThread).toMatchObject({ threadId: "t20" });
   });
+
+  // ---- Schedules (Phase 9 M6) ----
+
+  test("Schedules tab: a weekly audit is saved with its recurrence, and turning it off shows why it's off", async ({ page }) => {
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "", background: true, schedules: true } }));
+    await page.route("**/api/cms/roles/content-types**", (route) => route.fulfill({ json: [{ uid: "api::news.news", label: "News" }] }));
+    await page.route("**/api/agent/jobs/summary", (route) => route.fulfill({ json: { active: 0, waiting: 0, failed: 0 } }));
+    const saved: any[] = [];
+    let list: any[] = [];
+    await page.route("**/api/agent/schedules", (route) => {
+      if (route.request().method() !== "POST") return route.fulfill({ json: list });
+      const body = route.request().postDataJSON();
+      saved.push(body);
+      list = [{
+        documentId: "sch1", name: body.name, template: body.template, params: body.params, recurrence: body.recurrence,
+        enabled: true, nextRunAt: "2026-09-14T03:30:00.000Z", ownerEmail: "editor@dga.local",
+      }];
+      return route.fulfill({ json: list[0] });
+    });
+    let toggled: any = null;
+    await page.route("**/api/agent/schedules/sch1", (route) => {
+      toggled = route.request().postDataJSON();
+      list = [{ ...list[0], enabled: false, disabledReason: "user" }];
+      return route.fulfill({ json: list[0] });
+    });
+
+    await page.goto(WEBX_STUDIO + "/agent/schedules");
+    await expect(page.getByTestId("agent-schedules")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("agent-schedule-new").click();
+
+    const form = page.getByTestId("agent-schedule-form");
+    await form.getByTestId("agent-schedule-name").fill("Weekly news audit");
+    await expect(form.getByTestId("agent-job-tpl-bulk_create")).toHaveCount(0); // creating drafts can't be scheduled
+    await form.getByTestId("agent-job-tpl-audit_all").click();
+    await form.getByRole("button", { name: "News", exact: true }).click();
+    await form.getByLabel("Only entries changed since the last run").check();
+    await form.getByRole("button", { name: "Wed", exact: true }).click(); // weekly on Monday is the default
+    await form.getByLabel("Hour").selectOption("10");
+    await form.getByLabel("Minute").selectOption("30");
+    await expect(form.getByTestId("agent-schedule-summary")).toHaveText("Every Mon, Wed at 10:30");
+    await form.getByTestId("agent-schedule-save").click();
+
+    const row = page.getByTestId("agent-schedule-sch1");
+    await expect(row).toContainText("Weekly news audit", { timeout: 10_000 });
+    await expect(page.getByTestId("agent-schedule-form")).toHaveCount(0);
+    expect(saved[0]).toMatchObject({
+      name: "Weekly news audit", template: "audit_all",
+      params: { contentTypes: ["api::news.news"], sinceLastRun: true, max: 100 },
+      recurrence: { freq: "weekly", byWeekday: [1, 3], hour: 10, minute: 30, tz: "Asia/Bangkok" },
+    });
+
+    await row.getByTestId("agent-schedule-toggle").click();
+    await expect(row.getByTestId("agent-schedule-state")).toHaveAttribute("data-state", "off", { timeout: 10_000 });
+    await expect(row).toContainText("Turned off by a person.");
+    expect(toggled).toEqual({ enabled: false });
+  });
 });

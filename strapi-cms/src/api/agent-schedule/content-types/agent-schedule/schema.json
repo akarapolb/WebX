@@ -1,0 +1,41 @@
+{
+  "kind": "collectionType",
+  "collectionName": "agent_schedules",
+  "info": {
+    "singularName": "agent-schedule",
+    "pluralName": "agent-schedules",
+    "displayName": "Agent Schedule",
+    "description": "A recurring WebX Agent background job (webx-studio lib/agent/jobs/schedules.ts). The tick advances it only through the secret-protected /api/internal/agent-schedules/* endpoints, each a compare-and-set on runSeq; never written through the generic entries route."
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "tenantKey": { "type": "string", "required": true },
+    "ownerEmail": { "type": "string", "required": true },
+    "ownerUserId": {
+      "type": "string",
+      "required": true,
+      "description": "The owner's account id when the schedule was saved. A different id for the same email later means a different person, and the schedule turns off."
+    },
+    "engine": { "type": "string", "default": "strapi" },
+    "name": { "type": "string", "required": true },
+    "template": { "type": "string", "required": true },
+    "params": { "type": "json" },
+    "lang": { "type": "string", "default": "en" },
+    "recurrence": { "type": "json", "required": true, "description": "{ freq: daily | weekly | monthly, byWeekday?, byMonthDay? (1-28), hour, minute (0/15/30/45), tz }" },
+    "enabled": { "type": "boolean", "default": true },
+    "nextRunAt": { "type": "datetime" },
+    "lastRunAt": { "type": "datetime" },
+    "lastJobId": { "type": "string" },
+    "countedJobId": { "type": "string", "description": "The last finished job already counted toward consecutiveFailures." },
+    "consecutiveFailures": { "type": "integer", "default": 0 },
+    "lastSkipReason": { "type": "string" },
+    "disabledReason": { "type": "string", "description": "owner_revoked | policy_changed | plan | reauthorize | failures | template | user" },
+    "disabledAt": { "type": "datetime" },
+    "authorizedAt": { "type": "datetime" },
+    "authorizedUntil": { "type": "datetime", "description": "90 days after the owner last saved or turned the schedule on; after that it turns off until they confirm it again." },
+    "requiredLevel": { "type": "string", "required": true },
+    "policySnapshot": { "type": "json" },
+    "budget": { "type": "json" },
+    "runSeq": { "type": "integer", "default": 0, "description": "Bumped by every tick change; the compare-and-set token." }
+  }
+}

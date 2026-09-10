@@ -24,6 +24,8 @@ export type AgentPolicy = {
   reason?: "disabled" | "unscoped" | "plan" | "not_granted";
   /** Background jobs are on for this workspace and its plan includes them. */
   background?: boolean;
+  /** Schedules are on too, and the plan includes them. */
+  schedules?: boolean;
 };
 
 /** What an open editor exposes to the panel — a write handler per proposal

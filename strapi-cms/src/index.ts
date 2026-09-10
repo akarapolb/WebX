@@ -142,6 +142,10 @@ async function cleanupOldRecords(strapi: any) {
     await jobs.deleteMany({ where: { runState: finished, finishedAt: { $lt: new Date(Date.now() - 90 * day) } } });
     await jobs.updateMany({ where: { runState: finished, finishedAt: { $lt: new Date(Date.now() - 7 * day) }, checkpoint: { $notNull: true } }, data: { checkpoint: null } });
   } catch (e) { /* noop */ }
+  // Agent schedules: one that has been turned off is deleted 180 days later.
+  try {
+    await strapi.db.query('api::agent-schedule.agent-schedule').deleteMany({ where: { enabled: false, disabledAt: { $lt: new Date(Date.now() - 180 * day) } } });
+  } catch (e) { /* noop */ }
 }
 
 // Scheduled-release publishing used to live here (processDueReleases, a

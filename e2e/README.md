@@ -143,7 +143,8 @@ Settings tab. Background jobs (Phase 9): a template previewed then started
 from the Jobs tab opening the job's page (checklist, timeline, top-bar jobs
 indicator), a job waiting for an answer shown in Thai and answered, the Jobs
 tab with background jobs turned off, and **Continue in background** turning a
-stopped conversation into a job.
+stopped conversation into a job. Schedules: a weekly audit saved from the
+Schedules tab with its recurrence, then turned off.
 
 ## Config
 
