@@ -59,7 +59,9 @@ export type AgentEvent =
   | { type: "proposal"; proposal: AgentProposal }
   | { type: "usage"; promptTokens: number; completionTokens: number }
   | { type: "done"; runId: string; applied?: { uid: string; id: string }[] }
-  | { type: "error"; code: string; message: string };
+  | { type: "error"; code: string; message: string }
+  /** The run ended before finishing its task. A `resumable` run can be continued from the thread's saved checkpoint. */
+  | { type: "stopped"; reason: string; resumable: boolean; message: string };
 
 export type AgentProposal = {
   id: string;

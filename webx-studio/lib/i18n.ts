@@ -970,6 +970,7 @@ export const DICT: Record<string, Entry> = {
   "ag.errorGeneric": { en: "Something went wrong.", th: "เกิดข้อผิดพลาด" },
   "ag.stop": { en: "Stop", th: "หยุด" },
   "ag.send": { en: "Send", th: "ส่ง" },
+  "ag.continue": { en: "Continue", th: "ทำต่อ" },
   "ag.fieldsProposal": { en: "field change(s)", th: "การเปลี่ยนแปลงฟิลด์" },
   "ag.toolsWorking": { en: "Working…", th: "กำลังทำงาน…" },
   "ag.toolsUsed": { en: "Used tools", th: "ใช้เครื่องมือ" },

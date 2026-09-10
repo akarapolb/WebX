@@ -14,10 +14,15 @@ export type ChatMsg =
   | { kind: "assistant"; id: string; text: string }
   | { kind: "tools"; id: string; steps: ToolStep[] }
   | { kind: "proposal"; id: string; proposal: AgentProposal; status: "pending" | "applied" | "undone" | "stale" }
-  | { kind: "error"; id: string; text: string };
+  | { kind: "error"; id: string; text: string }
+  /** The run ended before finishing its task; `resumable` offers Continue. */
+  | { kind: "stopped"; id: string; reason: string; text: string; resumable: boolean };
 
 type SendOpts = {
+  /** Empty when continuing a stopped run. */
   message: string;
+  /** Continue the thread's stopped run from its saved checkpoint. */
+  resume?: boolean;
   mode: "docked" | "workspace";
   lang: "en" | "th";
   context: AgentContextRef;
@@ -29,13 +34,15 @@ const nid = () => "m" + Date.now().toString(36) + (seq++).toString(36);
 
 /** Converts a persisted thread's own stored `messages` (app/api/agent/run's
  * buildPersistMessages shape — plain {role,content}/{role:"tools",steps}/
- * {role:"proposal",proposal} rows, NOT this file's own ChatMsg union) back
- * into renderable ChatMsg[] for AgentProvider.loadThread. Loaded proposals
- * are marked "pending" rather than replaying an unknowable applied/undone
- * history (buildPersistMessages never stored status) — Apply re-validates
- * the target + level at click time regardless, so this stays safe even if
- * the underlying entry has since changed or closed. */
-export function chatMsgsFromThread(rows: any[]): ChatMsg[] {
+ * {role:"proposal",proposal}/{role:"stopped",…} rows, NOT this file's own
+ * ChatMsg union) back into renderable ChatMsg[] for AgentProvider.loadThread.
+ * Loaded proposals are marked "pending" rather than replaying an unknowable
+ * applied/undone history (buildPersistMessages never stored status) — Apply
+ * re-validates the target + level at click time regardless, so this stays
+ * safe even if the underlying entry has since changed or closed.
+ * `resumable` (the thread still holds a checkpoint) re-enables Continue on
+ * the final stop notice only. */
+export function chatMsgsFromThread(rows: any[], resumable = false): ChatMsg[] {
   const out: ChatMsg[] = [];
   rows.forEach((r, i) => {
     const id = "h" + i;
@@ -46,8 +53,12 @@ export function chatMsgsFromThread(rows: any[]): ChatMsg[] {
       out.push({ kind: "tools", id, steps: r.steps.map((s: any, j: number) => ({ id: id + "-" + j, name: s?.name || "", ok: s?.ok, summary: s?.summary, pending: false })) });
     } else if (r.role === "proposal" && r.proposal) {
       out.push({ kind: "proposal", id, proposal: r.proposal, status: "pending" });
+    } else if (r.role === "stopped" && typeof r.message === "string") {
+      out.push({ kind: "stopped", id, reason: String(r.reason || ""), text: r.message, resumable: false });
     }
   });
+  const last = out[out.length - 1];
+  if (resumable && last?.kind === "stopped") out[out.length - 1] = { ...last, resumable: true };
   return out;
 }
 
@@ -97,7 +108,12 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
   }, []);
 
   const send = useCallback(async (opts: SendOpts) => {
-    setMessages((m) => [...m, { kind: "user", id: nid(), text: opts.message }]);
+    const userMsg: ChatMsg | null = opts.message ? { kind: "user", id: nid(), text: opts.message } : null;
+    // Any new run retires older Continue buttons: the server keeps only the newest checkpoint.
+    setMessages((m) => {
+      const settled = m.map((x) => (x.kind === "stopped" && x.resumable ? { ...x, resumable: false } : x));
+      return userMsg ? [...settled, userMsg] : settled;
+    });
     setRunning(true);
     toolsMsgId.current = null;
     const ac = new AbortController();
@@ -110,7 +126,7 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: opts.message, mode: opts.mode, lang: opts.lang,
+          message: opts.message || undefined, resume: opts.resume || undefined, mode: opts.mode, lang: opts.lang,
           context: opts.context, threadId: opts.threadId || undefined,
         }),
         signal: ac.signal,
@@ -162,6 +178,12 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
             toolsMsgId.current = null;
             if (d.content) setMessages((m) => [...m, { kind: "assistant", id: nid(), text: d.content }]);
             break;
+          case "stopped": {
+            toolsMsgId.current = null;
+            const stopMsg: ChatMsg = { kind: "stopped", id: nid(), reason: String(d.reason || ""), text: String(d.message || ""), resumable: Boolean(d.resumable) };
+            setMessages((m) => [...m, stopMsg]);
+            break;
+          }
           case "usage":
             setUsage({ promptTokens: d.promptTokens || 0, completionTokens: d.completionTokens || 0 });
             break;

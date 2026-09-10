@@ -30,6 +30,10 @@
       "description": "idle|running|done|error — named runState, not status: Strapi 5's content-manager reserves \"status\" as a system field (document draft/published state) on every collection type regardless of draftAndPublish, and rejects a custom attribute using that name outright (found live: POST here 400s with ValidationError \"Invalid status\" the moment a payload sets it)."
     },
     "lastRunId": { "type": "string" },
-    "usage": { "type": "json" }
+    "usage": { "type": "json" },
+    "checkpoint": {
+      "type": "json",
+      "description": "Engine RunCheckpoint (webx-studio lib/agent/engine/types.ts) for a run that stopped before finishing and can be continued. Null once a run ends for good. Capped at ~256KB by app/api/agent/run; never sent to the browser."
+    }
   }
 }

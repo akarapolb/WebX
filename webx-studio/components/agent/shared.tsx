@@ -132,6 +132,21 @@ export function CapabilitiesPopover({ policy, t, onClose }: { policy: AgentPolic
   );
 }
 
+/** A run that ended before finishing. The newest one on a thread can be
+ * continued from the checkpoint the server saved for it. */
+export function StoppedNotice({ msg, t }: { msg: Extract<ChatMsg, { kind: "stopped" }>; t: (k: string) => string }) {
+  const agent = useAgent();
+  return (
+    <div className="ag-stop" data-testid="agent-stopped">
+      <Icon name="stop" />
+      <span className="ag-stop-tx">{msg.text}</span>
+      {msg.resumable && (
+        <button className="btn btn--p btn-sm" onClick={agent.resume} disabled={agent.running} data-testid="agent-continue">{t("ag.continue")}</button>
+      )}
+    </div>
+  );
+}
+
 /** The scrolling message list — identical rendering whichever surface hosts
  * it, driven entirely by AgentProvider's own `messages`/`running` state. */
 export function MessageList({ t, className }: { t: (k: string) => string; className?: string }) {
@@ -154,6 +169,7 @@ export function MessageList({ t, className }: { t: (k: string) => string; classN
         );
         if (m.kind === "tools") return <ToolsGroup key={m.id} steps={m.steps} t={t} />;
         if (m.kind === "proposal") return <ProposalCard key={m.id} msg={m} t={t} />;
+        if (m.kind === "stopped") return <StoppedNotice key={m.id} msg={m} t={t} />;
         if (m.kind === "error") return <div className="ag-msg" key={m.id}><div className="ag-msg-av bad"><Icon name="close" /></div><div className="ag-msg-tx ag-err">{m.text}</div></div>;
         return null;
       })}

@@ -456,11 +456,15 @@ export function toolSpecs(ctx: AgentRunContext) {
   return availableTools(ctx).map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.parameters } }));
 }
 
+/** Whether a tool can change content. The engine records a write as started
+ * before running it, so a crash mid-write is reported to the model as an
+ * unknown outcome instead of being retried blindly. */
+export function toolIsWrite(name: string): boolean {
+  const t = TOOL_BY_NAME.get(name);
+  return Boolean(t && t.mode !== "read");
+}
+
 const MAX_RESULT_BYTES = 8 * 1024;
-// Exported too — runtime.ts reuses this same cap on the full
-// {ok,summary,data,proposal} payload it sends back to the MODEL (not the
-// UI, which gets the uncapped r.data via its own emit() call; the two are
-// deliberately capped independently — see that call site's own comment).
 export function capResult(s: string): string {
   return s.length > MAX_RESULT_BYTES ? s.slice(0, MAX_RESULT_BYTES) + "\n…(truncated)" : s;
 }

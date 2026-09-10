@@ -182,6 +182,43 @@ test.describe("WebX Agent — docked panel + workspace (mocked backend)", () => 
     await expect(canvas.locator(".home-hero")).toHaveCount(0);
   });
 
+  test("a resumable stop offers Continue, which resumes the same thread without a new message", async ({ page }) => {
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "" } }));
+    await page.route("**/api/agent/threads", (route) => route.fulfill({ json: [] }));
+    const bodies: any[] = [];
+    await page.route("**/api/agent/run", (route) => {
+      bodies.push(route.request().postDataJSON());
+      const events = bodies.length === 1
+        ? [
+            { type: "run_started", runId: "r9", threadId: "t9", level: "draft", model: "" },
+            { type: "tool_call", id: "c1", name: "search_content", args: {} },
+            { type: "tool_result", id: "c1", ok: true, summary: "Found 4 entries" },
+            { type: "stopped", reason: "slice_end", resumable: true, message: "Paused — reached this run's step limit (1 of 1 steps succeeded). Continue to pick up where it left off." },
+            { type: "done", runId: "r9" },
+          ]
+        : [
+            { type: "run_started", runId: "r10", threadId: "t9", level: "draft", model: "" },
+            { type: "text", content: "Finished the remaining steps." },
+            { type: "done", runId: "r10" },
+          ];
+      return route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(events) });
+    });
+
+    await page.goto(WEBX_STUDIO + "/dashboard");
+    await page.getByTestId("agent-toggle").click();
+    await page.getByTestId("agent-composer").fill("Audit every news entry");
+    await page.getByTestId("agent-send").click();
+
+    await expect(page.getByTestId("agent-stopped")).toContainText("step limit", { timeout: 10_000 });
+    await page.getByTestId("agent-continue").click();
+
+    await expect(page.getByText("Finished the remaining steps.")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("agent-continue")).toHaveCount(0); // the old notice can't be continued twice
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toMatchObject({ resume: true, threadId: "t9" });
+    expect(bodies[1].message).toBeUndefined();
+  });
+
   test("policy \"off\" hides the toggle entirely and shows the empty state with no composer", async ({ page, context }) => {
     await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "off", reason: "plan" } }));
     // At level "off", Shell.tsx's topbar toggle and AgentPanel's own FAB

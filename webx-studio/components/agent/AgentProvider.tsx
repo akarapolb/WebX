@@ -62,6 +62,8 @@ type Ctx = {
   running: boolean;
   usage: { promptTokens: number; completionTokens: number };
   send: (text: string) => void;
+  /** Continues the thread's stopped run from the checkpoint the server saved for it. */
+  resume: () => void;
   abort: () => void;
   newThread: () => void;
   /** Loads a past thread's own persisted messages into the current live
@@ -190,13 +192,18 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     run.send({ message: t, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
   }, [run, lang, ref, threadId, policy, suppressed]);
 
+  const resume = useCallback(() => {
+    if (run.running || !threadId || !policy || policy.level === "off") return;
+    run.send({ message: "", resume: true, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
+  }, [run, lang, ref, threadId, policy, suppressed]);
+
   const loadThread = useCallback(async (id: string) => {
     run.abort();
     try {
       const r = await fetch("/api/agent/threads/" + encodeURIComponent(id));
       if (!r.ok) return;
       const t = await r.json();
-      run.setMessages(chatMsgsFromThread(Array.isArray(t?.messages) ? t.messages : []));
+      run.setMessages(chatMsgsFromThread(Array.isArray(t?.messages) ? t.messages : [], Boolean(t?.resumable)));
       setThreadId(id);
     } catch { /* leave the current conversation as-is on failure */ }
   }, [run]);
@@ -229,7 +236,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const value: Ctx = {
     open: open && !suppressed, toggle: () => setOpen((o) => !o), close: () => setOpen(false), openWith,
     policy, ref, threadId, messages: run.messages, running: run.running, usage: run.usage,
-    send, abort: run.abort, newThread, loadThread, setProposalStatus, applyProposal, register,
+    send, resume, abort: run.abort, newThread, loadThread, setProposalStatus, applyProposal, register,
     draftPrompt, setDraftPrompt, autosendPending, consumeAutosend,
   };
 

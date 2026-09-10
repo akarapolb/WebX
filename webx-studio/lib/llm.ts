@@ -2,6 +2,8 @@
 // (OpenAI-compatible), so the provider/model is swappable per tenant/env with
 // zero feature-code changes. Server-only: keys never reach the browser.
 import "server-only";
+import { LlmError, classifyHttp, parseRetryAfter } from "./agent/engine/errors";
+import type { ChatReply, ChatRequest, ToolCall, ToolSpec, WireMsg } from "./agent/engine/types";
 
 const URL = (process.env.LITELLM_URL || "").replace(/\/$/, "");      // e.g. http://localhost:4000
 const KEY = process.env.LITELLM_KEY || "";                           // LiteLLM master/virtual key
@@ -10,22 +12,39 @@ const EMBED_MODEL = process.env.LITELLM_EMBED_MODEL || "webx-embed";
 
 export const llmConfigured = () => Boolean(URL);
 
-type Role = "system" | "user" | "assistant" | "tool";
-type Block = { type: "text"; text: string; cache_control?: { type: "ephemeral" } };
-export type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
-export type Msg = { role: Role; content: string | Block[] | null; tool_calls?: ToolCall[]; tool_call_id?: string; name?: string };
-export type ToolSpec = { type: "function"; function: { name: string; description: string; parameters: Record<string, any> } };
+export { LlmError };
+export type { ToolCall, ToolSpec };
+export type Msg = WireMsg;
 
+/** Throws LlmError (with a retry-relevant `kind`) for network failures,
+ * timeouts and HTTP errors. The caller's own abort is rethrown unchanged. */
 async function call(path: string, body: unknown, signal?: AbortSignal): Promise<any> {
   if (!URL) throw new Error("LLM_NOT_CONFIGURED");
-  const r = await fetch(URL + path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(KEY ? { Authorization: "Bearer " + KEY } : {}) },
-    body: JSON.stringify(body),
-    cache: "no-store",
-    signal,
-  });
-  if (!r.ok) throw new Error("LLM_HTTP_" + r.status + ": " + (await r.text().catch(() => "")).slice(0, 200));
+  let r: Response;
+  try {
+    r = await fetch(URL + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(KEY ? { Authorization: "Bearer " + KEY } : {}) },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal,
+    });
+  } catch (e: any) {
+    if (e?.name === "TimeoutError" || signal?.reason?.name === "TimeoutError") {
+      throw new LlmError("LLM request timed out", { status: 0, kind: "timeout" });
+    }
+    if (signal?.aborted || e?.name === "AbortError") throw e;
+    throw new LlmError("LLM_NETWORK: " + String(e?.message || e).slice(0, 200), { status: 0, kind: "network" });
+  }
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new LlmError("LLM_HTTP_" + r.status + ": " + text.slice(0, 200), {
+      status: r.status,
+      kind: classifyHttp(r.status, text),
+      retryAfterMs: parseRetryAfter(r.headers.get("retry-after")),
+      body: text.slice(0, 2000),
+    });
+  }
   return r.json();
 }
 
@@ -59,28 +78,33 @@ export async function structured<T = any>(o: { prompt: string; system?: string; 
   catch { return JSON.parse(String(raw).replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")) as T; }
 }
 
-/** Tool-calling chat turn for the WebX Agent (lib/agent/runtime.ts) — the one
- * caller that needs raw message history + tool definitions in and a message +
- * usage back out, rather than generate()/structured()'s single-prompt shape.
- * No `stream` option: v1 emits per-turn SSE events (thinking/tool_call/
- * tool_result/text/done) rather than token deltas — tool-call argument
- * streaming is the least consistent part of LiteLLM's OpenAI-compat surface
- * across Anthropic/Gemini/Ollama, so per-turn events (already a few seconds
- * apart at most) are the more reliable v1 choice; token streaming can be
- * added here later without changing this function's signature. */
-export async function chat(o: {
-  messages: Msg[]; tools?: ToolSpec[]; model?: string; maxTokens?: number; temperature?: number; signal?: AbortSignal;
-}): Promise<{ message: { content: string | null; tool_calls?: ToolCall[] }; usage?: { prompt_tokens: number; completion_tokens: number } }> {
+/** One tool-calling turn for the WebX Agent engine (lib/agent/engine/loop.ts).
+ * Per-turn rather than token-streamed: tool-call argument streaming is the
+ * least consistent part of LiteLLM's OpenAI-compatible surface across
+ * providers. Besides the message, it returns what the engine needs to keep a
+ * long run healthy: the provider's reasoning (Kimi's `reasoning_content`,
+ * Anthropic's `thinking_blocks`, which must be echoed back within a turn),
+ * `finish_reason`, and the model that actually served the request (a router
+ * fallback can differ from the alias asked for). */
+export async function chat(o: ChatRequest): Promise<ChatReply> {
   const body: Record<string, any> = {
     model: o.model || MODEL, messages: o.messages,
     max_tokens: o.maxTokens ?? 1200, temperature: o.temperature ?? 0.4,
   };
   if (o.tools?.length) { body.tools = o.tools; body.tool_choice = "auto"; }
   const j = await call("/chat/completions", body, o.signal);
-  const m = j?.choices?.[0]?.message ?? {};
+  const choice = j?.choices?.[0] ?? {};
+  const m = choice.message ?? {};
   return {
-    message: { content: m.content ?? null, tool_calls: Array.isArray(m.tool_calls) ? m.tool_calls : undefined },
+    message: {
+      content: typeof m.content === "string" ? m.content : null,
+      tool_calls: Array.isArray(m.tool_calls) ? m.tool_calls : undefined,
+      ...(typeof m.reasoning_content === "string" && m.reasoning_content ? { reasoning_content: m.reasoning_content } : {}),
+      ...(Array.isArray(m.thinking_blocks) && m.thinking_blocks.length ? { thinking_blocks: m.thinking_blocks } : {}),
+    },
     usage: j?.usage ? { prompt_tokens: j.usage.prompt_tokens ?? 0, completion_tokens: j.usage.completion_tokens ?? 0 } : undefined,
+    finishReason: typeof choice.finish_reason === "string" ? choice.finish_reason : undefined,
+    model: typeof j?.model === "string" ? j.model : undefined,
   };
 }
 

@@ -1558,7 +1558,16 @@ export type AgentThreadInput = { tenantKey: string | null; title: string; contex
 // using that name (found live testing this route: ValidationError "Invalid
 // status" the moment a create/update payload set it) — see the schema's own
 // comment.
-export type AgentThreadPatch = { title?: string; messages?: any[]; runState?: string; lastRunId?: string; usage?: Record<string, any> };
+export type AgentThreadPatch = { title?: string; messages?: any[]; runState?: string; lastRunId?: string; usage?: Record<string, any>; checkpoint?: unknown };
+
+/** A thread as the browser sees it. The engine checkpoint (up to ~256KB, and
+ * the model's working state rather than anything the UI renders) stays
+ * server-side; only whether one exists is exposed, as `resumable`. */
+export function agentThreadView(row: any): any {
+  if (!row || typeof row !== "object") return row;
+  const { checkpoint, ...rest } = row;
+  return { ...rest, resumable: Boolean(checkpoint) };
+}
 
 async function loadOwnedThread(id: string, user: CurrentUser): Promise<any> {
   const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_THREAD_UID, id)).catch(() => null);
@@ -1574,7 +1583,7 @@ export async function listAgentThreads(): Promise<any[]> {
   const filter: any[] = [{ field: "ownerEmail", op: "eq", value: user.email || "" }];
   if (eff) filter.push({ field: "tenantKey", op: "eq", value: eff.key });
   const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_THREAD_UID, { filter, sort: "updatedAt:DESC", pageSize: 100 }));
-  return data;
+  return data.map(agentThreadView);
 }
 
 export async function getAgentThread(id: string): Promise<any> {

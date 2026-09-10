@@ -483,6 +483,7 @@ export interface ApiAgentThreadAgentThread extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    checkpoint: Schema.Attribute.JSON;
     context: Schema.Attribute.JSON;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
