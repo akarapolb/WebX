@@ -30,7 +30,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm } from "./wordpress";
 import { CmsError } from "./types";
-import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList } from "./types";
+import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
 import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
@@ -180,23 +180,67 @@ const CONSENT_LOG_UID = "api::consent-log.consent-log";
 // its own comment above. It stays a plain SCOPED-only Strapi uid now,
 // exactly like complaint/application/contact-message always were.
 const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID]);
-/** The four BOOKKEEPING_UIDS blocked outright from the generic entries
+/** The three BOOKKEEPING_UIDS blocked outright from the generic entries
  * route's WRITE side (assertBookkeepingWriteAllowed, below) — each needs a
  * dedicated writer with its own ownership/ordering logic the generic path
- * can't express. NOT reused for reads: unlike agent-thread (whose own
- * listAgentThreads/getAgentThread genuinely never call governed.list/get —
- * see that section), audit-log's /audit page (AuditLog.tsx) and
- * field-policy's /field-access page (FieldAccess.tsx, and EntryEditor.tsx's
- * own field-policy lookup) both read their data THROUGH this exact generic
- * route today — blocking those reads too would break those two real,
- * currently-working screens, not just close a gap. Only custom-role has a
- * fully separate read+write path (getCustomRoles/saveCustomRole, its own
- * /api/cms/roles/* route) and could safely take the same read block as
- * agent-thread; left out of GENERIC_ROUTE_READ_BLOCKED_UIDS below anyway to
- * keep this change scoped to the uid Milestone 1/2 actually added, and
- * because CustomRoles.tsx never exercises the generic route in the first
- * place (blocking it would be inert, not protective). */
-const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, FIELD_POLICY_UID, AUDIT_UID, AGENT_THREAD_UID]);
+ * can't express, or (audit-log) must never be client-writable at all.
+ * field-policy is deliberately NOT in this set — see its own branch in
+ * assertBookkeepingWriteAllowed, which guards it a different way (an
+ * admin-only check, not an outright block) since FieldAccess.tsx's save()
+ * genuinely is its real write path, unlike the three here. NOT reused for
+ * reads: unlike agent-thread (whose own listAgentThreads/getAgentThread
+ * genuinely never call governed.list/get — see that section), audit-log's
+ * /audit page (AuditLog.tsx) and field-policy's /field-access page
+ * (FieldAccess.tsx, and EntryEditor.tsx's own field-policy lookup) both read
+ * their data THROUGH this exact generic route today — blocking those reads
+ * too would break those two real, currently-working screens, not just close
+ * a gap. Only custom-role has a fully separate read+write path
+ * (getCustomRoles/saveCustomRole, its own /api/cms/roles/* route) and could
+ * safely take the same read block as agent-thread; left out of
+ * GENERIC_ROUTE_READ_BLOCKED_UIDS below anyway to keep this change scoped to
+ * the uid Milestone 1/2 actually added, and because CustomRoles.tsx never
+ * exercises the generic route in the first place (blocking it would be
+ * inert, not protective). */
+const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, AUDIT_UID, AGENT_THREAD_UID]);
+/** BOOKKEEPING_UIDS that carry a real `tenant` RELATION (not a plain
+ * tenantKey string) and are ALSO in Strapi's own SCOPED set
+ * (strapi-cms/src/index.ts) for the non-bookkeeping case — meaning a
+ * bookkeeping-routed read of one of these runs under strapiBookkeeping's
+ * scheduler service credential, and Strapi's own tenant-scoping hook derives
+ * its filter from that request's identity (the scheduler, unscoped in every
+ * tenant's adminEmails), so the hook silently no-ops. The exact same failure
+ * mode review.review had — governed.list/get below is the only thing
+ * actually enforcing isolation for these reads. REVIEW_UID keeps its own
+ * separate branch (its get-side needs an extra list-based lookup a plain
+ * relation check can't do — see that branch's own comment) rather than
+ * joining this set, but uses the identical filter shape. Unlike WP_SCOPED/
+ * REVIEW_UID's fail-closed-even-when-unscoped convention, an unscoped caller
+ * here gets NO added filter (sees everything) — matching
+ * assertBookkeepingWriteAllowed's own "unscoped super admin — allowed, same
+ * exemption as everywhere else in this file" convention for these same
+ * uids' writes. */
+const RELATION_SCOPED_BOOKKEEPING_UIDS = new Set([RELEASE_UID, CONSENT_LOG_UID, MENU_ITEM_UID]);
+
+/** Appends a fail-closed tenant condition to a query's own filter array —
+ * but ONLY after stripping any client-supplied condition on that exact same
+ * field first. Found live testing this exact fix: naively spreading the
+ * caller's filter and appending ours after it (the pattern every branch
+ * below used to use) is NOT reliably safe — a caller who supplies their own
+ * condition on the identical field path (e.g. `key eq "orst"` when the
+ * enforced field is also `key`) ends up with TWO conditions on one field in
+ * the resulting query string (lib/cms/strapi.ts's buildQuery emits one
+ * `filters[...][$eq]=` param per array entry, so two conditions on the same
+ * path become duplicate query-string keys) — and depending on the exact
+ * field shape, Strapi's own qs-based parsing sometimes coerces that into an
+ * effective OR/IN rather than the intended AND, silently widening instead
+ * of narrowing what gets returned. Confirmed live: `api::tenant.tenant`
+ * with a client-supplied top-level `key eq "orst"` alongside an appended
+ * `key eq "<caller's own key>"` returned BOTH tenants, not just the
+ * caller's own — a real cross-tenant leak this helper closes by construction
+ * (there is only ever one condition per field, ours, never two to conflict). */
+function withTenantFilter(existing: EntryQuery["filter"] | undefined, field: string, op: FilterOp, value: any): EntryQuery["filter"] {
+  return [...(existing || []).filter((f) => f.field !== field), { field, op, value }];
+}
 /** Reads blocked outright through the generic entries route — see the
  * comment above for why this is narrower than the write-block set. Found
  * live: without this, any authenticated admin of ANY tenant could open
@@ -1188,23 +1232,41 @@ async function tenantGuard(uid: string, id: string, eff: Tenant | null, adapter:
  * route, executed with Super Admin rights regardless of the caller's own
  * permissions. This is the dedicated backstop for that gap.
  *
- * custom-role and field-policy already have their own properly-scoped
- * functions (saveCustomRole/deleteCustomRole/assignCustomRole; FieldAccess's
- * own save path) — nothing in the UI writes them through the generic path,
- * so it's blocked outright rather than half-guarded. audit-log must never be
- * client-writable at all: writeAudit() below writes it directly via
- * strapiBookkeeping, bypassing this function entirely, so blocking the
- * generic path here has no legitimate caller to break.
+ * custom-role already has its own properly-scoped functions
+ * (saveCustomRole/deleteCustomRole/assignCustomRole) — nothing in the UI
+ * writes it through the generic path, so it's blocked outright rather than
+ * half-guarded. audit-log must never be client-writable at all: writeAudit()
+ * below writes it directly via strapiBookkeeping, bypassing this function
+ * entirely, so blocking the generic path here has no legitimate caller to
+ * break. field-policy is NOT blocked outright (see its own branch below,
+ * FieldAccess.tsx's save() genuinely is the generic path — a prior version
+ * of this comment claimed a dedicated save path existed; it never did,
+ * which silently 403'd every Field Access save until this was found).
  *
  * tenant and release DO have legitimate generic-path callers (NewWorkspace.tsx
  * creating a new workspace; EntryEditor.tsx appending an item to a release) —
  * for those, allow an unscoped caller freely (matches every other unscoped
  * exemption in this file), and otherwise require the target row's own tenant
  * to match the caller's. */
-async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff: Tenant | null): Promise<void> {
+async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff: Tenant | null, user: CurrentUser): Promise<void> {
   if (!BOOKKEEPING_UIDS.has(uid)) return;
   if (GENERIC_ROUTE_WRITE_BLOCKED_UIDS.has(uid)) {
     throw new CmsError("This content type must be managed through its own screen, not written directly.", 403);
+  }
+  if (uid === FIELD_POLICY_UID) {
+    // No tenant dimension on this type (its schema has no tenant field at
+    // all — every workspace intentionally sees the same global role-based
+    // policy set), so the risk here isn't cross-tenant leakage, it's
+    // privilege escalation: field-policy governs what OTHER roles can see
+    // and edit, globally, so only a genuine workspace admin (or an unscoped
+    // super admin) may write it — never someone acting under a custom role
+    // themselves, who could otherwise unhide their own role's restricted
+    // fields. Same convention saveAgentPolicy already established for the
+    // agent's own autonomy level.
+    if (eff && (eff.customRoleAssignments || {})[(user.email || "").toLowerCase()]) {
+      throw new CmsError("Only a workspace administrator can change field access policy.", 403);
+    }
+    return;
   }
   if (!eff) return; // unscoped super admin — allowed, same exemption as everywhere else in this file
   if (uid === TENANT_UID) {
@@ -1251,18 +1313,20 @@ function tenantStamp(uid: string, eff: Tenant | null): Record<string, any> {
   // key-less template shared with every workspace.
   if (uid === PAGE_TEMPLATE_UID) return { tenantKey: eff.key };
   if (uid.startsWith("wp:")) return WP_SCOPED.has(uid) ? { tenant: eff.key } : {};
-  // review.review carries a real `tenant` relation (manyToOne ->
-  // api::tenant.tenant) in its own schema.json, same shape SCOPED types use
-  // — added here rather than to SCOPED itself since SCOPED also controls
-  // Strapi's own tenant-scoping hook (strapi-cms/src/index.ts) and review
-  // rows are deliberately Strapi-only regardless of the reviewed entry's
-  // own engine (see REVIEW_UID's own comment), unlike everything else in
-  // SCOPED. Found live: this was never stamped at all before — every
-  // review ever created had tenant:null, which combined with the
-  // governed.list/get identity-resolution bug fixed just below meant
-  // reviews were completely unscoped by tenant, readable across every
-  // workspace via /reviews or EntryEditor's own review-status lookup.
-  return (SCOPED.has(uid) || uid === REVIEW_UID) ? { tenant: eff.id } : {};
+  // review.review and release.release both carry a real `tenant` relation
+  // (manyToOne -> api::tenant.tenant) in their own schema.json, same shape
+  // SCOPED types use — added here rather than to SCOPED itself since SCOPED
+  // also controls Strapi's own tenant-scoping hook (strapi-cms/src/index.ts)
+  // and both are BOOKKEEPING_UIDS whose writes always route through the
+  // scheduler's own credential regardless of SCOPED membership, unlike
+  // everything else in SCOPED. Found live: neither was ever stamped at all
+  // before — every review/release row was created with tenant:null, which
+  // combined with the governed.list/get identity-resolution bug fixed just
+  // below meant both were completely unscoped by tenant, readable (and, for
+  // release, writable/deletable — see assertBookkeepingWriteAllowed's own
+  // trueOwnerOf-based guard above, which silently no-ops on a null owner)
+  // across every workspace.
+  return (SCOPED.has(uid) || uid === REVIEW_UID || uid === RELEASE_UID) ? { tenant: eff.id } : {};
 }
 
 // Phase 8 — lets every EXISTING writeAudit() call site (every governed.*
@@ -1808,14 +1872,63 @@ export const governed = {
         // behavior for the identical "no tenant resolved" case (see
         // media-meta's controller). An unmatched sentinel key here becomes
         // wordpress.ts's own wtenant=-1 "match nothing" case, same as there.
-        const filter = [...(query?.filter || []), { field: "tenant.key", op: "eq" as const, value: eff?.key ?? "__unscoped__" }];
+        // withTenantFilter (see its own comment) strips any client-supplied
+        // condition on this same field first — a naive spread-and-append
+        // here is not actually safe against a crafted duplicate filter.
+        const filter = withTenantFilter(query?.filter, "tenant.key", "eq", eff?.key ?? "__unscoped__");
         return cms.entries.list<T>(uid, { ...query, filter });
       }
       if (uid === REVIEW_UID) {
         // Same fail-closed convention as WP_SCOPED above, against the
         // relation's own numeric id (tenantStamp's own stamp shape) rather
         // than a wtenant string key — -1 matches no real tenant.
-        const filter = [...(query?.filter || []), { field: "tenant.id", op: "eq" as const, value: eff?.id ?? -1 }];
+        const filter = withTenantFilter(query?.filter, "tenant.id", "eq", eff?.id ?? -1);
+        return cms.entries.list<T>(uid, { ...query, filter });
+      }
+      if (RELATION_SCOPED_BOOKKEEPING_UIDS.has(uid) && eff) {
+        // See RELATION_SCOPED_BOOKKEEPING_UIDS's own comment — unlike
+        // REVIEW_UID/WP_SCOPED above, no filter is added at all when eff is
+        // null (unscoped caller sees every tenant's rows, deliberately).
+        const filter = withTenantFilter(query?.filter, "tenant.id", "eq", eff.id);
+        return cms.entries.list<T>(uid, { ...query, filter });
+      }
+      if (uid === AUDIT_UID && eff) {
+        // audit-log scopes by a plain tenantKey STRING (its schema has no
+        // tenant relation), same shape WP_SCOPED uses — found live via the
+        // real /audit screen (AuditLog.tsx): completely unfiltered before
+        // this, every tenant's full audit trail (who did what, when, in
+        // which workspace) visible to any authenticated admin.
+        const filter = withTenantFilter(query?.filter, "tenantKey", "eq", eff.key);
+        return cms.entries.list<T>(uid, { ...query, filter });
+      }
+      if (uid === PAGE_TEMPLATE_UID) {
+        // Same "own or shared" semantics VisualBuilder.tsx's own client-side
+        // .filter() already applies for display — ported server-side here so
+        // a raw network response (not just the rendered UI) never carries
+        // another workspace's private templates. A blank tenantKey means
+        // "shared with every workspace" (see the schema's own comment) and
+        // must always pass through, which a single relation-style eq filter
+        // can't express — post-fetch filtering is the simplest correct fix.
+        // Unscoped (eff null) sees everything unfiltered, same convention as
+        // RELATION_SCOPED_BOOKKEEPING_UIDS above.
+        const result = await cms.entries.list<any>(uid, query);
+        if (!eff) return result;
+        const data = result.data.filter((e: any) => !e.tenantKey || e.tenantKey === eff.key);
+        return { ...result, data, total: data.length } as EntryList<T>;
+      }
+      if (uid === TENANT_UID && eff) {
+        // A scoped caller may only ever see their OWN tenant row through the
+        // generic route — unscoped (the scheduler, workspace-switcher tools)
+        // keeps full cross-tenant reach, since that's its actual job. Found
+        // live-auditing this session: nothing stopped a scoped caller from
+        // substituting another tenant's key/id into the same request shape
+        // several components already use for a legitimate self-lookup
+        // (ContentBrowser.tsx, VisualBuilder.tsx, etc.) and getting back
+        // that OTHER tenant's adminEmails, sso config, customRoleAssignments
+        // — confirmed live: a crafted `key eq "<other tenant>"` filter
+        // naively appended alongside this one returned BOTH tenants, not
+        // just the caller's own (see withTenantFilter's own comment).
+        const filter = withTenantFilter(query?.filter, "key", "eq", eff.key);
         return cms.entries.list<T>(uid, { ...query, filter });
       }
       return cms.entries.list<T>(uid, query);
@@ -1853,13 +1966,32 @@ export const governed = {
         });
         if (!own.data.length) throw new CmsError("Cross-tenant operation not permitted", 403);
       }
+      if (RELATION_SCOPED_BOOKKEEPING_UIDS.has(uid) && result && eff) {
+        // Same relation-populate limitation REVIEW_UID's own branch above
+        // documents — content-manager's single-document GET doesn't return
+        // a comparable shape for a plain relation, so check via a filtered
+        // list call instead of trusting `result.tenant` directly.
+        const own = await cms.entries.list<any>(uid, {
+          pageSize: 1, filter: [{ field: "documentId", op: "eq", value: id }, { field: "tenant.id", op: "eq", value: eff.id }],
+        });
+        if (!own.data.length) throw new CmsError("Cross-tenant operation not permitted", 403);
+      }
+      if (uid === AUDIT_UID && result && eff && result.tenantKey && result.tenantKey !== eff.key) {
+        throw new CmsError("Cross-tenant operation not permitted", 403);
+      }
+      if (uid === PAGE_TEMPLATE_UID && result && eff && result.tenantKey && result.tenantKey !== eff.key) {
+        throw new CmsError("Cross-tenant operation not permitted", 403); // blank tenantKey = shared, always readable
+      }
+      if (uid === TENANT_UID && result && eff && result.key !== eff.key) {
+        throw new CmsError("Cross-tenant operation not permitted", 403);
+      }
       return result;
     });
   },
   async create<T = any>(uid: string, data: Record<string, any>): Promise<T> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
-    await assertBookkeepingWriteAllowed(uid, null, eff);
+    await assertBookkeepingWriteAllowed(uid, null, eff, user);
     await enforceItemLimit(eff, uid);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.create) throw new CmsError("Your role does not permit creating this content", 403);
@@ -1879,7 +2011,7 @@ export const governed = {
   async update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
-    await assertBookkeepingWriteAllowed(uid, id, eff);
+    await assertBookkeepingWriteAllowed(uid, id, eff, user);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.update) throw new CmsError("Your role does not permit updating this content", 403);
     if (crp && !crp.embedCode && PAGE_LIKE_UIDS.has(uid) && hasEmbedBlock(data)) {
@@ -1898,7 +2030,7 @@ export const governed = {
   async remove(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
-    await assertBookkeepingWriteAllowed(uid, id, eff);
+    await assertBookkeepingWriteAllowed(uid, id, eff, user);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.delete) throw new CmsError("Your role does not permit deleting this content", 403);
     await withContentAdapter(uid, async (cms) => {
