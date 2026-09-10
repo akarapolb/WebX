@@ -6,7 +6,7 @@
 // buffering to do here, only per-turn tool-call/tool-result/proposal/error
 // events to fold into the right message.
 import { useCallback, useRef, useState } from "react";
-import type { AgentContextRef, AgentProposal } from "@/lib/agent/types";
+import type { AgentContextRef, AgentProposal, PlanItem } from "@/lib/agent/types";
 
 export type ToolStep = { id: string; name: string; ok?: boolean; summary?: string; pending: boolean };
 export type ChatMsg =
@@ -16,7 +16,11 @@ export type ChatMsg =
   | { kind: "proposal"; id: string; proposal: AgentProposal; status: "pending" | "applied" | "undone" | "stale" }
   | { kind: "error"; id: string; text: string }
   /** The run ended before finishing its task; `resumable` offers Continue. */
-  | { kind: "stopped"; id: string; reason: string; text: string; resumable: boolean };
+  | { kind: "stopped"; id: string; reason: string; text: string; resumable: boolean }
+  /** The model's checklist. A thread shows one, updated in place. */
+  | { kind: "plan"; id: string; items: PlanItem[] }
+  /** The run is waiting for the user; `answered` once any later message is sent. */
+  | { kind: "question"; id: string; question: string; options: string[]; answered: boolean };
 
 type SendOpts = {
   /** Empty when continuing a stopped run. */
@@ -55,10 +59,18 @@ export function chatMsgsFromThread(rows: any[], resumable = false): ChatMsg[] {
       out.push({ kind: "proposal", id, proposal: r.proposal, status: "pending" });
     } else if (r.role === "stopped" && typeof r.message === "string") {
       out.push({ kind: "stopped", id, reason: String(r.reason || ""), text: r.message, resumable: false });
+    } else if (r.role === "plan" && Array.isArray(r.items)) {
+      // Each run saves the plan as it stood; show only the latest, at its latest position.
+      const earlier = out.findIndex((x) => x.kind === "plan");
+      if (earlier >= 0) out.splice(earlier, 1);
+      out.push({ kind: "plan", id, items: r.items });
+    } else if (r.role === "question" && typeof r.question === "string") {
+      out.push({ kind: "question", id, question: r.question, options: Array.isArray(r.options) ? r.options : [], answered: true });
     }
   });
   const last = out[out.length - 1];
   if (resumable && last?.kind === "stopped") out[out.length - 1] = { ...last, resumable: true };
+  if (resumable && last?.kind === "question") out[out.length - 1] = { ...last, answered: false };
   return out;
 }
 
@@ -109,9 +121,13 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
 
   const send = useCallback(async (opts: SendOpts) => {
     const userMsg: ChatMsg | null = opts.message ? { kind: "user", id: nid(), text: opts.message } : null;
-    // Any new run retires older Continue buttons: the server keeps only the newest checkpoint.
+    // Any new run retires older Continue buttons (the server keeps only the
+    // newest checkpoint) and settles open questions (this message answers them).
     setMessages((m) => {
-      const settled = m.map((x) => (x.kind === "stopped" && x.resumable ? { ...x, resumable: false } : x));
+      const settled = m.map((x) =>
+        x.kind === "stopped" && x.resumable ? { ...x, resumable: false }
+        : x.kind === "question" && !x.answered ? { ...x, answered: true }
+        : x);
       return userMsg ? [...settled, userMsg] : settled;
     });
     setRunning(true);
@@ -182,6 +198,32 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
             toolsMsgId.current = null;
             const stopMsg: ChatMsg = { kind: "stopped", id: nid(), reason: String(d.reason || ""), text: String(d.message || ""), resumable: Boolean(d.resumable) };
             setMessages((m) => [...m, stopMsg]);
+            break;
+          }
+          case "plan": {
+            const planId = nid();
+            const items: PlanItem[] = Array.isArray(d.items) ? d.items : [];
+            setMessages((m) => {
+              const i = m.findIndex((x) => x.kind === "plan");
+              if (i === -1) return [...m, { kind: "plan", id: planId, items }];
+              return m.map((x, j) => (j === i && x.kind === "plan" ? { ...x, items } : x));
+            });
+            break;
+          }
+          case "plan_item":
+            setMessages((m) => m.map((x) => (x.kind === "plan"
+              ? { ...x, items: x.items.map((it) => (it.id === d.id
+                  ? { ...it, status: d.status, ...(d.note !== undefined ? { note: d.note } : {}), ...(d.result !== undefined ? { result: d.result } : {}) }
+                  : it)) }
+              : x)));
+            break;
+          case "question": {
+            toolsMsgId.current = null;
+            const questionMsg: ChatMsg = {
+              kind: "question", id: nid(), question: String(d.question || ""),
+              options: Array.isArray(d.options) ? d.options : [], answered: false,
+            };
+            setMessages((m) => [...m, questionMsg]);
             break;
           }
           case "usage":

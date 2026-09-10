@@ -1,7 +1,7 @@
 // Types for the WebX Agent engine. The engine is loaded directly by
 // `node --test`, so nothing under lib/agent/engine/ (except deps.server.ts)
 // may import `server-only`, Next, or the CMS adapters.
-import type { AgentContextRef, AgentEvent, AgentProposal } from "../types";
+import type { AgentContextRef, AgentEvent, AgentProposal, RunPlan } from "../types";
 
 export type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 export type ToolSpec = { type: "function"; function: { name: string; description: string; parameters: Record<string, any> } };
@@ -62,7 +62,15 @@ export type ToolResultRec = {
 export type HItem =
   | { kind: "user"; text: string }
   | { kind: "assistant_text"; text: string; reasoning?: ReasoningPayload }
-  | { kind: "exchange"; text: string | null; reasoning?: ReasoningPayload; calls: ToolCall[]; results: ToolResultRec[] };
+  | {
+      kind: "exchange";
+      text: string | null;
+      reasoning?: ReasoningPayload;
+      calls: ToolCall[];
+      results: ToolResultRec[];
+      /** Calls whose arguments arrived as broken JSON (stored as {}); answered without running. */
+      malformed?: string[];
+    };
 
 export type ExchangeItem = Extract<HItem, { kind: "exchange" }>;
 
@@ -113,6 +121,11 @@ export type RunCheckpoint = {
   /** Prompt tokens per request byte, calibrated from provider usage (engine/compaction.ts). */
   tokenRatio?: number;
   stuck?: StuckState;
+  plan?: RunPlan;
+  /** Set while the run waits for the user to answer an ask_user question. */
+  waiting?: { question: string; options: string[]; callId: string };
+  /** Questions answered for the model in an unattended job. */
+  autoAnswers?: number;
   /** Set while a tool batch is running; `pendingWrite` marks a write that started but has no recorded result. */
   inflight?: { exchangeIndex: number; done: string[]; pendingWrite?: string };
   lastStop?: StopReason;
@@ -140,6 +153,8 @@ export type EngineDeps = {
   strictProtocol?: boolean;
   /** Jitter source for retry backoff; tests pass a fixed one. */
   random?: () => number;
+  /** "wait" pauses the run on ask_user (default); "auto" answers for the model in an unattended job. */
+  onQuestion?: "wait" | "auto";
 };
 
 export type SliceLimits = {

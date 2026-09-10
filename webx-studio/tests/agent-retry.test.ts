@@ -35,14 +35,11 @@ function harness(chat: ScriptedChat, tools: EngineTools, extra: Partial<EngineDe
 const noTools = () => fakeTools({}).tools;
 
 describe("decideRetry", () => {
-  test("transient failures retry until the attempt limit", () => {
+  test("transient failures retry until the attempt limit, then pause to try again later", () => {
     for (const kind of ["network", "timeout", "rate_limit", "server"] as const) {
       assert.equal(decideRetry(llmErr(500, kind), 1, { maxAttempts: 3, mode: "docked", state: fresh() }).action, "retry", kind);
-      assert.equal(decideRetry(llmErr(500, kind), 3, { maxAttempts: 3, mode: "docked", state: fresh() }).action, "fail", kind);
+      assert.equal(decideRetry(llmErr(500, kind), 3, { maxAttempts: 3, mode: "docked", state: fresh() }).action, "later", kind);
     }
-  });
-
-  test("a background job out of attempts is requeued instead of failed", () => {
     assert.equal(decideRetry(llmErr(503, "server"), 5, { maxAttempts: 5, mode: "job", state: fresh() }).action, "later");
   });
 
@@ -90,15 +87,17 @@ describe("model request retries in the loop", () => {
     assert.deepEqual(h.events.filter((e) => e.type === "retry").map((e: any) => [e.attempt, e.delayMs, e.reason]), [[1, 2000, "rate_limit"]]);
   });
 
-  test("chat gives up after three failed attempts, with an error event and no Continue", async () => {
+  test("chat pauses resumably after three failed attempts, so Continue can try again (found live: repeated timeouts ended the run)", async () => {
     const chat = scriptedChat([{ throws: llmErr(503, "server") }, { throws: llmErr(503, "server") }, { throws: llmErr(503, "server") }]);
     const h = harness(chat, noTools());
     const r = await runSlice(newRun(), h.deps, limitsFor("docked"));
 
-    assert.equal(r.stop, "llm_error");
-    assert.equal(r.resumable, false);
+    assert.equal(r.stop, "retry_later");
+    assert.equal(r.resumable, true);
     assert.equal(chat.requests.length, 3);
-    assert.ok(h.events.some((e) => e.type === "error"));
+    assert.equal(h.events.some((e) => e.type === "error"), false);
+    const stopped = h.events.find((e) => e.type === "stopped");
+    assert.ok(stopped && stopped.type === "stopped" && stopped.resumable);
   });
 
   test("a job out of attempts stops resumably so it can be retried later", async () => {
@@ -147,6 +146,41 @@ describe("model request retries in the loop", () => {
     assert.equal(chat.requests[0].maxTokens, limits.maxTokens);
     assert.equal(chat.requests[1].maxTokens, limits.maxTokens * 2);
     assert.equal(r.checkpoint.counters.completionTokens, 1220);
+  });
+
+  test("a reply cut off even at the largest allowance has its broken calls answered, not run (found live)", async () => {
+    const tools = fakeTools({ create_draft_entry: { write: true, run: () => ({ ok: true, summary: "Created" }) } });
+    const cutOff = {
+      message: {
+        content: null,
+        tool_calls: [
+          toolCall("create_draft_entry", { title: "A" }, "w1"),
+          { id: "w2", type: "function" as const, function: { name: "create_draft_entry", arguments: '{"title":"B","body":"ข่าวประชาสัมพ' } },
+        ],
+      },
+      finishReason: "length",
+      usage: { prompt_tokens: 100, completion_tokens: 4096 },
+    };
+    const chat = scriptedChat([
+      { reply: cutOff },
+      { reply: cutOff },
+      { reply: cutOff },
+      {
+        expect: (req) => {
+          const results = req.messages.filter((m) => m.role === "tool").map((m) => JSON.parse(m.content as string));
+          assert.equal(results[0].ok, true);
+          assert.match(results[1].summary, /not valid JSON/);
+          assert.match(results[1].harness_note, /cut off at the output limit/);
+        },
+        reply: replyText("Created A; B needs another try."),
+      },
+    ]);
+    const r = await runSlice(newRun(), harness(chat, tools.tools).deps, limitsFor("docked"));
+
+    chat.assertClean();
+    assert.equal(r.stop, "text");
+    assert.deepEqual(chat.requests.map((q) => q.maxTokens), [4096, 8192, 16384, 4096]);
+    assert.equal(tools.calls.length, 1);
   });
 
   test("a provider 400 about the tool-call structure is retried once after repairing the history", async () => {

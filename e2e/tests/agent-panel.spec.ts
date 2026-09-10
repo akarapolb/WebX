@@ -219,6 +219,54 @@ test.describe("WebX Agent — docked panel + workspace (mocked backend)", () => 
     expect(bodies[1].message).toBeUndefined();
   });
 
+  test("a plan renders as a checklist that updates in place, and a question's option button answers it", async ({ page }) => {
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "" } }));
+    await page.route("**/api/agent/threads", (route) => route.fulfill({ json: [] }));
+    const bodies: any[] = [];
+    await page.route("**/api/agent/run", (route) => {
+      bodies.push(route.request().postDataJSON());
+      const events = bodies.length === 1
+        ? [
+            { type: "run_started", runId: "r11", threadId: "t11", level: "draft", model: "" },
+            { type: "plan", items: [{ id: "1", title: "Create the news draft", status: "pending" }, { id: "2", title: "Create the FAQ draft", status: "pending" }] },
+            { type: "tool_call", id: "c1", name: "create_draft_entry", args: {} },
+            { type: "tool_result", id: "c1", ok: true, summary: "Created a draft api::news.news" },
+            { type: "plan_item", id: "1", status: "done", result: "doc-1" },
+            { type: "question", question: "Which category should the FAQ use?", options: ["General", "Services"] },
+            { type: "done", runId: "r11" },
+          ]
+        : [
+            { type: "run_started", runId: "r12", threadId: "t11", level: "draft", model: "" },
+            { type: "plan_item", id: "2", status: "done", result: "doc-2" },
+            { type: "verification", ok: true, report: "2 of 2 plan items done." },
+            { type: "text", content: "Both drafts are ready." },
+            { type: "done", runId: "r12" },
+          ];
+      return route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(events) });
+    });
+
+    await page.goto(WEBX_STUDIO + "/dashboard");
+    await page.getByTestId("agent-toggle").click();
+    await page.getByTestId("agent-composer").fill("Create a news draft and an FAQ draft");
+    await page.getByTestId("agent-send").click();
+
+    const plan = page.getByTestId("agent-plan");
+    await expect(plan).toContainText("Create the news draft", { timeout: 10_000 });
+    await expect(plan.locator('[data-status="done"]')).toHaveCount(1);
+    await expect(plan).toContainText("1/2");
+    await expect(plan).toContainText("doc-1");
+    await expect(page.getByTestId("agent-question")).toContainText("Which category should the FAQ use?");
+
+    await page.getByRole("button", { name: "Services", exact: true }).click();
+
+    await expect(page.getByText("Both drafts are ready.")).toBeVisible({ timeout: 10_000 });
+    await expect(plan.locator('[data-status="done"]')).toHaveCount(2);
+    await expect(plan).toContainText("2/2");
+    await expect(page.getByTestId("agent-plan")).toHaveCount(1); // updated in place, not duplicated
+    await expect(page.getByRole("button", { name: "Services", exact: true })).toBeDisabled();
+    expect(bodies[1]).toMatchObject({ message: "Services", threadId: "t11" });
+  });
+
   test("policy \"off\" hides the toggle entirely and shows the empty state with no composer", async ({ page, context }) => {
     await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "off", reason: "plan" } }));
     // At level "off", Shell.tsx's topbar toggle and AgentPanel's own FAB

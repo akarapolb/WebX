@@ -51,6 +51,7 @@ export function applyInput(cp: RunCheckpoint, input: { kind: "message" | "answer
   const text = input.text.trim();
   if (text) next.history.push({ kind: "user", text });
   next.lastStop = undefined;
+  delete next.waiting;
   return next;
 }
 

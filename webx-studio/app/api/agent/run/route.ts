@@ -58,7 +58,9 @@ function buildPersistMessages(userMessage: string, result: RunResult, resumable:
   if (userMessage.trim()) out.push({ role: "user", content: userMessage });
   if (result.toolSteps.length) out.push({ role: "tools", steps: result.toolSteps });
   for (const p of result.proposals) out.push({ role: "proposal", proposal: p });
+  if (result.plan) out.push({ role: "plan", items: result.plan });
   if (result.finalText) out.push({ role: "assistant", content: result.finalText });
+  if (result.question) out.push({ role: "question", question: result.question.question, options: result.question.options });
   if (result.stopMessage) out.push({ role: "stopped", reason: result.stopReason, resumable, message: result.stopMessage });
   return out;
 }

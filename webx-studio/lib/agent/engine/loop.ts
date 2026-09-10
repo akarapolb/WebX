@@ -1,10 +1,12 @@
 import { buildWireMessages, emptyCounters } from "./checkpoint";
 import { calibrateRatio, compactHistory, DEFAULT_TOKEN_RATIO, type CompactionResult } from "./compaction";
+import { harnessSpecs, isHarnessTool, runHarnessTool } from "./harnessTools";
 import { checkProtocol, ProtocolError, repairHistory } from "./invariants";
 import { sameReasoningTarget } from "./providers";
 import { decideRetry, type RetryState } from "./retry";
 import { observeCall, observeTurn, type StuckHit } from "./stuck";
 import { byteLen, toolResultRecord, withHarnessNote } from "./toolView";
+import { MAX_NUDGES, nudgeText, openItems, verifyPlan } from "./verify";
 import {
   RESUMABLE_STOPS,
   type AppliedRef, type ChatReply, type EngineDeps, type ExchangeItem, type ReasoningPayload, type RunCheckpoint,
@@ -16,6 +18,17 @@ export const OUTCOME_UNKNOWN =
   "Outcome unknown: the run stopped after this call started but before its result was recorded. Verify with a read tool (search_content or get_entry) before retrying it.";
 
 const NOT_EXECUTED_STOPPED = "Not executed: the run was stopped before this call started.";
+const NOT_EXECUTED_MALFORMED =
+  "Not executed: this call's arguments were not valid JSON, probably because the reply was cut off at the output limit. Send it again with fewer calls or shorter content per turn.";
+const TRUNCATED_NOTE =
+  "Harness note: your last reply was cut off at the output limit, so tool calls in it may be incomplete. Send fewer tool calls per turn, with shorter content.";
+const AUTO_ANSWER =
+  "No one is available to answer during this run. Take the most conservative reasonable option, or mark the affected plan item blocked with a note, and continue.";
+
+/** Unattended jobs: questions answered for the model before the run gives up. */
+const MAX_AUTO_ANSWERS = 2;
+/** A truncated reply is retried with double the allowance, up to this. */
+const MAX_OUTPUT_TOKENS = 16_384;
 const MAX_LEDGER_STEPS = 500;
 const READ_RETRY_DELAY_MS = 500;
 
@@ -23,7 +36,14 @@ const notExecutedOverLimit = (limit: number) =>
   `Not executed: at most ${limit} tool calls run per turn. Re-issue this call next turn if it is still needed.`;
 
 type SliceOut = { steps: ToolStepRec[]; proposals: AgentProposal[]; applied: AppliedRef[] };
-type StopInfo = { detail?: string; resumable?: boolean };
+type StopInfo = { detail?: string; message?: string; resumable?: boolean };
+type BatchResult = {
+  aborted: boolean;
+  stuck?: StuckHit;
+  question?: { question: string; options: string[]; callId: string };
+  /** An unattended job asked more questions than can be answered for it. */
+  unanswerable?: boolean;
+};
 
 function linkSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
   const live = signals.filter((s): s is AbortSignal => Boolean(s));
@@ -52,28 +72,43 @@ function safeArgs(raw: string): Record<string, any> {
   }
 }
 
+function isObjectJson(raw: string): boolean {
+  try {
+    const v = JSON.parse(raw);
+    return Boolean(v) && typeof v === "object" && !Array.isArray(v);
+  } catch {
+    return false;
+  }
+}
+
 function existingCallIds(cp: RunCheckpoint): Set<string> {
   const ids = new Set<string>();
   for (const h of cp.history) if (h.kind === "exchange") for (const c of h.calls) ids.add(c.id);
   return ids;
 }
 
-function normalizeCalls(raw: unknown, turn: number, taken: Set<string>): ToolCall[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((c: any, i: number) => {
+/** Unique ids, string arguments, and broken-JSON arguments replaced by {} (so history stays valid) and listed. */
+function normalizeCalls(raw: unknown, turn: number, taken: Set<string>): { calls: ToolCall[]; malformed: string[] } {
+  if (!Array.isArray(raw)) return { calls: [], malformed: [] };
+  const malformed: string[] = [];
+  const calls = raw.map((c: any, i: number) => {
     let id = typeof c?.id === "string" && c.id ? c.id : `call_t${turn}_${i}`;
     if (taken.has(id)) id = `${id}_t${turn}_${i}`;
     taken.add(id);
-    const args = c?.function?.arguments;
+    const rawArgs = c?.function?.arguments;
+    let args = typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs ?? {});
+    if (!args.trim()) args = "{}";
+    if (!isObjectJson(args)) {
+      malformed.push(id);
+      args = "{}";
+    }
     return {
       id,
       type: "function" as const,
-      function: {
-        name: typeof c?.function?.name === "string" ? c.function.name : "",
-        arguments: typeof args === "string" ? args : JSON.stringify(args ?? {}),
-      },
+      function: { name: typeof c?.function?.name === "string" ? c.function.name : "", arguments: args },
     };
   });
+  return { calls, malformed };
 }
 
 function reasoningOf(reply: ChatReply, requested: string): ReasoningPayload | undefined {
@@ -86,6 +121,7 @@ function reasoningOf(reply: ChatReply, requested: string): ReasoningPayload | un
 }
 
 function stopMessageFor(stop: StopReason, lang: "en" | "th", steps: ToolStepRec[], info: StopInfo): string {
+  if (info.message) return info.message;
   const th = lang === "th";
   const ok = steps.filter((s) => s.ok).length;
   switch (stop) {
@@ -99,8 +135,6 @@ function stopMessageFor(stop: StopReason, lang: "en" | "th", steps: ToolStepRec[
         : "Paused — the AI service is busy or unreachable. Continue to try again.";
     case "paused":
       return th ? "หยุดชั่วคราวแล้ว" : "Paused.";
-    case "waiting_input":
-      return th ? "รอคำตอบจากคุณ" : "Waiting for your answer.";
     case "budget":
       return info.resumable === false
         ? th
@@ -115,7 +149,10 @@ function stopMessageFor(stop: StopReason, lang: "en" | "th", steps: ToolStepRec[
         : `Stopped — the agent was going in circles (${info.detail || "no progress"}). Try rephrasing the request, or check that the agent has access to what it needs.`;
     case "policy":
       return th ? "หยุดทำงาน — agent ไม่มีเครื่องมือที่ใช้ได้ใน workspace นี้แล้ว" : "Stopped — the agent no longer has any tools available in this workspace.";
+    case "done_incomplete":
+      return th ? `เสร็จสิ้น แต่ยังทำไม่ครบตามแผน — ${info.detail || ""}` : `Finished, but not everything in the plan was done — ${info.detail || ""}`;
     default:
+      // "waiting_input" has its question card; "text" and "done" end normally.
       return "";
   }
 }
@@ -137,18 +174,18 @@ async function execute(deps: EngineDeps, call: ToolCall): Promise<ToolOutcome> {
   try {
     return await deps.tools.execute(call);
   } catch {
-    return { ok: false, summary: "Tool failed unexpectedly.", retryable: true };
+    return { ok: false, summary: "Tool failed unexpectedly." , retryable: true };
   }
 }
 
 async function runBatch(
   cp: RunCheckpoint, deps: EngineDeps, limits: SliceLimits, signal: AbortSignal | undefined, slice: SliceOut,
-): Promise<{ aborted: boolean; stuck?: StuckHit }> {
+  o: { truncated?: boolean } = {},
+): Promise<BatchResult> {
   const inflight = cp.inflight!;
   const ex = cp.history[inflight.exchangeIndex] as ExchangeItem;
   const turn = cp.counters.turns;
-  let aborted = false;
-  let stuck: StuckHit | undefined;
+  const out: BatchResult = { aborted: false };
   let executed = 0;
   let progressed = false;
   let readOnly = true;
@@ -156,10 +193,10 @@ async function runBatch(
   // First detection: a note on the latest result (one per turn). A detection
   // in a later turn, after the model has seen a note, ends the run.
   const react = (hit: StuckHit | null) => {
-    if (!hit || stuck || !cp.stuck || !ex.results.length) return;
+    if (!hit || out.stuck || !cp.stuck || !ex.results.length) return;
     const noted = cp.stuck.noted;
     if (noted && noted.turn < turn) {
-      stuck = hit;
+      out.stuck = hit;
       return;
     }
     if (noted?.turn === turn) return;
@@ -183,9 +220,34 @@ async function runBatch(
       inflight.done.push(call.id);
       continue;
     }
-    if (aborted || signal?.aborted) {
-      aborted = true;
+    if (out.aborted || signal?.aborted) {
+      out.aborted = true;
       ex.results.push(toolResultRecord(call.id, name, { ok: false, summary: NOT_EXECUTED_STOPPED }, false, limits));
+      continue;
+    }
+    if (ex.malformed?.includes(call.id)) {
+      ex.results.push(toolResultRecord(call.id, name, { ok: false, summary: NOT_EXECUTED_MALFORMED }, false, limits));
+      inflight.done.push(call.id);
+      continue;
+    }
+
+    if (isHarnessTool(name)) {
+      const h = runHarnessTool(cp, call);
+      let outcome = h.outcome;
+      if (h.question && deps.onQuestion === "auto") {
+        cp.autoAnswers = (cp.autoAnswers ?? 0) + 1;
+        outcome = { ok: true, summary: AUTO_ANSWER };
+        if (cp.autoAnswers > MAX_AUTO_ANSWERS) out.unanswerable = true;
+      } else {
+        for (const e of h.events) deps.emit(e);
+        if (h.question) out.question = { ...h.question, callId: call.id };
+      }
+      // Keeping the plan current counts as progress; a question does not.
+      if (outcome.ok && !h.question) progressed = true;
+      executed++;
+      ex.results.push(toolResultRecord(call.id, name, outcome, true, limits));
+      react(observeCall(cp, { turn, name, args: call.function.arguments, ok: outcome.ok, summary: outcome.summary }));
+      inflight.done.push(call.id);
       continue;
     }
 
@@ -196,12 +258,12 @@ async function runBatch(
       if (deps.save) await deps.save(cp, "pre_write");
     }
 
-    let out = await execute(deps, call);
-    if (!out.ok && out.retryable && !write && !signal?.aborted) {
+    let result = await execute(deps, call);
+    if (!result.ok && result.retryable && !write && !signal?.aborted) {
       cp.counters.retries++;
       try {
         await deps.clock.sleep(READ_RETRY_DELAY_MS, signal);
-        out = await execute(deps, call);
+        result = await execute(deps, call);
       } catch {
         /* stopped while waiting: keep the first outcome */
       }
@@ -211,43 +273,47 @@ async function runBatch(
     executed++;
     if (write) {
       readOnly = false;
-      if (out.ok) progressed = true;
+      if (result.ok) progressed = true;
     }
-    ex.results.push(toolResultRecord(call.id, name, out, true, limits));
-    react(observeCall(cp, { turn, name, args: call.function.arguments, ok: out.ok, summary: out.summary }));
+    ex.results.push(toolResultRecord(call.id, name, result, true, limits));
+    react(observeCall(cp, { turn, name, args: call.function.arguments, ok: result.ok, summary: result.summary }));
 
-    const step: ToolStepRec = { name, ok: out.ok, summary: out.summary };
+    const step: ToolStepRec = { name, ok: result.ok, summary: result.summary };
     cp.ledger.toolSteps.push(step);
     if (cp.ledger.toolSteps.length > MAX_LEDGER_STEPS) cp.ledger.toolSteps.splice(0, cp.ledger.toolSteps.length - MAX_LEDGER_STEPS);
     slice.steps.push(step);
-    if (out.proposal) {
-      cp.ledger.proposals.push(out.proposal);
-      slice.proposals.push(out.proposal);
-    } else if (out.ok && out.data?.uid && out.data?.id) {
-      const ref = { uid: String(out.data.uid), id: String(out.data.id) };
+    if (result.proposal) {
+      cp.ledger.proposals.push(result.proposal);
+      slice.proposals.push(result.proposal);
+    } else if (result.ok && result.data?.uid && result.data?.id) {
+      const ref = { uid: String(result.data.uid), id: String(result.data.id) };
       cp.ledger.applied.push(ref);
       slice.applied.push(ref);
     }
-    deps.emit({ type: "tool_result", id: call.id, ok: out.ok, summary: out.summary, data: out.proposal ? undefined : out.data });
-    if (out.proposal) deps.emit({ type: "proposal", proposal: out.proposal });
+    deps.emit({ type: "tool_result", id: call.id, ok: result.ok, summary: result.summary, data: result.proposal ? undefined : result.data });
+    if (result.proposal) deps.emit({ type: "proposal", proposal: result.proposal });
 
     inflight.pendingWrite = undefined;
     inflight.done.push(call.id);
   }
 
   if (executed) react(observeTurn(cp, { turn, progressed, readOnly }, cp.mode));
+  const last = ex.results.length - 1;
+  if (o.truncated && last >= 0 && !ex.results[last].full.startsWith('{"harness_note"')) {
+    ex.results[last] = withHarnessNote(ex.results[last], TRUNCATED_NOTE, limits);
+  }
   cp.inflight = undefined;
   if (deps.save) await deps.save(cp, "turn");
-  return { aborted, stuck };
+  return out;
 }
 
-/** One model reply for the current turn, with retries, repair and compaction handled. */
+/** One model reply for the current turn, with retries, repair, compaction and larger allowances handled. */
 async function requestReply(
   cp: RunCheckpoint, deps: EngineDeps, limits: SliceLimits, signal: AbortSignal | undefined,
   o: { system: string; specs: ToolSpec[]; t0: number },
-): Promise<{ reply: ChatReply } | { stop: StopReason; info?: StopInfo }> {
+): Promise<{ reply: ChatReply; truncated: boolean } | { stop: StopReason; info?: StopInfo }> {
   const state: RetryState = { compacted: false, repaired: false };
-  let expanded = false;
+  let emptyRetried = false;
   let maxTokens = limits.maxTokens;
 
   for (let attempt = 1; ; attempt++) {
@@ -311,17 +377,22 @@ async function requestReply(
       cp.tokenRatio = calibrateRatio(cp.tokenRatio, Number(reply.usage.prompt_tokens) || 0, bytes);
     }
 
-    const hasCalls = Array.isArray(reply.message.tool_calls) && reply.message.tool_calls.length > 0;
-    const text = typeof reply.message.content === "string" ? reply.message.content : "";
-    // A reasoning model can spend the whole token allowance thinking; give it one retry with more room.
-    if (!expanded && (reply.finishReason === "length" || (!hasCalls && !text.trim()))) {
-      expanded = true;
-      maxTokens *= 2;
+    // A reasoning model can spend the whole allowance thinking: retry with more room, up to a cap.
+    if (reply.finishReason === "length" && maxTokens < MAX_OUTPUT_TOKENS) {
+      maxTokens = Math.min(maxTokens * 2, MAX_OUTPUT_TOKENS);
       cp.counters.retries++;
-      deps.emit({ type: "retry", attempt, delayMs: 0, reason: reply.finishReason === "length" ? "truncated" : "empty" });
+      deps.emit({ type: "retry", attempt, delayMs: 0, reason: "truncated" });
       continue;
     }
-    return { reply };
+    const hasCalls = Array.isArray(reply.message.tool_calls) && reply.message.tool_calls.length > 0;
+    const text = typeof reply.message.content === "string" ? reply.message.content : "";
+    if (!hasCalls && !text.trim() && !emptyRetried) {
+      emptyRetried = true;
+      cp.counters.retries++;
+      deps.emit({ type: "retry", attempt, delayMs: 0, reason: "empty" });
+      continue;
+    }
+    return { reply, truncated: reply.finishReason === "length" };
   }
 }
 
@@ -343,10 +414,26 @@ export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: S
     return { checkpoint: cp, stop, resumable, finalText, stopMessage, ...slice };
   };
 
-  if (cp.inflight) {
-    const b = await runBatch(cp, deps, limits, signal, slice);
+  const afterBatch = (b: BatchResult): Promise<SliceResult> | null => {
     if (b.aborted) return finish("aborted");
     if (b.stuck) return finish("stuck", "", { detail: b.stuck.detail });
+    if (b.unanswerable) {
+      return finish("done_incomplete", "", {
+        message: cp.lang === "th"
+          ? "หยุดทำงาน — งานนี้ต้องการการตัดสินใจที่ไม่มีใครตอบได้ในขณะนี้"
+          : "Stopped — the job needed decisions that no one was available to make.",
+      });
+    }
+    if (b.question) {
+      cp.waiting = b.question;
+      return finish("waiting_input");
+    }
+    return null;
+  };
+
+  if (cp.inflight) {
+    const stopped = afterBatch(await runBatch(cp, deps, limits, signal, slice));
+    if (stopped) return stopped;
   }
 
   for (;;) {
@@ -358,8 +445,9 @@ export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: S
     }
     if (sliceTurns >= limits.maxTurns || deps.clock.now() - t0 >= limits.maxWallMs) return finish("slice_end");
 
-    const specs = deps.tools.specs();
-    if (!specs.length && cp.history.some((h) => h.kind === "exchange")) return finish("policy");
+    const cmsSpecs = deps.tools.specs();
+    if (!cmsSpecs.length && cp.history.some((h) => h.kind === "exchange")) return finish("policy");
+    const specs = [...harnessSpecs(), ...cmsSpecs];
 
     const system = deps.systemPrompt();
     const compaction = compactHistory(cp, { system, specs, limits });
@@ -374,20 +462,33 @@ export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: S
     sliceTurns++;
     cp.counters.turns++;
     const reasoning = reasoningOf(reply, cp.model);
-    const calls = normalizeCalls(reply.message.tool_calls, cp.counters.turns, existingCallIds(cp));
+    const { calls, malformed } = normalizeCalls(reply.message.tool_calls, cp.counters.turns, existingCallIds(cp));
     const text = typeof reply.message.content === "string" ? reply.message.content : "";
 
     if (!calls.length) {
-      if (text.trim()) cp.history.push({ kind: "assistant_text", text, ...(reasoning ? { reasoning } : {}) });
-      deps.emit({ type: "text", content: text });
-      return finish("text", text);
+      if (text.trim()) {
+        cp.history.push({ kind: "assistant_text", text, ...(reasoning ? { reasoning } : {}) });
+        deps.emit({ type: "text", content: text });
+      }
+      const open = openItems(cp.plan);
+      if (cp.plan && open.length && cp.plan.nudges < MAX_NUDGES) {
+        cp.plan.nudges++;
+        cp.history.push({ kind: "user", text: nudgeText(open) });
+        continue;
+      }
+      if (!cp.plan) return finish("text", text);
+      const v = verifyPlan(cp.plan);
+      deps.emit({ type: "verification", ok: v.ok, report: v.report });
+      return finish(v.ok ? "done" : "done_incomplete", text, { detail: v.report });
     }
 
-    cp.history.push({ kind: "exchange", text: text || null, ...(reasoning ? { reasoning } : {}), calls, results: [] });
+    cp.history.push({
+      kind: "exchange", text: text || null, ...(reasoning ? { reasoning } : {}), calls, results: [],
+      ...(malformed.length ? { malformed } : {}),
+    });
     cp.inflight = { exchangeIndex: cp.history.length - 1, done: [] };
     if (deps.save) await deps.save(cp, "turn");
-    const b = await runBatch(cp, deps, limits, signal, slice);
-    if (b.aborted) return finish("aborted");
-    if (b.stuck) return finish("stuck", "", { detail: b.stuck.detail });
+    const stopped = afterBatch(await runBatch(cp, deps, limits, signal, slice, { truncated: got.truncated }));
+    if (stopped) return stopped;
   }
 }

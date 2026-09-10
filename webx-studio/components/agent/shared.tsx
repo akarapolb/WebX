@@ -132,6 +132,52 @@ export function CapabilitiesPopover({ policy, t, onClose }: { policy: AgentPolic
   );
 }
 
+/** The model's checklist, updated in place as it marks items. */
+export function PlanCard({ msg, t }: { msg: Extract<ChatMsg, { kind: "plan" }>; t: (k: string) => string }) {
+  const done = msg.items.filter((i) => i.status === "done").length;
+  const pct = msg.items.length ? Math.round((done / msg.items.length) * 100) : 0;
+  return (
+    <div className="ag-plan" data-testid="agent-plan">
+      <div className="ag-plan-h">
+        <Icon name="check" />
+        <span>{t("ag.plan")}</span>
+        <span className="ag-plan-n mono">{done}/{msg.items.length}</span>
+      </div>
+      <div className="ag-plan-bar" aria-hidden><i style={{ width: pct + "%" }} /></div>
+      <ol>
+        {msg.items.map((it) => (
+          <li key={it.id} className={"ag-plan-i " + it.status} data-status={it.status}>
+            <span className="ag-plan-st" role="img" aria-label={t("ag.planStatus_" + it.status)} />
+            <span className="ag-plan-t">
+              {it.title}
+              {(it.result || it.note) && <small>{it.result || it.note}</small>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** A question the run is waiting on. An option button sends that option as the answer. */
+export function QuestionCard({ msg, t }: { msg: Extract<ChatMsg, { kind: "question" }>; t: (k: string) => string }) {
+  const agent = useAgent();
+  return (
+    <div className="ag-q" data-testid="agent-question">
+      <div className="ag-q-h"><Icon name="info" /><span>{t("ag.question")}</span></div>
+      <p>{msg.question}</p>
+      {msg.options.length > 0 && (
+        <div className="ag-q-opts">
+          {msg.options.map((o) => (
+            <button key={o} className="btn btn--g btn-sm" disabled={msg.answered || agent.running} onClick={() => agent.send(o)}>{o}</button>
+          ))}
+        </div>
+      )}
+      {!msg.answered && <div className="ag-q-hint muted">{t("ag.answerHint")}</div>}
+    </div>
+  );
+}
+
 /** A run that ended before finishing. The newest one on a thread can be
  * continued from the checkpoint the server saved for it. */
 export function StoppedNotice({ msg, t }: { msg: Extract<ChatMsg, { kind: "stopped" }>; t: (k: string) => string }) {
@@ -170,6 +216,8 @@ export function MessageList({ t, className }: { t: (k: string) => string; classN
         if (m.kind === "tools") return <ToolsGroup key={m.id} steps={m.steps} t={t} />;
         if (m.kind === "proposal") return <ProposalCard key={m.id} msg={m} t={t} />;
         if (m.kind === "stopped") return <StoppedNotice key={m.id} msg={m} t={t} />;
+        if (m.kind === "plan") return <PlanCard key={m.id} msg={m} t={t} />;
+        if (m.kind === "question") return <QuestionCard key={m.id} msg={m} t={t} />;
         if (m.kind === "error") return <div className="ag-msg" key={m.id}><div className="ag-msg-av bad"><Icon name="close" /></div><div className="ag-msg-tx ag-err">{m.text}</div></div>;
         return null;
       })}

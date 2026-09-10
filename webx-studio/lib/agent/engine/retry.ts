@@ -11,7 +11,7 @@ export type RetryDecision =
   | { action: "retry"; delayMs: number; reason: LlmErrorKind }
   | { action: "compact" }
   | { action: "repair" }
-  /** Out of attempts in a background job: requeue it rather than fail. */
+  /** Out of attempts on a transient failure: pause resumably so the user, or the job queue, tries again later. */
   | { action: "later" }
   | { action: "fail"; reason: LlmErrorKind | "unexpected" };
 
@@ -34,7 +34,7 @@ export function decideRetry(
   if (!(err instanceof LlmError)) return { action: "fail", reason: "unexpected" };
   if (TRANSIENT.has(err.kind)) {
     if (attempt < o.maxAttempts) return { action: "retry", delayMs: backoffMs(attempt, o.random, err.retryAfterMs), reason: err.kind };
-    return o.mode === "job" ? { action: "later" } : { action: "fail", reason: err.kind };
+    return { action: "later" };
   }
   if (err.kind === "context_length") return o.state.compacted ? { action: "fail", reason: err.kind } : { action: "compact" };
   if (err.kind === "bad_request" && TOOL_PROTOCOL_400.test(err.body || err.message)) {

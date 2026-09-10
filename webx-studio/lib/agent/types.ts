@@ -78,7 +78,19 @@ export type AgentEvent =
   /** A model request is being retried (after a transient failure, or a truncated or empty reply). */
   | { type: "retry"; attempt: number; delayMs: number; reason: string }
   /** Older history was summarized to stay inside the model's context window. */
-  | { type: "compaction"; beforeTokens: number; afterTokens: number; folded: number };
+  | { type: "compaction"; beforeTokens: number; afterTokens: number; folded: number }
+  /** The model wrote or replaced its plan. */
+  | { type: "plan"; items: PlanItem[] }
+  | { type: "plan_item"; id: string; status: PlanStatus; note?: string; result?: string }
+  /** The model is waiting for the user to answer. */
+  | { type: "question"; question: string; options?: string[] }
+  /** The plan was checked before the run finished. */
+  | { type: "verification"; ok: boolean; report: string };
+
+export type PlanStatus = "pending" | "in_progress" | "done" | "blocked" | "skipped";
+export type PlanItem = { id: string; title: string; detail?: string; status: PlanStatus; note?: string; result?: string };
+/** A run's checklist (engine/harnessTools.ts). A `locked` plan comes from a job template and can't be replaced. */
+export type RunPlan = { items: PlanItem[]; locked?: boolean; nudges: number };
 
 export type AgentProposal = {
   id: string;

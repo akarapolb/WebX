@@ -8,7 +8,7 @@ import { serverDeps } from "./engine/deps.server";
 import { limitsFor } from "./engine/limits";
 import { runSlice } from "./engine/loop";
 import type { RunCheckpoint, StopReason } from "./engine/types";
-import type { AgentContextRef, AgentEvent, AgentProposal, AgentRunContext } from "./types";
+import type { AgentContextRef, AgentEvent, AgentProposal, AgentRunContext, PlanItem } from "./types";
 
 const DEFAULT_MODEL = process.env.LITELLM_MODEL || "webx-default";
 
@@ -49,6 +49,10 @@ export type RunResult = {
   stopMessage: string;
   /** Set only when the run can be continued. */
   checkpoint: RunCheckpoint | null;
+  /** The run's checklist as it stands, if the model made one. */
+  plan: PlanItem[] | null;
+  /** Set when the run stopped to wait for the user's answer. */
+  question: { question: string; options: string[] } | null;
 };
 
 export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): Promise<RunResult> {
@@ -95,5 +99,9 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     stopReason: r.stop,
     stopMessage: r.stopMessage,
     checkpoint: r.resumable ? r.checkpoint : null,
+    plan: r.checkpoint.plan?.items ?? null,
+    question: r.stop === "waiting_input" && r.checkpoint.waiting
+      ? { question: r.checkpoint.waiting.question, options: r.checkpoint.waiting.options }
+      : null,
   };
 }
