@@ -68,6 +68,28 @@ async function json(r: Response): Promise<any> {
   try { return await r.json(); } catch { return null; }
 }
 
+/** Strapi's content-manager error body is usually genuinely informative
+ * (e.g. "jobId must be defined" for a missing required field, or the exact
+ * enum values a field accepts) — found live via the WebX Agent: every
+ * "<action> failed" throw here used to discard that body entirely, so a
+ * validation 400 gave the caller (a human's catch block, or the agent's own
+ * executeTool -> CmsError.message -> model feedback loop) zero signal to
+ * fix the actual problem. The agent kept moving on to a different content
+ * type instead of retrying with corrected fields — same "silent generic
+ * failure" shape as the content-type-uid bug fixed earlier in tools.ts,
+ * just one layer deeper. `errors[].message`/`details.errors[]` covers
+ * Strapi 5's own validation-error shape; `.message`/`.name` covers its
+ * plainer error shapes (auth, not-found, etc.). */
+async function errorMessage(r: Response, fallback: string): Promise<string> {
+  const j = await json(r);
+  const e = j?.error;
+  if (!e) return fallback;
+  const detail =
+    (Array.isArray(e.details?.errors) && e.details.errors.map((d: any) => d.message).filter(Boolean).join("; ")) ||
+    e.message || e.name;
+  return detail ? `${fallback}: ${detail}` : fallback;
+}
+
 export const strapiAdapter: CmsAdapter = {
   schema: {
     async listContentTypes(): Promise<ContentTypeInfo[]> {
@@ -92,7 +114,7 @@ export const strapiAdapter: CmsAdapter = {
   entries: {
     async list<T = any>(uid: string, query?: EntryQuery): Promise<EntryList<T>> {
       const r = await fetch(entryUrl(uid) + buildQuery(query), { headers: await authHeaders(), cache: "no-store" });
-      if (!r.ok) throw new CmsError("list failed", r.status);
+      if (!r.ok) throw new CmsError(await errorMessage(r, "list failed"), r.status);
       const j = await json(r);
       const rows: T[] = j?.results ?? j?.data ?? [];
       return {
@@ -103,7 +125,7 @@ export const strapiAdapter: CmsAdapter = {
     },
     async get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null> {
       const r = await fetch(entryUrl(uid, id, opts), { headers: await authHeaders(), cache: "no-store" });
-      if (!r.ok) throw new CmsError("get failed", r.status);
+      if (!r.ok) throw new CmsError(await errorMessage(r, "get failed"), r.status);
       const j = await json(r);
       return (j?.data ?? j) as T;
     },
@@ -114,7 +136,7 @@ export const strapiAdapter: CmsAdapter = {
         body: JSON.stringify(data),
         cache: "no-store",
       });
-      if (!r.ok) throw new CmsError("create failed", r.status);
+      if (!r.ok) throw new CmsError(await errorMessage(r, "create failed"), r.status);
       const j = await json(r);
       return (j?.data ?? j) as T;
     },
@@ -126,13 +148,13 @@ export const strapiAdapter: CmsAdapter = {
         body: JSON.stringify(body),
         cache: "no-store",
       });
-      if (!r.ok) throw new CmsError("update failed", r.status);
+      if (!r.ok) throw new CmsError(await errorMessage(r, "update failed"), r.status);
       const j = await json(r);
       return (j?.data ?? j) as T;
     },
     async remove(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
       const r = await fetch(entryUrl(uid, id, opts), { method: "DELETE", headers: await authHeaders(), cache: "no-store" });
-      if (!r.ok) throw new CmsError("delete failed", r.status);
+      if (!r.ok) throw new CmsError(await errorMessage(r, "delete failed"), r.status);
     },
   },
 

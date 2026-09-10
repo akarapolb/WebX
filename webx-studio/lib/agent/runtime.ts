@@ -83,11 +83,21 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
   const applied: RunResult["applied"] = [];
   let finalText = "";
   let aborted = false;
+  // Defaults to the one exit this loop's own `for` condition can reach on
+  // its own (turn hits MAX_TURNS) — every OTHER exit sets this explicitly.
+  // Found live: a genuinely long job (asked to create ~18 content types)
+  // burned through all 12 turns without ever getting to a no-tool-calls
+  // final response, and the loop just ended silently — no error, no "here's
+  // what I got done," finalText stayed "" and the panel showed nothing
+  // after the last tool step. Wall-clock budget exhaustion already had this
+  // covered (the "budget" branch below); turn-count exhaustion didn't.
+  let stopReason: "text" | "budget" | "llm_error" | "aborted" | "max_turns" = "max_turns";
 
   turnLoop: for (let turn = 0; turn < MAX_TURNS; turn++) {
-    if (input.signal?.aborted) { aborted = true; break; }
+    if (input.signal?.aborted) { aborted = true; stopReason = "aborted"; break; }
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
+      stopReason = "budget";
       emit({ type: "error", code: "budget", message: input.lang === "th" ? "เกินเวลาที่กำหนดสำหรับการทำงานนี้" : "This run took too long and was stopped." });
       break;
     }
@@ -100,7 +110,8 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
         signal: combined(input.signal, AbortSignal.timeout(Math.min(remaining, 60_000))),
       });
     } catch (e: any) {
-      if (e?.name === "AbortError" || input.signal?.aborted) { aborted = true; break turnLoop; }
+      if (e?.name === "AbortError" || input.signal?.aborted) { aborted = true; stopReason = "aborted"; break turnLoop; }
+      stopReason = "llm_error";
       emit({ type: "error", code: "llm", message: input.lang === "th" ? "เรียก AI ไม่สำเร็จ" : "The AI request failed." });
       break turnLoop;
     }
@@ -108,13 +119,27 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
 
     const calls = (result.message.tool_calls || []).slice(0, MAX_TOOL_CALLS_PER_TURN);
     if (!calls.length) {
+      stopReason = "text";
       finalText = result.message.content || "";
       messages.push({ role: "assistant", content: finalText });
       emit({ type: "text", content: finalText });
       break;
     }
 
-    messages.push({ role: "assistant", content: result.message.content ?? null, tool_calls: result.message.tool_calls });
+    // MUST be `calls` (the MAX_TOOL_CALLS_PER_TURN-sliced array), not
+    // result.message.tool_calls — found live: a model that returns more
+    // than 6 parallel tool_calls in one turn (Kimi did, asked to create
+    // ~18 content types) used to have every call beyond the slice pushed
+    // into this assistant message's own tool_calls array but never
+    // executed and never given a matching tool-role response below, which
+    // is a hard protocol violation (every model provider requires exactly
+    // one tool response per tool_call in the preceding assistant message)
+    // — the very next turn's chat() call 400'd outright ("assistant
+    // message with 'tool_calls' must be followed by tool messages... did
+    // not have response messages: search_content:7, :8, :9, :10"), ending
+    // the whole run. Slicing here keeps this message's own tool_calls list
+    // exactly matching what the loop below actually executes and responds to.
+    messages.push({ role: "assistant", content: result.message.content ?? null, tool_calls: calls });
     for (const call of calls) {
       const args = safeArgsPreview(call.function.arguments);
       emit({ type: "tool_call", id: call.id, name: call.function.name, args });
@@ -141,6 +166,13 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     }
   }
 
+  if (stopReason === "max_turns") {
+    const done = toolSteps.filter((s) => s.ok).length;
+    finalText = input.lang === "th"
+      ? `หยุดทำงานแล้ว — ครบจำนวนขั้นตอนสูงสุดสำหรับการทำงานนี้ (ทำสำเร็จ ${done} จาก ${toolSteps.length} ขั้นตอน) ต้องการให้ทำต่อไหม?`
+      : `Stopped — reached this run's own turn limit (${done} of ${toolSteps.length} steps succeeded). Want me to continue?`;
+    emit({ type: "text", content: finalText });
+  }
   if (usage.promptTokens + usage.completionTokens > 0) emit({ type: "usage", promptTokens: usage.promptTokens, completionTokens: usage.completionTokens });
   return { finalText, toolSteps, proposals, applied, usage, aborted };
 }
