@@ -52,8 +52,14 @@ export default function ContentBrowser() {
         raw.forEach((x) => { sch[x.uid] = x.attributes || {}; });
         setSchemas(sch);
         setTenantUids(new Set(raw.filter((x) => x.attributes?.tenant).map((x) => x.uid)));
-        const first = list.find((x) => x.api === "article") ?? list[0];
+        // A link from elsewhere (a background job's results) can pick the type
+        // and open one entry: /content?type=<uid>&open=<documentId>.
+        const params = new URLSearchParams(window.location.search);
+        const linked = list.find((x) => x.uid === params.get("type"));
+        const first = linked ?? list.find((x) => x.api === "article") ?? list[0];
         if (first) setUid(first.uid); else setErr("No content types are exposed by this backend.");
+        const open = linked ? params.get("open") : null;
+        if (open) setEditing({ docId: open });
       } catch (e) {
         if (e instanceof CmsError && e.status === 403) setErr(t("c.noPerm"));
         else if (e instanceof CmsError) setErr("Could not load content types (HTTP " + e.status + ").");

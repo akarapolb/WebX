@@ -1,34 +1,22 @@
 "use client";
-// The full-page agent workspace (/agent) — Phase 8 Milestone 3. Shares the
-// exact same live conversation state as the docked panel (AgentProvider is
-// one global provider; MessageList/Composer from shared.tsx are the same
-// components) so a run started in the docked panel keeps streaming here if
-// the user navigates to this route mid-run, and vice versa. Adds: a thread
-// list (past conversations, GET/DELETE /api/agent/threads), a run sidebar
-// (autonomy + usage + context), Jobs (templated multi-entry prompts), and
-// (admins only) the workspace's own autonomy settings.
+// The full-page agent workspace: /agent (chat), /agent/jobs and
+// /agent/jobs/:id (background jobs), and the agent's settings. It shares the
+// live conversation with the docked panel (AgentProvider is one global
+// provider; MessageList/Composer from shared.tsx are the same components), so
+// a run started in the panel keeps streaming here and vice versa.
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Icon from "../Icon";
 import { useLang } from "../LangProvider";
-import { useTenant } from "../TenantProvider";
-import { cms } from "@/lib/cms";
 import { useAgent } from "./AgentProvider";
 import { LEVEL_KEY, REASON_KEY, CapabilitiesPopover, MessageList, Composer } from "./shared";
 import AgentSettings from "./AgentSettings";
+import JobDetail from "./jobs/JobDetail";
+import JobsView from "./jobs/JobsView";
 
 type ThreadRow = { id: number; documentId?: string; title?: string; runState?: string; updatedAt?: string; context?: any };
-
-// Bookkeeping types that show up in the raw schema listing (it isn't
-// filtered — see governance.ts's own comment on GENERIC_ROUTE_READ_BLOCKED_UIDS)
-// but would just error if a job tried to search/translate/audit them
-// through the agent's own tools. Same exclusion FieldAccess.tsx's own
-// content-type picker already applies, for the identical reason.
-const JOB_HIDE = new Set([
-  "api::field-policy.field-policy", "api::audit-log.audit-log", "api::page-version.page-version",
-  "api::ab-event.ab-event", "api::review.review", "api::release.release", "api::tenant.tenant",
-  "api::block-type.block-type", "api::agent-thread.agent-thread", "api::custom-role.custom-role",
-  "api::page-template.page-template", "api::consent-log.consent-log", "api::menu-item.menu-item",
-]);
+type Tab = "chat" | "jobs" | "settings";
 
 function fmt(iso?: string, lang?: string) {
   if (!iso) return "";
@@ -87,62 +75,6 @@ function ThreadList({ t, lang }: { t: (k: string) => string; lang: string }) {
   );
 }
 
-function JobsPanel({ t }: { t: (k: string) => string }) {
-  const agent = useAgent();
-  const [types, setTypes] = useState<{ uid: string; name: string }[]>([]);
-  const [open, setOpen] = useState<"" | "translate" | "audit">("");
-  const [ctype, setCtype] = useState("");
-  const [locale, setLocale] = useState("th");
-
-  useEffect(() => {
-    cms.schema.listContentTypes()
-      .then((list) => setTypes(list.filter((d: any) => !JOB_HIDE.has(d.uid)).map((d: any) => ({ uid: d.uid, name: d.name || d.uid }))))
-      .catch(() => {});
-  }, []);
-
-  function run() {
-    if (!ctype) return;
-    const label = types.find((x) => x.uid === ctype)?.name || ctype;
-    const msg = open === "translate"
-      ? `Job: translate content.\nContent type: ${label} (${ctype}).\nTarget locale: ${locale}.\nFirst list the entries of this type, then translate each one's text fields into ${locale}, then tell me how many you translated and how many failed.`
-      : `Job: audit content.\nContent type: ${label} (${ctype}).\nFirst list the entries of this type, then run an accessibility/SEO/freshness/PDPA audit on each one, then summarize the findings grouped by severity.`;
-    agent.send(msg);
-    setOpen("");
-  }
-
-  const disabled = !agent.policy || agent.policy.level === "off" || agent.running;
-
-  return (
-    <div className="agw-jobs">
-      <div className="agw-side-h">{t("aw.jobs")}</div>
-      <div className="agw-job-btns">
-        <button className="btn btn--g btn-sm" onClick={() => setOpen(open === "translate" ? "" : "translate")} disabled={disabled}>
-          <Icon name="spark" />{t("aw.jobTranslate")}
-        </button>
-        <button className="btn btn--g btn-sm" onClick={() => setOpen(open === "audit" ? "" : "audit")} disabled={disabled}>
-          <Icon name="check" />{t("aw.jobAudit")}
-        </button>
-      </div>
-      {open && (
-        <div className="agw-job-form">
-          <select className="vb-sel" value={ctype} onChange={(e) => setCtype(e.target.value)}>
-            <option value="">{t("aw.jobPickType")}</option>
-            {types.map((x) => <option key={x.uid} value={x.uid}>{x.name}</option>)}
-          </select>
-          {open === "translate" && (
-            <select className="vb-sel" value={locale} onChange={(e) => setLocale(e.target.value)}>
-              <option value="th">Thai</option>
-              <option value="en">English</option>
-            </select>
-          )}
-          <button className="btn btn--p btn-sm" onClick={run} disabled={!ctype}>{t("aw.jobRun")}</button>
-        </div>
-      )}
-      <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>{t("aw.jobsHint")}</p>
-    </div>
-  );
-}
-
 function RunSidebar({ t }: { t: (k: string) => string }) {
   const agent = useAgent();
   const [popOpen, setPopOpen] = useState(false);
@@ -177,26 +109,43 @@ function RunSidebar({ t }: { t: (k: string) => string }) {
           <span className="mono" style={{ fontSize: 12.5 }}>{agent.usage.promptTokens + agent.usage.completionTokens} tok ({agent.usage.promptTokens} in / {agent.usage.completionTokens} out)</span>
         </div>
       )}
-      <JobsPanel t={t} />
+      {policy?.background && (
+        <div className="agw-side-block">
+          <div className="agw-side-h">{t("aw.tabJobs")}</div>
+          <p className="agj-note" style={{ marginBottom: 10 }}>{t("aj.newHint")}</p>
+          <Link className="btn btn--g btn-sm" href="/agent/jobs"><Icon name="plus" />{t("aj.new")}</Link>
+        </div>
+      )}
     </aside>
   );
 }
 
-export default function AgentWorkspace() {
+export default function AgentWorkspace({ view = "chat", jobId }: { view?: "chat" | "jobs"; jobId?: string }) {
   const { t, lang } = useLang();
-  const { currentKey } = useTenant();
   const agent = useAgent();
-  const [tab, setTab] = useState<"chat" | "settings">("chat");
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>(view);
+  useEffect(() => { setTab(view); }, [view, jobId]);
   const policy = agent.policy;
   const showEmpty = policy && policy.level === "off";
+
+  // Chat and Jobs are routes (a job's page has its own URL); Settings is a tab on either.
+  function openTab(next: Tab) {
+    if (next === "settings" || (next === view && !(next === "jobs" && jobId))) {
+      setTab(next);
+      return;
+    }
+    router.push(next === "jobs" ? "/agent/jobs" : "/agent");
+  }
 
   return (
     <div className="agw">
       <div className="vh">
         <div><h1>{t("nav.agent")}</h1><p>{t("aw.sub")}</p></div>
         <div className="agw-tabs seg">
-          <button className={tab === "chat" ? "on" : ""} onClick={() => setTab("chat")}><Icon name="msg" />{t("aw.tabChat")}</button>
-          <button className={tab === "settings" ? "on" : ""} onClick={() => setTab("settings")}><Icon name="lock" />{t("aw.tabSettings")}</button>
+          <button className={tab === "chat" ? "on" : ""} aria-pressed={tab === "chat"} onClick={() => openTab("chat")} data-testid="agent-tab-chat"><Icon name="msg" />{t("aw.tabChat")}</button>
+          <button className={tab === "jobs" ? "on" : ""} aria-pressed={tab === "jobs"} onClick={() => openTab("jobs")} data-testid="agent-tab-jobs"><Icon name="activity" />{t("aw.tabJobs")}</button>
+          <button className={tab === "settings" ? "on" : ""} aria-pressed={tab === "settings"} onClick={() => openTab("settings")}><Icon name="lock" />{t("aw.tabSettings")}</button>
         </div>
       </div>
 
@@ -211,6 +160,8 @@ export default function AgentWorkspace() {
           {policy.reason === "plan" && <a className="btn btn--g btn-sm" href="/billing">{t("ag.upgrade")}</a>}
           {policy.reason === "not_granted" && <button className="btn btn--g btn-sm" onClick={() => setTab("settings")}>{t("aw.tabSettings")}</button>}
         </div>
+      ) : tab === "jobs" ? (
+        jobId ? <JobDetail id={jobId} /> : <JobsView onOpenSettings={() => setTab("settings")} />
       ) : (
         <div className="agw-body">
           <ThreadList t={t} lang={lang} />

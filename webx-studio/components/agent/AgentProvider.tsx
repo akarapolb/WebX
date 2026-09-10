@@ -22,6 +22,8 @@ export type AgentPolicy = {
   model?: string;
   local?: boolean;
   reason?: "disabled" | "unscoped" | "plan" | "not_granted";
+  /** Background jobs are on for this workspace and its plan includes them. */
+  background?: boolean;
 };
 
 /** What an open editor exposes to the panel — a write handler per proposal

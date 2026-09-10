@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
 import { useAgent, targetMatches, type AgentPolicy } from "./AgentProvider";
+import ContinueInBackground from "./jobs/ContinueInBackground";
 import type { ChatMsg } from "./useAgentRun";
 import type { AgentLevel } from "@/lib/agent/types";
 
@@ -187,7 +188,10 @@ export function StoppedNotice({ msg, t }: { msg: Extract<ChatMsg, { kind: "stopp
       <Icon name="stop" />
       <span className="ag-stop-tx">{msg.text}</span>
       {msg.resumable && (
-        <button className="btn btn--p btn-sm" onClick={agent.resume} disabled={agent.running} data-testid="agent-continue">{t("ag.continue")}</button>
+        <>
+          <button className="btn btn--p btn-sm" onClick={agent.resume} disabled={agent.running} data-testid="agent-continue">{t("ag.continue")}</button>
+          <ContinueInBackground />
+        </>
       )}
     </div>
   );

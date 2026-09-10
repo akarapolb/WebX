@@ -32,7 +32,12 @@ import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./word
 import { CmsError } from "./types";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
+import { parseCheckpoint } from "@/lib/agent/engine/checkpoint";
 import { evaluateJobOwner } from "@/lib/agent/jobs/owner";
+import {
+  bulkCreateGoal, bulkCreatePlan, isTemplateKey, parseTemplateParams, requiredLevelFor, templateTitle, TemplateError,
+  type DirectItem, type TemplateKey,
+} from "@/lib/agent/jobs/templates";
 import { controlJob, type JobControlAction } from "@/lib/agent/jobs/store.server";
 import type { AgentJobRow, JobOwner, JobPolicy, OwnerRefusal } from "@/lib/agent/jobs/types";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine, actingSession, withActingSession } from "../strapi";
@@ -1682,13 +1687,14 @@ async function countJobs(tenantKey: string, runState: string): Promise<number> {
 }
 
 export type AgentJobInput = {
-  title?: string; goal: string; template?: string; params?: Record<string, any>;
+  title?: string; goal?: string; template?: string; params?: Record<string, any>;
   threadId?: string; lang?: "en" | "th"; budget?: { maxTokens?: number; maxMinutes?: number };
 };
 
-export async function createAgentJob(input: AgentJobInput): Promise<any> {
-  assertNotActing("create background jobs");
-  const user = await requireUser();
+type JobPlanLimits = ReturnType<typeof planLimit>;
+
+/** Every job needs a workspace, an agent that isn't off, a plan that includes jobs, and background jobs turned on. */
+async function jobPreconditions(user: CurrentUser): Promise<{ eff: Tenant; policy: AgentPolicy; limits: JobPlanLimits }> {
   const eff = await resolveEffectiveTenant(user.email);
   if (!eff) throw new CmsError("Background jobs run inside a workspace.", 403);
   const policy = await resolveAgentPolicy(user);
@@ -1698,10 +1704,129 @@ export async function createAgentJob(input: AgentJobInput): Promise<any> {
   if (!eff.features?.agent?.background) {
     throw new CmsError("Background jobs are turned off for this workspace. A workspace administrator can turn them on in Agent settings.", 403);
   }
-  const goal = String(input.goal ?? "").trim();
-  if (!goal) throw new CmsError("Describe what the job should do.", 400);
-  if (goal.length > 8000) throw new CmsError("The job description is too long (8,000 characters at most).", 400);
+  return { eff, policy, limits };
+}
 
+/** The panel's status check: the caller's agent policy, and whether this workspace runs background jobs. */
+export async function resolveAgentStatus(user: CurrentUser): Promise<AgentPolicy & { background: boolean }> {
+  const policy = await resolveAgentPolicy(user);
+  const eff = policy.level === "off" ? null : await resolveEffectiveTenant(user.email);
+  return { ...policy, background: Boolean(eff?.features?.agent?.background && planLimit(eff.plan).agentConcurrentJobs) };
+}
+
+// Job templates (lib/agent/jobs/templates.ts). Parameters are checked and the
+// work is listed here, as the person starting the job, so the preview shows
+// exactly what the job will do and a job never covers more than its owner can
+// see.
+
+const TEMPLATE_TOOL: Partial<Record<TemplateKey, string>> = { bulk_create: "create_draft_entry", bulk_translate: "translate_fields", audit_all: "audit_entry" };
+/** Rough AI tokens per item, for the preview's estimate only. */
+const TOKENS_PER_ITEM: Partial<Record<TemplateKey, number>> = { bulk_create: 6000, bulk_translate: 1500, audit_all: 0 };
+const PREVIEW_ITEMS = 20;
+const ENTRY_TITLE_FIELDS = ["title", "name", "subject", "question", "heading", "label"];
+
+type ExpandedJob = {
+  template: TemplateKey; title: string; goal: string; params: Record<string, any>; requiredLevel: AgentLevel;
+  count: number; items: { title: string; detail?: string }[]; estimatedTokens: number | null;
+};
+
+const entryTitle = (e: any): string =>
+  String(ENTRY_TITLE_FIELDS.map((k) => e?.[k]).find((v) => typeof v === "string" && v.trim()) || e?.documentId || e?.id || "").slice(0, 100);
+
+async function entriesForJob(uid: string, o: { q?: string; updatedSince?: string; ids?: string[]; max: number }): Promise<DirectItem[]> {
+  const out: DirectItem[] = [];
+  if (o.ids?.length) {
+    for (const id of o.ids.slice(0, o.max)) {
+      const e: any = await governed.get(uid, id).catch(() => null);
+      if (e) out.push({ uid, id: String(e.documentId ?? id), title: entryTitle(e) });
+    }
+    return out;
+  }
+  const filter: NonNullable<EntryQuery["filter"]> = o.updatedSince ? [{ field: "updatedAt", op: "gte", value: o.updatedSince }] : [];
+  for (let page = 1; out.length < o.max && page <= 20; page++) {
+    const r = await governed.list(uid, { page, pageSize: 100, sort: "updatedAt:DESC", ...(o.q ? { q: o.q } : {}), ...(filter.length ? { filter } : {}) });
+    for (const e of r.data as any[]) {
+      const id = String(e?.documentId ?? e?.id ?? "");
+      if (id) out.push({ uid, id, title: entryTitle(e) });
+      if (out.length >= o.max) break;
+    }
+    if (page >= (r.pageCount || 1)) break;
+  }
+  return out;
+}
+
+async function expandJob(eff: Tenant, policy: AgentPolicy, rawKey: unknown, rawParams: unknown, lang: "en" | "th"): Promise<ExpandedJob> {
+  if (!isTemplateKey(rawKey)) throw new CmsError("Unknown job template.", 400);
+  const key = rawKey;
+  let p: any;
+  try {
+    p = parseTemplateParams(key, rawParams);
+  } catch (e) {
+    if (e instanceof TemplateError) throw new CmsError(e.message, 400);
+    throw e;
+  }
+  const requiredLevel = requiredLevelFor(key, p, policy.level);
+  if (AGENT_LEVEL_RANK[policy.level] < AGENT_LEVEL_RANK[requiredLevel]) {
+    throw new CmsError(`This job needs the agent's "${requiredLevel}" autonomy level, and this workspace grants "${policy.level}".`, 403);
+  }
+  const tool = TEMPLATE_TOOL[key];
+  if (tool && policy.tools && !policy.tools.includes(tool)) {
+    throw new CmsError(`This job uses the ${tool} tool, which isn't enabled for the agent in this workspace.`, 403);
+  }
+
+  const uids: string[] = key === "bulk_translate" ? [p.contentType] : key === "custom" ? [] : p.contentTypes;
+  const names: Record<string, string> = {};
+  if (uids.length) {
+    const governable = await listGovernableContentTypes(eff.key);
+    for (const u of uids) {
+      const ct = governable.find((c) => c.uid === u);
+      if (!ct) throw new CmsError(`${u} isn't a content type in this workspace.`, 400);
+      if (policy.contentTypes && !policy.contentTypes.includes(u)) throw new CmsError(`The agent isn't allowed to work with ${ct.label} in this workspace.`, 403);
+      names[u] = ct.label;
+    }
+  }
+  const title = templateTitle(key, p, names, lang);
+
+  if (key === "custom") {
+    return { template: key, title, goal: p.goal, params: p.tools ? { tools: p.tools } : {}, requiredLevel, count: 0, items: [], estimatedTokens: null };
+  }
+  if (key === "bulk_create") {
+    const schemas: ContentTypeSchema[] = [];
+    for (const u of uids) {
+      const s = await getContentTypeSchema(u);
+      if (s) schemas.push(s);
+    }
+    const plan = bulkCreatePlan(p, names);
+    return {
+      template: key, title, goal: bulkCreateGoal(p, schemas), params: { ...p, plan }, requiredLevel, count: plan.length,
+      items: plan.slice(0, PREVIEW_ITEMS).map((i) => ({ title: i.title })), estimatedTokens: plan.length * (TOKENS_PER_ITEM.bulk_create ?? 0),
+    };
+  }
+  let items: DirectItem[] = [];
+  if (key === "bulk_translate") {
+    items = await entriesForJob(p.contentType, p);
+  } else {
+    for (const u of uids) {
+      if (items.length >= p.max) break;
+      items.push(...(await entriesForJob(u, { updatedSince: p.updatedSince, max: p.max - items.length })));
+    }
+  }
+  const goal = key === "bulk_translate"
+    ? `Translate ${items.length} ${names[p.contentType]} entries into ${p.targetLocale} and file each translation for review.`
+    : `Audit ${items.length} entries of ${uids.map((u) => names[u]).join(", ")}.`;
+  return {
+    template: key, title, goal, params: { ...p, items }, requiredLevel, count: items.length,
+    items: items.slice(0, PREVIEW_ITEMS).map((i) => ({ title: i.title || i.id, detail: names[i.uid] || i.uid })),
+    estimatedTokens: items.length * (TOKENS_PER_ITEM[key] ?? 0),
+  };
+}
+
+type NewJob = {
+  template: TemplateKey; title: string; goal: string; params: Record<string, any>; requiredLevel: AgentLevel;
+  lang: "en" | "th"; threadId: string | null; budget?: AgentJobInput["budget"]; checkpoint?: unknown;
+};
+
+async function insertAgentJob(user: CurrentUser, eff: Tenant, policy: AgentPolicy, limits: JobPlanLimits, j: NewJob): Promise<any> {
   const unfinished = (await countJobs(eff.key, "queued")) + (await countJobs(eff.key, "running")) + (await countJobs(eff.key, "paused"));
   if (unfinished >= limits.agentQueuedJobs) {
     throw new CmsError(`This workspace already has ${unfinished} unfinished background jobs, the most its plan allows. Wait for some to finish or cancel them.`, 429);
@@ -1711,15 +1836,68 @@ export async function createAgentJob(input: AgentJobInput): Promise<any> {
   const within = (asked: number | undefined, max: number) => (asked && asked > 0 ? Math.min(asked, max) : max);
   const created: any = await strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_JOB_UID, {
     tenantKey: eff.key, ownerEmail: user.email, ownerUserId: String(user.id), engine: eff.engine || "strapi",
-    threadId: input.threadId || null, template: input.template || "custom",
-    title: String(input.title || goal).trim().slice(0, 120), goal, params: input.params ?? null,
-    lang: input.lang === "th" ? "th" : "en", requiredLevel: policy.level, policySnapshot: jobPolicyOf(policy), onQuestion: "wait",
-    runState: "queued", attempts: 0, checkpointSeq: 0, eventSeq: 0, tokensUsed: 0,
-    budget: { maxTokens: within(input.budget?.maxTokens, limits.agentJobTokenBudget), maxMinutes: within(input.budget?.maxMinutes, limits.agentJobMaxMinutes) },
+    threadId: j.threadId, template: j.template, title: j.title.trim().slice(0, 120), goal: j.goal, params: j.params,
+    lang: j.lang, requiredLevel: j.requiredLevel, policySnapshot: jobPolicyOf(policy), onQuestion: "wait",
+    runState: "queued", attempts: 0, checkpointSeq: 0, eventSeq: 0, tokensUsed: 0, checkpoint: j.checkpoint ?? null,
+    budget: { maxTokens: within(j.budget?.maxTokens, limits.agentJobTokenBudget), maxMinutes: within(j.budget?.maxMinutes, limits.agentJobMaxMinutes) },
   }));
   await recordAgentRunStart(user, `job:${created?.documentId}`);
   await writeAudit("agent_job_create", AGENT_JOB_UID, created?.documentId ?? null, user, eff.key);
   return agentJobView(created);
+}
+
+export async function createAgentJob(input: AgentJobInput): Promise<any> {
+  assertNotActing("create background jobs");
+  const user = await requireUser();
+  const { eff, policy, limits } = await jobPreconditions(user);
+  const lang = input.lang === "th" ? "th" : "en";
+  const key = input.template || "custom";
+  const params = key === "custom" ? { ...(input.params || {}), goal: input.params?.goal ?? input.goal } : input.params;
+  const job = await expandJob(eff, policy, key, params, lang);
+  if ((job.template === "bulk_translate" || job.template === "audit_all") && !job.count) {
+    throw new CmsError("No entries match, so this job would have nothing to do.", 400);
+  }
+  return insertAgentJob(user, eff, policy, limits, {
+    template: job.template, title: String(input.title || job.title), goal: job.goal, params: job.params,
+    requiredLevel: job.requiredLevel, lang, threadId: input.threadId || null, budget: input.budget,
+  });
+}
+
+/** The same checks and listing as starting a job, without starting it. */
+export async function previewAgentJob(input: { template?: string; params?: any; lang?: string }): Promise<any> {
+  const user = await requireUser();
+  const { eff, policy, limits } = await jobPreconditions(user);
+  const job = await expandJob(eff, policy, input.template, input.params, input.lang === "th" ? "th" : "en");
+  return {
+    template: job.template, title: job.title, requiredLevel: job.requiredLevel, count: job.count, items: job.items,
+    estimatedTokens: job.estimatedTokens, tokenBudget: limits.agentJobTokenBudget,
+  };
+}
+
+/**
+ * "Continue in background": a conversation that stopped where it can resume
+ * becomes a custom job that picks up from its checkpoint. The conversation
+ * gives the checkpoint up, so the chat and the job can't both carry on.
+ */
+export async function createAgentJobFromThread(threadId: string, lang?: string): Promise<any> {
+  assertNotActing("create background jobs");
+  const user = await requireUser();
+  const thread = await loadOwnedThread(threadId, user);
+  const cp = parseCheckpoint(thread.checkpoint);
+  if (!cp) throw new CmsError("This conversation has nothing to continue.", 409);
+  if (thread.runState === "running") throw new CmsError("This conversation is still running.", 409);
+  const { eff, policy, limits } = await jobPreconditions(user);
+  if (thread.tenantKey && thread.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  const firstAsk = cp.history.find((h) => h.kind === "user") as { text?: string } | undefined;
+  const goal = String(firstAsk?.text || thread.title || "Continue the conversation").trim().slice(0, 8000);
+  const job = await insertAgentJob(user, eff, policy, limits, {
+    template: "custom", title: String(thread.title || goal), goal, params: {}, requiredLevel: policy.level,
+    lang: lang === "th" || lang === "en" ? lang : cp.lang, threadId,
+    // A job has no open editor to hand proposals to, so its draft tools write (within the owner's level).
+    checkpoint: { ...cp, mode: "job", ref: { kind: "none" } },
+  });
+  await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_THREAD_UID, threadId, { checkpoint: null, runState: "done" }));
+  return job;
 }
 
 export async function listAgentJobs(): Promise<any[]> {

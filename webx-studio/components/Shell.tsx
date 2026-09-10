@@ -10,6 +10,7 @@ import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 import { useAgent } from "./agent/AgentProvider";
 import AgentPanel from "./agent/AgentPanel";
+import JobsIndicator from "./agent/JobsIndicator";
 
 export default function Shell({
   user, connected, children,
@@ -110,6 +111,7 @@ export default function Shell({
             <Icon name="search" /><span className="ph">{t("tb.search")}</span><span className="kbd">⌘K</span>
           </button>
           <div className="tb-sp" />
+          <JobsIndicator />
           {agent.policy && agent.policy.level !== "off" && (
             <button className={"agent-tg" + (agent.open ? " on" : "")} onClick={agent.toggle} data-testid="agent-toggle">
               <Icon name="spark" /><span>{t("ag.toggleTitle")}</span><span className="kbd">⌘J</span>

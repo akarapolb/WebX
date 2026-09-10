@@ -72,6 +72,9 @@ export type JobProgress = {
   plan: PlanItem[] | null;
   question: { question: string; options: string[] } | null;
   lastStop: string | null;
+  /** Direct templates (one tool per item): items handled so far, and in all. */
+  done?: number;
+  total?: number;
 };
 
 export type JobFinish = {

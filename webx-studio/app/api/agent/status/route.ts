@@ -8,9 +8,13 @@
 // of whether they administer this workspace. Found live while wiring
 // AgentProvider: it had been calling the admin route by mistake, which
 // both omits `reason` and could 403 a non-admin editor outright.
-import { requireUser, resolveAgentPolicy } from "@/lib/cms/governance";
+// Also says whether background jobs are available (`background`), for the
+// Jobs tab, the jobs indicator and "Continue in background".
+import { requireUser, resolveAgentStatus } from "@/lib/cms/governance";
 import { handle } from "@/lib/cms/route-helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
-  return handle(async () => resolveAgentPolicy(await requireUser()));
+  return handle(async () => resolveAgentStatus(await requireUser()));
 }

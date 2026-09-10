@@ -294,6 +294,7 @@ async function runBatch(
     }
     deps.emit({ type: "tool_result", id: call.id, ok: result.ok, summary: result.summary, data: result.proposal ? undefined : result.data });
     if (result.proposal) deps.emit({ type: "proposal", proposal: result.proposal });
+    for (const e of deps.afterTool?.(cp, call, result) ?? []) deps.emit(e);
 
     inflight.pendingWrite = undefined;
     inflight.done.push(call.id);
@@ -479,6 +480,7 @@ export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: S
         cp.history.push({ kind: "assistant_text", text, ...(reasoning ? { reasoning } : {}) });
         deps.emit({ type: "text", content: text });
       }
+      for (const e of deps.checkPlan?.(cp) ?? []) deps.emit(e);
       const open = openItems(cp.plan);
       if (cp.plan && open.length && cp.plan.nudges < MAX_NUDGES) {
         cp.plan.nudges++;

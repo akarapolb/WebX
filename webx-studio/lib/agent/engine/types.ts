@@ -156,6 +156,10 @@ export type EngineDeps = {
   random?: () => number;
   /** "wait" pauses the run on ask_user (default); "auto" answers for the model in an unattended job. */
   onQuestion?: "wait" | "auto";
+  /** Called after each CMS tool call with its outcome; may update the checkpoint (e.g. tick a template's plan) and return events. */
+  afterTool?: (cp: RunCheckpoint, call: ToolCall, outcome: ToolOutcome) => AgentEvent[] | void;
+  /** Called when the model gives its final answer, before the plan is checked; a template can reopen items that weren't really done. */
+  checkPlan?: (cp: RunCheckpoint) => AgentEvent[] | void;
 };
 
 export type SliceLimits = {

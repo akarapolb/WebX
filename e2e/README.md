@@ -139,7 +139,11 @@ rendering from a canned SSE body, a tool-call + proposal rendering with
 Apply correctly disabled when no matching editor is open (`targetMatches()`
 in `AgentProvider.tsx`), the `"off"` empty state hiding the toggle/FAB
 entirely, and the `/agent` workspace hydrating a mocked thread list plus its
-Settings tab.
+Settings tab. Background jobs (Phase 9): a template previewed then started
+from the Jobs tab opening the job's page (checklist, timeline, top-bar jobs
+indicator), a job waiting for an answer shown in Thai and answered, the Jobs
+tab with background jobs turned off, and **Continue in background** turning a
+stopped conversation into a job.
 
 ## Config
 

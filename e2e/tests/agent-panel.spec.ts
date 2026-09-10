@@ -299,4 +299,152 @@ test.describe("WebX Agent — docked panel + workspace (mocked backend)", () => 
     await page.getByRole("button", { name: "Settings" }).click();
     await expect(page.getByText("Agent autonomy")).toBeVisible({ timeout: 10_000 });
   });
+
+  // ---- Background jobs (Phase 9 M5) ----
+
+  test("Jobs tab: a template previews what it will do, starts a job, and opens the job's page", async ({ page }) => {
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "", background: true } }));
+    await page.route("**/api/agent/threads", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/cms/roles/content-types**", (route) => route.fulfill({
+      json: [{ uid: "api::news.news", label: "News" }, { uid: "api::faq.faq", label: "FAQ" }],
+    }));
+    await page.route("**/api/agent/jobs/summary", (route) => route.fulfill({ json: { active: 1, waiting: 0, failed: 0 } }));
+    const posted: { path: string; body: any }[] = [];
+    await page.route("**/api/agent/jobs/preview", (route) => {
+      posted.push({ path: "preview", body: route.request().postDataJSON() });
+      return route.fulfill({
+        json: {
+          template: "bulk_create", title: "Create 2 drafts across 2 content types", requiredLevel: "draft", count: 2,
+          items: [{ title: "News draft" }, { title: "FAQ draft" }], estimatedTokens: 12000, tokenBudget: 500000,
+        },
+      });
+    });
+    await page.route("**/api/agent/jobs", (route) => {
+      if (route.request().method() !== "POST") return route.fulfill({ json: [] });
+      posted.push({ path: "create", body: route.request().postDataJSON() });
+      return route.fulfill({ json: { documentId: "job1", title: "Create 2 drafts across 2 content types", runState: "queued" } });
+    });
+    const plan = [
+      { id: "news-1", title: "News draft", detail: "api::news.news", status: "done", result: "doc-n1" },
+      { id: "faq-1", title: "FAQ draft", detail: "api::faq.faq", status: "pending" },
+    ];
+    await page.route("**/api/agent/jobs/job1/events**", (route) => route.fulfill({
+      json: {
+        job: {
+          documentId: "job1", title: "Create 2 drafts across 2 content types", template: "bulk_create", runState: "running",
+          ownerEmail: "editor@dga.local", tokensUsed: 5400, budget: { maxTokens: 500000 },
+          progress: { turns: 2, toolCalls: 1, tokens: 5400, applied: 1, proposals: 0, plan, question: null },
+        },
+        events: [
+          { seq: 1, at: "2026-09-11T03:00:00.000Z", type: "plan", items: plan },
+          { seq: 2, at: "2026-09-11T03:00:05.000Z", type: "tool_call", id: "w1", name: "create_draft_entry", args: {} },
+          { seq: 3, at: "2026-09-11T03:00:06.000Z", type: "tool_result", id: "w1", ok: true, summary: "Created a draft api::news.news" },
+        ],
+      },
+    }));
+
+    await page.goto(WEBX_STUDIO + "/agent/jobs");
+    await expect(page.getByTestId("agent-jobs")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("No background jobs yet.")).toBeVisible();
+
+    await page.getByTestId("agent-job-tpl-bulk_create").click();
+    const form = page.getByTestId("agent-job-form");
+    const start = page.getByTestId("agent-job-start");
+    await expect(start).toBeDisabled();
+    await form.getByRole("button", { name: "News", exact: true }).click();
+    await form.getByRole("button", { name: "FAQ", exact: true }).click();
+    await expect(start).toBeDisabled(); // a bulk job has to be previewed first
+    await page.getByTestId("agent-job-preview-btn").click();
+
+    const preview = page.getByTestId("agent-job-preview");
+    await expect(preview).toContainText("Creates 2 drafts", { timeout: 10_000 });
+    await expect(preview).toContainText("FAQ draft");
+    await expect(start).toBeEnabled();
+    await start.click();
+
+    await expect(page).toHaveURL(/\/agent\/jobs\/job1$/, { timeout: 10_000 });
+    const checklist = page.getByTestId("agent-job-plan");
+    await expect(checklist).toContainText("1/2", { timeout: 10_000 });
+    await expect(checklist.locator('[data-status="done"]')).toHaveCount(1);
+    await expect(page.getByTestId("agent-job-timeline")).toContainText("create_draft_entry");
+    await expect(page.getByTestId("agent-job-state")).toHaveAttribute("data-state", "running");
+    await expect(page.getByTestId("agent-jobs-indicator")).toContainText("1");
+    expect(posted.map((p) => p.path)).toEqual(["preview", "create"]);
+    expect(posted[1].body).toMatchObject({ template: "bulk_create", params: { contentTypes: ["api::news.news", "api::faq.faq"], perType: 1 } });
+  });
+
+  test("a job waiting for an answer shows its question in Thai, and answering sends it to the job", async ({ page }) => {
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "", background: true } }));
+    await page.route("**/api/agent/jobs/summary", (route) => route.fulfill({ json: { active: 0, waiting: 1, failed: 0 } }));
+    let answered: any = null;
+    await page.route("**/api/agent/jobs/job2/answer", (route) => {
+      answered = route.request().postDataJSON();
+      return route.fulfill({ json: { documentId: "job2", runState: "queued" } });
+    });
+    const base = { documentId: "job2", title: "Tidy the FAQs", template: "custom", ownerEmail: "editor@dga.local", tokensUsed: 900 };
+    await page.route("**/api/agent/jobs/job2/events**", (route) => route.fulfill({
+      json: {
+        events: [],
+        job: answered
+          ? { ...base, runState: "queued" }
+          : {
+              ...base, runState: "paused", stateReason: "needs_input",
+              progress: { turns: 1, toolCalls: 0, tokens: 900, applied: 0, proposals: 0, plan: null, question: { question: "Merge duplicate FAQs?", options: ["Yes", "No"] } },
+            },
+      },
+    }));
+
+    await page.goto(WEBX_STUDIO + "/agent/jobs/job2");
+    await page.getByRole("button", { name: "ไทย" }).click();
+    await expect(page.getByTestId("agent-job-state")).toHaveText("รอคำตอบ", { timeout: 15_000 });
+    await expect(page.getByTestId("agent-job-question")).toContainText("Merge duplicate FAQs?");
+    await expect(page.getByTestId("agent-jobs-indicator")).toHaveAttribute("title", "มีงานเบื้องหลังรอคำตอบจากคุณ");
+
+    await page.getByTestId("agent-job-question").getByRole("button", { name: "Yes", exact: true }).click();
+    await expect(page.getByTestId("agent-job-state")).toHaveAttribute("data-state", "queued", { timeout: 10_000 });
+    await expect(page.getByTestId("agent-job-question")).toHaveCount(0);
+    expect(answered).toEqual({ answer: "Yes" });
+  });
+
+  test("with background jobs turned off, the Jobs tab says so and offers no templates", async ({ page }) => {
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "", background: false } }));
+    await page.route("**/api/agent/jobs", (route) => route.fulfill({ json: [] }));
+
+    await page.goto(WEBX_STUDIO + "/agent/jobs");
+    await expect(page.getByTestId("agent-jobs-off")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("agent-job-tpl-bulk_create")).toHaveCount(0);
+    await expect(page.getByTestId("agent-jobs-indicator")).toHaveCount(0);
+  });
+
+  test("a resumable stop offers Continue in background, which turns the conversation into a job", async ({ page }) => {
+    await page.route("**/api/agent/status", (route) => route.fulfill({ json: { level: "draft", model: "", background: true } }));
+    await page.route("**/api/agent/threads", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/agent/jobs/summary", (route) => route.fulfill({ json: { active: 1, waiting: 0, failed: 0 } }));
+    await page.route("**/api/agent/run", (route) => route.fulfill({
+      status: 200, contentType: "text/event-stream",
+      body: sse([
+        { type: "run_started", runId: "r20", threadId: "t20", level: "draft", model: "" },
+        { type: "stopped", reason: "slice_end", resumable: true, message: "Paused — reached this run's step limit." },
+        { type: "done", runId: "r20" },
+      ]),
+    }));
+    let fromThread: any = null;
+    await page.route("**/api/agent/jobs/from-thread", (route) => {
+      fromThread = route.request().postDataJSON();
+      return route.fulfill({ json: { documentId: "job3", runState: "queued" } });
+    });
+    await page.route("**/api/agent/jobs/job3/events**", (route) => route.fulfill({
+      json: { events: [], job: { documentId: "job3", title: "Audit every news entry", template: "custom", runState: "queued", ownerEmail: "editor@dga.local", tokensUsed: 0 } },
+    }));
+
+    await page.goto(WEBX_STUDIO + "/dashboard");
+    await page.getByTestId("agent-toggle").click();
+    await page.getByTestId("agent-composer").fill("Audit every news entry");
+    await page.getByTestId("agent-send").click();
+    await page.getByTestId("agent-continue-bg").click();
+
+    await expect(page).toHaveURL(/\/agent\/jobs\/job3$/, { timeout: 10_000 });
+    await expect(page.getByTestId("agent-job-detail")).toContainText("Audit every news entry");
+    expect(fromThread).toMatchObject({ threadId: "t20" });
+  });
 });
