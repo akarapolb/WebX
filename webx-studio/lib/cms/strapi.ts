@@ -36,7 +36,12 @@ function toMediaAsset(f: any): MediaAsset {
   };
 }
 
-function buildQuery(q?: EntryQuery): string {
+/** Exported so tests/agent-tools.test.ts can verify the "gte" filter op
+ * (added for governance.ts's enforceAgentRunLimit) interpolates into
+ * Strapi's own `filters[field][$gte]=value` shape correctly — this function
+ * itself needed no change for that op, only FilterOp's own type widening
+ * (lib/cms/types.ts), which is the thing worth directly verifying. */
+export function buildQuery(q?: EntryQuery): string {
   if (!q) return "";
   const parts: string[] = [];
   if (q.page != null) parts.push("page=" + q.page);

@@ -1,14 +1,23 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
 import RichText from "./RichText";
 import { useLang } from "./LangProvider";
 import { cms, CmsError } from "@/lib/cms";
 import type { MediaAsset } from "@/lib/cms";
 import MediaLibrary from "./MediaLibrary";
+import { useAgentContext } from "./agent/useAgentContext";
+import type { AgentProposal } from "@/lib/agent/types";
 
 type Kind = "input" | "textarea" | "rich";
-type Field = { key: string; value: string; initial: string; kind: Kind };
+// `agentPrev` is set the moment the WebX Agent patches this field (either
+// directly via write_draft_fields at "draft"+ level, or by the user hitting
+// Apply on a "fields" proposal card at "suggest" level) and holds whatever
+// the field's own `value` was at that instant — Undo restores it, Accept
+// just clears the marker (the new value already counts as a normal unsaved
+// edit via value!==initial, same as any manual typing, so Save picks it up
+// unchanged either way).
+type Field = { key: string; value: string; initial: string; kind: Kind; agentPrev?: string };
 
 const SYS = new Set([
   "id", "documentId", "createdAt", "updatedAt", "publishedAt", "locale", "status",
@@ -63,8 +72,11 @@ export default function EntryEditor({
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
   const locOpt = locale ? { locale } : undefined;
 
-  useEffect(() => {
-    (async () => {
+  // Extracted from the mount effect below so the agent's own refresh handler
+  // (registered via useAgentContext) can reload the same way after a real
+  // write lands — see the "done.applied" handling in AgentProvider.
+  const load = useCallback(async () => {
+      setLoading(true);
       try {
         const e: any = await cms.entries.get(uid, docId, locOpt);
         const fs: Field[] = Object.keys(e)
@@ -124,9 +136,57 @@ export default function EntryEditor({
         else setMsg({ t: "Cannot reach the backend.", ok: false });
       }
       finally { setLoading(false); }
-    })();
-    return () => { if (typer.current) clearInterval(typer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, docId, locale]);
+
+  useEffect(() => {
+    load();
+    return () => { if (typer.current) clearInterval(typer.current); };
+  }, [load]);
+
+  // Field-level Accept/Undo for changes the WebX Agent made — either a
+  // direct write_draft_fields call at "draft"+ level, or the user hitting
+  // Apply on a "fields" proposal at "suggest" level (see applyAgentProposal
+  // below, registered as this editor's applyProposal handler).
+  function applyFieldPatch(key: string, value: any) {
+    if (fp.hidden.has(key) || fp.readonly.has(key)) return; // second guard — the agent's own tools already exclude these
+    const v = typeof value === "string" ? value : value == null ? "" : String(value);
+    setFields((fs) => fs.map((f) => (f.key === key ? { ...f, agentPrev: f.agentPrev ?? f.value, value: v } : f)));
+  }
+  function acceptField(key: string) {
+    setFields((fs) => fs.map((f) => (f.key === key ? { ...f, agentPrev: undefined } : f)));
+  }
+  function undoField(key: string) {
+    setFields((fs) => fs.map((f) => (f.key === key && f.agentPrev !== undefined ? { ...f, value: f.agentPrev, agentPrev: undefined } : f)));
+  }
+  /** The docked panel's ProposalCard calls this (via AgentProvider.applyProposal,
+   * which only forwards when this exact entry is the one open) for a
+   * "fields"-kind proposal. Snapshots every touched field's pre-patch value
+   * so a single Undo click on the proposal card reverts the whole batch. */
+  function applyAgentProposal(p: AgentProposal): { undo: () => void } | void {
+    if (p.kind !== "fields" || !p.fields) return;
+    const snapshot: Record<string, string> = {};
+    setFields((fs) => fs.map((f) => {
+      if (!(f.key in p.fields!) || fp.hidden.has(f.key) || fp.readonly.has(f.key)) return f;
+      snapshot[f.key] = f.agentPrev ?? f.value;
+      const raw = p.fields![f.key];
+      const v = typeof raw === "string" ? raw : raw == null ? "" : String(raw);
+      return { ...f, agentPrev: f.agentPrev ?? f.value, value: v };
+    }));
+    return {
+      undo: () => setFields((fs) => fs.map((f) => (f.key in snapshot ? { ...f, value: snapshot[f.key], agentPrev: undefined } : f))),
+    };
+  }
+
+  useAgentContext(
+    { kind: "entry", uid, docId, locale, applyLocally: true },
+    { applyFieldPatch, applyProposal: applyAgentProposal, refresh: load },
+    // fp (field-policy hidden/readonly sets) loads asynchronously AFTER the
+    // first render, inside load() — it must be a dep too, or the registered
+    // closures above would keep checking against the always-empty initial
+    // fp forever instead of picking up the real policy once it arrives.
+    [uid, docId, locale, fp]
+  );
 
   function setVal(key: string, value: string) {
     setFields((f) => f.map((x) => (x.key === key ? { ...x, value } : x)));
@@ -346,8 +406,9 @@ export default function EntryEditor({
             const ro = fp.readonly.has(f.key);
             const lock = ro ? <span className="muted" style={{ fontWeight: 500 }}> · {t("e.locked")}</span> : null;
             const busy = aiBusyKey === f.key;
+            const agentChanged = f.agentPrev !== undefined;
             return (
-              <div className={"fld" + (ro ? " fld--ro" : "")} key={f.key}>
+              <div className={"fld" + (ro ? " fld--ro" : "") + (agentChanged ? " fld--live" : "")} key={f.key} data-testid={"fld-" + f.key}>
                 <div className="ai-row">
                   <label style={{ margin: 0, flex: 1 }}>{labelize(f.key)}{lock}</label>
                   {!ro && (
@@ -370,6 +431,13 @@ export default function EntryEditor({
                   : f.kind === "rich"
                     ? <RichText value={f.value} onChange={(html) => setVal(f.key, html)} placeholder={labelize(f.key)} />
                     : <textarea data-testid={"field-" + f.key} value={f.value} onChange={(e) => setVal(f.key, e.target.value)} disabled={ro || busy} />}
+                {agentChanged && (
+                  <div className="fld-chg">
+                    <b><Icon name="spark" />{t("ag.changedBy")}</b>
+                    <button className="fld-chg-ok" onClick={() => acceptField(f.key)} data-testid={"agent-accept-" + f.key}>{t("ag.accept")}</button>
+                    <button onClick={() => undoField(f.key)} data-testid={"agent-undo-" + f.key}>{t("ag.undo")}</button>
+                  </div>
+                )}
               </div>
             );
           })}

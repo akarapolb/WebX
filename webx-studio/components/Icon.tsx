@@ -49,6 +49,9 @@ const P: Record<string, string> = {
   star: '<path d="M12 2l2.9 6.9 7.1.6-5.4 4.6 1.6 7-6.2-3.8-6.2 3.8 1.6-7L2 9.5l7.1-.6z"/>',
   msg: '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>',
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
 };
 
 export default function Icon({ name, className }: { name: string; className?: string }) {

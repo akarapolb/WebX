@@ -12,6 +12,7 @@ export const NAV: NavItem[] = [
   { id: "forms", label: "Forms", icon: "inbox", k: 3, group: "main" },
   { id: "search", label: "AI Search", icon: "spark", k: 4, group: "main" },
   { id: "analytics", label: "Analytics", icon: "chart", k: 14, group: "main" },
+  { id: "agent", label: "Agent", icon: "spark", k: 23, group: "main" },
   { id: "builder", label: "Visual Builder", icon: "layout", k: 5, group: "build" },
   { id: "reviews", label: "Reviews", icon: "check", k: 6, group: "build" },
   { id: "releases", label: "Releases", icon: "package", k: 7, group: "build" },

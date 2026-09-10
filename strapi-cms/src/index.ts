@@ -103,7 +103,7 @@ async function effectiveTenant(strapi: any) {
 /** ล้างข้อมูล log/version/event ที่เก่ากว่า 90 วัน (กันตารางบวม) */
 async function cleanupOldRecords(strapi: any) {
   const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  for (const uid of ['api::audit-log.audit-log', 'api::ab-event.ab-event', 'api::page-version.page-version']) {
+  for (const uid of ['api::audit-log.audit-log', 'api::ab-event.ab-event', 'api::page-version.page-version', 'api::agent-thread.agent-thread']) {
     try { await strapi.db.query(uid).deleteMany({ where: { createdAt: { $lt: cutoff } } }); } catch (e) { /* noop */ }
   }
 }

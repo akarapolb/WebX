@@ -471,6 +471,42 @@ export interface ApiAbEventAbEvent extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiAgentThreadAgentThread extends Struct.CollectionTypeSchema {
+  collectionName: 'agent_threads';
+  info: {
+    description: "WebX Agent conversation + run history (webx-studio's own bookkeeping \u2014 see lib/agent/threads.ts). Never written through the generic entries route; see governance.ts's assertBookkeepingWriteAllowed.";
+    displayName: 'Agent Thread';
+    pluralName: 'agent-threads';
+    singularName: 'agent-thread';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    context: Schema.Attribute.JSON;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    lastRunId: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::agent-thread.agent-thread'
+    > &
+      Schema.Attribute.Private;
+    messages: Schema.Attribute.JSON;
+    ownerEmail: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    runState: Schema.Attribute.String & Schema.Attribute.DefaultTo<'idle'>;
+    tenantKey: Schema.Attribute.String & Schema.Attribute.Required;
+    title: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    usage: Schema.Attribute.JSON;
+  };
+}
+
 export interface ApiApplicationApplication extends Struct.CollectionTypeSchema {
   collectionName: 'applications';
   info: {
@@ -3028,6 +3064,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::ab-event.ab-event': ApiAbEventAbEvent;
+      'api::agent-thread.agent-thread': ApiAgentThreadAgentThread;
       'api::application.application': ApiApplicationApplication;
       'api::article.article': ApiArticleArticle;
       'api::audit-log.audit-log': ApiAuditLogAuditLog;

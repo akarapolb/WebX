@@ -17,6 +17,7 @@ import { useTenant } from "./TenantProvider";
 import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
+import { useAgentOptional } from "./agent/AgentProvider";
 
 type Block = Record<string, any> & { __component: string };
 // `tenantKey` — only ever set for a WordPress page (wordpress.ts's
@@ -518,6 +519,7 @@ function interpolate(bt: BlockType, props: Record<string, any>) {
 
 export default function VisualBuilder() {
   const { t, lang } = useLang();
+  const agent = useAgentOptional();
   const { currentKey, current, engine } = useTenant();
   const searchParams = useSearchParams();
   // Under a WordPress session BOTH Strapi uids are unreachable (the
@@ -559,7 +561,6 @@ export default function VisualBuilder() {
   const [previewMode, setPreviewMode] = useState(false);
   const [uploadingI, setUploadingI] = useState<number>(-1);
   const [aiPrompt, setAiPrompt] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
   const [customTypes, setCustomTypes] = useState<BlockType[]>([]);
   const [showTypeEditor, setShowTypeEditor] = useState(false);
   const [customIcons, setCustomIcons] = useState<CustomIcon[]>([]);
@@ -996,39 +997,19 @@ export default function VisualBuilder() {
   const uploadProp = (i: number, key: string, file: File) => uploadFieldImage(i, ["props", key], file);
   const iconOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.icon || "grid") : (metaOf(b.__component)?.icon || "doc");
   const labelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
-  // AI: generate a section. Prefers the LLM-agnostic /api/ai layer (schema-aware
-  // hero via LiteLLM); falls back to grounding in tenant content if AI isn't configured.
-  async function aiGenerate() {
+  // Was a direct single-block generator (POST /api/ai/generate → append one
+  // block, no review, no governance path at all — it wrote straight into
+  // this component's own local `blocks` state same as any manual edit).
+  // Phase 8 replaces it with "Ask the agent": opens the docked panel with
+  // this prompt and lets the real WebX Agent handle it instead — page-
+  // building tools aren't in its registry yet (lib/agent/tools.ts's own
+  // header comment — a deliberate follow-up alongside their own UI wiring),
+  // so today this just starts a conversation; once those tools land, the
+  // exact same entry point starts proposing real blocks with Apply/Undo.
+  function askAgent() {
     const p = aiPrompt.trim(); if (!p) return;
-    setAiBusy(true);
-    try {
-      let block: any = null;
-      try {
-        const r = await fetch("/api/ai/generate", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system: lang === "th" ? "คุณเป็นนักเขียนคอนเทนต์เว็บภาครัฐไทย เขียนกระชับ ชัดเจน เป็นทางการแต่เข้าถึงง่าย" : "You write concise, clear web copy.",
-            prompt: (lang === "th" ? "สร้างเนื้อหาส่วน Hero สำหรับหัวข้อ: " : "Write a hero section for: ") + p,
-            schema: { type: "object", additionalProperties: false, required: ["heading", "subheading", "ctaLabel"], properties: { kicker: { type: "string" }, heading: { type: "string" }, subheading: { type: "string" }, ctaLabel: { type: "string" } } },
-          }),
-        });
-        if (r.ok) { const d = (await r.json()).data; if (d?.heading) block = { __component: "block.hero", kicker: d.kicker || "AI", heading: d.heading, subheading: d.subheading || "", ctaLabel: d.ctaLabel || (lang === "th" ? "เริ่มใช้งาน" : "Get started"), ctaUrl: "#" }; }
-      } catch {}
-      if (!block) {
-        // no "|| dga" fallback — grounding an AI-generated hero in a
-        // DIFFERENT real tenant's content for an unscoped session was worse
-        // than no grounding at all, so skip grounding entirely rather than
-        // substitute the wrong tenant (ans stays "" and the ungrounded copy
-        // below is used, same as a real LiteLLM failure already handled).
-        const ans = tenantKey
-          ? await fetch("/api/strapi/api/ai/answer?q=" + encodeURIComponent(p) + "&tenant=" + encodeURIComponent(tenantKey) + "&locale=" + lang).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => j?.data?.answer || "")
-          : "";
-        block = { __component: "block.hero", kicker: "AI", heading: p, subheading: ans || (lang === "th" ? "เพิ่มรายละเอียดที่นี่" : "Add details here"), ctaLabel: lang === "th" ? "เริ่มใช้งาน" : "Get started", ctaUrl: "#" };
-      }
-      pushUndo(blocks);
-      setBlocks((b) => { setActive(b.length); return [...b, block]; });
-      setAiPrompt("");
-    } finally { setAiBusy(false); }
+    agent?.openWith({ prompt: p, autosend: true });
+    setAiPrompt("");
   }
   // feature items — thin wrappers over updateBlock/updateBlockField (see
   // those definitions above): same external call signatures as before this
@@ -2204,7 +2185,7 @@ export default function VisualBuilder() {
               onManageTypes={isWpPage ? undefined : () => setShowTypeEditor(true)}
               onManageIcons={isWpPage ? undefined : () => setShowIconManager(true)}
               canManage
-              ai={{ prompt: aiPrompt, busy: aiBusy, setPrompt: setAiPrompt, run: aiGenerate }} />
+              ai={{ prompt: aiPrompt, busy: false, setPrompt: setAiPrompt, run: askAgent }} />
           </aside>
         )}
       </div>

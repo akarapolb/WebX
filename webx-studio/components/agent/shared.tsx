@@ -1,0 +1,233 @@
+"use client";
+// Pieces shared between the docked panel (AgentPanel.tsx) and the full-page
+// workspace (AgentWorkspace.tsx) — both read the SAME AgentProvider state
+// (one active run, one active thread; "An in-flight run started in the
+// panel keeps streaming here" per the Phase 8 plan), so the message list,
+// tool-call/proposal rendering, and composer are one implementation each,
+// not two that could drift.
+import { useEffect, useRef, useState } from "react";
+import Icon from "../Icon";
+import { useAgent, targetMatches, type AgentPolicy } from "./AgentProvider";
+import type { ChatMsg } from "./useAgentRun";
+import type { AgentLevel } from "@/lib/agent/types";
+
+export const LEVEL_KEY: Record<AgentLevel, string> = {
+  off: "ag.levelOff", read: "ag.levelRead", suggest: "ag.levelSuggest",
+  draft: "ag.levelDraft", draft_submit: "ag.levelDraft_submit",
+};
+export const REASON_KEY: Record<string, string> = {
+  plan: "ag.emptyPlan", not_granted: "ag.emptyNotGranted", disabled: "ag.emptyDisabled", unscoped: "ag.emptyUnscoped",
+};
+
+export function ToolsGroup({ steps, t }: { steps: Extract<ChatMsg, { kind: "tools" }>["steps"]; t: (k: string) => string }) {
+  const done = steps.every((s) => !s.pending);
+  return (
+    <div className="ag-tools">
+      <div className={"ag-tools-h" + (done ? " done" : "")}>
+        {!done && <i className="ag-spin" />}
+        <span className="mono">{done ? t("ag.toolsUsed") : t("ag.toolsWorking")}</span>
+      </div>
+      <ul>
+        {steps.map((s) => (
+          <li key={s.id} className={s.pending ? "" : s.ok ? "ok" : "bad"}>
+            <span className="ag-tool-st" />
+            <span className="mono">{s.name}</span>
+            {!s.pending && s.summary && <span className="ag-tool-n">{s.summary}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function ProposalCard({ msg, t }: { msg: Extract<ChatMsg, { kind: "proposal" }>; t: (k: string) => string }) {
+  const agent = useAgent();
+  const undoRef = useRef<(() => void) | null>(null);
+  const p = msg.proposal;
+  const canTarget = targetMatches(p, agent.ref);
+  const readOnly = !agent.policy || agent.policy.level === "off" || agent.policy.level === "read";
+  const reason = readOnly ? "ag.readOnlyCannotApply" : !canTarget ? "ag.openToApply" : "";
+
+  function apply() {
+    const r = agent.applyProposal(p);
+    if (r.ok) {
+      undoRef.current = r.undo || null;
+      agent.setProposalStatus(msg.id, "applied");
+    }
+  }
+  function undo() {
+    undoRef.current?.();
+    agent.setProposalStatus(msg.id, "undone");
+  }
+
+  const fieldEntries = p.kind === "fields" && p.fields ? Object.entries(p.fields) : [];
+
+  return (
+    <div className="ag-card">
+      <div className="ag-card-h">
+        <Icon name="spark" />
+        <span>{p.title}</span>
+        <span className="badge ag-badge-acc">{p.kind}</span>
+      </div>
+      {fieldEntries.length > 0 && (
+        <ul>
+          {fieldEntries.map(([k, v]) => (
+            <li key={k}>
+              <span className="ag-card-k mono">{k}</span>
+              <span className="ag-card-v">{String(v).slice(0, 220)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {p.summary && <div className="ag-card-summary">{p.summary}</div>}
+      <div className="ag-card-f">
+        {msg.status === "pending" && (
+          <>
+            <button className="btn btn--p btn-sm" onClick={apply} disabled={readOnly || !canTarget}>{t("ag.apply")}</button>
+            <button className="btn btn--g btn-sm" onClick={() => agent.setProposalStatus(msg.id, "undone")}>{t("ag.dismiss")}</button>
+            {reason && <span className="ag-card-reason">{t(reason)}</span>}
+          </>
+        )}
+        {msg.status === "applied" && (
+          <>
+            <span className="badge ag-badge-ok"><Icon name="check" />{t("ag.applied")}</span>
+            {undoRef.current && <button className="btn btn--g btn-sm" onClick={undo}>{t("ag.undoBtn")}</button>}
+          </>
+        )}
+        {msg.status === "undone" && <span className="badge">{t("ag.undone")}</span>}
+      </div>
+    </div>
+  );
+}
+
+export function ContextChip({ t }: { t: (k: string) => string }) {
+  const { ref } = useAgent();
+  if (ref.kind === "entry") return <div className="ag-ctx"><span className="ctx"><Icon name="doc" />{t("ag.contextEntry")} · {ref.uid.replace(/^(api::|wp:)/, "")}</span></div>;
+  if (ref.kind === "board") return <div className="ag-ctx"><span className="ctx"><Icon name="check" />{t("ag.contextBoard")}</span></div>;
+  return null;
+}
+
+export function CapabilitiesPopover({ policy, t, onClose }: { policy: AgentPolicy; t: (k: string) => string; onClose: () => void }) {
+  const lv = policy.level;
+  const has = (min: AgentLevel) => {
+    const rank: Record<AgentLevel, number> = { off: 0, read: 1, suggest: 2, draft: 3, draft_submit: 4 };
+    return rank[lv] >= rank[min];
+  };
+  return (
+    <div className="ag-pop" onMouseLeave={onClose}>
+      <h4>{t("ag.capYes")}</h4>
+      <ul>
+        {has("read") && <li className="ok"><span className="ag-pop-dot" />{t("ag.canRead")}</li>}
+        {has("suggest") && <li className="ok"><span className="ag-pop-dot" />{t("ag.canPropose")}</li>}
+        {has("draft") && <li className="ok"><span className="ag-pop-dot" />{t("ag.canDraft")}</li>}
+        {has("draft_submit") && <li className="ok"><span className="ag-pop-dot" />{t("ag.canSubmit")}</li>}
+      </ul>
+      <h4>{t("ag.capNo")}</h4>
+      <ul>
+        <li className="no"><span className="ag-pop-dot" />{t("ag.cannotPublish")}</li>
+        <li className="no"><span className="ag-pop-dot" />{t("ag.cannotPerms")}</li>
+      </ul>
+      <div className="ag-pop-ft">{t("ag.footNote")}</div>
+    </div>
+  );
+}
+
+/** The scrolling message list — identical rendering whichever surface hosts
+ * it, driven entirely by AgentProvider's own `messages`/`running` state. */
+export function MessageList({ t, className }: { t: (k: string) => string; className?: string }) {
+  const agent = useAgent();
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [agent.messages, agent.running]);
+
+  return (
+    <div className={className || "ag-body"} ref={bodyRef}>
+      {agent.messages.map((m) => {
+        if (m.kind === "user") return <div className="ag-msg user" key={m.id}><div className="ag-msg-tx">{m.text}</div></div>;
+        if (m.kind === "assistant") return (
+          <div className="ag-msg" key={m.id}>
+            <div className="ag-msg-av"><Icon name="spark" /></div>
+            <div className="ag-msg-tx">{m.text}</div>
+          </div>
+        );
+        if (m.kind === "tools") return <ToolsGroup key={m.id} steps={m.steps} t={t} />;
+        if (m.kind === "proposal") return <ProposalCard key={m.id} msg={m} t={t} />;
+        if (m.kind === "error") return <div className="ag-msg" key={m.id}><div className="ag-msg-av bad"><Icon name="close" /></div><div className="ag-msg-tx ag-err">{m.text}</div></div>;
+        return null;
+      })}
+      {agent.running && !agent.messages.some((m) => m.kind === "tools") && (
+        <div className="ag-msg"><div className="ag-msg-av"><Icon name="spark" /></div><div className="ag-msg-tx muted">{t("ag.thinking")}</div></div>
+      )}
+    </div>
+  );
+}
+
+/** The message input — Enter to send (⇧Enter for a newline, IME-composition
+ * safe), Send/Stop toggling with `agent.running`, auto-growing height. Reads
+ * `draftPrompt`/`autosendPending` off AgentProvider so "Ask the agent" call
+ * sites elsewhere (Toolbox's old .vb-ai generator) can prefill + autosend
+ * regardless of which surface (docked panel or /agent workspace) is
+ * mounted when that happens. */
+export function Composer({ t }: { t: (k: string) => string }) {
+  const agent = useAgent();
+  const [text, setText] = useState("");
+  const composing = useRef(false);
+
+  useEffect(() => {
+    if (agent.draftPrompt) { setText(agent.draftPrompt); agent.setDraftPrompt(""); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.draftPrompt]);
+
+  useEffect(() => {
+    if (agent.autosendPending && text.trim()) {
+      const t2 = text;
+      agent.consumeAutosend();
+      setText("");
+      agent.send(t2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.autosendPending]);
+
+  const policy = agent.policy;
+  const disabled = !policy || policy.level === "off";
+
+  function submit() {
+    const v = text.trim();
+    if (!v || agent.running) return;
+    setText("");
+    agent.send(v);
+  }
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey && !composing.current) { e.preventDefault(); submit(); }
+  }
+  function autoGrow(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 140) + "px";
+  }
+
+  return (
+    <>
+      <div className="ag-comp">
+        <textarea
+          rows={1} value={text} placeholder={t("ag.placeholder")}
+          disabled={disabled}
+          onChange={(e) => { setText(e.target.value); autoGrow(e.currentTarget); }}
+          onKeyDown={onKeyDown}
+          onCompositionStart={() => (composing.current = true)}
+          onCompositionEnd={() => (composing.current = false)}
+          data-testid="agent-composer"
+        />
+        <div className="ag-comp-row">
+          <span className="sp" />
+          <span className="ag-model mono">{policy?.model || "Claude"}</span>
+          {agent.running
+            ? <button className="ag-send" onClick={agent.abort} title={t("ag.stop")} data-testid="agent-stop"><Icon name="stop" /></button>
+            : <button className="ag-send" onClick={submit} disabled={!text.trim() || disabled} title={t("ag.send")} data-testid="agent-send"><Icon name="up" /></button>}
+        </div>
+      </div>
+      <div className="ag-hint mono"><span>{t("ag.hintSend")}</span><span>{t("ag.hintDraft")}</span></div>
+    </>
+  );
+}

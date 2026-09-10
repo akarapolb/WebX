@@ -10,17 +10,20 @@ const EMBED_MODEL = process.env.LITELLM_EMBED_MODEL || "webx-embed";
 
 export const llmConfigured = () => Boolean(URL);
 
-type Role = "system" | "user" | "assistant";
+type Role = "system" | "user" | "assistant" | "tool";
 type Block = { type: "text"; text: string; cache_control?: { type: "ephemeral" } };
-type Msg = { role: Role; content: string | Block[] };
+export type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
+export type Msg = { role: Role; content: string | Block[] | null; tool_calls?: ToolCall[]; tool_call_id?: string; name?: string };
+export type ToolSpec = { type: "function"; function: { name: string; description: string; parameters: Record<string, any> } };
 
-async function call(path: string, body: unknown): Promise<any> {
+async function call(path: string, body: unknown, signal?: AbortSignal): Promise<any> {
   if (!URL) throw new Error("LLM_NOT_CONFIGURED");
   const r = await fetch(URL + path, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(KEY ? { Authorization: "Bearer " + KEY } : {}) },
     body: JSON.stringify(body),
     cache: "no-store",
+    signal,
   });
   if (!r.ok) throw new Error("LLM_HTTP_" + r.status + ": " + (await r.text().catch(() => "")).slice(0, 200));
   return r.json();
@@ -54,6 +57,31 @@ export async function structured<T = any>(o: { prompt: string; system?: string; 
   const raw = j?.choices?.[0]?.message?.content ?? "{}";
   try { return JSON.parse(raw) as T; }
   catch { return JSON.parse(String(raw).replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")) as T; }
+}
+
+/** Tool-calling chat turn for the WebX Agent (lib/agent/runtime.ts) — the one
+ * caller that needs raw message history + tool definitions in and a message +
+ * usage back out, rather than generate()/structured()'s single-prompt shape.
+ * No `stream` option: v1 emits per-turn SSE events (thinking/tool_call/
+ * tool_result/text/done) rather than token deltas — tool-call argument
+ * streaming is the least consistent part of LiteLLM's OpenAI-compat surface
+ * across Anthropic/Gemini/Ollama, so per-turn events (already a few seconds
+ * apart at most) are the more reliable v1 choice; token streaming can be
+ * added here later without changing this function's signature. */
+export async function chat(o: {
+  messages: Msg[]; tools?: ToolSpec[]; model?: string; maxTokens?: number; temperature?: number; signal?: AbortSignal;
+}): Promise<{ message: { content: string | null; tool_calls?: ToolCall[] }; usage?: { prompt_tokens: number; completion_tokens: number } }> {
+  const body: Record<string, any> = {
+    model: o.model || MODEL, messages: o.messages,
+    max_tokens: o.maxTokens ?? 1200, temperature: o.temperature ?? 0.4,
+  };
+  if (o.tools?.length) { body.tools = o.tools; body.tool_choice = "auto"; }
+  const j = await call("/chat/completions", body, o.signal);
+  const m = j?.choices?.[0]?.message ?? {};
+  return {
+    message: { content: m.content ?? null, tool_calls: Array.isArray(m.tool_calls) ? m.tool_calls : undefined },
+    usage: j?.usage ? { prompt_tokens: j.usage.prompt_tokens ?? 0, completion_tokens: j.usage.completion_tokens ?? 0 } : undefined,
+  };
 }
 
 /** Embeddings for RAG — provider-agnostic. Keep one embed model per vector index. */

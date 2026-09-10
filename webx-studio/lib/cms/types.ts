@@ -3,7 +3,12 @@
 // Engine Adapter Blueprint for the architecture this sets up (Phase 0: this
 // interface has exactly one implementation, lib/cms/strapi.ts).
 
-export type FilterOp = "eq" | "ne" | "contains";
+// gte/lte added for the agent's monthly run-count query (governance.ts's
+// enforceAgentRunLimit filters audit-log rows by `at >= <month start>`) —
+// lib/cms/strapi.ts's buildQuery already interpolates any op string as
+// Strapi's own `$<op>` filter operator generically, so this is a pure type
+// widening, no query-building change needed.
+export type FilterOp = "eq" | "ne" | "contains" | "gte" | "lte";
 
 export type EntryQuery = {
   /** field supports dotted relation paths, e.g. "tenant.key" */

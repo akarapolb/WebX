@@ -5,6 +5,7 @@ import { resolveMyTenant } from "@/lib/cms/governance";
 import Shell from "@/components/Shell";
 import SessionKeeper from "@/components/SessionKeeper";
 import { TenantProvider } from "@/components/TenantProvider";
+import { AgentProvider } from "@/components/agent/AgentProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const token = await sessionToken();
@@ -45,10 +46,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <TenantProvider tenants={tenants} engine={engine}>
-      <SessionKeeper />
-      {/* Under WordPress there's no equivalent "extra" console endpoint to
-          probe — reaching this point already proves the session is valid. */}
-      <Shell user={user} connected={wp ? true : Boolean(ctx)}>{children}</Shell>
+      <AgentProvider>
+        <SessionKeeper />
+        {/* Under WordPress there's no equivalent "extra" console endpoint to
+            probe — reaching this point already proves the session is valid. */}
+        <Shell user={user} connected={wp ? true : Boolean(ctx)}>{children}</Shell>
+      </AgentProvider>
     </TenantProvider>
   );
 }

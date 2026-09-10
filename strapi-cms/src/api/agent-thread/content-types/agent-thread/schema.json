@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "agent_threads",
+  "info": {
+    "singularName": "agent-thread",
+    "pluralName": "agent-threads",
+    "displayName": "Agent Thread",
+    "description": "WebX Agent conversation + run history (webx-studio's own bookkeeping — see lib/agent/threads.ts). Never written through the generic entries route; see governance.ts's assertBookkeepingWriteAllowed."
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "tenantKey": {
+      "type": "string",
+      "required": true,
+      "description": "Plain string, not a relation — same shape as page-version/custom-role/page-template, deliberately avoiding a relation-id lookup for what's pure bookkeeping metadata."
+    },
+    "ownerEmail": { "type": "string", "required": true },
+    "title": { "type": "string" },
+    "context": {
+      "type": "json",
+      "description": "{kind:'page'|'entry'|'board'|'none', uid?, id?, locale?} — what the thread was opened against, for the workspace's own thread list."
+    },
+    "messages": {
+      "type": "json",
+      "description": "Trimmed to the last ~40 messages by lib/agent/threads.ts; not a full unbounded transcript."
+    },
+    "runState": {
+      "type": "string",
+      "default": "idle",
+      "description": "idle|running|done|error — named runState, not status: Strapi 5's content-manager reserves \"status\" as a system field (document draft/published state) on every collection type regardless of draftAndPublish, and rejects a custom attribute using that name outright (found live: POST here 400s with ValidationError \"Invalid status\" the moment a payload sets it)."
+    },
+    "lastRunId": { "type": "string" },
+    "usage": { "type": "json" }
+  }
+}

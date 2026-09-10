@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 import { cms, CmsError } from "@/lib/cms";
+import { useAgentContext } from "./agent/useAgentContext";
 
 type Review = { id: number; documentId?: string; documentRef: string; contentType?: string; title?: string; stage: string; kind?: string; payload?: any; assignee?: string; requestedBy?: string; note?: string; history?: any[]; updatedAt?: string };
 const RV_UID = "api::review.review";
@@ -17,6 +18,17 @@ export default function ReviewBoard() {
   const [me, setMe] = useState("admin");
   const [busy, setBusy] = useState<number | null>(null);
   const [flash, setFlash] = useState("");
+
+  // Read-only context — lets the panel show "Reviews board" as a context
+  // chip while this page is open. No write handlers: submit_for_review
+  // (lib/agent/tools.ts) already works regardless of which page is open,
+  // and there is deliberately no list_reviews tool yet — the underlying
+  // governed.list("api::review.review", ...) has no tenant filter today
+  // (REVIEW_UID isn't in governance.ts's SCOPED/WP_SCOPED sets), a
+  // pre-existing cross-tenant leak this component itself also inherits;
+  // exposing that same query to the agent was cut from Milestone 1 rather
+  // than handed a bug to propagate further.
+  useAgentContext({ kind: "board" }, {}, []);
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");

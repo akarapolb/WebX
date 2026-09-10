@@ -26,6 +26,7 @@
 // endpoint instead (strapi-cms/src/api/internal) that does the same direct
 // DB lookup Strapi's own hook uses for this exact check, unscoped.
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm } from "./wordpress";
 import { CmsError } from "./types";
@@ -131,6 +132,15 @@ const PAGE_TEMPLATE_UID = "api::page-template.page-template";
 // WordPress-engine session (found live: "Could not load reviews (HTTP
 // 400)"), since WordPress's adapter has no way to resolve an "api::" uid.
 const REVIEW_UID = "api::review.review";
+// WebX Agent conversation + run history (Phase 8) — same shape of concern as
+// page-version/page-template: authoring/audit metadata, not site content, so
+// it lives in Strapi for every engine and joins BOOKKEEPING_UIDS below. Unlike
+// those two, a thread also has a per-OWNER boundary the generic bookkeeping
+// write-guard below can't express (it only ever checks tenant, not "did this
+// specific user's own thread"), so it's blocked outright there — same as
+// custom-role/field-policy/audit-log — and only ever written via
+// lib/agent/threads.ts's own owner+tenant-filtered functions.
+const AGENT_THREAD_UID = "api::agent-thread.agent-thread";
 // Cookie-consent records are written directly to Strapi by public-site
 // regardless of the tenant's own engine (see public-site/components/
 // CookieConsent.tsx's own comment — it just posts ?tenant=<key> against
@@ -169,10 +179,48 @@ const CONSENT_LOG_UID = "api::consent-log.consent-log";
 // BREAKING_NEWS_UID deliberately NOT included here anymore (Phase 7) — see
 // its own comment above. It stays a plain SCOPED-only Strapi uid now,
 // exactly like complaint/application/contact-message always were.
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID]);
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID]);
+/** The four BOOKKEEPING_UIDS blocked outright from the generic entries
+ * route's WRITE side (assertBookkeepingWriteAllowed, below) — each needs a
+ * dedicated writer with its own ownership/ordering logic the generic path
+ * can't express. NOT reused for reads: unlike agent-thread (whose own
+ * listAgentThreads/getAgentThread genuinely never call governed.list/get —
+ * see that section), audit-log's /audit page (AuditLog.tsx) and
+ * field-policy's /field-access page (FieldAccess.tsx, and EntryEditor.tsx's
+ * own field-policy lookup) both read their data THROUGH this exact generic
+ * route today — blocking those reads too would break those two real,
+ * currently-working screens, not just close a gap. Only custom-role has a
+ * fully separate read+write path (getCustomRoles/saveCustomRole, its own
+ * /api/cms/roles/* route) and could safely take the same read block as
+ * agent-thread; left out of GENERIC_ROUTE_READ_BLOCKED_UIDS below anyway to
+ * keep this change scoped to the uid Milestone 1/2 actually added, and
+ * because CustomRoles.tsx never exercises the generic route in the first
+ * place (blocking it would be inert, not protective). */
+const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, FIELD_POLICY_UID, AUDIT_UID, AGENT_THREAD_UID]);
+/** Reads blocked outright through the generic entries route — see the
+ * comment above for why this is narrower than the write-block set. Found
+ * live: without this, any authenticated admin of ANY tenant could open
+ * Content > "Agent Thread" (schema listing itself isn't filtered — every
+ * bookkeeping type shows up there, a separate pre-existing characteristic)
+ * and see every tenant's, every user's, agent conversation threads
+ * completely unfiltered — governed.list/get's own tenant filter only
+ * applies to WP_SCOPED uids, and agent-thread (owner-scoped, not just
+ * tenant-scoped) isn't in that set at all. audit-log/field-policy/
+ * custom-role have the SAME kind of gap today (pre-existing, not introduced
+ * by this change) but can't be closed the same way without a dedicated
+ * bypass read path first — out of scope here, flagged separately. */
+const GENERIC_ROUTE_READ_BLOCKED_UIDS = new Set([AGENT_THREAD_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
-type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string> };
+// `features` is the pre-existing free-form per-tenant JSON bag ("unset = all
+// on" for most flags — see its own schema.json comment); the WebX Agent's
+// own policy lives at features.agent (see resolveAgentPolicy below) without
+// needing its own migration. `publicTemplate` is VisualBuilder.tsx's own
+// Dialect field ("gov-portal"/"orst"/"royalsociety") — added here so the
+// agent runtime can resolve a caller's block-catalog dialect the same way
+// the Builder itself does (open()'s own tenants.list lookup), instead of a
+// second, divergent fetch.
+type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string>; features?: Record<string, any>; publicTemplate?: string };
 
 // Tenant/field-policy/audit bookkeeping lives in Strapi regardless of which
 // engine THIS session is authenticated against (see the module header), and
@@ -206,7 +254,7 @@ async function refreshTenantCache(): Promise<typeof tenantCache> {
     const byKey = new Map<string, Tenant>();
     data.forEach((t: any) => {
       const adminEmails: string[] = t.adminEmails || [];
-      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan, sso: t.sso, customRoleAssignments: t.customRoleAssignments };
+      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan, sso: t.sso, customRoleAssignments: t.customRoleAssignments, features: t.features, publicTemplate: t.publicTemplate };
       byKey.set(t.key, tenant);
       adminEmails.forEach((e: string) => byEmail.set(String(e).toLowerCase(), tenant));
     });
@@ -1155,7 +1203,7 @@ async function tenantGuard(uid: string, id: string, eff: Tenant | null, adapter:
  * to match the caller's. */
 async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff: Tenant | null): Promise<void> {
   if (!BOOKKEEPING_UIDS.has(uid)) return;
-  if (uid === CUSTOM_ROLE_UID || uid === FIELD_POLICY_UID || uid === AUDIT_UID) {
+  if (GENERIC_ROUTE_WRITE_BLOCKED_UIDS.has(uid)) {
     throw new CmsError("This content type must be managed through its own screen, not written directly.", 403);
   }
   if (!eff) return; // unscoped super admin — allowed, same exemption as everywhere else in this file
@@ -1206,11 +1254,28 @@ function tenantStamp(uid: string, eff: Tenant | null): Record<string, any> {
   return SCOPED.has(uid) ? { tenant: eff.id } : {};
 }
 
+// Phase 8 — lets every EXISTING writeAudit() call site (every governed.*
+// write, unchanged) attribute an action to the WebX Agent without knowing
+// anything about it: lib/agent/runtime.ts wraps one run's whole tool-
+// execution loop in withAgentActor(runId, fn), and any writeAudit() called
+// anywhere underneath that — via governed.update, governed.create, etc. —
+// picks up the ambient runId automatically. adminEmail always stays the
+// human who ran the agent (the CurrentUser governed.* already resolves from
+// THEIR OWN session); only actor/targetRef/the action-name prefix change.
+// Same AsyncLocalStorage pattern lib/strapi.ts's tokenOverride already uses
+// for the release scheduler's own credential override.
+const agentActorStore = new AsyncLocalStorage<{ runId: string }>();
+export function withAgentActor<T>(runId: string, fn: () => Promise<T>): Promise<T> {
+  return agentActorStore.run({ runId }, fn);
+}
+
 async function writeAudit(action: string, uid: string, entryId: any, user: CurrentUser, tenantKey: string | null): Promise<void> {
+  const agent = agentActorStore.getStore();
   try {
     await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
-      action, contentType: uid, entryId: entryId ?? null,
+      action: agent ? "agent_" + action : action, contentType: uid, entryId: entryId ?? null,
       adminEmail: user.email, tenantKey, at: new Date().toISOString(),
+      ...(agent ? { actor: "agent", targetRef: agent.runId } : {}),
     }));
   } catch { /* don't let audit failure break the underlying write */ }
 }
@@ -1219,6 +1284,235 @@ export async function requireUser(): Promise<CurrentUser> {
   const user = await (await activeAdapter()).auth.me();
   if (!user) throw new CmsError("Unauthenticated", 401);
   return user;
+}
+
+// ---------- WebX Agent policy (Phase 8) ----------
+// Admin-granted autonomy, resolved the same way every other WebX-owned
+// permission layer in this file is: a tenant-wide default (stored in the
+// pre-existing free-form tenant.features JSON — no schema migration, same
+// place SSO/analytics/liveChat settings already live) with an optional
+// per-custom-role override that can only ever RESTRICT it further, never
+// widen it — most-restrictive-wins, same convention stripPolicyFields/
+// stripCustomRoleFields already compose with.
+export type AgentLevel = "off" | "read" | "suggest" | "draft" | "draft_submit";
+const AGENT_LEVELS: AgentLevel[] = ["off", "read", "suggest", "draft", "draft_submit"];
+const AGENT_LEVEL_RANK: Record<AgentLevel, number> = { off: 0, read: 1, suggest: 2, draft: 3, draft_submit: 4 };
+function isAgentLevel(v: any): v is AgentLevel { return AGENT_LEVELS.includes(v); }
+/** Most-restrictive-wins merge of a tenant-wide default with a per-role
+ * override (resolveAgentPolicy's own use below) — exported (this file's
+ * internals are otherwise all module-private, see this file's header note on
+ * why every cross-cutting feature lives directly in here) purely so
+ * tests/agent-tools.test.ts can exercise the real merge rule directly rather
+ * than a re-implemented copy. */
+export function clampAgentLevel(a: AgentLevel, b: AgentLevel): AgentLevel { return AGENT_LEVEL_RANK[a] <= AGENT_LEVEL_RANK[b] ? a : b; }
+
+/** tools/contentTypes: null = no allowlist beyond the level itself (unset =
+ * all on, matching features' own established convention) — a non-null array
+ * is an intersection filter, never additive. `reason` is set only when
+ * level is "off", for the empty-state UI to explain why (Free plan vs. a
+ * workspace admin never having turned it on vs. AGENT_ENABLED=0). */
+export type AgentPolicy = { level: AgentLevel; tools: string[] | null; contentTypes: string[] | null; tenantKey: string | null; model: string; reason?: "disabled" | "unscoped" | "plan" | "not_granted" };
+
+/** Resolved fresh on every call — cheap (rides the existing 30s tenant cache
+ * and 15s custom-role cache, no extra network round trip beyond those) — so
+ * callers can safely re-check it before every tool call, not just once per
+ * run, and a workspace admin flipping the level to "off" mid-run takes
+ * effect on the very next tool call. */
+export async function resolveAgentPolicy(user: CurrentUser): Promise<AgentPolicy> {
+  const empty: AgentPolicy = { level: "off", tools: null, contentTypes: null, tenantKey: null, model: "" };
+  if (process.env.AGENT_ENABLED === "0") return { ...empty, reason: "disabled" };
+  const eff = await resolveEffectiveTenant(user.email);
+  // Unscoped/super-admin sessions (the scheduler, ops/support staff) have no
+  // single workspace whose admin could have granted a policy — deliberately
+  // conservative rather than defaulting an unscoped, cross-tenant-reach
+  // session to some ambient autonomy level.
+  if (!eff) return { ...empty, reason: "unscoped" };
+  if (eff.plan === "free" || !eff.plan) return { ...empty, tenantKey: eff.key, reason: "plan" };
+
+  const tenantAgent = (eff.features || {}).agent || {};
+  let level: AgentLevel = isAgentLevel(tenantAgent.level) ? tenantAgent.level : "off";
+  let tools: string[] | null = Array.isArray(tenantAgent.tools) ? tenantAgent.tools : null;
+  let contentTypes: string[] | null = Array.isArray(tenantAgent.contentTypes) ? tenantAgent.contentTypes : null;
+  const reason = level === "off" ? "not_granted" : undefined;
+
+  // Per-role override, reserved key "__agent" — role.permissions is keyed by
+  // real content-type uid everywhere else (CustomRolePermission), and every
+  // real uid is either "api::x.x" or "wp:x"; "__agent" can never collide.
+  if (!user.isSuperAdmin) {
+    const roleKey = (eff.customRoleAssignments || {})[(user.email || "").toLowerCase()];
+    if (roleKey) {
+      const role = (await getCustomRoles()).find((r) => r.tenantKey === eff.key && r.roleKey === roleKey);
+      const roleAgent = role?.permissions?.__agent;
+      if (roleAgent && isAgentLevel(roleAgent.level)) {
+        level = clampAgentLevel(level, roleAgent.level);
+        if (Array.isArray(roleAgent.tools)) tools = tools ? tools.filter((t) => roleAgent.tools.includes(t)) : roleAgent.tools;
+        if (Array.isArray(roleAgent.contentTypes)) contentTypes = contentTypes ? contentTypes.filter((c) => roleAgent.contentTypes.includes(c)) : roleAgent.contentTypes;
+      }
+    }
+  }
+  const model = tenantAgent.model || (tenantAgent.local ? "webx-local" : "");
+  return { level, tools, contentTypes, tenantKey: eff.key, model, reason: level === "off" ? reason : undefined };
+}
+
+/** Workspace-default settings form (AgentSettings.tsx) reads/writes only
+ * this — the tenant-wide default; a per-role override is edited alongside
+ * that role's other permissions in CustomRoles.tsx, under the same
+ * reserved "__agent" key resolveAgentPolicy reads above. */
+export type AgentTenantSettings = { level: AgentLevel; tools?: string[]; contentTypes?: string[]; model?: string; local?: boolean };
+
+export async function getAgentPolicy(tenantKey: string): Promise<AgentTenantSettings> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  const a = (target.features || {}).agent || {};
+  return {
+    level: isAgentLevel(a.level) ? a.level : "off",
+    tools: Array.isArray(a.tools) ? a.tools : undefined,
+    contentTypes: Array.isArray(a.contentTypes) ? a.contentTypes : undefined,
+    model: a.model || undefined, local: Boolean(a.local),
+  };
+}
+
+export async function saveAgentPolicy(tenantKey: string, input: AgentTenantSettings): Promise<void> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
+  // Only a genuine workspace admin (not someone acting under a custom role
+  // within this same workspace) may change the agent's own autonomy — an
+  // editor shouldn't be able to grant themselves more reach than their role
+  // permits everywhere else in this file. Scoped-down sibling of
+  // requireUnscoped's "who may" reasoning for API tokens: workspace-local
+  // here rather than instance-wide, since this setting genuinely is.
+  if (eff && (eff.customRoleAssignments || {})[(caller.email || "").toLowerCase()]) {
+    throw new CmsError("Only a workspace administrator can change the agent's autonomy level.", 403);
+  }
+  const target = await resolveTenantByKey(tenantKey);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  if (!isAgentLevel(input.level)) throw new CmsError("Invalid autonomy level", 400);
+  const features = {
+    ...(target.features || {}),
+    agent: { level: input.level, tools: input.tools, contentTypes: input.contentTypes, model: input.model, local: Boolean(input.local) },
+  };
+  await strapiBookkeeping(() => strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { features }));
+  invalidateTenantCache();
+  await writeAudit("agent_policy_update", TENANT_UID, target.documentId ?? target.id, caller, tenantKey);
+}
+
+/** Monthly agent-run budget (PLAN_LIMITS.agentRuns) — counted from the
+ * agent_run audit row runtime.ts writes once at the start of every run
+ * (same "enforcement counts the same way it's displayed" discipline as
+ * enforceItemLimit/tenantItemCount above). Fails open on a lookup error —
+ * a broken counter should never be the reason a run can't start. */
+async function enforceAgentRunLimit(eff: Tenant | null): Promise<void> {
+  if (!eff) return;
+  const limit = planLimit(eff.plan).agentRuns;
+  if (!Number.isFinite(limit)) return;
+  const monthStart = new Date();
+  monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0);
+  try {
+    const { total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AUDIT_UID, {
+      pageSize: 1,
+      filter: [
+        { field: "tenantKey", op: "eq", value: eff.key },
+        { field: "action", op: "eq", value: "agent_run" },
+        { field: "at", op: "gte", value: monthStart.toISOString() },
+      ],
+    }));
+    if (total >= limit) throw new CmsError(`This workspace has reached its ${limit}-run monthly agent limit — upgrade to raise it.`, 403);
+  } catch (e) {
+    if (e instanceof CmsError) throw e;
+    // the count lookup itself failed — fail open, same as every other
+    // limit/gate check in this file
+  }
+}
+
+/** The one exported entry point runtime.ts calls, once, at the start of a
+ * run — keeps Tenant itself fully private to this module. */
+export async function checkAgentRunBudget(user: CurrentUser): Promise<void> {
+  const eff = await resolveEffectiveTenant(user.email);
+  return enforceAgentRunLimit(eff);
+}
+
+/** The metering row enforceAgentRunLimit/checkAgentRunBudget counts —
+ * written explicitly (not via writeAudit's own ambient-actor prefixing,
+ * since this call IS the thing announcing an agent run started, not a
+ * governed.* side effect happening to occur during one) once per run, right
+ * after checkAgentRunBudget passes. Never throws — a metering write failing
+ * should not be the reason a run can't proceed. */
+export async function recordAgentRunStart(user: CurrentUser, runId: string): Promise<void> {
+  const eff = await resolveEffectiveTenant(user.email);
+  try {
+    await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
+      action: "agent_run", contentType: "agent", entryId: runId,
+      adminEmail: user.email, tenantKey: eff?.key ?? null, at: new Date().toISOString(),
+      actor: "agent", targetRef: runId,
+    }));
+  } catch { /* metering only — never block a run over this */ }
+}
+
+// ---------- Agent threads (Phase 8) ----------
+// AGENT_THREAD_UID is a BOOKKEEPING_UID blocked outright from the generic
+// entries route (see assertBookkeepingWriteAllowed above) — same reasoning
+// as audit-log: writeAudit() is that uid's own dedicated writer, bypassing
+// governed.create/update entirely. These five functions are agent-thread's
+// equivalent, with their own OWNER check (not just tenant) on every read and
+// write, since a thread can hold a specific editor's own in-progress draft
+// conversation — not something every admin in the workspace should browse by
+// default. lib/agent/threads.ts is a thin, message-trimming wrapper around
+// these; it holds no Strapi access of its own.
+export type AgentThreadInput = { tenantKey: string | null; title: string; context: Record<string, any> };
+// "runState", not "status" — Strapi 5 reserves "status" as a system field
+// (document draft/published state) on every content-manager collection type
+// regardless of draftAndPublish, and 400s outright on a custom attribute
+// using that name (found live testing this route: ValidationError "Invalid
+// status" the moment a create/update payload set it) — see the schema's own
+// comment.
+export type AgentThreadPatch = { title?: string; messages?: any[]; runState?: string; lastRunId?: string; usage?: Record<string, any> };
+
+async function loadOwnedThread(id: string, user: CurrentUser): Promise<any> {
+  const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_THREAD_UID, id)).catch(() => null);
+  if (!row || (row.ownerEmail || "").toLowerCase() !== (user.email || "").toLowerCase()) {
+    throw new CmsError("Unknown thread", 404);
+  }
+  return row;
+}
+
+export async function listAgentThreads(): Promise<any[]> {
+  const user = await requireUser();
+  const eff = await resolveEffectiveTenant(user.email);
+  const filter: any[] = [{ field: "ownerEmail", op: "eq", value: user.email || "" }];
+  if (eff) filter.push({ field: "tenantKey", op: "eq", value: eff.key });
+  const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_THREAD_UID, { filter, sort: "updatedAt:DESC", pageSize: 100 }));
+  return data;
+}
+
+export async function getAgentThread(id: string): Promise<any> {
+  const user = await requireUser();
+  return loadOwnedThread(id, user);
+}
+
+export async function createAgentThread(input: AgentThreadInput): Promise<any> {
+  const user = await requireUser();
+  const eff = await resolveEffectiveTenant(user.email);
+  if (eff && input.tenantKey && input.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  return strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_THREAD_UID, {
+    tenantKey: input.tenantKey ?? eff?.key ?? null, ownerEmail: user.email, title: input.title || "New chat",
+    context: input.context || {}, messages: [], runState: "idle",
+  }));
+}
+
+export async function updateAgentThread(id: string, patch: AgentThreadPatch): Promise<void> {
+  const user = await requireUser();
+  await loadOwnedThread(id, user);
+  await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_THREAD_UID, id, patch));
+}
+
+export async function deleteAgentThread(id: string): Promise<void> {
+  const user = await requireUser();
+  await loadOwnedThread(id, user);
+  await strapiBookkeeping(() => strapiAdapter.entries.remove(AGENT_THREAD_UID, id));
 }
 
 /** Strapi half of what Billing.tsx / contentUsageFor() below show as "items
@@ -1459,6 +1753,9 @@ export const governed = {
   },
 
   async list<T = any>(uid: string, query?: EntryQuery): Promise<EntryList<T>> {
+    if (GENERIC_ROUTE_READ_BLOCKED_UIDS.has(uid)) {
+      throw new CmsError("This content type must be managed through its own screen, not read directly.", 403);
+    }
     return withContentAdapter(uid, async (cms) => {
       // Custom roles' own "view" flag used to be a UI hint only (CustomRoles.tsx
       // still hides the nav item) with no server-side check behind it — a
@@ -1488,6 +1785,9 @@ export const governed = {
     });
   },
   async get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null> {
+    if (GENERIC_ROUTE_READ_BLOCKED_UIDS.has(uid)) {
+      throw new CmsError("This content type must be managed through its own screen, not read directly.", 403);
+    }
     return withContentAdapter(uid, async (cms) => {
       const user = await cms.auth.me();
       const eff = user ? await resolveEffectiveTenant(user.email) : null;

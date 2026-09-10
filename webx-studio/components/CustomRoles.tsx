@@ -4,10 +4,22 @@ import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 import { cms } from "@/lib/cms";
+import type { AgentLevel } from "@/lib/agent/types";
 
 type CType = { uid: string; label: string };
 type Perm = { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; publish?: boolean; embedCode?: boolean; hidden?: string[]; readonly?: string[] };
 type Role = { roleKey: string; name: string; permissions: Record<string, Perm> };
+// The reserved "__agent" key inside a role's own permissions object
+// (governance.ts's resolveAgentPolicy reads it — see that file's own
+// comment on why "__agent" can never collide with a real content-type uid,
+// which is always "api::x.x" or "wp:x"). A role can only ever NARROW the
+// workspace's own default level (clampAgentLevel — most-restrictive-wins),
+// never widen it — the empty-string "inherit" option below is what leaves
+// a role at the workspace default with no override at all.
+const AGENT_LEVELS: AgentLevel[] = ["off", "read", "suggest", "draft", "draft_submit"];
+const AGENT_LEVEL_KEY: Record<AgentLevel, string> = {
+  off: "ag.levelOff", read: "ag.levelRead", suggest: "ag.levelSuggest", draft: "ag.levelDraft", draft_submit: "ag.levelDraft_submit",
+};
 
 const SYS = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt", "locale", "status", "createdBy", "updatedBy", "localizations"]);
 const ACTIONS: { key: keyof Perm; label: string }[] = [
@@ -36,6 +48,10 @@ export default function CustomRoles() {
   const [perms, setPerms] = useState<Record<string, Perm>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [fieldsByType, setFieldsByType] = useState<Record<string, string[]>>({});
+  // "" = inherit the workspace default (no __agent key at all in the saved
+  // permissions object) — kept separate from `perms` (a real content-type
+  // uid never starts with "__") so the table above never has to special-case it.
+  const [agentLevel, setAgentLevel] = useState<"" | AgentLevel>("");
 
   const load = useCallback(async () => {
     if (!tenant) { setLoading(false); return; }
@@ -51,8 +67,13 @@ export default function CustomRoles() {
   }, [tenant]);
   useEffect(() => { load(); }, [load]);
 
-  function startCreate() { setEditingKey(""); setName(""); setPerms({}); setExpanded(null); setMsg(null); }
-  function startEdit(r: Role) { setEditingKey(r.roleKey); setName(r.name); setPerms(r.permissions || {}); setExpanded(null); setMsg(null); }
+  function startCreate() { setEditingKey(""); setName(""); setPerms({}); setExpanded(null); setMsg(null); setAgentLevel(""); }
+  function startEdit(r: Role) {
+    setEditingKey(r.roleKey); setName(r.name);
+    const { __agent, ...rest } = (r.permissions || {}) as any;
+    setPerms(rest); setExpanded(null); setMsg(null);
+    setAgentLevel(__agent && AGENT_LEVELS.includes(__agent.level) ? __agent.level : "");
+  }
   function cancel() { setEditingKey(null); }
 
   function setAction(uid: string, key: keyof Perm, val: boolean) {
@@ -82,9 +103,11 @@ export default function CustomRoles() {
     setSaving(true); setMsg(null);
     try {
       const url = editingKey ? `/api/cms/roles/${encodeURIComponent(editingKey)}?tenant=${encodeURIComponent(tenant)}` : `/api/cms/roles?tenant=${encodeURIComponent(tenant)}`;
+      const permissions: Record<string, any> = { ...perms };
+      if (agentLevel) permissions.__agent = { level: agentLevel };
       const r = await fetch(url, {
         method: editingKey ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, permissions: perms }),
+        body: JSON.stringify({ name, permissions }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { setMsg({ t: j.error || "Save failed", ok: false }); return; }
@@ -139,6 +162,15 @@ export default function CustomRoles() {
           <label className="vb-fld" style={{ marginBottom: 14 }}>
             <span>{t("cr.name")}</span>
             <input className="rv-assignee" style={{ width: "100%" }} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("cr.namePh")} />
+          </label>
+
+          <label className="vb-fld" style={{ marginBottom: 14, maxWidth: 320 }}>
+            <span>{t("cr.agentLevel")}</span>
+            <select className="vb-sel" style={{ width: "100%" }} value={agentLevel} onChange={(e) => setAgentLevel(e.target.value as "" | AgentLevel)}>
+              <option value="">{t("ag.levelInherit")}</option>
+              {AGENT_LEVELS.map((lv) => <option key={lv} value={lv}>{t(AGENT_LEVEL_KEY[lv])}</option>)}
+            </select>
+            <small className="muted">{t("cr.agentLevelHint")}</small>
           </label>
 
           <table className="tbl">

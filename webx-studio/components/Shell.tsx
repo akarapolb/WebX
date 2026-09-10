@@ -8,6 +8,8 @@ import NewWorkspace from "./NewWorkspace";
 import { NAV } from "@/lib/nav";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
+import { useAgent } from "./agent/AgentProvider";
+import AgentPanel from "./agent/AgentPanel";
 
 export default function Shell({
   user, connected, children,
@@ -20,6 +22,7 @@ export default function Shell({
   const router = useRouter();
   const { t, lang, setLang } = useLang();
   const { tenants, currentKey, setCurrentKey, current, engine } = useTenant();
+  const agent = useAgent();
   const [tenOpen, setTenOpen] = useState(false);
   const [nwOpen, setNwOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -107,6 +110,11 @@ export default function Shell({
             <Icon name="search" /><span className="ph">{t("tb.search")}</span><span className="kbd">⌘K</span>
           </button>
           <div className="tb-sp" />
+          {agent.policy && agent.policy.level !== "off" && (
+            <button className={"agent-tg" + (agent.open ? " on" : "")} onClick={agent.toggle} data-testid="agent-toggle">
+              <Icon name="spark" /><span>{t("ag.toggleTitle")}</span><span className="kbd">⌘J</span>
+            </button>
+          )}
           <button className="ic-btn" title="Notifications"><Icon name="bell" /></button>
           <button className="ic-btn" title="Theme" onClick={toggleTheme}><Icon name="moon" /></button>
           <div className="lang-tg">
@@ -118,7 +126,10 @@ export default function Shell({
           <button className="ic-btn" title="Sign out" onClick={logout}><Icon name="logout" /></button>
           <div className="avatar" title={user.email}>{initials}</div>
         </header>
-        <div className="page">{children}</div>
+        <div className="body">
+          <div className="page">{children}</div>
+          <AgentPanel />
+        </div>
       </div>
 
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} onToggleTheme={toggleTheme} onLogout={logout} />
