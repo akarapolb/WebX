@@ -1251,7 +1251,18 @@ function tenantStamp(uid: string, eff: Tenant | null): Record<string, any> {
   // key-less template shared with every workspace.
   if (uid === PAGE_TEMPLATE_UID) return { tenantKey: eff.key };
   if (uid.startsWith("wp:")) return WP_SCOPED.has(uid) ? { tenant: eff.key } : {};
-  return SCOPED.has(uid) ? { tenant: eff.id } : {};
+  // review.review carries a real `tenant` relation (manyToOne ->
+  // api::tenant.tenant) in its own schema.json, same shape SCOPED types use
+  // — added here rather than to SCOPED itself since SCOPED also controls
+  // Strapi's own tenant-scoping hook (strapi-cms/src/index.ts) and review
+  // rows are deliberately Strapi-only regardless of the reviewed entry's
+  // own engine (see REVIEW_UID's own comment), unlike everything else in
+  // SCOPED. Found live: this was never stamped at all before — every
+  // review ever created had tenant:null, which combined with the
+  // governed.list/get identity-resolution bug fixed just below meant
+  // reviews were completely unscoped by tenant, readable across every
+  // workspace via /reviews or EntryEditor's own review-status lookup.
+  return (SCOPED.has(uid) || uid === REVIEW_UID) ? { tenant: eff.id } : {};
 }
 
 // Phase 8 — lets every EXISTING writeAudit() call site (every governed.*
@@ -1756,20 +1767,25 @@ export const governed = {
     if (GENERIC_ROUTE_READ_BLOCKED_UIDS.has(uid)) {
       throw new CmsError("This content type must be managed through its own screen, not read directly.", 403);
     }
+    // Resolved via the REAL session adapter, deliberately NOT via `cms`
+    // inside withContentAdapter's callback below — found live, this is why
+    // review.review reads were completely unscoped by tenant regardless of
+    // caller: for a BOOKKEEPING_UID, the `cms` the callback receives is
+    // strapiAdapter running under strapiBookkeeping's own scheduler
+    // credential (see withContentAdapter/strapiBookkeeping/withServiceToken),
+    // so `cms.auth.me()` identified the SCHEDULER, not the real caller —
+    // resolveEffectiveTenant(scheduler's email) is always null (the
+    // scheduler is in no tenant's adminEmails), silently disabling both the
+    // custom-role view check and any eff-based filter for every bookkeeping
+    // type's reads. activeAdapter() here always reflects the genuine
+    // ambient session, bookkeeping override or not.
+    const user = await (await activeAdapter()).auth.me();
+    const eff = user ? await resolveEffectiveTenant(user.email) : null;
+    if (user) {
+      const crp = await resolveCustomRolePermissions(user, eff, uid);
+      if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
+    }
     return withContentAdapter(uid, async (cms) => {
-      // Custom roles' own "view" flag used to be a UI hint only (CustomRoles.tsx
-      // still hides the nav item) with no server-side check behind it — a
-      // view:false user could still read the content type straight through
-      // the API. Resolving user/eff here (previously only done inside the
-      // WP_SCOPED branch below) costs an extra auth.me() round-trip for every
-      // list call, same tradeoff governed.create/update/remove already accept
-      // for their own resolveCustomRolePermissions() call.
-      const user = await cms.auth.me();
-      const eff = user ? await resolveEffectiveTenant(user.email) : null;
-      if (user) {
-        const crp = await resolveCustomRolePermissions(user, eff, uid);
-        if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
-      }
       if (WP_SCOPED.has(uid)) {
         // No "eff -> pass through unfiltered" fallthrough — found live: a
         // WordPress admin whose own tenant hadn't resolved (e.g. no roster
@@ -1781,6 +1797,13 @@ export const governed = {
         const filter = [...(query?.filter || []), { field: "tenant.key", op: "eq" as const, value: eff?.key ?? "__unscoped__" }];
         return cms.entries.list<T>(uid, { ...query, filter });
       }
+      if (uid === REVIEW_UID) {
+        // Same fail-closed convention as WP_SCOPED above, against the
+        // relation's own numeric id (tenantStamp's own stamp shape) rather
+        // than a wtenant string key — -1 matches no real tenant.
+        const filter = [...(query?.filter || []), { field: "tenant.id", op: "eq" as const, value: eff?.id ?? -1 }];
+        return cms.entries.list<T>(uid, { ...query, filter });
+      }
       return cms.entries.list<T>(uid, query);
     });
   },
@@ -1788,18 +1811,33 @@ export const governed = {
     if (GENERIC_ROUTE_READ_BLOCKED_UIDS.has(uid)) {
       throw new CmsError("This content type must be managed through its own screen, not read directly.", 403);
     }
+    // See governed.list's own comment just above on why this is resolved
+    // via activeAdapter() and not the (possibly bookkeeping-overridden) `cms`
+    // the withContentAdapter callback receives.
+    const user = await (await activeAdapter()).auth.me();
+    const eff = user ? await resolveEffectiveTenant(user.email) : null;
+    if (user) {
+      const crp = await resolveCustomRolePermissions(user, eff, uid);
+      // Checked before the fetch below — a denied caller shouldn't pay for
+      // (or receive the response of) a read they're not allowed to make.
+      if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
+    }
     return withContentAdapter(uid, async (cms) => {
-      const user = await cms.auth.me();
-      const eff = user ? await resolveEffectiveTenant(user.email) : null;
-      if (user) {
-        const crp = await resolveCustomRolePermissions(user, eff, uid);
-        // Checked before the fetch below — a denied caller shouldn't pay for
-        // (or receive the response of) a read they're not allowed to make.
-        if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
-      }
       const result: any = await cms.entries.get<T>(uid, id, opts);
       if (WP_SCOPED.has(uid) && result && eff && result.tenantKey && result.tenantKey !== eff.key) {
         throw new CmsError("Cross-tenant operation not permitted", 403);
+      }
+      if (uid === REVIEW_UID && result && eff) {
+        // The content-manager single-document GET doesn't populate a plain
+        // relation field into a comparable shape (it comes back as a bare
+        // {count} summary — confirmed live), so the tenant match is checked
+        // via a real filtered list call instead of trusting `result.tenant`
+        // directly. One extra round trip, only on this uid, only on a
+        // single-entry read (list already filters server-side above).
+        const own = await cms.entries.list<any>(REVIEW_UID, {
+          pageSize: 1, filter: [{ field: "documentId", op: "eq", value: id }, { field: "tenant.id", op: "eq", value: eff.id }],
+        });
+        if (!own.data.length) throw new CmsError("Cross-tenant operation not permitted", 403);
       }
       return result;
     });
