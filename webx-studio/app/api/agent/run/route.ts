@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
         );
         const saved = result.checkpoint ? fitCheckpoint(result.checkpoint, MAX_CHECKPOINT_BYTES, { stripReasoning: true }) : null;
         const persisted = await appendMessages(finalThreadId, settledMessages, buildPersistMessages(message, result, Boolean(saved)), {
-          runState: saved ? "paused" : result.aborted ? "idle" : "done",
+          runState: result.aborted ? "idle" : saved ? "paused" : "done",
           lastRunId: runId,
           usage: { promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens },
           checkpoint: saved,

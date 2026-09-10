@@ -47,7 +47,7 @@ export type RunResult = {
   aborted: boolean;
   stopReason: StopReason;
   stopMessage: string;
-  /** Set only when the run can be continued. */
+  /** Set when the work can be picked up again: a resumable stop, or a run the user stopped. */
   checkpoint: RunCheckpoint | null;
   /** The run's checklist as it stands, if the model made one. */
   plan: PlanItem[] | null;
@@ -98,7 +98,10 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     aborted: r.stop === "aborted",
     stopReason: r.stop,
     stopMessage: r.stopMessage,
-    checkpoint: r.resumable ? r.checkpoint : null,
+    // A stopped run (Stop, a closed tab, a page reload) keeps its checkpoint too:
+    // it offers no Continue button, but the next message carries on from it
+    // instead of starting over (found live: a reload lost 16 steps of work).
+    checkpoint: r.resumable || r.stop === "aborted" ? r.checkpoint : null,
     plan: r.checkpoint.plan?.items ?? null,
     question: r.stop === "waiting_input" && r.checkpoint.waiting
       ? { question: r.checkpoint.waiting.question, options: r.checkpoint.waiting.options }

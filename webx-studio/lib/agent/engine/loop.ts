@@ -22,6 +22,8 @@ const NOT_EXECUTED_MALFORMED =
   "Not executed: this call's arguments were not valid JSON, probably because the reply was cut off at the output limit. Send it again with fewer calls or shorter content per turn.";
 const TRUNCATED_NOTE =
   "Harness note: your last reply was cut off at the output limit, so tool calls in it may be incomplete. Send fewer tool calls per turn, with shorter content.";
+const TOO_SLOW_NOTE =
+  "Harness note: your last reply took too long to generate and timed out. Reply again with at most three tool calls and short content, and continue with the rest in later turns.";
 const AUTO_ANSWER =
   "No one is available to answer during this run. Take the most conservative reasonable option, or mark the affected plan item blocked with a note, and continue.";
 
@@ -314,6 +316,7 @@ async function requestReply(
 ): Promise<{ reply: ChatReply; truncated: boolean } | { stop: StopReason; info?: StopInfo }> {
   const state: RetryState = { compacted: false, repaired: false };
   let emptyRetried = false;
+  let askedShorter = false;
   let maxTokens = limits.maxTokens;
 
   for (let attempt = 1; ; attempt++) {
@@ -344,6 +347,11 @@ async function requestReply(
         if (deps.clock.now() - o.t0 + d.delayMs >= limits.maxWallMs) return { stop: "retry_later" };
         cp.counters.retries++;
         deps.emit({ type: "retry", attempt, delayMs: d.delayMs, reason: d.reason });
+        // Regenerating the same oversized reply times out again (found live); ask for a smaller one.
+        if (d.reason === "timeout" && !askedShorter) {
+          askedShorter = true;
+          cp.history.push({ kind: "user", text: TOO_SLOW_NOTE });
+        }
         try {
           await deps.clock.sleep(d.delayMs, signal);
         } catch {
@@ -442,6 +450,7 @@ export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: S
       const c = await deps.control();
       if (c === "cancel") return finish("cancelled");
       if (c === "pause") return finish("paused");
+      if (c === "budget") return finish("budget");
     }
     if (sliceTurns >= limits.maxTurns || deps.clock.now() - t0 >= limits.maxWallMs) return finish("slice_end");
 

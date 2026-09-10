@@ -100,6 +100,17 @@ describe("model request retries in the loop", () => {
     assert.ok(stopped && stopped.type === "stopped" && stopped.resumable);
   });
 
+  test("after a timeout the retry asks the model for a smaller reply (found live: an oversized batch kept timing out)", async () => {
+    const chat = scriptedChat([
+      { throws: llmErr(0, "timeout") },
+      { expect: (req) => assert.match(String(req.messages[req.messages.length - 1].content), /took too long to generate/), reply: replyText("Done.") },
+    ]);
+    const r = await runSlice(newRun(), harness(chat, noTools()).deps, limitsFor("docked"));
+
+    chat.assertClean();
+    assert.equal(r.stop, "text");
+  });
+
   test("a job out of attempts stops resumably so it can be retried later", async () => {
     const chat = scriptedChat(Array.from({ length: 5 }, () => ({ throws: llmErr(502, "server") })));
     const h = harness(chat, noTools());

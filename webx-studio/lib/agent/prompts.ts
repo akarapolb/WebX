@@ -26,11 +26,14 @@ const CORE_RULE_COUNT = 3;
 const WORKFLOW_EN = [
   "For a task that takes more than three steps, call set_plan first with a short checklist, then keep it current with update_plan: done with a short result such as the entry id, or blocked or skipped with the reason.",
   "Use ask_user only when you cannot continue without the user's decision, never to confirm work they already asked for.",
+  // Found live: one reply batching 15 drafts with full content never finished generating.
+  "Send at most five tool calls in one reply, and keep draft content short (a title and a few sentences) unless the user asks for more. For bulk work, do a few items per turn.",
 ] as const;
 
 const WORKFLOW_TH = [
   "งานที่มีมากกว่าสามขั้นตอน ให้เรียก set_plan ก่อนเพื่อเขียนรายการงานสั้น ๆ แล้วอัปเดตด้วย update_plan ระหว่างทำ: done พร้อมผลลัพธ์สั้น ๆ เช่น id ของรายการ หรือ blocked/skipped พร้อมเหตุผล",
   "ใช้ ask_user เฉพาะเมื่อทำต่อไม่ได้หากไม่มีการตัดสินใจจากผู้ใช้ ห้ามใช้เพื่อขอยืนยันงานที่ผู้ใช้สั่งไว้แล้ว",
+  "ส่งการเรียกเครื่องมือไม่เกินห้าครั้งต่อหนึ่งคำตอบ และให้เนื้อหาฉบับร่างสั้นกระชับ (ชื่อเรื่องและไม่กี่ประโยค) เว้นแต่ผู้ใช้ขอมากกว่านั้น งานจำนวนมากให้ทำทีละไม่กี่รายการต่อรอบ",
 ] as const;
 
 const LEVEL_NOTE: Record<string, { en: string; th: string }> = {
@@ -83,7 +86,7 @@ export function jobSystemPrompt(ctx: AgentRunContext, o: JobPromptOptions): stri
         o.planLocked
           ? "แผนงานถูกกำหนดไว้แล้วโดยเทมเพลตของงาน ให้ทำตามรายการและอัปเดตแต่ละรายการด้วย update_plan"
           : "ภายในสองรอบแรก ให้เรียก set_plan เพื่อเขียนรายการงาน แล้วทำตามและอัปเดตแต่ละรายการด้วย update_plan",
-        "รวมการเรียกเครื่องมือที่ไม่ขึ้นต่อกันไว้ในรอบเดียว และใช้ id จากผลลัพธ์ก่อนหน้าแทนการค้นหาซ้ำ",
+        "ส่งการเรียกเครื่องมือที่ไม่ขึ้นต่อกันได้ไม่เกินแปดครั้งต่อรอบ ให้เนื้อหาสั้นกระชับ และใช้ id จากผลลัพธ์ก่อนหน้าแทนการค้นหาซ้ำ",
         "อย่าอ่านรายการที่มีอยู่เพื่อเดารูปแบบฟิลด์ ให้เรียก get_content_type_schema",
         o.onQuestion === "auto"
           ? "ระหว่างงานนี้ไม่มีใครตอบคำถามได้ หากไม่แน่ใจ ให้เลือกทางที่ระมัดระวังที่สุด หรือทำเครื่องหมายรายการเป็น blocked พร้อมบันทึกเหตุผล"
@@ -96,7 +99,7 @@ export function jobSystemPrompt(ctx: AgentRunContext, o: JobPromptOptions): stri
         o.planLocked
           ? "The plan is already fixed by the job template: work through its items and mark each one with update_plan."
           : "Within your first two turns, call set_plan with the checklist of work, then work through it and mark each item with update_plan.",
-        "Batch independent tool calls into one turn, and reuse ids from earlier results instead of looking entries up again.",
+        "Send up to eight independent tool calls in one turn with short content, and reuse ids from earlier results instead of looking entries up again.",
         "Do not read existing entries to learn field shapes; call get_content_type_schema.",
         o.onQuestion === "auto"
           ? "No one can answer questions during this run. When a choice is unclear, take the most conservative reasonable option, or mark the item blocked with a note."

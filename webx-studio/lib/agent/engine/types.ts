@@ -148,7 +148,8 @@ export type EngineDeps = {
   emit: (e: AgentEvent) => void;
   systemPrompt: () => string;
   save?: (cp: RunCheckpoint, at: SaveAt) => Promise<void>;
-  control?: () => Promise<"run" | "pause" | "cancel">;
+  /** Checked before every turn: a job's cancel/pause requests and its budget. */
+  control?: () => Promise<"run" | "pause" | "cancel" | "budget">;
   /** Throw on a protocol violation instead of repairing it (tests). */
   strictProtocol?: boolean;
   /** Jitter source for retry backoff; tests pass a fixed one. */
