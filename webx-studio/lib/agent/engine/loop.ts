@@ -1,11 +1,14 @@
-import { buildWireMessages } from "./checkpoint";
+import { buildWireMessages, emptyCounters } from "./checkpoint";
+import { calibrateRatio, compactHistory, DEFAULT_TOKEN_RATIO, type CompactionResult } from "./compaction";
 import { checkProtocol, ProtocolError, repairHistory } from "./invariants";
 import { sameReasoningTarget } from "./providers";
-import { toolResultRecord } from "./toolView";
+import { decideRetry, type RetryState } from "./retry";
+import { observeCall, observeTurn, type StuckHit } from "./stuck";
+import { byteLen, toolResultRecord, withHarnessNote } from "./toolView";
 import {
   RESUMABLE_STOPS,
   type AppliedRef, type ChatReply, type EngineDeps, type ExchangeItem, type ReasoningPayload, type RunCheckpoint,
-  type SliceLimits, type SliceResult, type StopReason, type ToolCall, type ToolOutcome, type ToolStepRec,
+  type SliceLimits, type SliceResult, type StopReason, type ToolCall, type ToolOutcome, type ToolSpec, type ToolStepRec,
 } from "./types";
 import type { AgentProposal } from "../types";
 
@@ -14,11 +17,13 @@ export const OUTCOME_UNKNOWN =
 
 const NOT_EXECUTED_STOPPED = "Not executed: the run was stopped before this call started.";
 const MAX_LEDGER_STEPS = 500;
+const READ_RETRY_DELAY_MS = 500;
 
 const notExecutedOverLimit = (limit: number) =>
   `Not executed: at most ${limit} tool calls run per turn. Re-issue this call next turn if it is still needed.`;
 
 type SliceOut = { steps: ToolStepRec[]; proposals: AgentProposal[]; applied: AppliedRef[] };
+type StopInfo = { detail?: string; resumable?: boolean };
 
 function linkSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
   const live = signals.filter((s): s is AbortSignal => Boolean(s));
@@ -80,21 +85,88 @@ function reasoningOf(reply: ChatReply, requested: string): ReasoningPayload | un
   return { ...(content ? { content } : {}), ...(blocks ? { thinkingBlocks: blocks } : {}), servedBy };
 }
 
-function stopMessageFor(stop: StopReason, lang: "en" | "th", steps: ToolStepRec[]): string {
+function stopMessageFor(stop: StopReason, lang: "en" | "th", steps: ToolStepRec[], info: StopInfo): string {
+  const th = lang === "th";
   const ok = steps.filter((s) => s.ok).length;
-  if (stop === "paused") return lang === "th" ? "หยุดชั่วคราวแล้ว" : "Paused.";
-  if (stop === "slice_end") {
-    return lang === "th"
-      ? `หยุดชั่วคราว — ครบขีดจำกัดของรอบนี้ (สำเร็จ ${ok} จาก ${steps.length} ขั้นตอน) กด "ทำต่อ" เพื่อทำงานต่อจากจุดเดิม`
-      : `Paused — reached this run's step limit (${ok} of ${steps.length} steps succeeded). Continue to pick up where it left off.`;
+  switch (stop) {
+    case "slice_end":
+      return th
+        ? `หยุดชั่วคราว — ครบขีดจำกัดของรอบนี้ (สำเร็จ ${ok} จาก ${steps.length} ขั้นตอน) กด "ทำต่อ" เพื่อทำงานต่อจากจุดเดิม`
+        : `Paused — reached this run's step limit (${ok} of ${steps.length} steps succeeded). Continue to pick up where it left off.`;
+    case "retry_later":
+      return th
+        ? `หยุดชั่วคราว — บริการ AI ไม่ว่างหรือเชื่อมต่อไม่ได้ กด "ทำต่อ" เพื่อลองอีกครั้ง`
+        : "Paused — the AI service is busy or unreachable. Continue to try again.";
+    case "paused":
+      return th ? "หยุดชั่วคราวแล้ว" : "Paused.";
+    case "waiting_input":
+      return th ? "รอคำตอบจากคุณ" : "Waiting for your answer.";
+    case "budget":
+      return info.resumable === false
+        ? th
+          ? "หยุดทำงาน — บทสนทนายาวเกินกว่าที่โมเดลอ่านได้ แม้สรุปขั้นตอนเก่าแล้ว เริ่มแชทใหม่เพื่อทำงานที่เหลือ"
+          : "Stopped — this conversation is longer than the model can read, even after summarizing older steps. Start a new chat for the remaining work."
+        : th
+          ? "หยุดชั่วคราว — งานนี้ใช้งบประมาณครบแล้ว"
+          : "Paused — this run used up its budget.";
+    case "stuck":
+      return th
+        ? `หยุดทำงาน — agent ทำงานวนซ้ำโดยไม่คืบหน้า (${info.detail || "ไม่มีความคืบหน้า"}) ลองเปลี่ยนคำขอ หรือตรวจสอบว่า agent มีสิทธิ์ที่จำเป็น`
+        : `Stopped — the agent was going in circles (${info.detail || "no progress"}). Try rephrasing the request, or check that the agent has access to what it needs.`;
+    case "policy":
+      return th ? "หยุดทำงาน — agent ไม่มีเครื่องมือที่ใช้ได้ใน workspace นี้แล้ว" : "Stopped — the agent no longer has any tools available in this workspace.";
+    default:
+      return "";
   }
-  return lang === "th" ? "หยุดชั่วคราว" : "Paused.";
 }
 
-async function runBatch(cp: RunCheckpoint, deps: EngineDeps, limits: SliceLimits, signal: AbortSignal | undefined, slice: SliceOut): Promise<"ok" | "aborted"> {
+function llmErrorMessage(kind: string, lang: "en" | "th"): string {
+  if (kind === "auth" || kind === "not_found") {
+    return lang === "th" ? "บริการ AI ปฏิเสธคำขอ — ตรวจสอบคีย์และชื่อโมเดล" : "The AI service rejected the request — check the API key and model name.";
+  }
+  return lang === "th" ? "เรียก AI ไม่สำเร็จ" : "The AI request failed.";
+}
+
+function emitCompaction(cp: RunCheckpoint, deps: EngineDeps, c: CompactionResult): void {
+  if (!c.changed) return;
+  cp.counters.compactions++;
+  deps.emit({ type: "compaction", beforeTokens: c.beforeTokens, afterTokens: c.afterTokens, folded: c.folded });
+}
+
+async function execute(deps: EngineDeps, call: ToolCall): Promise<ToolOutcome> {
+  try {
+    return await deps.tools.execute(call);
+  } catch {
+    return { ok: false, summary: "Tool failed unexpectedly.", retryable: true };
+  }
+}
+
+async function runBatch(
+  cp: RunCheckpoint, deps: EngineDeps, limits: SliceLimits, signal: AbortSignal | undefined, slice: SliceOut,
+): Promise<{ aborted: boolean; stuck?: StuckHit }> {
   const inflight = cp.inflight!;
   const ex = cp.history[inflight.exchangeIndex] as ExchangeItem;
+  const turn = cp.counters.turns;
   let aborted = false;
+  let stuck: StuckHit | undefined;
+  let executed = 0;
+  let progressed = false;
+  let readOnly = true;
+
+  // First detection: a note on the latest result (one per turn). A detection
+  // in a later turn, after the model has seen a note, ends the run.
+  const react = (hit: StuckHit | null) => {
+    if (!hit || stuck || !cp.stuck || !ex.results.length) return;
+    const noted = cp.stuck.noted;
+    if (noted && noted.turn < turn) {
+      stuck = hit;
+      return;
+    }
+    if (noted?.turn === turn) return;
+    const last = ex.results.length - 1;
+    ex.results[last] = withHarnessNote(ex.results[last], hit.note, limits);
+    cp.stuck.noted = { turn, kind: hit.kind };
+  };
 
   for (let i = 0; i < ex.calls.length; i++) {
     const call = ex.calls[i];
@@ -117,21 +189,33 @@ async function runBatch(cp: RunCheckpoint, deps: EngineDeps, limits: SliceLimits
       continue;
     }
 
+    const write = deps.tools.isWrite(name);
     deps.emit({ type: "tool_call", id: call.id, name, args: safeArgs(call.function.arguments) });
-    if (deps.tools.isWrite(name)) {
+    if (write) {
       inflight.pendingWrite = call.id;
       if (deps.save) await deps.save(cp, "pre_write");
     }
 
-    let out: ToolOutcome;
-    try {
-      out = await deps.tools.execute(call);
-    } catch {
-      out = { ok: false, summary: "Tool failed unexpectedly." };
+    let out = await execute(deps, call);
+    if (!out.ok && out.retryable && !write && !signal?.aborted) {
+      cp.counters.retries++;
+      try {
+        await deps.clock.sleep(READ_RETRY_DELAY_MS, signal);
+        out = await execute(deps, call);
+      } catch {
+        /* stopped while waiting: keep the first outcome */
+      }
     }
 
     cp.counters.toolCalls++;
+    executed++;
+    if (write) {
+      readOnly = false;
+      if (out.ok) progressed = true;
+    }
     ex.results.push(toolResultRecord(call.id, name, out, true, limits));
+    react(observeCall(cp, { turn, name, args: call.function.arguments, ok: out.ok, summary: out.summary }));
+
     const step: ToolStepRec = { name, ok: out.ok, summary: out.summary };
     cp.ledger.toolSteps.push(step);
     if (cp.ledger.toolSteps.length > MAX_LEDGER_STEPS) cp.ledger.toolSteps.splice(0, cp.ledger.toolSteps.length - MAX_LEDGER_STEPS);
@@ -151,31 +235,119 @@ async function runBatch(cp: RunCheckpoint, deps: EngineDeps, limits: SliceLimits
     inflight.done.push(call.id);
   }
 
+  if (executed) react(observeTurn(cp, { turn, progressed, readOnly }, cp.mode));
   cp.inflight = undefined;
   if (deps.save) await deps.save(cp, "turn");
-  return aborted ? "aborted" : "ok";
+  return { aborted, stuck };
+}
+
+/** One model reply for the current turn, with retries, repair and compaction handled. */
+async function requestReply(
+  cp: RunCheckpoint, deps: EngineDeps, limits: SliceLimits, signal: AbortSignal | undefined,
+  o: { system: string; specs: ToolSpec[]; t0: number },
+): Promise<{ reply: ChatReply } | { stop: StopReason; info?: StopInfo }> {
+  const state: RetryState = { compacted: false, repaired: false };
+  let expanded = false;
+  let maxTokens = limits.maxTokens;
+
+  for (let attempt = 1; ; attempt++) {
+    let messages = buildWireMessages(cp, { system: o.system, targetModel: cp.model, digestAfterBytes: limits.digestAfterBytes });
+    const errors = checkProtocol(messages, { toolsSent: o.specs.length > 0 }).filter((v) => v.severity === "error");
+    if (errors.length && deps.strictProtocol) throw new ProtocolError(errors);
+    if (errors.length || state.repaired) {
+      const fixed = repairHistory(messages);
+      messages = fixed.messages;
+      cp.counters.protocolRepairs += fixed.repairs;
+    }
+    const bytes = byteLen(JSON.stringify(messages)) + (o.specs.length ? byteLen(JSON.stringify(o.specs)) : 0);
+    const elapsed = deps.clock.now() - o.t0;
+
+    let reply: ChatReply;
+    try {
+      reply = await deps.chat({
+        messages,
+        tools: o.specs.length ? o.specs : undefined,
+        model: cp.model || undefined,
+        maxTokens,
+        signal: linkSignals(signal, timeoutSignal(Math.min(limits.llmTimeoutMs, Math.max(0, limits.maxWallMs - elapsed) + 30_000))),
+      });
+    } catch (err) {
+      if (signal?.aborted) return { stop: "aborted" };
+      const d = decideRetry(err, attempt, { maxAttempts: limits.maxLlmAttempts, mode: cp.mode, state, random: deps.random });
+      if (d.action === "retry") {
+        if (deps.clock.now() - o.t0 + d.delayMs >= limits.maxWallMs) return { stop: "retry_later" };
+        cp.counters.retries++;
+        deps.emit({ type: "retry", attempt, delayMs: d.delayMs, reason: d.reason });
+        try {
+          await deps.clock.sleep(d.delayMs, signal);
+        } catch {
+          return { stop: "aborted" };
+        }
+        continue;
+      }
+      if (d.action === "compact") {
+        state.compacted = true;
+        // The provider counted more tokens than estimated; trust it from here on.
+        cp.tokenRatio = (cp.tokenRatio ?? DEFAULT_TOKEN_RATIO) * 1.5;
+        const c = compactHistory(cp, { system: o.system, specs: o.specs, limits, aggressive: true });
+        emitCompaction(cp, deps, c);
+        if (!c.changed) return { stop: "budget", info: { resumable: false } };
+        cp.counters.retries++;
+        continue;
+      }
+      if (d.action === "repair") {
+        state.repaired = true;
+        cp.counters.retries++;
+        continue;
+      }
+      if (d.action === "later") return { stop: "retry_later" };
+      deps.emit({ type: "error", code: "llm", message: llmErrorMessage(d.reason, cp.lang) });
+      return { stop: "llm_error" };
+    }
+
+    if (reply.usage) {
+      cp.counters.promptTokens += Number(reply.usage.prompt_tokens) || 0;
+      cp.counters.completionTokens += Number(reply.usage.completion_tokens) || 0;
+      cp.tokenRatio = calibrateRatio(cp.tokenRatio, Number(reply.usage.prompt_tokens) || 0, bytes);
+    }
+
+    const hasCalls = Array.isArray(reply.message.tool_calls) && reply.message.tool_calls.length > 0;
+    const text = typeof reply.message.content === "string" ? reply.message.content : "";
+    // A reasoning model can spend the whole token allowance thinking; give it one retry with more room.
+    if (!expanded && (reply.finishReason === "length" || (!hasCalls && !text.trim()))) {
+      expanded = true;
+      maxTokens *= 2;
+      cp.counters.retries++;
+      deps.emit({ type: "retry", attempt, delayMs: 0, reason: reply.finishReason === "length" ? "truncated" : "empty" });
+      continue;
+    }
+    return { reply };
+  }
 }
 
 /** Runs one bounded slice of a conversation and returns the updated checkpoint. Never mutates `input`. */
 export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: SliceLimits, signal?: AbortSignal): Promise<SliceResult> {
   const cp: RunCheckpoint = structuredClone(input);
+  cp.counters = { ...emptyCounters(), ...cp.counters };
   const t0 = deps.clock.now();
   const slice: SliceOut = { steps: [], proposals: [], applied: [] };
   let sliceTurns = 0;
 
-  const finish = async (stop: StopReason, finalText = ""): Promise<SliceResult> => {
+  const finish = async (stop: StopReason, finalText = "", info: StopInfo = {}): Promise<SliceResult> => {
     cp.lastStop = stop;
     cp.counters.ms += Math.max(0, deps.clock.now() - t0);
-    let stopMessage = "";
-    if (RESUMABLE_STOPS.has(stop)) {
-      stopMessage = stopMessageFor(stop, cp.lang, slice.steps);
-      deps.emit({ type: "stopped", reason: stop, resumable: true, message: stopMessage });
-    }
+    const resumable = RESUMABLE_STOPS.has(stop) && info.resumable !== false;
+    const stopMessage = stopMessageFor(stop, cp.lang, slice.steps, info);
+    if (stopMessage) deps.emit({ type: "stopped", reason: stop, resumable, message: stopMessage });
     if (deps.save) await deps.save(cp, "stop");
-    return { checkpoint: cp, stop, finalText, stopMessage, ...slice };
+    return { checkpoint: cp, stop, resumable, finalText, stopMessage, ...slice };
   };
 
-  if (cp.inflight && (await runBatch(cp, deps, limits, signal, slice)) === "aborted") return finish("aborted");
+  if (cp.inflight) {
+    const b = await runBatch(cp, deps, limits, signal, slice);
+    if (b.aborted) return finish("aborted");
+    if (b.stuck) return finish("stuck", "", { detail: b.stuck.detail });
+  }
 
   for (;;) {
     if (signal?.aborted) return finish("aborted");
@@ -184,45 +356,23 @@ export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: S
       if (c === "cancel") return finish("cancelled");
       if (c === "pause") return finish("paused");
     }
-    const elapsed = deps.clock.now() - t0;
-    if (sliceTurns >= limits.maxTurns || elapsed >= limits.maxWallMs) return finish("slice_end");
+    if (sliceTurns >= limits.maxTurns || deps.clock.now() - t0 >= limits.maxWallMs) return finish("slice_end");
 
     const specs = deps.tools.specs();
     if (!specs.length && cp.history.some((h) => h.kind === "exchange")) return finish("policy");
 
-    deps.emit({ type: "thinking", turn: cp.counters.turns + 1 });
-    let messages = buildWireMessages(cp, { system: deps.systemPrompt(), targetModel: cp.model, digestAfterBytes: limits.digestAfterBytes });
-    const errors = checkProtocol(messages, { toolsSent: specs.length > 0 }).filter((v) => v.severity === "error");
-    if (errors.length) {
-      if (deps.strictProtocol) throw new ProtocolError(errors);
-      const fixed = repairHistory(messages);
-      messages = fixed.messages;
-      cp.counters.protocolRepairs += fixed.repairs;
-    }
+    const system = deps.systemPrompt();
+    const compaction = compactHistory(cp, { system, specs, limits });
+    emitCompaction(cp, deps, compaction);
+    if (compaction.overLimit) return finish("budget", "", { resumable: false });
 
-    let reply: ChatReply;
-    try {
-      const timeoutMs = Math.min(limits.llmTimeoutMs, Math.max(0, limits.maxWallMs - elapsed) + 30_000);
-      reply = await deps.chat({
-        messages,
-        tools: specs.length ? specs : undefined,
-        model: cp.model || undefined,
-        maxTokens: limits.maxTokens,
-        signal: linkSignals(signal, timeoutSignal(timeoutMs)),
-      });
-    } catch {
-      if (signal?.aborted) return finish("aborted");
-      deps.emit({ type: "error", code: "llm", message: cp.lang === "th" ? "เรียก AI ไม่สำเร็จ" : "The AI request failed." });
-      return finish("llm_error");
-    }
+    deps.emit({ type: "thinking", turn: cp.counters.turns + 1 });
+    const got = await requestReply(cp, deps, limits, signal, { system, specs, t0 });
+    if ("stop" in got) return finish(got.stop, "", got.info);
+    const reply = got.reply;
 
     sliceTurns++;
     cp.counters.turns++;
-    if (reply.usage) {
-      cp.counters.promptTokens += Number(reply.usage.prompt_tokens) || 0;
-      cp.counters.completionTokens += Number(reply.usage.completion_tokens) || 0;
-    }
-
     const reasoning = reasoningOf(reply, cp.model);
     const calls = normalizeCalls(reply.message.tool_calls, cp.counters.turns, existingCallIds(cp));
     const text = typeof reply.message.content === "string" ? reply.message.content : "";
@@ -236,6 +386,8 @@ export async function runSlice(input: RunCheckpoint, deps: EngineDeps, limits: S
     cp.history.push({ kind: "exchange", text: text || null, ...(reasoning ? { reasoning } : {}), calls, results: [] });
     cp.inflight = { exchangeIndex: cp.history.length - 1, done: [] };
     if (deps.save) await deps.save(cp, "turn");
-    if ((await runBatch(cp, deps, limits, signal, slice)) === "aborted") return finish("aborted");
+    const b = await runBatch(cp, deps, limits, signal, slice);
+    if (b.aborted) return finish("aborted");
+    if (b.stuck) return finish("stuck", "", { detail: b.stuck.detail });
   }
 }

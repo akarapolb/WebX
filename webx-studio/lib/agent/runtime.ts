@@ -7,7 +7,7 @@ import { applyInput, startRun } from "./engine/checkpoint";
 import { serverDeps } from "./engine/deps.server";
 import { limitsFor } from "./engine/limits";
 import { runSlice } from "./engine/loop";
-import { RESUMABLE_STOPS, type RunCheckpoint, type StopReason } from "./engine/types";
+import type { RunCheckpoint, StopReason } from "./engine/types";
 import type { AgentContextRef, AgentEvent, AgentProposal, AgentRunContext } from "./types";
 
 const DEFAULT_MODEL = process.env.LITELLM_MODEL || "webx-default";
@@ -94,6 +94,6 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     aborted: r.stop === "aborted",
     stopReason: r.stop,
     stopMessage: r.stopMessage,
-    checkpoint: RESUMABLE_STOPS.has(r.stop) ? r.checkpoint : null,
+    checkpoint: r.resumable ? r.checkpoint : null,
   };
 }

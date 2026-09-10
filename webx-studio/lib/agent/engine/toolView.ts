@@ -81,6 +81,22 @@ export function extractIds(data: unknown, limit = 20): IdRef[] {
   return out;
 }
 
+/** The same record with a harness note placed first in what the model sees.
+ * The note is never truncated; the original payload shrinks to make room. */
+export function withHarnessNote(rec: ToolResultRec, note: string, limits: Pick<SliceLimits, "toolFullBytes">): ToolResultRec {
+  const noteJson = JSON.stringify(note);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rec.full);
+  } catch {
+    payload = { ok: rec.ok, summary: rec.summary };
+  }
+  const obj = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : { result: payload };
+  const inner = boundedJson(obj, Math.max(64, limits.toolFullBytes - byteLen(noteJson) - 20));
+  const full = inner === "{}" ? `{"harness_note":${noteJson}}` : `{"harness_note":${noteJson},${inner.slice(1)}`;
+  return { ...rec, full };
+}
+
 export function toolResultRecord(
   callId: string,
   name: string,

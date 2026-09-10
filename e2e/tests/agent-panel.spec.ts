@@ -4,7 +4,7 @@ import { WEBX_STUDIO, STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD } from "
 // UI-level coverage for the docked agent panel (components/agent/AgentPanel.tsx
 // + AgentProvider.tsx) and the /agent workspace — entirely through
 // page.route() mocks of /api/agent/*, so this suite needs no LiteLLM, no
-// mock-litellm.mjs process, and no tenant plan/policy setup: it exercises
+// mock LLM server, and no tenant plan/policy setup: it exercises
 // the CLIENT's own state machine (open/close persistence, SSE parsing into
 // the message list, proposal Apply gating) against canned responses, the
 // same way agent.spec.ts exercises the real backend contract those canned

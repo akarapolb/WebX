@@ -32,7 +32,7 @@ npm run test:studio         # WebX Studio round trip (needs WP_ADMIN_APP_PASSWOR
 npm run test:users          # user management + rebuild-now (needs STRAPI_SCHEDULER_PASSWORD)
 npm run test:wp-admin       # WordPress admin direct edit (needs WP_ADMIN_PASSWORD)
 npm run test:agent-panel    # WebX Agent docked panel + workspace UI (mocked backend, needs STRAPI_SCHEDULER_PASSWORD only)
-npm run test:agent          # WebX Agent real backend run (needs DGA_EDITOR_PASSWORD + a running mock-litellm — see Suite 5)
+npm run test:agent          # WebX Agent real backend run (needs DGA_EDITOR_PASSWORD + webx-studio pointed at the mock LLM — see Suite 5)
 ```
 
 ## Suite 1 — public-site rendering
@@ -88,7 +88,7 @@ export DGA_EDITOR_PASSWORD="dga-editor@dga.local's password"          # strapi-c
 ```
 
 Also needs the **already-running** webx-studio dev server to have been
-started with `LITELLM_URL` pointing at `e2e/mock-litellm.mjs` — env vars in
+started with `LITELLM_URL` pointing at the mock LLM server (port 4010) — env vars in
 `lib/llm.ts` are read once at module load, not per request, so this can't be
 injected per-test-run the way credentials above can:
 
@@ -102,10 +102,14 @@ npm run dev
 npm run test:agent
 ```
 
-The test itself starts/stops `mock-litellm.mjs` (a tiny scripted
-OpenAI-`/chat/completions`-compatible server — no real model, deterministic:
-turn 1 always calls `write_draft_fields` against a real seeded dga article,
-turn 2 always ends the run) and temporarily bumps dga's plan + agent
+The test itself starts and stops `webx-studio/tests/harness/mockLlmServer.ts`
+(a scenario-driven OpenAI-`/chat/completions`-compatible server — no real
+model, deterministic: the `write-draft-field` scenario in
+`webx-studio/tests/scenarios/` calls `write_draft_fields` against a real seeded
+dga article on turn 1 and ends the run on turn 2). The server checks every
+request webx-studio sends against the provider tool-calling protocol, and the
+test fails if any request broke it (`GET /__mock/report`). The test also
+temporarily bumps dga's plan + agent
 autonomy level via the Strapi admin API so the run isn't blocked by either
 gate — reverting both, and the article's own title, in `afterAll` regardless
 of pass/fail. Revert `LITELLM_URL` back to empty (or remove the line) and
@@ -118,7 +122,7 @@ mock instead of degrading gracefully or hitting a real model.
 
 Pure UI coverage of `components/agent/*` (the docked panel, the `/agent`
 full-page workspace) via `page.route()` mocks of every `/api/agent/*` call —
-no LiteLLM, no `mock-litellm.mjs`, no tenant plan/policy setup, and it runs
+no LiteLLM, no mock LLM server, no tenant plan/policy setup, and it runs
 against whatever the currently logged-in session's OWN tenant happens to be
 (irrelevant, since nothing agent-related hits the real backend). Only needs
 `STRAPI_SCHEDULER_PASSWORD` (for the login itself — `middleware.ts` gates

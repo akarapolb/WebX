@@ -3,7 +3,8 @@
 // governance.ts's own exported AgentLevel/AgentPolicy types are re-exported
 // here rather than this file importing them back, keeping the direction of
 // the dependency graph obvious at a glance).
-import type { CurrentUser } from "@/lib/cms/types";
+import type { CurrentUser, EntryList, EntryQuery } from "@/lib/cms/types";
+import type { ContentTypeSchema } from "./schemaDigest";
 
 export type AgentLevel = "off" | "read" | "suggest" | "draft" | "draft_submit";
 // Mirrors governance.ts's own private AGENT_LEVEL_RANK — duplicated rather
@@ -18,14 +19,24 @@ export const levelAtLeast = (have: AgentLevel, need: AgentLevel): boolean => LEV
  * downgrade a draft-mode write into a `proposal` event instead of writing
  * through governed.* directly (see tools.ts) — the Visual Builder and
  * EntryEditor hold their own unsaved local state, so a server-side write
- * would diverge from or clobber it. Page-building tool kinds ("page") are
- * accepted here now but their tools land in a follow-up pass — see
- * tools.ts's own header comment. */
+ * would diverge from or clobber it. */
 export type AgentContextRef =
   | { kind: "page"; uid: string; docId: string; locale?: string; applyLocally?: boolean }
   | { kind: "entry"; uid: string; docId: string; locale?: string; applyLocally?: boolean }
   | { kind: "board" }
   | { kind: "none" };
+
+/** The CMS operations the agent's tools use. Production passes governed.*,
+ * so every tenant, role and field-policy guard applies; tests pass an
+ * in-memory stand-in (tests/harness/fakeCms.ts). */
+export type AgentCms = {
+  list<T = any>(uid: string, query?: EntryQuery): Promise<EntryList<T>>;
+  get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null>;
+  create<T = any>(uid: string, data: Record<string, any>): Promise<T>;
+  update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T>;
+  listContentTypes(tenantKey: string): Promise<{ uid: string; label: string }[]>;
+  contentTypeSchema(uid: string): Promise<ContentTypeSchema | null>;
+};
 
 export type AgentRunContext = {
   user: CurrentUser;
@@ -46,10 +57,12 @@ export type AgentRunContext = {
    * to pick "wp:page" vs the Strapi page/landing uids. */
   dialect: string;
   engine: "strapi" | "wordpress";
+  /** Defaults to governed.* (see tools.ts). */
+  cms?: AgentCms;
 };
 
 // ---- SSE wire events (app/api/agent/run/route.ts emits these; the client's
-// useAgentRun hook — Milestone 2 — parses the identical shape) ----
+// useAgentRun hook parses the identical shape) ----
 export type AgentEvent =
   | { type: "run_started"; runId: string; threadId: string; level: AgentLevel; model: string }
   | { type: "thinking"; turn: number }
@@ -61,7 +74,11 @@ export type AgentEvent =
   | { type: "done"; runId: string; applied?: { uid: string; id: string }[] }
   | { type: "error"; code: string; message: string }
   /** The run ended before finishing its task. A `resumable` run can be continued from the thread's saved checkpoint. */
-  | { type: "stopped"; reason: string; resumable: boolean; message: string };
+  | { type: "stopped"; reason: string; resumable: boolean; message: string }
+  /** A model request is being retried (after a transient failure, or a truncated or empty reply). */
+  | { type: "retry"; attempt: number; delayMs: number; reason: string }
+  /** Older history was summarized to stay inside the model's context window. */
+  | { type: "compaction"; beforeTokens: number; afterTokens: number; folded: number };
 
 export type AgentProposal = {
   id: string;

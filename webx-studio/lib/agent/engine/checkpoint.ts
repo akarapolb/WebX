@@ -1,9 +1,13 @@
 import { providerFor, sameReasoningTarget } from "./providers";
 import { byteLen } from "./toolView";
-import type { ExchangeItem, HItem, ReasoningPayload, RunCheckpoint, RunMode, WireMsg } from "./types";
+import type { ExchangeItem, HItem, ReasoningPayload, RunCheckpoint, RunCounters, RunMode, WireMsg } from "./types";
 import type { AgentContextRef } from "../types";
 
 export const CHECKPOINT_VERSION = 1 as const;
+
+export const emptyCounters = (): RunCounters => ({
+  turns: 0, toolCalls: 0, promptTokens: 0, completionTokens: 0, protocolRepairs: 0, retries: 0, compactions: 0, ms: 0,
+});
 
 export type StartRunInput = {
   runId: string;
@@ -37,7 +41,7 @@ export function startRun(i: StartRunInput): RunCheckpoint {
     model: i.model,
     history,
     ledger: { applied: [], proposals: [], toolSteps: [] },
-    counters: { turns: 0, toolCalls: 0, promptTokens: 0, completionTokens: 0, protocolRepairs: 0, ms: 0 },
+    counters: emptyCounters(),
   };
 }
 
@@ -50,6 +54,7 @@ export function applyInput(cp: RunCheckpoint, input: { kind: "message" | "answer
   return next;
 }
 
+/** A checkpoint from storage, or null when it is missing, malformed or from another engine version. */
 export function parseCheckpoint(raw: unknown): RunCheckpoint | null {
   let v: any = raw;
   if (typeof raw === "string") {
@@ -61,7 +66,7 @@ export function parseCheckpoint(raw: unknown): RunCheckpoint | null {
   }
   if (!v || typeof v !== "object" || v.v !== CHECKPOINT_VERSION) return null;
   if (typeof v.runId !== "string" || !Array.isArray(v.history) || !v.ledger || !v.counters) return null;
-  return v as RunCheckpoint;
+  return { ...v, counters: { ...emptyCounters(), ...v.counters } } as RunCheckpoint;
 }
 
 export function buildWireMessages(cp: RunCheckpoint, o: { system: string; targetModel: string; digestAfterBytes: number }): WireMsg[] {
@@ -127,6 +132,7 @@ export function fitCheckpoint(cp: RunCheckpoint, maxBytes: number, o: { stripRea
     for (const r of h.results) r.full = r.digest;
     if (fits()) return c;
   }
+  delete c.stuck;
   c.ledger.proposals = c.ledger.proposals.map((p) => ({ id: p.id, kind: p.kind, target: p.target, title: p.title }));
   c.ledger.toolSteps = c.ledger.toolSteps.slice(-50);
   return fits() ? c : null;

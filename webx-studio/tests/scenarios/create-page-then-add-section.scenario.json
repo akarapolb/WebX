@@ -1,0 +1,27 @@
+{
+  "name": "create-page-then-add-section",
+  "description": "Creates a page, then adds a hero section using the id the create call returned (bug 2: the id has to reach the model).",
+  "steps": [
+    {
+      "expectTools": ["create_draft_entry", "insert_blocks"],
+      "reply": {
+        "toolCalls": [{ "name": "create_draft_entry", "args": { "uid": "api::page.page", "fields": { "title": "Digital ID Services" } } }]
+      }
+    },
+    {
+      "when": { "lastTool": { "name": "create_draft_entry", "ok": true } },
+      "reply": {
+        "toolCalls": [
+          {
+            "name": "insert_blocks",
+            "args": { "uid": "api::page.page", "id": "{{last.data.id}}", "at": 0, "blocks": [{ "comp": "block.hero", "fields": { "heading": "Digital ID Services" } }] }
+          }
+        ]
+      }
+    },
+    {
+      "when": { "lastTool": { "name": "insert_blocks", "ok": true } },
+      "reply": { "text": "Created the Digital ID Services page and added a hero section." }
+    }
+  ]
+}

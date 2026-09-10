@@ -9,8 +9,8 @@ import {
 
 // __dirname (CJS global — this repo's e2e package has no "type":"module",
 // and Playwright's own TS transform here doesn't support import.meta) —
-// used below to spawn mock-litellm.mjs by an absolute path regardless of
-// the shell's own cwd when `npx playwright test` is invoked.
+// used below to start webx-studio's mock LLM server by an absolute path
+// regardless of the shell's own cwd when `npx playwright test` is invoked.
 const TARGET_UID = "api::article.article";
 const TARGET_FIELD = "title";
 
@@ -76,10 +76,12 @@ test.describe("WebX Agent — real backend run against a mock LLM", () => {
       data: { plan: "pro", features: { agent: { level: "draft", local: false } } },
     });
 
-    // The mock LLM: turn 1 always calls write_draft_fields against this
-    // exact entry, turn 2 always ends the run — see mock-litellm.mjs.
+    // The mock LLM plays webx-studio/tests/scenarios/write-draft-field.scenario.json:
+    // turn 1 calls write_draft_fields against this exact entry, turn 2 ends
+    // the run. It also checks every request webx-studio sends against the
+    // provider tool-calling protocol (asserted at the end of the test).
     // stdio "pipe" (not "ignore") + listening for its own startup line is
-    // deliberate — found live: a STALE mock-litellm process left over from
+    // deliberate — found live: a STALE mock LLM process left over from
     // an earlier manual/interrupted run silently kept :4010 bound, so this
     // run's own freshly-spawned process failed to bind and its EADDRINUSE
     // never surfaced (spawn()'s bind failure is async and stdio:"ignore"
@@ -87,21 +89,21 @@ test.describe("WebX Agent — real backend run against a mock LLM", () => {
     // stale target and failed on an unrelated-looking "update failed" a
     // full turn later, nowhere near this actual root cause. Failing fast
     // and loudly here instead of an hour later downstream.
-    mockProc = spawn("node", ["mock-litellm.mjs"], {
-      cwd: path.join(__dirname, ".."),
+    mockProc = spawn(process.execPath, ["--import", "tsx", "tests/harness/mockLlmServer.ts"], {
+      cwd: path.join(__dirname, "..", "..", "webx-studio"),
       env: {
         ...process.env,
         MOCK_LITELLM_PORT: String(MOCK_LITELLM_PORT),
-        MOCK_TARGET_UID: TARGET_UID, MOCK_TARGET_ID: entryDocumentId,
-        MOCK_TARGET_FIELD: TARGET_FIELD, MOCK_TARGET_VALUE: newTitle,
+        MOCK_SCENARIO: "write-draft-field",
+        MOCK_VARS: JSON.stringify({ uid: TARGET_UID, id: entryDocumentId, field: TARGET_FIELD, value: newTitle }),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`mock-litellm.mjs didn't report ready on :${MOCK_LITELLM_PORT} within 5s — is something else already bound to that port?`)), 5000);
+      const timer = setTimeout(() => reject(new Error(`The mock LLM server didn't report ready on :${MOCK_LITELLM_PORT} within 20s — is something else already bound to that port?`)), 20_000);
       mockProc!.stdout?.on("data", (chunk) => { if (String(chunk).includes("listening")) { clearTimeout(timer); resolve(); } });
       mockProc!.on("error", (e) => { clearTimeout(timer); reject(e); });
-      mockProc!.on("exit", (code) => { if (code !== 0 && code !== null) { clearTimeout(timer); reject(new Error(`mock-litellm.mjs exited early with code ${code} — port ${MOCK_LITELLM_PORT} likely already in use`)); } });
+      mockProc!.on("exit", (code) => { if (code !== 0 && code !== null) { clearTimeout(timer); reject(new Error(`The mock LLM server exited early with code ${code} — port ${MOCK_LITELLM_PORT} likely already in use`)); } });
     });
 
     // A real tenant-scoped session — resolveAgentPolicy structurally
@@ -183,5 +185,12 @@ test.describe("WebX Agent — real backend run against a mock LLM", () => {
     const auditRows = (await auditRes.json()).results ?? [];
     const agentRow = auditRows.find((r: any) => r.action === "agent_update" && r.entryId === entryDocumentId && r.actor === "agent");
     expect(agentRow, `an audit-log row {action:"agent_update", actor:"agent", entryId:"${entryDocumentId}"} must exist — got: ${JSON.stringify(auditRows.slice(0, 3))}`).toBeTruthy();
+
+    // Every request webx-studio sent must have passed the provider protocol
+    // checks, and the scenario must have played out exactly as scripted.
+    const report = await (await page.request.get(`http://localhost:${MOCK_LITELLM_PORT}/__mock/report`)).json();
+    expect(report.violations, JSON.stringify(report.violations)).toEqual([]);
+    expect(report.failures, JSON.stringify(report.failures)).toEqual([]);
+    expect(report.remaining).toBe(0);
   });
 });

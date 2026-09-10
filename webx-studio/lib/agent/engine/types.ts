@@ -36,7 +36,14 @@ export type ChatReply = {
 
 export type ChatFn = (req: ChatRequest) => Promise<ChatReply>;
 
-export type ToolOutcome = { ok: boolean; summary: string; data?: any; proposal?: AgentProposal };
+export type ToolOutcome = {
+  ok: boolean;
+  summary: string;
+  data?: any;
+  proposal?: AgentProposal;
+  /** A transient failure such as a CMS 5xx. Read tools are retried once; writes never are. */
+  retryable?: boolean;
+};
 
 export type ReasoningPayload = { content?: string; thinkingBlocks?: unknown[]; servedBy: string };
 
@@ -70,6 +77,25 @@ export type RunMode = "docked" | "workspace" | "job";
 export type ToolStepRec = { name: string; ok: boolean; summary: string };
 export type AppliedRef = { uid: string; id: string };
 
+/** Recent tool activity the stuck detector reads (engine/stuck.ts). */
+export type StuckState = {
+  calls: { turn: number; name: string; sig: string; ok: boolean; errorKey: string; error: string }[];
+  turns: { turn: number; progressed: boolean; readOnly: boolean }[];
+  /** The last harness note. Detection only counts activity after its turn, and a second detection ends the run. */
+  noted?: { turn: number; kind: string };
+};
+
+export type RunCounters = {
+  turns: number;
+  toolCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  protocolRepairs: number;
+  retries: number;
+  compactions: number;
+  ms: number;
+};
+
 export type RunCheckpoint = {
   v: 1;
   runId: string;
@@ -83,7 +109,10 @@ export type RunCheckpoint = {
   history: HItem[];
   pinned?: { goal?: string; progress?: string };
   ledger: { applied: AppliedRef[]; proposals: AgentProposal[]; toolSteps: ToolStepRec[] };
-  counters: { turns: number; toolCalls: number; promptTokens: number; completionTokens: number; protocolRepairs: number; ms: number };
+  counters: RunCounters;
+  /** Prompt tokens per request byte, calibrated from provider usage (engine/compaction.ts). */
+  tokenRatio?: number;
+  stuck?: StuckState;
   /** Set while a tool batch is running; `pendingWrite` marks a write that started but has no recorded result. */
   inflight?: { exchangeIndex: number; done: string[]; pendingWrite?: string };
   lastStop?: StopReason;
@@ -109,6 +138,8 @@ export type EngineDeps = {
   control?: () => Promise<"run" | "pause" | "cancel">;
   /** Throw on a protocol violation instead of repairing it (tests). */
   strictProtocol?: boolean;
+  /** Jitter source for retry backoff; tests pass a fixed one. */
+  random?: () => number;
 };
 
 export type SliceLimits = {
@@ -122,11 +153,21 @@ export type SliceLimits = {
   toolDigestBytes: number;
   /** Past this much tool content in history, exchanges older than the last two are sent as digests. */
   digestAfterBytes: number;
+  /** Model requests per turn, counting the first; transient failures are retried up to this. */
+  maxLlmAttempts: number;
+  /** Compact once the estimated prompt passes this share of the model's context… */
+  compactAt: number;
+  /** …down to this share. */
+  compactTo: number;
+  /** Still above this share after compacting: stop with "budget". */
+  contextHardLimit: number;
 };
 
 export type SliceResult = {
   checkpoint: RunCheckpoint;
   stop: StopReason;
+  /** Whether this stop can be continued from `checkpoint`. */
+  resumable: boolean;
   finalText: string;
   stopMessage: string;
   steps: ToolStepRec[];

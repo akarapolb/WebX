@@ -43,8 +43,8 @@ export const STRAPI_SCHEDULER_PASSWORD = process.env.STRAPI_SCHEDULER_PASSWORD |
 export const DGA_EDITOR_EMAIL = process.env.DGA_EDITOR_EMAIL || "dga-editor@dga.local";
 export const DGA_EDITOR_PASSWORD = process.env.DGA_EDITOR_PASSWORD || "";
 
-// e2e/mock-litellm.mjs's own port — agent.spec.ts starts that process
-// itself, but the ALREADY-RUNNING webx-studio dev server must have been
+// The mock LLM server's port (webx-studio/tests/harness/mockLlmServer.ts) —
+// agent.spec.ts starts that process itself, but the ALREADY-RUNNING webx-studio dev server must have been
 // started with LITELLM_URL pointing at this same port (env vars in
 // lib/llm.ts are read once at module load, not per-request — see
 // e2e/README.md's Suite 5 section for the exact startup command).

@@ -28,9 +28,10 @@
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { strapiAdapter } from "./strapi";
-import { wordpressAdapter, ensureWtenantTerm } from "./wordpress";
+import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./wordpress";
 import { CmsError } from "./types";
-import type { CmsAdapter, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
+import type { CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
+import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
 import { strapiLogin, strapiRefresh, withServiceToken, sessionEngine } from "../strapi";
 import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
@@ -829,6 +830,51 @@ export async function listGovernableContentTypes(tenantKey: string): Promise<{ u
   const uids = target.engine === "wordpress" ? WP_SCOPED : SCOPED;
   const all = await withEngineAdapter(target.engine || "strapi", (a) => a.schema.listContentTypes());
   return all.filter((ct) => uids.has(ct.uid)).map((ct) => ({ uid: ct.uid, label: ct.name || ct.uid }));
+}
+
+const contentTypeCache: Partial<Record<"strapi" | "wordpress", { at: number; list: ContentTypeInfo[] }>> = {};
+async function contentTypesForEngine(engine: "strapi" | "wordpress"): Promise<ContentTypeInfo[]> {
+  const hit = contentTypeCache[engine];
+  if (hit && Date.now() - hit.at < 60_000) return hit.list;
+  const list = await withEngineAdapter(engine, (a) => a.schema.listContentTypes());
+  contentTypeCache[engine] = { at: Date.now(), list };
+  return list;
+}
+
+/** One content type's fields as the WebX Agent sees them (lib/agent/schemaDigest.ts):
+ * only types this workspace governs, fields the caller's role can't see
+ * dropped, fields it can't change marked read-only (Strapi field policies and
+ * the tenant's custom role, same union stripPolicyFields/stripCustomRoleFields
+ * apply on write). Null for any other uid. */
+export async function getContentTypeSchema(uid: string): Promise<ContentTypeSchema | null> {
+  const user = await requireUser();
+  const eff = await resolveEffectiveTenant(user.email);
+  const engine = eff?.engine === "wordpress" ? "wordpress" : "strapi";
+  if (!(engine === "wordpress" ? WP_SCOPED : SCOPED).has(uid)) return null;
+  const info = (await contentTypesForEngine(engine)).find((ct) => ct.uid === uid);
+  if (!info) return null;
+
+  let attributes = info.attributes;
+  if (engine === "wordpress") {
+    const names = wordpressFieldNames(uid);
+    attributes = wordpressAttributes(names?.acf ?? [], names?.json ?? []);
+  }
+
+  const hidden: string[] = [];
+  const readonly: string[] = [];
+  if (!user.isSuperAdmin) {
+    for (const p of await getFieldPolicies()) {
+      if (p.contentType !== uid || !user.roles.includes(p.role)) continue;
+      if (Array.isArray(p.hidden)) hidden.push(...p.hidden);
+      if (Array.isArray(p.readonly)) readonly.push(...p.readonly);
+    }
+  }
+  const crp = await resolveCustomRolePermissions(user, eff, uid);
+  if (crp) {
+    hidden.push(...crp.hidden);
+    readonly.push(...crp.readonly);
+  }
+  return digestContentType({ uid, name: info.name, attributes }, { hidden, readonly });
 }
 
 export async function saveCustomRole(tenantKey: string, input: CustomRoleInput): Promise<any> {

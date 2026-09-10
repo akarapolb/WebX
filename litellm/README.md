@@ -41,10 +41,11 @@ model swapped in via `router_settings.fallbacks` should be verified for
 tool-calling specifically before relying on it for agent traffic, not just
 for plain generation — a model that silently ignores `tools` and answers in
 prose instead will make the agent's own turn loop treat every message as
-final text (see `lib/agent/runtime.ts`'s `chat()` call), not a hard error,
+final text (see `webx-studio/lib/agent/engine/loop.ts`), not a hard error,
 so a bad fallback here fails quietly rather than loudly.
 
-`e2e/mock-litellm.mjs` stands in for a real LiteLLM proxy in
-`e2e/tests/agent.spec.ts` — a tiny scripted `/chat/completions` server, no
-real model calls, kept in sync with this same request/response shape. See
+`webx-studio/tests/harness/mockLlmServer.ts` stands in for a real LiteLLM
+proxy in `e2e/tests/agent.spec.ts` — a scenario-driven `/chat/completions`
+server (scenarios in `webx-studio/tests/scenarios/`), no real model calls,
+that also rejects any request breaking the tool-calling protocol. See
 `e2e/README.md`'s own Suite 5 section for how to run it.

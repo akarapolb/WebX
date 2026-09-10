@@ -162,6 +162,13 @@ const ACF_JSON_FIELDS: Record<string, string[]> = {
   "wp:application": ["extra"],
 };
 
+/** The ACF field names a WordPress post type carries, and which of them hold
+ * JSON — for the agent's get_content_type_schema. Null for an unknown uid. */
+export function wordpressFieldNames(uid: string): { acf: string[]; json: string[] } | null {
+  if (!POST_TYPES[uid]) return null;
+  return { acf: ACF_FIELDS[uid] || [], json: ACF_JSON_FIELDS[uid] || [] };
+}
+
 function encodeJsonFields(uid: string, data: Record<string, any>): Record<string, any> {
   const keys = ACF_JSON_FIELDS[uid];
   if (!keys) return data;

@@ -2,22 +2,24 @@
 // governed.* (lib/cms/governance.ts), so tenant scoping, custom-role gates,
 // field-policy stripping, the item plan cap, and audit logging are ALL
 // inherited automatically; nothing here re-implements or bypasses any of it.
+// Tests swap governed.* for an in-memory CMS through ctx.cms.
 //
-// Covers both content-entry tools (read/search/audit/write-draft/translate/
-// submit) and page-building tools (get_page_blocks/insert_blocks/
+// Covers both content-entry tools (read/search/schema/audit/write-draft/
+// translate/submit) and page-building tools (get_page_blocks/insert_blocks/
 // replace_block/remove_block/list_block_types — added once
 // lib/blockCatalog.ts existed to share VisualBuilder.tsx's own block-type
 // catalog without a second copy).
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { governed, listGovernableContentTypes } from "@/lib/cms/governance";
+import { governed, listGovernableContentTypes, getContentTypeSchema } from "@/lib/cms/governance";
 import { CmsError } from "@/lib/cms/types";
 import { structured } from "@/lib/llm";
 import { toBuilder, toWire, type Dialect } from "@/lib/blockDialect";
 import { ALL_TYPES, metaOf } from "@/lib/blockCatalog";
 import { auditEntry } from "./auditRules";
 import { untrustedBlock } from "./prompts";
-import { levelAtLeast, type AgentRunContext, type ToolDef, type ToolMode, type AgentProposal } from "./types";
+import { validateArgs } from "./validateArgs";
+import { levelAtLeast, type AgentCms, type AgentRunContext, type ToolDef, type ToolMode, type AgentProposal } from "./types";
 
 const REVIEW_UID = "api::review.review";
 const PAGE_VERSION_UID = "api::page-version.page-version";
@@ -41,6 +43,17 @@ const BLOCK_TYPE_DENY = /embed/i;
 // block above, in case some OTHER field (e.g. a rich-text body) could
 // otherwise carry a script-like payload onto a live public page.
 const UNSAFE_BLOCK_STRING = /<script[\s>]|javascript:|on(?:error|load|click|mouseover|focus)\s*=/i;
+
+// governed.* by default; tests hand the tools an in-memory CMS instead.
+const governedCms: AgentCms = {
+  list: (uid, query) => governed.list(uid, query),
+  get: (uid, id, opts) => governed.get(uid, id, opts),
+  create: (uid, data) => governed.create(uid, data),
+  update: (uid, id, data, opts) => governed.update(uid, id, data, opts),
+  listContentTypes: (tenantKey) => listGovernableContentTypes(tenantKey),
+  contentTypeSchema: (uid) => getContentTypeSchema(uid),
+};
+const cmsOf = (ctx: AgentRunContext): AgentCms => ctx.cms ?? governedCms;
 
 // AgentRunContext.dialect is a plain string (governance.ts's AgentPolicy.dialect
 // comes straight from the tenant's own free-form publicTemplate field, never
@@ -79,7 +92,7 @@ function buildBlock(comp: string, fields: Record<string, any>): Record<string, a
  * the real edit it's protecting if the snapshot itself fails. */
 async function snapshotPageVersion(ctx: AgentRunContext, uid: string, id: string, title: string, blocks: any[]): Promise<void> {
   try {
-    await governed.create(PAGE_VERSION_UID, {
+    await cmsOf(ctx).create(PAGE_VERSION_UID, {
       documentRef: id, contentType: uid, tenantKey: ctx.tenantKey,
       label: "agent:" + ctx.runId, data: { title, blocks },
     });
@@ -147,12 +160,28 @@ const TOOLS: ToolDef[] = [
   {
     name: "list_content_types",
     mode: "read",
-    description: "List the content types (SCOPED for this tenant's engine) the agent can read or write in this workspace.",
+    description: "List the content types (SCOPED for this tenant's engine) the agent can read or write in this workspace. Pass each uid to other tools exactly as returned.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
     async run(ctx) {
-      const types = await listGovernableContentTypes(ctx.tenantKey || "");
+      const types = await cmsOf(ctx).listContentTypes(ctx.tenantKey || "");
       const allowed = ctx.allowedContentTypes ? types.filter((t) => ctx.allowedContentTypes!.includes(t.uid)) : types;
       return { summary: `${allowed.length} content type(s)`, data: allowed };
+    },
+  },
+  {
+    name: "get_content_type_schema",
+    mode: "read",
+    description: "Get the exact fields of one content type: type, whether required, allowed values, length limits, and whether you may set each field. Call it before creating entries of a type you have not created in this conversation, instead of reading existing entries to guess field shapes.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid"],
+      properties: { uid: { type: "string" } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      const schema = await cmsOf(ctx).contentTypeSchema(args.uid);
+      if (!schema) throw new CmsError(`Unknown content type "${args.uid}". Use an exact uid from list_content_types.`, 404);
+      const required = schema.fields.filter((f) => f.required).map((f) => f.name);
+      return { summary: `${schema.fields.length} field(s)` + (required.length ? `; required: ${required.join(", ")}` : ""), data: schema };
     },
   },
   {
@@ -165,7 +194,7 @@ const TOOLS: ToolDef[] = [
     },
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
-      const { data, total } = await governed.list<any>(args.uid, { q: args.q, pageSize: Math.min(Number(args.limit) || 10, 20) });
+      const { data, total } = await cmsOf(ctx).list<any>(args.uid, { q: args.q, pageSize: Math.min(Number(args.limit) || 10, 20) });
       const rows = data.map((e: any) => ({ id: String(e.documentId ?? e.id), title: titleOf(e) || "(untitled)", updatedAt: e.updatedAt || null }));
       return { summary: `${rows.length} of ${total} match(es)`, data: rows };
     },
@@ -180,7 +209,7 @@ const TOOLS: ToolDef[] = [
     },
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
-      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Entry not found", 404);
       const readable: Record<string, any> = {};
       for (const [k, v] of Object.entries(e)) {
@@ -200,7 +229,7 @@ const TOOLS: ToolDef[] = [
     },
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
-      const e: any = await governed.get(args.uid, args.id);
+      const e: any = await cmsOf(ctx).get(args.uid, args.id);
       if (!e) throw new CmsError("Entry not found", 404);
       const findings = auditEntry({
         title: titleOf(e), body: bodyOf(e),
@@ -226,14 +255,14 @@ const TOOLS: ToolDef[] = [
         title: "Field changes", fields: args.fields,
       };
       if (shouldPropose(ctx)) return { summary: `Proposed ${Object.keys(args.fields).length} field change(s)`, proposal };
-      await governed.update(args.uid, args.id, args.fields, { locale: args.locale });
+      await cmsOf(ctx).update(args.uid, args.id, args.fields, { locale: args.locale });
       return { summary: `Wrote ${Object.keys(args.fields).length} field(s) as a draft`, data: { uid: args.uid, id: args.id } };
     },
   },
   {
     name: "create_draft_entry",
     mode: "draft",
-    description: "Create a new entry as a DRAFT (never published). Downgrades to a proposal under the same rules as write_draft_fields.",
+    description: "Create a new entry as a DRAFT (never published). For a content type you have not created in this conversation, call get_content_type_schema first. Downgrades to a proposal under the same rules as write_draft_fields.",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "fields"],
       properties: { uid: { type: "string" }, fields: { type: "object" } },
@@ -247,7 +276,7 @@ const TOOLS: ToolDef[] = [
           proposal: { id: randomUUID(), kind: "fields", target: { uid: args.uid, id: "" }, title: titleOf(args.fields) || "New entry", fields: args.fields },
         };
       }
-      const created: any = await governed.create(args.uid, args.fields);
+      const created: any = await cmsOf(ctx).create(args.uid, args.fields);
       return { summary: `Created a draft ${args.uid}`, data: { uid: args.uid, id: String(created?.documentId ?? created?.id ?? "") } };
     },
   },
@@ -261,7 +290,7 @@ const TOOLS: ToolDef[] = [
     },
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
-      const e: any = await governed.get(args.uid, args.id, { locale: args.sourceLocale });
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.sourceLocale });
       if (!e) throw new CmsError("Entry not found", 404);
       const CAND = ["title", "name", "subject", "question", "categoryLabel", "excerpt", "summary", "description", "answer", "body", "content"];
       const source: Record<string, string> = {};
@@ -284,7 +313,7 @@ const TOOLS: ToolDef[] = [
         };
       }
       const title = "[" + String(args.targetLocale).toUpperCase() + "] " + (source.title || source.name || args.id.slice(0, 8));
-      await governed.create(REVIEW_UID, {
+      await cmsOf(ctx).create(REVIEW_UID, {
         documentRef: args.id, contentType: args.uid, title, stage: "in_review", kind: "translation",
         requestedBy: ctx.user.email || "agent",
         note: "Agent draft translation -> " + args.targetLocale + ". Review, then Apply to write the " + args.targetLocale + " locale.",
@@ -306,7 +335,7 @@ const TOOLS: ToolDef[] = [
       assertContentTypeAllowed(ctx, args.uid);
       const title = args.title || args.id.slice(0, 8);
       const entry = { from: "draft", to: "in_review", by: ctx.user.email || "agent", at: new Date().toISOString() };
-      const created: any = await governed.create(REVIEW_UID, {
+      const created: any = await cmsOf(ctx).create(REVIEW_UID, {
         documentRef: args.id, contentType: args.uid, title, stage: "in_review", requestedBy: ctx.user.email || "agent", history: [entry],
       });
       return { summary: "Submitted for review", data: { reviewId: String(created?.documentId ?? created?.id ?? "") } };
@@ -336,7 +365,7 @@ const TOOLS: ToolDef[] = [
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
       assertPageUid(args.uid);
-      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
       const blocks = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx)).map((b: any, index: number) => ({ index, ...b }));
       const truncated = blocks.length > MAX_BLOCKS_RETURNED;
@@ -371,13 +400,13 @@ const TOOLS: ToolDef[] = [
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Insert ${newBlocks.length} block(s)`, blocks: newBlocks, at: args.at },
         };
       }
-      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
       const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
       const at = Math.max(0, Math.min(args.at, current.length));
       const next = [...current.slice(0, at), ...newBlocks, ...current.slice(at)];
       await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await governed.update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Inserted ${newBlocks.length} block(s) at position ${at}`, data: { uid: args.uid, id: args.id } };
     },
   },
@@ -399,13 +428,13 @@ const TOOLS: ToolDef[] = [
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Replace block ${args.index}`, blocks: [newBlock], replace: args.index },
         };
       }
-      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
       const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
       if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
       const next = current.map((b: any, i: number) => (i === args.index ? newBlock : b));
       await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await governed.update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Replaced block ${args.index}`, data: { uid: args.uid, id: args.id } };
     },
   },
@@ -426,13 +455,13 @@ const TOOLS: ToolDef[] = [
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Remove block ${args.index}`, blocks: [], replace: args.index },
         };
       }
-      const e: any = await governed.get(args.uid, args.id, { locale: args.locale });
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
       const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
       if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
       const next = current.filter((_: any, i: number) => i !== args.index);
       await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await governed.update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Removed block ${args.index}`, data: { uid: args.uid, id: args.id } };
     },
   },
@@ -469,11 +498,23 @@ export function capResult(s: string): string {
   return s.length > MAX_RESULT_BYTES ? s.slice(0, MAX_RESULT_BYTES) + "\n…(truncated)" : s;
 }
 
+// Strapi's validation message says what was wrong; it doesn't say where the
+// model can find what's right (bug 4: the model moved on to another content
+// type instead of fixing the fields).
+const SCHEMA_HINT_TOOLS = new Set(["create_draft_entry", "write_draft_fields"]);
+function withSchemaHint(name: string, args: Record<string, any>, e: CmsError): string {
+  const status = e.status ?? 0;
+  if (!SCHEMA_HINT_TOOLS.has(name) || (status !== 400 && status !== 422) || typeof args.uid !== "string" || !/ failed: /.test(e.message)) return e.message;
+  return `${e.message} — call get_content_type_schema with {"uid":"${args.uid}"} for the exact fields and allowed values.`;
+}
+
 /** Executes one tool call by name, re-checking everything the tool list was
  * already filtered by (a stale tool list from an earlier turn, or a model
  * hallucinating a disallowed call, must still be caught here — this is the
  * actual enforcement point, availableTools() is only what's offered). */
-export async function executeTool(ctx: AgentRunContext, name: string, argsJson: string): Promise<{ ok: boolean; summary: string; data?: any; proposal?: AgentProposal }> {
+export async function executeTool(
+  ctx: AgentRunContext, name: string, argsJson: string,
+): Promise<{ ok: boolean; summary: string; data?: any; proposal?: AgentProposal; retryable?: boolean }> {
   if (DENY_NAME.test(name)) return { ok: false, summary: "This action is not available to the agent." };
   const tool = TOOL_BY_NAME.get(name);
   if (!tool) return { ok: false, summary: `Unknown tool "${name}".` };
@@ -482,11 +523,13 @@ export async function executeTool(ctx: AgentRunContext, name: string, argsJson: 
   let args: Record<string, any>;
   try { args = argsJson ? JSON.parse(argsJson) : {}; } catch { return { ok: false, summary: "Malformed tool arguments." }; }
   if (JSON.stringify(args).length > MAX_RESULT_BYTES) return { ok: false, summary: "Tool arguments too large." };
+  const problems = validateArgs(tool.parameters, args);
+  if (problems.length) return { ok: false, summary: `Invalid arguments for ${name}: ${problems.join("; ")}.` };
   try {
     const r = await tool.run(ctx, args);
     return { ok: true, summary: capResult(r.summary), data: r.data, proposal: r.proposal };
   } catch (e: any) {
-    if (e instanceof CmsError) return { ok: false, summary: e.message };
-    return { ok: false, summary: "Tool failed unexpectedly." };
+    if (e instanceof CmsError) return { ok: false, summary: capResult(withSchemaHint(name, args, e)), retryable: (e.status ?? 0) >= 500 };
+    return { ok: false, summary: "Tool failed unexpectedly.", retryable: true };
   }
 }

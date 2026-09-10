@@ -1,0 +1,18 @@
+{
+  "name": "write-draft-field",
+  "description": "Sets one field on one entry, then ends the run. Vars: uid, id, field, value. Used by e2e/tests/agent.spec.ts.",
+  "steps": [
+    {
+      "expectTools": ["write_draft_fields"],
+      "reply": {
+        "toolCalls": [
+          { "name": "write_draft_fields", "args": { "uid": "{{vars.uid}}", "id": "{{vars.id}}", "fields": { "{{vars.field}}": "{{vars.value}}" } } }
+        ]
+      }
+    },
+    {
+      "when": { "lastTool": { "name": "write_draft_fields", "ok": true } },
+      "reply": { "text": "Done — updated the field as requested." }
+    }
+  ]
+}
