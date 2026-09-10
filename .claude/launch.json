@@ -21,6 +21,13 @@
       "port": 3001
     },
     {
+      "name": "strapi-cms",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "develop"],
+      "cwd": "strapi-cms",
+      "port": 1337
+    },
+    {
       "name": "public-site",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "public-site/out", "-l", "8095"],
