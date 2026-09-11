@@ -155,6 +155,19 @@ svg{display:block;width:18px;height:18px;flex:none}
 .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
 .muted{color:var(--mut);font-size:12.5px}
 .notice{font-size:11.5px;color:var(--mut);margin-top:18px;display:flex;align-items:center;gap:7px}
+
+/* Per-tenant "require MFA" — MfaRequirement.tsx, Shell.tsx, Security.tsx */
+.mfa-banner{display:flex;align-items:center;gap:10px;padding:9px 22px;background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--ink);font-size:13px;border-bottom:1px solid var(--line)}
+.mfa-banner svg{width:16px;height:16px;color:var(--warn);flex:none}
+.mfa-banner span{flex:1;min-width:0}
+.mfa-nag{margin-bottom:16px}
+.mfa-nag--overdue .badge{white-space:normal;text-align:left}
+.mfa-block{display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow:auto}
+.mfa-block-inner{max-width:480px;width:100%}
+.mfa-block-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.mfa-block-h svg{width:20px;height:20px;color:var(--warn);flex:none}
+.mfa-block-h h2{margin:0;font-size:19px;font-weight:700}
+.mfa-block-inner>.lead{color:var(--mut);font-size:13.5px;margin:0 0 18px}
 .notice svg{width:14px;height:14px}
 .stub{display:grid;place-items:center;height:60vh;text-align:center}
 .stub .ic{width:54px;height:54px;border-radius:15px;background:var(--accent-soft);display:grid;place-items:center;margin:0 auto 16px}

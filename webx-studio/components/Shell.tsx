@@ -11,19 +11,30 @@ import { useTenant } from "./TenantProvider";
 import { useAgent } from "./agent/AgentProvider";
 import AgentPanel from "./agent/AgentPanel";
 import JobsIndicator from "./agent/JobsIndicator";
+import Security from "./Security";
+
+type MfaEnforcement = { required: boolean; enrolled: boolean; deadline: string | null; overdue: boolean } | null;
 
 export default function Shell({
-  user, connected, children,
+  user, connected, children, mfaEnforcement,
 }: {
   user: { email: string; name: string };
   connected: boolean;
   children: React.ReactNode;
+  /** Per-tenant "require MFA" (governance.ts's mfaEnforcementStatus), resolved once by the layout. Null off the Strapi engine or on lookup failure — never blocks in that case. */
+  mfaEnforcement?: MfaEnforcement;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { t, lang, setLang } = useLang();
   const { tenants, currentKey, setCurrentKey, current, engine } = useTenant();
   const agent = useAgent();
+  // Local copy so enrolling can lift the block immediately (Security's
+  // onEnabled) without waiting for a full navigation to re-run the layout.
+  const [mfa, setMfa] = useState(mfaEnforcement ?? null);
+  useEffect(() => { setMfa(mfaEnforcement ?? null); }, [mfaEnforcement]);
+  const onSecurityPage = pathname === "/account/security";
+  const mfaBlocked = Boolean(mfa?.overdue) && !onSecurityPage;
   const [tenOpen, setTenOpen] = useState(false);
   const [nwOpen, setNwOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -128,8 +139,27 @@ export default function Shell({
           <button className="ic-btn" title="Sign out" onClick={logout}><Icon name="logout" /></button>
           <div className="avatar" title={user.email}>{initials}</div>
         </header>
+        {mfa?.required && !mfa.enrolled && !mfa.overdue && (
+          <div className="mfa-banner" data-testid="mfa-banner">
+            <Icon name="shield" />
+            <span>
+              {t("sec.req.reminder").replace("{date}", mfa.deadline ? new Date(mfa.deadline).toLocaleDateString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium" }) : "")}
+            </span>
+            <button className="btn btn--p btn-sm" onClick={() => router.push("/account/security")}>{t("sec.req.cta")}</button>
+          </div>
+        )}
         <div className="body">
-          <div className="page">{children}</div>
+          {mfaBlocked ? (
+            <div className="page mfa-block" data-testid="mfa-block">
+              <div className="mfa-block-inner">
+                <div className="mfa-block-h"><Icon name="shield" /><h2>{t("sec.req.blockTitle")}</h2></div>
+                <p className="lead">{t("sec.req.blockDesc")}</p>
+                <Security onEnabled={() => setMfa((m) => (m ? { ...m, overdue: false, enrolled: true } : m))} />
+              </div>
+            </div>
+          ) : (
+            <div className="page">{children}</div>
+          )}
           <AgentPanel />
         </div>
       </div>

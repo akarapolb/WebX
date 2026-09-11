@@ -611,6 +611,72 @@ export async function ssoLoginAvailable(tenantKey: string): Promise<{ enabled: b
   return { enabled: true, label: target.name };
 }
 
+// ---------- MFA enforcement (per-tenant "require MFA") ----------
+// Real per-user MFA (isMfaEnabled et al., above) is opt-in and always
+// available regardless of tenant. This layer lets a workspace ADMINISTRATOR
+// require it — off by default, so an un-configured tenant behaves exactly as
+// before. Turning it on starts a grace period for anyone not already
+// enrolled: a visible reminder, then the app is blocked (but login and
+// enrollment itself always work — see startMfaEnrollment's own comment on
+// why a hard lock with no way back in would be wrong here). Skipped entirely
+// for an SSO-enabled tenant (the IdP is already the trust boundary — see
+// isMfaEnabled's own comment) and for a WordPress-engine session (no TOTP
+// enrollment path exists there — the login route only ever checks personal
+// MFA for a Strapi login).
+const MFA_GRACE_DAYS = 14;
+type SecurityFeatures = { mfaRequired?: boolean; mfaRequiredAt?: string };
+const securityOf = (t: Pick<Tenant, "features">): SecurityFeatures => (t.features || {}).security || {};
+
+/** Settings-page read, for the caller's own workspace. `isAdmin` tells the UI
+ * whether to offer the toggle at all — a non-admin can still see the status. */
+export async function getSecuritySettings(): Promise<{ mfaRequired: boolean; mfaRequiredAt: string | null; graceDays: number; isAdmin: boolean; ssoEnabled: boolean }> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  if (!eff) return { mfaRequired: false, mfaRequiredAt: null, graceDays: MFA_GRACE_DAYS, isAdmin: false, ssoEnabled: false };
+  const sec = securityOf(eff);
+  const isAdmin = !(eff.customRoleAssignments || {})[(caller.email || "").toLowerCase()];
+  return { mfaRequired: Boolean(sec.mfaRequired), mfaRequiredAt: sec.mfaRequiredAt || null, graceDays: MFA_GRACE_DAYS, isAdmin, ssoEnabled: Boolean(eff.sso?.enabled) };
+}
+
+/** Settings-page write — a genuine workspace administrator only, same rule
+ * saveAgentPolicy/saveTenantSsoConfig use (not someone acting under a custom
+ * role within this same workspace). Turning it on starts a fresh
+ * MFA_GRACE_DAYS window; it isn't restarted by saving it again while already on. */
+export async function saveMfaRequirement(mfaRequired: boolean): Promise<void> {
+  assertNotActing("change security settings");
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  if (!eff) throw new CmsError("This setting applies inside a workspace.", 403);
+  if ((eff.customRoleAssignments || {})[(caller.email || "").toLowerCase()]) {
+    throw new CmsError("Only a workspace administrator can change this.", 403);
+  }
+  const target = await resolveTenantByKey(eff.key);
+  if (!target) throw new CmsError("Unknown workspace", 404);
+  const existing = securityOf(target);
+  const security: SecurityFeatures = {
+    mfaRequired,
+    mfaRequiredAt: mfaRequired ? (existing.mfaRequired ? existing.mfaRequiredAt : new Date().toISOString()) : undefined,
+  };
+  await strapiBookkeeping(() => strapiAdapter.entries.update(TENANT_UID, target.documentId ?? target.id, { features: { ...(target.features || {}), security } }));
+  invalidateTenantCache();
+  await writeAudit(mfaRequired ? "security_mfa_require_enable" : "security_mfa_require_disable", TENANT_UID, target.documentId ?? target.id, caller, eff.key);
+}
+
+/** What the app layout / Security.tsx need: is MFA required for this
+ * session's workspace, is the CALLER already enrolled, the grace deadline,
+ * and whether it has passed. Strapi-engine only — callers must not invoke
+ * this for a WordPress session (see the module comment above). */
+export async function mfaEnforcementStatus(): Promise<{ required: boolean; enrolled: boolean; deadline: string | null; overdue: boolean }> {
+  const caller = await requireUser();
+  const enrolled = await isMfaEnabled(caller.email || "").catch(() => false);
+  const eff = await resolveEffectiveTenant(caller.email);
+  const sec = eff && !eff.sso?.enabled ? securityOf(eff) : {};
+  if (!sec.mfaRequired || enrolled) return { required: Boolean(sec.mfaRequired), enrolled, deadline: null, overdue: false };
+  const since = sec.mfaRequiredAt ? Date.parse(sec.mfaRequiredAt) : Date.now();
+  const deadline = new Date(since + MFA_GRACE_DAYS * 86_400_000).toISOString();
+  return { required: true, enrolled, deadline, overdue: Date.now() > since + MFA_GRACE_DAYS * 86_400_000 };
+}
+
 /** JIT-provisioning + login orchestration — the callback route's single
  * call once the IdP has confirmed the user's email. */
 export async function ssoLogin(tenantKey: string, rawEmail: string): Promise<{ token: string; refresh: string | null }> {

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { sessionToken, sessionEngine, strapiMe, strapiGet } from "@/lib/strapi";
 import { wordpressMe } from "@/lib/wordpress";
-import { resolveMyTenant } from "@/lib/cms/governance";
+import { resolveMyTenant, mfaEnforcementStatus } from "@/lib/cms/governance";
 import Shell from "@/components/Shell";
 import SessionKeeper from "@/components/SessionKeeper";
 import { TenantProvider } from "@/components/TenantProvider";
@@ -44,13 +44,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     name: wp ? (me.name || me.email || "Admin") : ([me.firstname, me.lastname].filter(Boolean).join(" ") || me.email || "Admin"),
   };
 
+  // Per-tenant "require MFA" (default off — see governance.ts's own
+  // module comment). Strapi-engine only: a WordPress session has no TOTP
+  // enrollment path here at all. Failure fails open (never locks anyone
+  // out over a transient lookup error) — the same call, if it fails, will
+  // simply fail again on the next page load.
+  const mfa = wp ? null : await mfaEnforcementStatus().catch(() => null);
+
   return (
     <TenantProvider tenants={tenants} engine={engine}>
       <AgentProvider>
         <SessionKeeper />
         {/* Under WordPress there's no equivalent "extra" console endpoint to
             probe — reaching this point already proves the session is valid. */}
-        <Shell user={user} connected={wp ? true : Boolean(ctx)}>{children}</Shell>
+        <Shell user={user} connected={wp ? true : Boolean(ctx)} mfaEnforcement={mfa}>{children}</Shell>
       </AgentProvider>
     </TenantProvider>
   );

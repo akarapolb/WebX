@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
+import MfaRequirement from "./MfaRequirement";
 
 const lbl: any = { display: "block", fontSize: 12, color: "var(--muted)", margin: "10px 0 4px" };
 
 type Step = "loading" | "off" | "enrolling" | "recovery" | "on";
 
-export default function Security() {
-  const { t } = useLang();
+export default function Security({ onEnabled }: { onEnabled?: () => void } = {}) {
+  const { t, lang } = useLang();
   const [step, setStep] = useState<Step>("loading");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18,12 +19,21 @@ export default function Security() {
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [disablePassword, setDisablePassword] = useState("");
   const [copied, setCopied] = useState(false);
+  // Reminder when this workspace requires MFA and the caller hasn't enabled
+  // it yet — same governance.ts call the app layout uses to decide whether
+  // to block. Only fetched when relevant: an already-on account skips it
+  // entirely (see the effect below).
+  const [required, setRequired] = useState<{ deadline: string | null; overdue: boolean } | null>(null);
 
   async function loadStatus() {
     try {
       const r = await fetch("/api/cms/mfa/status");
       const j = await r.json();
       setStep(j.enabled ? "on" : "off");
+      if (!j.enabled) {
+        const rr = await fetch("/api/cms/security/status").then((res) => (res.ok ? res.json() : null)).catch(() => null);
+        if (rr?.required) setRequired({ deadline: rr.deadline, overdue: rr.overdue });
+      }
     } catch { setStep("off"); }
   }
   useEffect(() => { loadStatus(); }, []);
@@ -48,7 +58,12 @@ export default function Security() {
       });
       const j = await r.json();
       if (!r.ok) { setErr(j.error || "Incorrect code"); setBusy(false); return; }
-      setRecoveryCodes(j.recoveryCodes); setStep("recovery"); setCode("");
+      setRecoveryCodes(j.recoveryCodes); setStep("recovery"); setCode(""); setRequired(null);
+      // MFA is already active server-side at this point (confirmMfaEnrollment
+      // already ran) — but onEnabled fires only once the user acknowledges
+      // the recovery codes (the "Done" button below), not here: a blocking
+      // caller (Shell.tsx) unmounts this component the instant it fires, which
+      // would yank the once-only recovery-codes screen away before it's seen.
     } catch { setErr("Cannot reach the server"); }
     setBusy(false);
   }
@@ -77,6 +92,18 @@ export default function Security() {
         <div><h1>{t("nav.security")}</h1><p>{t("sec.sub")}</p></div>
       </div>
 
+      <MfaRequirement />
+
+      {required && step === "off" && (
+        <div className={"panel " + (required.overdue ? "mfa-nag mfa-nag--overdue" : "mfa-nag")} data-testid="mfa-requirement-reminder">
+          <span className={"badge " + (required.overdue ? "b-warn" : "b-mut")}><span className="dot" />
+            {required.deadline
+              ? t(required.overdue ? "sec.req.overdue" : "sec.req.reminder").replace("{date}", new Date(required.deadline).toLocaleDateString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium" }))
+              : t("sec.req.reminderNoDate")}
+          </span>
+        </div>
+      )}
+
       {err && <div className="panel" style={{ marginBottom: 16 }}><span className="badge b-warn"><span className="dot" />!</span><span className="muted" style={{ marginLeft: 10 }}>{err}</span></div>}
 
       {step === "loading" && <div className="panel"><span className="muted">{t("sec.loading")}</span></div>}
@@ -87,7 +114,7 @@ export default function Security() {
             <span className="badge b-mut"><span className="dot" />{t("sec.off")}</span>
           </div>
           <p className="muted" style={{ marginTop: 0 }}>{t("sec.offDesc")}</p>
-          <button className="btn btn--p" onClick={startEnroll} disabled={busy}>
+          <button className="btn btn--p" onClick={startEnroll} disabled={busy} data-testid="mfa-enable">
             <Icon name="lock" /> {busy ? t("sec.starting") : t("sec.enable")}
           </button>
         </div>
@@ -113,11 +140,11 @@ export default function Security() {
           </details>
           <form onSubmit={confirmEnroll}>
             <label style={lbl}>{t("sec.enterCode")}</label>
-            <input className="rv-assignee" style={{ width: "100%" }} inputMode="numeric" autoFocus required
+            <input className="rv-assignee" style={{ width: "100%" }} inputMode="numeric" autoFocus required data-testid="mfa-code-input"
               value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button type="button" className="btn btn--g" onClick={() => setStep("off")} disabled={busy}>{t("e.cancel")}</button>
-              <button type="submit" className="btn btn--p" disabled={busy}>{busy ? t("sec.verifying") : t("sec.confirm")}</button>
+              <button type="submit" className="btn btn--p" disabled={busy} data-testid="mfa-confirm">{busy ? t("sec.verifying") : t("sec.confirm")}</button>
             </div>
           </form>
         </div>
@@ -138,7 +165,7 @@ export default function Security() {
             <span className="dot" />{t("sec.recoveryWarn")}
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button className="btn btn--p" onClick={() => setStep("on")}>{t("u.done")}</button>
+            <button className="btn btn--p" onClick={() => { setStep("on"); onEnabled?.(); }} data-testid="mfa-recovery-done">{t("u.done")}</button>
           </div>
         </div>
       )}
@@ -151,10 +178,10 @@ export default function Security() {
           <p className="muted" style={{ marginTop: 0 }}>{t("sec.onDesc")}</p>
           <form onSubmit={disable}>
             <label style={lbl}>{t("sec.disablePassword")}</label>
-            <input className="rv-assignee" style={{ width: "100%" }} type="password" required
+            <input className="rv-assignee" style={{ width: "100%" }} type="password" required data-testid="mfa-disable-password"
               value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)} placeholder="••••••••" />
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-              <button type="submit" className="btn btn--g" disabled={busy}>{busy ? t("sec.disabling") : t("sec.disable")}</button>
+              <button type="submit" className="btn btn--g" disabled={busy} data-testid="mfa-disable">{busy ? t("sec.disabling") : t("sec.disable")}</button>
             </div>
           </form>
         </div>
