@@ -98,6 +98,14 @@ export default function Home({ locale }: { locale: Locale }) {
               <div className="eyebrow">{s.agents.eyebrow}</div>
               <h2>{s.agents.h2}</h2>
               <p className="lead">{s.agents.p}</p>
+              <div className="levels" aria-label={s.agents.levelsLabel}>
+                {s.agents.levels.map((l, i) => (
+                  <div className="levels-step" key={l}>
+                    <span className={"levels-pill" + (i === s.agents.levels.length - 1 ? " on" : "")}>{l}</span>
+                    {i < s.agents.levels.length - 1 && <Icon name="arrow" className="levels-arrow" />}
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="term" aria-label={s.agents.toolsLabel}>
               <div className="term-h"><Icon name="terminal" />{s.agents.toolsLabel}</div>
@@ -105,6 +113,20 @@ export default function Home({ locale }: { locale: Locale }) {
                 {s.agents.tools.map((x) => <li key={x}><Icon name="tick" />{x}</li>)}
               </ul>
               <div className="denied"><Icon name="x" />{s.agents.denied}</div>
+            </div>
+          </div>
+          <div className="wrap agent-more">
+            <div className="agent-caps">
+              {s.agents.caps.map((c) => (
+                <div key={c.t}>
+                  <div className="ic"><Icon name={c.icon} /></div>
+                  <h3>{c.t}</h3>
+                  <p>{c.d}</p>
+                </div>
+              ))}
+            </div>
+            <div className="agent-mcp-note">
+              <span>{s.agents.mcpH3}</span> {s.agents.mcpP}
             </div>
           </div>
         </section>
