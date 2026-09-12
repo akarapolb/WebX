@@ -1,11 +1,35 @@
 # WebX — handoff for next session
 
-**As of:** 2026-09-11 · `main` @ `232775f`, pushed and in sync with `origin/main`.
-**Working tree:** clean, nothing pending.
+**As of:** 2026-09-11 (later same day) · `main` @ `c86c341` plus uncommitted
+changes below. **Working tree:** dirty — see "New this pass" below; not yet
+committed or pushed.
 
 This covers Phase 9 (the WebX Agent: durable jobs, harness, plans, templates,
-schedules) plus two things done outside that plan this session: per-tenant
-MFA enforcement, and a marketing-site review/fix.
+schedules) plus two things done outside that plan in the original session:
+per-tenant MFA enforcement, and a marketing-site review/fix. A later pass
+the same day live-verified M5/M6, fixed the tenant-cache bug, and closed
+the content-usage auth gap — both were only *found* in the original pass,
+not fixed yet at that point.
+
+## New this pass (uncommitted)
+1. **Fixed** the tenant-list cache bug (`strapi-cms/src/middlewares/tenant.ts`
+   + new `strapi-cms/src/api/tenant/content-types/tenant/lifecycles.ts`) —
+   the HTTP-level cache now invalidates on tenant create/update/delete
+   instead of only refreshing every 30s. Not yet re-tested against a real
+   fresh signup (the original repro); `tsc --noEmit` clean on strapi-cms.
+2. **Fixed** the `/api/cms/content-usage` auth gap
+   (`webx-studio/lib/cms/governance.ts`'s `contentUsageFor`) — now requires
+   a session and scopes to the caller's own tenant (same
+   `assertCanActOnTenant` pattern as `complianceSecuritySignal`), an
+   unscoped admin still sees any. Live-verified: dga-editor's own tenant
+   still returns `{contentTotal: 103}`, a cross-tenant request now 403s
+   with `Cross-tenant operation not permitted`, and the real `/billing`
+   page still renders its usage bar correctly. `tsc --noEmit` clean on
+   webx-studio.
+3. **Live-verified** M5 (`audit_all` to completion; `bulk_create`'s
+   retry/pause behavior, not yet a full successful run) and M6 (a schedule
+   actually firing, exactly once, with the compare-and-set advance
+   working) — see the M5/M6 section below for the full detail.
 
 ---
 
@@ -53,20 +77,64 @@ Plan file (if still present): `C:\Users\akarapol\.claude\plans\atomic-sniffing-w
   correctly attributed the writes to `actor:agent` / `targetRef:job:<id>`,
   one-running-job-per-owner and cancel both worked.
 
-### What is NOT yet verified live (real gap — do this next)
-- **M5**: a real `bulk_create` job (e.g. "draft every editorial content
-  type") run to completion with the browser tab closed; `audit_all`
-  started from the UI to done; the Jobs UI checked in both TH and EN.
-- **M6**: a schedule actually firing for real (force `nextRunAt` to now,
-  tick twice, confirm exactly one job created) — the schedule
-  advance-in-one-transaction path in
-  `strapi-cms/src/api/internal/controllers/agent-schedules.ts` has unit
-  coverage but has never run against the real dev stack.
-- **M7**: doesn't exist yet — `eval/agent/run.mjs`, cases, `baseline.webx-kimi.json`,
-  `.github/workflows/agent-eval.yml`. See the plan file's M7 row for the
-  full spec (checks: `entries_created`, `review_filed`, `plan_complete`,
-  `stop_not_in`, `protocol_repairs == 0`, `tool_errors_lte`, `no_publish`,
-  `no_cross_tenant`).
+### M5/M6 — now live-verified (2026-09-11, later same day)
+- **`audit_all`** (Audit content template, FAQ, 9 entries): started from the
+  UI, ran to Done end-to-end with 0 AI tokens (as designed — it's the
+  no-model template) — 9/9 checked, 9 findings, autonomy READ ONLY. TH/EN
+  toggle not separately re-checked this pass.
+- **`bulk_create`** (Create drafts, FAQ): started from the UI, worker
+  claimed/heartbeat/checkpointed it correctly (confirmed in strapi-cms's own
+  http log), but every AI call failed because **the LiteLLM proxy isn't
+  running in this dev environment** (port 4000 unreachable — Docker
+  Desktop wasn't started, so the `docker-compose --profile ai` `litellm`
+  service never came up). The job's own retry+pause behavior handled this
+  correctly: 4 retries, then `Stopped: Paused — the AI service is busy or
+  unreachable`, no crash, no partial/corrupt draft. That pause/resume path
+  is now real-verified; the actual successful draft-creation path (real
+  Kimi call → persisted draft) is **still unverified** — needs LiteLLM up
+  (`pip install "litellm[proxy]"`, real `MOONSHOT_API_KEY` +
+  `LITELLM_MASTER_KEY`, `litellm --config litellm/config.yaml --port 4000`,
+  or start Docker Desktop and `docker compose --profile ai up litellm`)
+  before re-running this template to completion.
+- **M6**: created a real weekly schedule (`audit_all`, FAQ), turned on
+  Schedules for the workspace (Settings → Agent autonomy →
+  "Scheduled jobs"), force-set `nextRunAt` to a past timestamp via a direct
+  Strapi write (content-manager, logged in as the `scheduler@webx.local`
+  Super Admin service account — `agent-schedule` isn't exposed to a normal
+  editor's content-manager role, by design), then called
+  `POST /api/internal/agent/tick` (with `x-internal-secret`) twice back to
+  back: tick 1 → `{due:1, started:[<jobId>]}`, tick 2 (immediately after) →
+  `{due:0, started:[]}`. Exactly one job was created, it ran to Done (9/9),
+  and the schedule's `nextRunAt` correctly advanced to the next occurrence
+  (next Monday 09:00) rather than staying due. The compare-and-set advance
+  in `strapi-cms/src/api/internal/controllers/agent-schedules.ts` is now
+  real-verified, not just unit-tested. The test schedule was turned off
+  afterward (its own Delete button uses a native `confirm()` that this
+  session's browser automation couldn't drive — turned off instead, which
+  is an equally valid stop; a person can delete it from
+  `/agent/schedules` any time).
+
+### Dev-environment note (new, found this session)
+Both `strapi-cms` and `webx-studio` dev servers **silently exited (code 0,
+not a crash) after ~8–12 minutes** of this session's own background
+`preview_start` runs, twice each. Cause not diagnosed — didn't reproduce
+with an error, no OOM/log signal, and Strapi's own admin-login rate
+limiter wasn't involved. Restarting (`preview_start` again) picked up
+right where it left off both times (SQLite state persisted). If a future
+session sees the same thing, it's not necessarily a regression from this
+session's own tenant-cache change — worth a closer look if it keeps
+happening, but not chased further here.
+
+### M7 — still not started
+`eval/agent/run.mjs`, cases, `baseline.webx-kimi.json`,
+`.github/workflows/agent-eval.yml`. See the plan file's M7 row for the
+full spec (checks: `entries_created`, `review_filed`, `plan_complete`,
+`stop_not_in`, `protocol_repairs == 0`, `tool_errors_lte`, `no_publish`,
+`no_cross_tenant`). Given M5's bulk_create still has an unverified
+successful-completion path (see above), a real LiteLLM run of at least
+one bulk_create end-to-end would be worth doing before baselining M7
+against it — no point locking in an eval baseline for behavior that's
+only ever been seen failing gracefully, never succeeding.
 
 ### To resume live testing
 ```
@@ -165,7 +233,7 @@ background / can be scheduled), keeping the MCP tools card as a secondary
 "automate it yourself" option below. New `clock` icon in `components/Icon.tsx`.
 Verified live in EN and TH; `tsc --noEmit` clean.
 
-### Found, not fixed — real bugs worth a follow-up session
+### Found this pass, fixed in the later pass the same day
 1. **`strapi-cms/src/middlewares/tenant.ts`** caches the full tenant list
    for 30s with **no invalidation on tenant creation**. A brand-new
    tenant's `?tenant=<key>` requests (e.g. the analytics-summary endpoint
@@ -176,35 +244,40 @@ Verified live in EN and TH; `tsc --noEmit` clean.
    because the limit check saw an unrelated tenant's item count. This is a
    real onboarding-breaking bug for any brand-new self-serve signup, not
    just marketing-site tooling — `webx-studio`'s own `tenantCache` already
-   does the right thing (`invalidateTenantCache()` on every write); this is
-   a *separate*, un-invalidated cache inside strapi-cms itself that needs
-   the same treatment.
-2. **`GET /api/cms/content-usage`** (webx-studio) has no `requireUser()` /
-   auth check at all and trusts the `?tenant=` query param outright — any
-   caller, authenticated or not, can read any tenant's content/submission
-   counts by guessing or knowing its key. Low severity (aggregate counts
-   only, no PII) but should be scoped the same way `/api/cms/security`
-   etc. already are.
+   does the right thing (`invalidateTenantCache()` on every write); this
+   was a *separate*, un-invalidated cache inside strapi-cms itself.
+   **Fixed** — see "New this pass" above. Not yet re-verified against a
+   fresh signup specifically (only `tsc` + the existing lifecycle-hook
+   pattern was checked); worth a quick real signup test before trusting it
+   fully.
+2. **`GET /api/cms/content-usage`** (webx-studio) had no `requireUser()` /
+   auth check at all and trusted the `?tenant=` query param outright.
+   **Fixed and live-verified** — see "New this pass" above.
 
-Full detail and the repro steps for both are saved in this machine's
-Claude memory: `project_webx_marketing_site.md` (via the memory index at
-`MEMORY.md`), so a fresh session picks this up automatically without
-needing this document.
+Full detail and the original repro steps for both are saved in this
+machine's Claude memory: `project_webx_marketing_site.md` (via the memory
+index at `MEMORY.md`) — that memory is now stale on this point and should
+be updated to say "fixed" next time it's touched.
 
 ---
 
 ## 4. Suggested order for next session
 
-1. Decide: fix the tenant-cache bug now (real customer-facing risk, small
-   fix — invalidate/refresh `tenant.ts`'s cache wherever a tenant is
-   created) or file it and move on.
-2. Live-verify M5 (`bulk_create` with tab closed, `audit_all` from UI, TH/EN
-   check) and M6 (a schedule actually firing) — both are code-complete and
-   unit-tested but never run for real.
-3. Build M7 (the eval harness) once M5/M6's live behavior is confirmed
-   correct — no point baselining an eval runner against behavior that
-   hasn't been checked yet.
-4. Close the `content-usage` auth gap (quick, unrelated to the above).
+1. Real-signup re-test of the tenant-cache fix (sign up a fresh disposable
+   tenant, confirm its very first content-create isn't blocked by a stale
+   neighbor's item count) — the fix is in and typechecks, but wasn't
+   re-run against the original repro.
+2. Get LiteLLM actually running in this dev environment (Docker Desktop
+   wasn't up this pass — see "Dev-environment note" above) and re-run
+   `bulk_create` to a real successful completion, not just its
+   already-verified pause-on-failure path.
+3. Build M7 (the eval harness) now that M5/M6's live behavior is mostly
+   confirmed — bulk_create's successful path from #2 above is the one
+   remaining gap worth closing first, so the eval baseline isn't locked in
+   against untested behavior.
+4. Decide whether to commit the three uncommitted changes from this pass
+   (tenant-cache fix, content-usage auth fix) — nothing was committed or
+   pushed this pass.
 
 ---
 
