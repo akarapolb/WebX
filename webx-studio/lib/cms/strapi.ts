@@ -9,7 +9,7 @@ import type {
 } from "./types";
 import { CmsError } from "./types";
 import { actingSession, sessionToken } from "../strapi";
-import { STRAPI_URL } from "../config";
+import { STRAPI_URL, STRAPI_INTERNAL_SECRET } from "../config";
 import { genTempPassword } from "./genPassword";
 
 const BASE = STRAPI_URL;
@@ -25,7 +25,13 @@ async function authHeaders(extra?: Record<string, string>): Promise<Record<strin
   // write as them (strapi-cms/src/index.ts's actingIdentity).
   const acting = actingSession();
   const actingHeaders: Record<string, string> = acting ? { "X-WebX-Acting-Email": acting.email, "X-WebX-Acting-Tenant": acting.tenantKey } : {};
-  return { Authorization: "Bearer " + token, "X-WebX-Governed": "1", ...actingHeaders, ...(extra || {}) };
+  // Every call this adapter makes hits Strapi's admin content-manager
+  // surface, which admin-mfa.ts now gates behind MFA by default (a
+  // 2026-09-12 audit fix) — this exempts this trusted backend the same way
+  // lib/strapi.ts's own internalHeader() does for /admin/login. See that
+  // file's comment for why this doesn't reopen the original gap.
+  const internalHeaders: Record<string, string> = STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {};
+  return { Authorization: "Bearer " + token, "X-WebX-Governed": "1", ...actingHeaders, ...internalHeaders, ...(extra || {}) };
 }
 
 /** Strapi's own file shape (from /upload or /api/media-meta) -> MediaAsset.

@@ -3,8 +3,21 @@
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { cookies } from "next/headers";
-import { STRAPI_URL, SESSION_COOKIE, ENGINE_COOKIE } from "./config";
+import { STRAPI_URL, SESSION_COOKIE, ENGINE_COOKIE, STRAPI_INTERNAL_SECRET } from "./config";
 import type { CurrentUser } from "./cms/types";
+
+// Sent on every call this file makes to Strapi's admin surface (/admin/*) —
+// strapi-cms's own admin-mfa.ts middleware now requires MFA on that whole
+// surface (a 2026-09-12 audit fix closing a gap where /admin/login and
+// /content-manager/* weren't covered by the original, narrower MFA gate),
+// and this webx-studio backend is the trusted first-party caller of it on
+// every real user's behalf — the shared secret is the same signal
+// rate-limit.ts's own /api/internal/* exemption already uses for exactly
+// this kind of trust boundary. See admin-mfa.ts's own comment for why this
+// isn't a reopened hole: a stolen user credential still can't produce it.
+function internalHeader(): Record<string, string> {
+  return STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {};
+}
 
 // Lets a caller with no incoming request/cookies (the Phase 5 release
 // scheduler — see lib/cms/governance.ts's processDueReleases, which has no
@@ -55,7 +68,7 @@ export async function strapiLogin(email: string, password: string) {
   try {
     r = await fetch(`${STRAPI_URL}/admin/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...internalHeader() },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
     });
@@ -83,7 +96,7 @@ export async function strapiRefresh(refreshToken: string): Promise<{ token: stri
   try {
     const r = await fetch(`${STRAPI_URL}/admin/access-token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `strapi_admin_refresh=${encodeURIComponent(refreshToken)}` },
+      headers: { "Content-Type": "application/json", Cookie: `strapi_admin_refresh=${encodeURIComponent(refreshToken)}`, ...internalHeader() },
       cache: "no-store",
     });
     if (!r.ok) return null;
@@ -99,7 +112,7 @@ export async function strapiRefresh(refreshToken: string): Promise<{ token: stri
 /** Validate a token by self-calling /admin/users/me (the token is opaque, not a JWT). */
 export async function strapiMe(token: string) {
   const r = await fetch(`${STRAPI_URL}/admin/users/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, ...internalHeader() },
     cache: "no-store",
   });
   if (!r.ok) return null;
@@ -113,7 +126,7 @@ export async function strapiGet<T = any>(path: string): Promise<T | null> {
   if (!token) return null;
   try {
     const r = await fetch(`${STRAPI_URL}${path.startsWith("/") ? "" : "/"}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, ...internalHeader() },
       cache: "no-store",
     });
     if (!r.ok) return null;

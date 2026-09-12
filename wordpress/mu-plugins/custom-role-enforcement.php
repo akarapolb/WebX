@@ -91,6 +91,16 @@ function webx_crp_governed_post_types(): array
     ];
 }
 
+/** The inverse of the three post_type/rest_base spellings that actually
+ * differ (see webx_crp_governed_post_types()'s own comment) — needed by the
+ * map_meta_cap/save_post backstop below, which only has the post_type slug
+ * (from a WP_Post) to work with, not the REST route's rest_base. */
+function webx_crp_post_type_to_rest_base(string $post_type): string
+{
+    $overrides = ['post' => 'posts', 'page' => 'pages', 'contact_message' => 'contact-message', 'breaking_news' => 'breaking-news'];
+    return $overrides[$post_type] ?? $post_type;
+}
+
 /** Fetches (and caches) the acting user's tenant + (if any) custom-role
  * permissions for one content type from Strapi. Returns null only on a
  * lookup failure (network/HTTP/JSON error) — that and "not a WebX-provisioned
@@ -250,6 +260,144 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
 
     return $response; // unchanged (null) — proceed to the route's own callback
 }, 10, 3);
+
+// --- non-REST write backstop (classic editor / Quick Edit / bulk edit / WP-CLI) ---
+// The filter above only fires for rest_request_before_callbacks, i.e. only
+// for /wp/v2/* REST writes. custom-post-types.php explicitly routes
+// 'org-unit', 'mission-item', 'timeline-event', and 'document' to the
+// classic editor (a documented Gutenberg-bug workaround), and Quick
+// Edit/bulk edit call wp_update_post() straight from admin-ajax.php's
+// inline-save handler — none of that goes through the REST route at all,
+// so a WebX-provisioned tenant editor logged into wp-admin directly could
+// edit, publish, or delete another tenant's content through either path
+// with zero enforcement. Found in a full-codebase audit (2026-09-12).
+//
+// map_meta_cap is WordPress's own single choke point for "can this user
+// edit/delete/publish THIS post" — current_user_can('edit_post', $id) (and
+// delete_post/publish_post) resolves through it everywhere: the classic
+// editor's post.php save handler checks it before accepting the submitted
+// form, Quick Edit/bulk edit's ajax handler checks it before calling
+// wp_update_post(), and even the REST API's own default permission_callback
+// for /wp/v2/<type>/<id> checks it before our custom filter above ever
+// runs. Denying here rejects the action BEFORE anything is written, the
+// same posture as the REST filter — no revert-after-the-fact needed for
+// edit/delete/publish on an EXISTING post.
+add_filter('map_meta_cap', function (array $caps, string $cap, int $user_id, array $args) {
+    if (!in_array($cap, ['edit_post', 'delete_post', 'publish_post'], true)) return $caps;
+    $post_id = (int) ($args[0] ?? 0);
+    if (!$post_id) return $caps; // no post id yet (e.g. the "Add New" screen) — nothing to scope against here, see the save_post hook below for create
+    $post = get_post($post_id);
+    if (!$post || !in_array($post->post_type, webx_crp_governed_post_types(), true)) return $caps;
+
+    $user = get_userdata($user_id);
+    if (!$user || empty($user->user_email)) return $caps;
+    $email = strtolower($user->user_email);
+    $uid = webx_crp_post_type_uid_map()[webx_crp_post_type_to_rest_base($post->post_type)] ?? null;
+    if (!$uid) return $caps;
+
+    $perms = webx_crp_fetch($email, $uid);
+    if ($perms === null) return $caps; // lookup unavailable — fail open, same posture as the REST filter
+    $caller_tenant = $perms['tenantKey'] ?? null;
+    if ($caller_tenant === null) return $caps; // not a WebX-provisioned admin of any tenant
+
+    $target_tenant = webx_crp_post_tenant_key($post_id);
+    if ($target_tenant !== null && $target_tenant !== $caller_tenant) {
+        return ['do_not_allow'];
+    }
+
+    if (!empty($perms['hasCustomRole'])) {
+        $action = $cap === 'delete_post' ? 'delete' : ($cap === 'publish_post' ? 'publish' : 'update');
+        if (empty($perms[$action])) return ['do_not_allow'];
+    }
+    return $caps;
+}, 10, 4);
+
+// map_meta_cap is checked by every UI-driven path (classic editor's
+// post.php, Quick Edit/bulk edit's ajax handler, REST's own
+// permission_callback) but NOT by WP-CLI's `wp post update`/`wp post
+// create` — confirmed live: `wp post update <id> --user=<tenant-editor>`
+// on another tenant's post went straight through with zero enforcement,
+// even with --user set to a real WebX-provisioned account, because these
+// commands call wp_update_post()/wp_insert_post() directly without ever
+// checking current_user_can(). That's exactly the third path H13 named
+// (classic editor and Quick Edit are the other two, both closed by
+// map_meta_cap above). Since there's no reliable pre-write veto point that
+// fires for a raw wp_update_post()/wp_insert_post() call, this backstop
+// works post-hoc instead: snapshot the pre-write state, then revert in
+// save_post if the write turns out to have been cross-tenant.
+//
+// pre_post_update fires only for updates (not inserts), with the OLD row
+// still in the database — the only point where "what was this post's
+// tenant/content BEFORE this write" is still readable.
+add_action('pre_post_update', function (int $post_id) {
+    $existing = get_post($post_id);
+    if (!$existing) return;
+    set_transient('webx_crp_snapshot_' . $post_id, [
+        'tenant' => webx_crp_post_tenant_key($post_id) ?? '',
+        'post_title' => $existing->post_title,
+        'post_content' => $existing->post_content,
+        'post_excerpt' => $existing->post_excerpt,
+        'post_status' => $existing->post_status,
+    ], MINUTE_IN_SECONDS);
+}, 10, 1);
+
+add_action('save_post', function (int $post_id, WP_Post $post, bool $update) {
+    static $reverting = [];
+    if (!empty($reverting[$post_id])) return; // this save_post firing is our OWN revert call below — don't re-enter
+    if (wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) return;
+    if (!in_array($post->post_type, webx_crp_governed_post_types(), true)) return;
+
+    $uid = webx_crp_post_type_uid_map()[webx_crp_post_type_to_rest_base($post->post_type)] ?? null;
+    if (!$uid) return;
+
+    $user = wp_get_current_user();
+    if (!$user || !$user->exists() || empty($user->user_email)) return; // no WebX-provisioned identity in play (e.g. WP-CLI with no --user at all) — out of this backstop's scope, same as every other resolver here
+    $email = strtolower($user->user_email);
+
+    $perms = webx_crp_fetch($email, $uid);
+    if ($perms === null) return; // fail open, same posture as the REST filter
+    $caller_tenant = $perms['tenantKey'] ?? null;
+    if ($caller_tenant === null) return;
+
+    if (!$update) {
+        // New post: no prior legitimate state to preserve, so a bad tenant
+        // (missing, or already reassigned away from the creator's own via
+        // the classic editor's taxonomy meta box) is a clean delete — same
+        // "tenant required on create" rule as the REST filter's create path.
+        $target_tenant = webx_crp_post_tenant_key($post_id);
+        if ($target_tenant === null || $target_tenant !== $caller_tenant) {
+            error_log("[webx-custom-role] deleted post $post_id ($post->post_type) — created by $email outside their own tenant via a non-REST path");
+            $reverting[$post_id] = true;
+            wp_delete_post($post_id, true);
+            $reverting[$post_id] = false;
+        }
+        return;
+    }
+
+    // Update: check against the tenant the post belonged to BEFORE this
+    // write (the pre_post_update snapshot), not its tenant now — an update
+    // that both edits content AND reassigns the wtenant term to the
+    // caller's own tenant would otherwise launder itself past a post-write
+    // tenant check.
+    $snapshot = get_transient('webx_crp_snapshot_' . $post_id);
+    delete_transient('webx_crp_snapshot_' . $post_id);
+    if (!is_array($snapshot)) return; // no snapshot (e.g. this hook was only just added) — nothing to compare against, fail open
+    $prior_tenant = $snapshot['tenant'];
+    if ($prior_tenant === '' || $prior_tenant === $caller_tenant) return; // untenanted, or already the caller's own — fine
+
+    error_log("[webx-custom-role] reverted update to post $post_id ($post->post_type) by $email — cross-tenant via non-REST path");
+    $reverting[$post_id] = true;
+    wp_update_post([
+        'ID' => $post_id,
+        'post_title' => $snapshot['post_title'],
+        'post_content' => $snapshot['post_content'],
+        'post_excerpt' => $snapshot['post_excerpt'],
+        'post_status' => $snapshot['post_status'],
+    ]);
+    $term = get_term_by('slug', $prior_tenant, 'wtenant');
+    if ($term && !is_wp_error($term)) wp_set_post_terms($post_id, [$term->term_id], 'wtenant');
+    $reverting[$post_id] = false;
+}, 20, 3); // priority 20: run after ACF/taxonomy meta boxes (default priority 10) have saved whatever was submitted, so the create-path check above sees the tenant that was actually submitted
 
 // --- wp-admin list-screen tenant scoping --------------------------------
 // The REST write-side check above deliberately leaves reads untouched (see

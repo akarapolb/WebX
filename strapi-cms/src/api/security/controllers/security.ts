@@ -2,9 +2,20 @@ import { MFA_SECRET, COOKIE_NAME, signCookie } from '../../../utils/mfa';
 import { verifyTOTP, otpauthUri } from '../../../utils/totp';
 import { issueCaptcha } from '../../../utils/captcha';
 
+// Rendering the shared TOTP secret in-page lets anyone who loads this page
+// once compute valid codes forever, defeating the point of MFA. Kept as an
+// opt-in dev/demo convenience (so a fresh checkout can be tried without a
+// separate enrollment step) but off by default in production; an operator
+// running this for real should enroll the secret out-of-band and never set
+// MFA_SHOW_SECRET=true on a real deployment.
+const SHOW_SECRET = process.env.MFA_SHOW_SECRET === 'true' ||
+  (process.env.MFA_SHOW_SECRET !== 'false' && process.env.NODE_ENV !== 'production');
+
 function mfaPage(to: string, error: string): string {
   const safeTo = (typeof to === 'string' && to.indexOf('/admin') === 0) ? to : '/admin';
-  const uri = otpauthUri(MFA_SECRET, 'admin', 'WebX-CMS');
+  const enrollmentHint = SHOW_SECRET
+    ? `<div class="demo">โหมดสาธิต — เพิ่มลงแอป Authenticator ด้วยคีย์:<br><b>${MFA_SECRET}</b><br>หรือ otpauth URI:<br>${otpauthUri(MFA_SECRET, 'admin', 'WebX-CMS')}</div>`
+    : `<div class="demo">ไม่พบรหัสลงทะเบียนในแอป Authenticator? ติดต่อผู้ดูแลระบบเพื่อขอคีย์ลงทะเบียนใหม่นอกช่องทางนี้</div>`;
   return `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ยืนยันตัวตน 2 ขั้น (MFA) — WebX CMS</title>
 <style>
@@ -24,7 +35,7 @@ ${error ? `<div class="err">${error}</div>` : ''}
 <input name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" autofocus>
 <input type="hidden" name="to" value="${safeTo}">
 <button type="submit">ยืนยัน</button>
-<div class="demo">โหมดสาธิต — เพิ่มลงแอป Authenticator ด้วยคีย์:<br><b>${MFA_SECRET}</b><br>หรือ otpauth URI:<br>${uri}</div>
+${enrollmentHint}
 </form></body></html>`;
 }
 

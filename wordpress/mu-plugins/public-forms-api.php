@@ -53,6 +53,50 @@ function webx_captcha_error(): WP_Error {
 }
 
 // ---------------------------------------------------------------------------
+// Rate limiting — these public forms had none at all: a single-digit captcha
+// plus wp_mail() to an attacker-supplied address on every submit is directly
+// scriptable into a content-table flood or an email bomb against a third
+// party. Found in a full-codebase audit (2026-09-12).
+//
+// Sliding window per (bucket, ip), same shape as strapi-cms's own
+// middlewares/rate-limit.ts, but backed by a transient (WP's own DB/object-
+// cache-backed primitive) instead of an in-process Map — mod_php has no
+// shared memory across requests the way a long-lived Node process does,
+// which is exactly why webx_issue_captcha() above already uses a transient
+// for the same reason.
+//
+// IP resolution deliberately does NOT trust X-Forwarded-For unless an
+// operator has explicitly confirmed a real reverse proxy sits in front
+// (WEBX_TRUST_PROXY=true) — trusting a client-supplied header by default
+// would let anyone reset their own bucket on every request just by sending
+// a different X-Forwarded-For value, defeating the limiter entirely. Same
+// reasoning as the TRUST_PROXY fix already applied on the Strapi side.
+function webx_client_ip(): string {
+    if (getenv('WEBX_TRUST_PROXY') === 'true') {
+        $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+        if ($xff) return trim(explode(',', $xff)[0]);
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+}
+
+function webx_rate_limit(string $bucket, int $max, int $window_seconds): bool {
+    $key = 'webx_rl_' . md5($bucket . '|' . webx_client_ip());
+    $now = time();
+    $hits = get_transient($key);
+    if (!is_array($hits)) $hits = [];
+    $cutoff = $now - $window_seconds;
+    $hits = array_values(array_filter($hits, function ($t) use ($cutoff) { return $t >= $cutoff; }));
+    if (count($hits) >= $max) return false;
+    $hits[] = $now;
+    set_transient($key, $hits, $window_seconds);
+    return true;
+}
+
+function webx_rate_limit_error(): WP_Error {
+    return new WP_Error('rate_limited', 'มีการส่งคำขอถี่เกินไป กรุณาลองใหม่อีกครั้งในภายหลัง', ['status' => 429]);
+}
+
+// ---------------------------------------------------------------------------
 // Per-tenant staff-notification email — Settings → WebX Forms (wp-admin).
 // No existing Settings API usage anywhere in this codebase before this — a
 // deliberately small, self-contained screen (one JSON-map textarea, same
@@ -196,6 +240,7 @@ add_action('rest_api_init', function () {
         'methods' => 'GET',
         'permission_callback' => '__return_true',
         'callback' => function () {
+            if (!webx_rate_limit('captcha', 20, 5 * MINUTE_IN_SECONDS)) return webx_rate_limit_error();
             return ['data' => webx_issue_captcha()];
         },
     ]);
@@ -285,6 +330,7 @@ add_action('rest_api_init', function () {
     // JSON request), so no need to keep Strapi's historical JSON-vs-multipart
     // route split.
     $submit_complaint = function (WP_REST_Request $req) {
+        if (!webx_rate_limit('complaints', 5, 10 * MINUTE_IN_SECONDS)) return webx_rate_limit_error();
         if (!webx_verify_captcha($req)) return webx_captcha_error();
         $tenant = sanitize_key((string) $req->get_param('tenant'));
         $anonymous = filter_var($req->get_param('anonymous'), FILTER_VALIDATE_BOOLEAN);
@@ -340,6 +386,7 @@ add_action('rest_api_init', function () {
         'methods' => 'POST',
         'permission_callback' => '__return_true',
         'callback' => function (WP_REST_Request $req) {
+            if (!webx_rate_limit('contact-messages', 5, 10 * MINUTE_IN_SECONDS)) return webx_rate_limit_error();
             if (!webx_verify_captcha($req)) return webx_captcha_error();
             $tenant = sanitize_key((string) $req->get_param('tenant'));
             $name = sanitize_text_field((string) $req->get_param('name'));
@@ -361,6 +408,7 @@ add_action('rest_api_init', function () {
         'methods' => 'POST',
         'permission_callback' => '__return_true',
         'callback' => function (WP_REST_Request $req) {
+            if (!webx_rate_limit('applications', 5, 10 * MINUTE_IN_SECONDS)) return webx_rate_limit_error();
             if (!webx_verify_captcha($req)) return webx_captcha_error();
             $tenant = sanitize_key((string) $req->get_param('tenant'));
             $ref = webx_gen_ref($tenant ?: 'orst', 'APP');

@@ -47,6 +47,7 @@ import { wordpressLogin } from "../wordpress";
 import { requestPublicSiteRebuild, forceRebuildNow, getPublicSiteBuildStatus } from "../publicSiteBuild";
 import { genTempPassword } from "./genPassword";
 import { encrypt, decrypt } from "../crypto";
+import { assertIssuerHostIsPublic } from "../oidc";
 import {
   STRAPI_URL, STRAPI_INTERNAL_SECRET,
   STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD,
@@ -70,6 +71,15 @@ if (process.env.NODE_ENV === "production" && !STRAPI_INTERNAL_SECRET) {
   console.error(
     "[governance] STRAPI_INTERNAL_SECRET is not set — the cross-tenant write guard for background/scheduler-credential writes (trueOwnerOf/tenantGuard) is silently disabled. Set it to a real value (must match strapi-cms's own WEBX_INTERNAL_SECRET)."
   );
+}
+
+/** Every direct fetch this file makes to Strapi's /admin/* surface needs
+ * this — strapi-cms's admin-mfa.ts now gates that whole surface behind MFA
+ * by default, and this backend is the trusted first-party caller of it (see
+ * lib/strapi.ts's own internalHeader() and admin-mfa.ts's comment for why
+ * this exemption doesn't reopen the gap it closed). */
+function adminAuthHeaders(token: string, extra?: Record<string, string>): Record<string, string> {
+  return { Authorization: "Bearer " + token, ...(STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {}), ...(extra || {}) };
 }
 
 // The one swap point (Phase 2, made per-session in Phase 6): every
@@ -606,6 +616,8 @@ export async function saveTenantSsoConfig(tenantKey: string, input: {
   if (input.enabled) {
     if (!input.issuerUrl || !input.clientId) throw new CmsError("Issuer URL and Client ID are required to enable SSO", 400);
     try { new URL(input.issuerUrl); } catch { throw new CmsError("Issuer URL must be a valid URL", 400); }
+    try { await assertIssuerHostIsPublic(input.issuerUrl); }
+    catch { throw new CmsError("Issuer URL must not point at an internal/private address", 400); }
     // JIT provisioning only knows how to bridge into a real Strapi admin
     // session (see ssoLogin) — a WordPress-engine tenant's real content
     // isn't reachable through that session at all, so enabling SSO for one
@@ -772,7 +784,7 @@ export async function ssoLogin(tenantKey: string, rawEmail: string): Promise<{ t
       // re-mint rather than lock the user out.
       const fresh = genTempPassword();
       const r = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, {
-        method: "PUT", headers: { Authorization: "Bearer " + schedToken, "Content-Type": "application/json" },
+        method: "PUT", headers: adminAuthHeaders(schedToken, { "Content-Type": "application/json" }),
         body: JSON.stringify({ password: fresh }),
       });
       if (r.ok) {
@@ -834,20 +846,20 @@ export async function reconcileSsoDeprovisioning(): Promise<{ tenantsChecked: nu
           const stillEnabled = enabledEmails.has(email.toLowerCase());
           const actor: CurrentUser = { id: "sso-reconcile", email, roles: [], isSuperAdmin: false };
 
-          const r = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, { headers: { Authorization: "Bearer " + schedToken } });
+          const r = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, { headers: adminAuthHeaders(schedToken) });
           if (!r.ok) continue;
           const current = await r.json();
           const isActive = Boolean(current?.data?.isActive);
 
           if (!stillEnabled && isActive) {
             const upd = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, {
-              method: "PUT", headers: { Authorization: "Bearer " + schedToken, "Content-Type": "application/json" },
+              method: "PUT", headers: adminAuthHeaders(schedToken, { "Content-Type": "application/json" }),
               body: JSON.stringify({ isActive: false }),
             });
             if (upd.ok) { summary.deactivated++; await writeAudit("sso_deprovisioned", TENANT_UID, tenant.documentId ?? tenant.id, actor, tenant.key); }
           } else if (stillEnabled && !isActive) {
             const upd = await fetch(STRAPI_URL + "/admin/users/" + row.strapiUserId, {
-              method: "PUT", headers: { Authorization: "Bearer " + schedToken, "Content-Type": "application/json" },
+              method: "PUT", headers: adminAuthHeaders(schedToken, { "Content-Type": "application/json" }),
               body: JSON.stringify({ isActive: true }),
             });
             if (upd.ok) { summary.reactivated++; await writeAudit("sso_reprovisioned", TENANT_UID, tenant.documentId ?? tenant.id, actor, tenant.key); }
@@ -1271,7 +1283,7 @@ export async function listApiTokens(): Promise<ApiTokenSummary[]> {
   const token = await schedulerStrapiToken();
   if (!token) throw new CmsError("Temporarily unavailable", 500);
   return withServiceToken(token, async () => {
-    const r = await fetch(STRAPI_URL + "/admin/api-tokens", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    const r = await fetch(STRAPI_URL + "/admin/api-tokens", { headers: adminAuthHeaders(token), cache: "no-store" });
     if (!r.ok) throw new CmsError("Could not list tokens", r.status);
     const j = await r.json();
     return (j?.data || []).map((t: any) => ({
@@ -1289,7 +1301,7 @@ export async function listApiTokenPermissionCatalog(): Promise<Record<string, { 
   const token = await schedulerStrapiToken();
   if (!token) throw new CmsError("Temporarily unavailable", 500);
   return withServiceToken(token, async () => {
-    const r = await fetch(STRAPI_URL + "/admin/content-api/permissions", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    const r = await fetch(STRAPI_URL + "/admin/content-api/permissions", { headers: adminAuthHeaders(token), cache: "no-store" });
     if (!r.ok) throw new CmsError("Could not load the permission catalog", r.status);
     const j = await r.json();
     return j?.data || {};
@@ -1306,7 +1318,7 @@ export async function createApiToken(input: {
   if (!token) throw new CmsError("Temporarily unavailable", 500);
   return withServiceToken(token, async () => {
     const r = await fetch(STRAPI_URL + "/admin/api-tokens", {
-      method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      method: "POST", headers: adminAuthHeaders(token, { "Content-Type": "application/json" }),
       body: JSON.stringify({
         name: input.name.trim(), description: input.description || "", type: input.type,
         lifespan: input.lifespan ?? null,
@@ -1332,7 +1344,7 @@ export async function deleteApiToken(id: number): Promise<void> {
   const token = await schedulerStrapiToken();
   if (!token) throw new CmsError("Temporarily unavailable", 500);
   await withServiceToken(token, async () => {
-    const r = await fetch(STRAPI_URL + "/admin/api-tokens/" + id, { method: "DELETE", headers: { Authorization: "Bearer " + token } });
+    const r = await fetch(STRAPI_URL + "/admin/api-tokens/" + id, { method: "DELETE", headers: adminAuthHeaders(token) });
     if (!r.ok) throw new CmsError("Could not delete the token", r.status);
   });
   await writeAudit("delete_api_token", "admin::api-token", id, user, null);
