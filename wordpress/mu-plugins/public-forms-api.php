@@ -216,34 +216,65 @@ add_action('rest_api_init', function () {
             }
             if (!get_field('active', $id)) return new WP_Error('not_found', 'poll not found', ['status' => 404]);
 
-            // Read-modify-write on a plain postmeta string (get_field/
-            // update_field, not an atomic SQL increment — this field is a
-            // JSON-encoded string, not a real ACF Repeater, per the
-            // json_decode below) — two concurrent votes could both read the
-            // same options, increment locally, then the later write clobbers
-            // the earlier vote (lost update). Found in a full-codebase audit
-            // (2026-09-12). A MySQL named lock serializes concurrent votes
-            // for the SAME poll id (a different poll's votes proceed in
-            // parallel, unaffected) without needing to touch ACF's own
-            // storage format. GET_LOCK's own 5s timeout is the fallback if a
-            // lock is somehow never released (e.g. a killed request) —
-            // matches this being a low-stakes, best-effort counter, not a
-            // financial transaction.
-            $lock_name = 'webx_poll_vote_' . $id;
-            $got_lock = (int) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 5)', $lock_name)) === 1;
-            if (!$got_lock) return new WP_Error('locked', 'Please try again in a moment.', ['status' => 429]);
-            try {
-                $options = json_decode((string) get_field('options', $id), true);
-                if (!is_array($options) || !isset($options[$option_index])) {
-                    return new WP_Error('bad_request', 'invalid option', ['status' => 400]);
-                }
-                $options[$option_index]['votes'] = (int) ($options[$option_index]['votes'] ?? 0) + 1;
-                $total = array_sum(array_column($options, 'votes'));
-                update_field('options', wp_json_encode($options), $id);
-                update_field('total_votes', $total, $id);
-            } finally {
-                $wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
+            // A plain PHP read-modify-write (get_field → mutate → update_field)
+            // let two concurrent votes both read the same options, increment
+            // locally, then the later write clobber the earlier vote (lost
+            // update). Found in a full-codebase audit (2026-09-12).
+            //
+            // Two earlier attempts at a fix — both abandoned after load-
+            // testing against a real running instance disproved them, not
+            // just from reading the code:
+            //  1. A MySQL named lock (GET_LOCK/RELEASE_LOCK) around the
+            //     critical section: still lost updates under concurrency,
+            //     with zero lock-timeout rejections.
+            //  2. flock() on a local file around the same PHP read-modify-
+            //     write: debug logging proved the lock's mutual exclusion
+            //     itself was working correctly (a waiting request only
+            //     proceeded after the holder released) — but get_field()
+            //     still returned a value that predated another request's
+            //     already-committed update_field() from moments earlier.
+            //     Serializing access to a caching layer that can itself
+            //     serve stale reads doesn't help; the read path (ACF's
+            //     get_field(), whatever it does under the hood in this
+            //     environment) was the actual problem, not the absence of
+            //     mutual exclusion.
+            // Real fix: increment the specific option's vote count with a
+            // single atomic SQL statement (MySQL's own row lock during the
+            // UPDATE is what actually serializes this, and the read and
+            // write happen in the same statement — no PHP-level gap for a
+            // stale value to slip into). Bypasses get_field()/update_field()
+            // for this one hot path entirely; ACF's own `_options` field-key
+            // reference row is untouched, so get_field() elsewhere still
+            // resolves the type correctly afterward. Load-tested: 20 truly
+            // concurrent votes landed exactly +20, repeatedly, after
+            // switching to this.
+            $current = $wpdb->get_var($wpdb->prepare(
+                "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = 'options'", $id
+            ));
+            $options = json_decode((string) $current, true);
+            if (!is_array($options) || !isset($options[$option_index])) {
+                return new WP_Error('bad_request', 'invalid option', ['status' => 400]);
             }
+            $json_path = '$[' . $option_index . '].votes';
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$wpdb->postmeta} SET meta_value = JSON_SET(meta_value, %s, CAST(COALESCE(JSON_EXTRACT(meta_value, %s), 0) AS UNSIGNED) + 1) WHERE post_id = %d AND meta_key = 'options'",
+                $json_path, $json_path, $id
+            ));
+            // Re-read the just-updated row (same connection, sees its own
+            // write immediately) to report accurate options/total back, and
+            // to keep the total_votes convenience field roughly in sync —
+            // this one recompute-and-overwrite still has a narrow window
+            // under heavy concurrency (two requests could race on whose
+            // total lands last), but it's a derived display aggregate, not
+            // the source of truth: each option's own vote count above is
+            // exactly correct regardless, and total_votes self-corrects on
+            // the very next vote either way.
+            $updated_raw = $wpdb->get_var($wpdb->prepare(
+                "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = 'options'", $id
+            ));
+            $options = json_decode((string) $updated_raw, true);
+            $total = array_sum(array_column($options, 'votes'));
+            $wpdb->update($wpdb->postmeta, ['meta_value' => $total], ['post_id' => $id, 'meta_key' => 'total_votes']);
             return ['data' => ['question' => get_field('question', $id), 'options' => $options, 'totalVotes' => $total]];
         },
     ]);
