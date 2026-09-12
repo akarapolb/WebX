@@ -4,6 +4,7 @@
  */
 export default {
   routes: [
+    { method: 'GET', path: '/internal/health', handler: 'internal.health', config: { auth: false } },
     { method: 'GET', path: '/internal/tenant-of', handler: 'internal.tenantOf', config: { auth: false } },
     { method: 'GET', path: '/internal/custom-role-permissions', handler: 'internal.customRolePermissions', config: { auth: false } },
     { method: 'POST', path: '/internal/agent-jobs/claim', handler: 'agent-jobs.claim', config: { auth: false } },

@@ -61,29 +61,76 @@ export type Tenant = {
 };
 
 export type TenantKeyInfo = { key: string; engine?: "strapi" | "wordpress"; publicTemplate?: PublicTemplate };
+// A genuinely empty response (a fresh install with zero tenants seeded yet)
+// is the only case this falls back for — a real bootstrap default, not the
+// bug this fallback used to also cover. See listTenants()'s own comment for
+// why a fetch FAILURE (Strapi unreachable/erroring) is handled completely
+// differently, by throwing instead of using this.
 const FALLBACK_TENANTS: TenantKeyInfo[] = [
   { key: "dga", publicTemplate: "gov-portal" },
   { key: "pea", publicTemplate: "gov-portal" },
 ];
 
 /** Every known active tenant, with enough to route + template-select at
- * build time. Backed by Strapi's public GET /api/tenants/keys (Phase 6/8);
- * falls back to the two original demo tenants if that's unreachable at
- * build time, so a Strapi outage doesn't drop pages that already existed. */
+ * build time. Backed by Strapi's public GET /api/tenants/keys (Phase 6/8).
+ *
+ * Used to silently fall back to the two original demo tenants whenever
+ * Strapi was unreachable at build time — the stated intent was "so a Strapi
+ * outage doesn't drop pages that already existed," but in practice it did
+ * exactly that for every OTHER tenant: a scheduled rebuild during a
+ * transient Strapi hiccup would silently export only dga/pea, dropping
+ * every other real tenant's pages from the site with the build still
+ * reporting success. Found in a full-codebase audit (2026-09-12).
+ *
+ * Now throws on an actual fetch failure (network error or non-2xx) instead
+ * — the CI/deploy pipeline calling `next build` sees a real non-zero exit
+ * and a clear error instead of a silently incomplete export. Only a
+ * genuinely empty (well-formed 200, zero tenants) response still falls back
+ * to the demo tenants, since that's a legitimate fresh-install state, not
+ * an outage. */
 export async function listTenants(): Promise<TenantKeyInfo[]> {
+  let r: Response;
   try {
-    const r = await fetch(STRAPI + "/api/tenants/keys", { headers: { Accept: "application/json" } });
-    if (!r.ok) return FALLBACK_TENANTS;
-    const j = await r.json();
-    const list = ((j?.data as any[]) || []).filter((t) => t?.key) as TenantKeyInfo[];
-    return list.length ? list : FALLBACK_TENANTS;
-  } catch {
-    return FALLBACK_TENANTS;
+    r = await fetch(STRAPI + "/api/tenants/keys", { headers: { Accept: "application/json" } });
+  } catch (e) {
+    throw new Error("[cms] listTenants: Strapi unreachable at " + STRAPI + " — " + (e as Error).message);
   }
+  if (!r.ok) throw new Error("[cms] listTenants: Strapi returned HTTP " + r.status + " for /api/tenants/keys");
+  const j = await r.json();
+  const list = ((j?.data as any[]) || []).filter((t) => t?.key) as TenantKeyInfo[];
+  return list.length ? list : FALLBACK_TENANTS;
 }
 
-export async function getTenant(key: string): Promise<Tenant | null> {
-  return get<Tenant>("tenants/resolve", key).then((t) => t as any);
+/** Resolves one tenant's public branding/contact/social/footer config.
+ *
+ * Used to return null on ANY failure — including Strapi being unreachable
+ * — which HomePage.tsx then silently backfilled with a hardcoded
+ * DGA-branded fallback (FALLBACK_TENANT). That meant a transient Strapi
+ * outage during a scheduled rebuild could render a real agency's entire
+ * site under DGA's name/logo/colors, with the build still exiting 0. Found
+ * in a full-codebase audit (2026-09-12).
+ *
+ * Strapi's own /api/tenants/resolve controller (strapi-cms's tenant
+ * controller) already falls back to the "dga" tenant itself when a
+ * requested key doesn't match any tenant, and only 404s if there are
+ * literally zero active tenants configured system-wide — so in practice a
+ * null here has only ever meant "the request to Strapi itself failed"
+ * (network error, non-2xx, malformed JSON), never a legitimate "this key
+ * doesn't exist" signal from a healthy Strapi. Throwing here instead is
+ * safe for exactly that reason: it can't accidentally turn a real
+ * unknown-tenant case into a broken build, because that case was never
+ * routed through here to begin with. */
+export async function getTenant(key: string): Promise<Tenant> {
+  const url = STRAPI + "/api/tenants/resolve?tenant=" + encodeURIComponent(key) + "&locale=th";
+  let r: Response;
+  try {
+    r = await fetch(url, { headers: { Accept: "application/json" } });
+  } catch (e) {
+    throw new Error("[cms] getTenant(" + key + "): Strapi unreachable at " + STRAPI + " — " + (e as Error).message);
+  }
+  if (!r.ok) throw new Error("[cms] getTenant(" + key + "): Strapi returned HTTP " + r.status);
+  const j = await r.json();
+  return j.data as Tenant;
 }
 
 /** Job/application e-forms (TOR gap audit — orst/royalsociety had no job

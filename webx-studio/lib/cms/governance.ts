@@ -53,7 +53,7 @@ import {
   STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD,
   WORDPRESS_SCHEDULER_USERNAME, WORDPRESS_SCHEDULER_APP_PASSWORD,
 } from "../config";
-import { planLimit } from "../plans";
+import { planLimit, seatLimitExceeded } from "../plans";
 import { generateSecret, otpauthUri, verifyTOTP, generateRecoveryCodes, hashRecoveryCode } from "../totp";
 import { keycloakAdminToken, listEnabledKeycloakEmails, realmFromIssuerUrl } from "../keycloakAdmin";
 
@@ -1205,6 +1205,19 @@ export async function disableMfa(password: string): Promise<void> {
 // (the password step already happened, this only checks the second
 // factor). A simple in-memory per-email counter on a rolling window, same
 // modest scope as strapi-cms's own middlewares/rate-limit.ts.
+//
+// Multi-replica caveat (M6, 2026-09-12 audit finding): this Map is
+// per-process, with no documented caveat before this comment — running
+// more than one webx-studio instance behind a load balancer means each
+// replica keeps its own independent count, so an attacker who can reach N
+// replicas gets N × MFA_MAX_ATTEMPTS guesses before this actually engages
+// anywhere. Deliberately not fixed with a shared store (Redis or
+// equivalent) in this pass — that's the same infrastructure decision M7
+// flags for the tenant/custom-role caches, not a one-line change, and
+// nothing here is worse than the pre-existing per-process design already
+// documented and accepted for those caches. An operator running more than
+// one replica should know this before assuming the attempt cap is real
+// across their whole deployment.
 const mfaAttempts = new Map<string, { count: number; windowStart: number }>();
 const MFA_MAX_ATTEMPTS = 8;
 const MFA_WINDOW_MS = 10 * 60_000;
@@ -2579,7 +2592,7 @@ export const governed = {
       // check against" case here, since tenantKey always names one.
       const seatLimit = planLimit(target.plan).seats;
       const currentSeats = (target.adminEmails || []).length;
-      if (Number.isFinite(seatLimit) && currentSeats >= seatLimit) {
+      if (seatLimitExceeded(target.plan, currentSeats)) {
         throw new CmsError(`This workspace has reached its ${seatLimit}-seat plan limit — upgrade to add more users.`, 403);
       }
       // A custom role isn't a real Strapi/WordPress role — it's a WebX

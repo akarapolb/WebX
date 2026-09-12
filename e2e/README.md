@@ -155,6 +155,15 @@ guarantee the whole system makes: tenant A cannot read or write tenant B's
 data. That gap is exactly why real cross-tenant bugs shipped undetected
 (see `cross-tenant-isolation.spec.ts`'s own header comment for the list).
 
+**This is the one suite here that actually runs in CI** (`.github/workflows/
+ci.yml`'s `e2e-cross-tenant-isolation` job, on every push/PR, against a
+freshly-seeded throwaway Strapi + webx-studio pair — a same-day follow-up
+fix once the audit itself noticed the docs called suites like this "CI
+gates" when none of them were wired in at all). The other 6 suites below
+still need a live WordPress/Keycloak/real LLM key this project doesn't
+stand up per-PR, so they stay manual-only for now — run them yourself per
+this file before a release that touches those surfaces.
+
 Logs in as both seeded demo-tenant editors (`dga-editor@dga.local`,
 `pea-editor@pea.local`) and confirms, through webx-studio's real governed
 API, that neither can read, list, update, or delete the other's rows —

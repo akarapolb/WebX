@@ -34,3 +34,20 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
   },
 };
 export const planLimit = (plan?: string) => PLAN_LIMITS[plan || "free"] || PLAN_LIMITS.free;
+
+/** true if adding one more user would exceed (or already has exceeded) the
+ * plan's seat cap — governance.ts's users.create() throws off this.
+ *
+ * Extracted into this dependency-free module specifically so it's testable
+ * on its own (M15, 2026-09-12 audit finding): users.create() itself calls
+ * requireUser(), which reads Next's cookies() and throws outside a real
+ * request scope, so nothing that goes through it can run in a plain unit
+ * test without a session-mocking harness this test suite doesn't have yet.
+ * The enforcement DECISION doesn't need any of that context, though — just
+ * a plan name and a seat count — so pulling it out here gets real coverage
+ * on the part that was actually untested, without needing to build (or
+ * fake) that harness. */
+export function seatLimitExceeded(plan: string | undefined, currentSeats: number): boolean {
+  const limit = planLimit(plan).seats;
+  return Number.isFinite(limit) && currentSeats >= limit;
+}

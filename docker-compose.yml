@@ -382,7 +382,19 @@ services:
         done
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    # Was `:main-latest` — the exact anti-pattern wordpress/Dockerfile's own
+    # comment documents and avoids (a floating tag silently changes what
+    # ships on every pull, with no diff to review). Worse here than a
+    # typical `:latest`: confirmed live (2026-09-12) that `main-latest`
+    # currently resolves to a *prerelease dev build* (v1.102.0-dev.2), not
+    # even LiteLLM's own latest stable release. Pinned to v1.100.1, the
+    # latest tag LiteLLM's own release history marks stable (also aliased
+    # `main-stable` by the vendor, a floating-but-vetted alternative not
+    # used here for the same determinism reasons wordpress/Dockerfile
+    # already established in this codebase) — bump deliberately, not
+    # automatically, per LiteLLM's own deploy docs recommendation to pin a
+    # version rather than a moving tag.
+    image: ghcr.io/berriai/litellm:v1.100.1
     restart: unless-stopped
     profiles: ["ai"]
     command: ["--config", "/app/config.yaml", "--port", "4000"]

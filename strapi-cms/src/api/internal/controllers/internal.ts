@@ -19,6 +19,32 @@ import { SCOPED } from '../../../index';
  * session — these are service-to-service calls, not user actions.
  */
 export default {
+  /**
+   * Zero-data-exposure secret round-trip check — exists purely so a caller
+   * (WordPress's custom-role-enforcement.php in particular) can tell "the
+   * shared secret is wrong" (401) apart from "Strapi is just unreachable"
+   * (a network-level failure, never reaches this handler at all) without
+   * touching any real content lookup to do it.
+   *
+   * Added because this exact failure mode happened live during a
+   * full-codebase audit (2026-09-12): docker-compose.wordpress.yml's
+   * WEBX_INTERNAL_SECRET silently fell back to a dev default while Strapi
+   * used a different real secret, and every one of this file's OTHER
+   * handlers' fail-open design (see tenantOf/customRolePermissions'
+   * own comments) meant the resulting 401s were silently swallowed as
+   * "Strapi is probably just down" — disabling all WordPress-side
+   * cross-tenant enforcement with zero operator-visible signal. See
+   * custom-role-enforcement.php's own admin-notice check for the other
+   * half of this fix.
+   */
+  async health(ctx: any) {
+    const secret = process.env.WEBX_INTERNAL_SECRET;
+    if (!secret || ctx.request.header['x-internal-secret'] !== secret) {
+      ctx.status = 401; ctx.body = { error: 'unauthorized' }; return;
+    }
+    ctx.body = { ok: true };
+  },
+
   async tenantOf(ctx: any) {
     const strapi = (global as any).strapi;
     const secret = process.env.WEBX_INTERNAL_SECRET;

@@ -10,15 +10,13 @@ import Awards from "./Awards";
 import Faqs from "./Faqs";
 import Featured from "./Featured";
 import BlockRenderer from "./blocks/BlockRenderer";
-import { getHomeData, getNavItems, getPage, getTenant, type Tenant } from "@/lib/cms";
+import { getHomeData, getNavItems, getPage, getTenant } from "@/lib/cms";
 import { brandCssVars } from "@/lib/brandColor";
 
 // One designated slug per tenant renders AT the homepage route instead of
 // as a sub-page under [tenant]/[slug] — see that route for the rest of a
 // tenant's pages.
 const BLOCK_PAGE_SLUG = "home-blocks";
-
-const FALLBACK_TENANT: Tenant = { key: "dga", name: "สำนักงานพัฒนารัฐบาลดิจิทัล (สพร.)" };
 
 // Shared by app/page.tsx (the default "dga" tenant, served at /) and
 // app/[tenant]/page.tsx (every other tenant, one static page each at build
@@ -29,14 +27,18 @@ export default async function HomePage({ tenantKey }: { tenantKey: string }) {
   // Sequential, not Promise.all: getHomeData needs to know the tenant's own
   // engine (Phase 6) before it knows which backend to fetch content from.
   // Build-time static generation, not a user-facing request — fine to pay
-  // the extra round trip here.
+  // the extra round trip here. getTenant() throws rather than returning
+  // null on a Strapi outage (2026-09-12 audit fix) — this used to silently
+  // fall back to a hardcoded DGA-branded tenant record, which could render
+  // a completely different agency's site under DGA's own name/logo/colors
+  // during a transient outage, with the build still reporting success.
   const tenantData = await getTenant(tenantKey);
-  const data = await getHomeData(tenantKey, tenantData?.engine);
+  const data = await getHomeData(tenantKey, tenantData.engine);
   // Strapi-only for now (page.page has no WordPress equivalent) — a
   // wordpress-engine tenant just never matches and falls through below.
-  const page = tenantData?.engine !== "wordpress" ? await getPage(tenantKey, BLOCK_PAGE_SLUG) : null;
+  const page = tenantData.engine !== "wordpress" ? await getPage(tenantKey, BLOCK_PAGE_SLUG) : null;
   const navItems = await getNavItems(tenantKey);
-  const tenant = tenantData || FALLBACK_TENANT;
+  const tenant = tenantData;
   const orgName = tenant.brand?.orgName?.th || tenant.name;
   const primary = tenant.brand?.primaryColor;
 

@@ -56,6 +56,18 @@ function webx_crp_post_type_uid_map(): array
     // provisioned for) could read/write every tenant's complaints/
     // applications/contact-messages (PII-bearing) and publish a
     // breaking-news alert onto a tenant they don't own.
+    //
+    // event/member were found missing the same way, same session, one pass
+    // later — via a boot-time consistency check (webx_crp_consistency_check
+    // below) added specifically because THIS bug pattern (a post type gets
+    // the wtenant taxonomy attached in custom-post-types.php but never makes
+    // it into these two hand-maintained lists here) had already happened
+    // once undetected. Both are registered in custom-post-types.php and
+    // already known to wordpress.ts's own POST_TYPES map (wp:event/
+    // wp:member — added there in an earlier phase, per that file's own
+    // comment) but, like the six above, were never added HERE — any WP
+    // editor could create/edit/delete another tenant's events or member
+    // directory entries (a defacement vector, same shape as breaking-news).
     return [
         'posts' => 'wp:post',
         'pages' => 'wp:page',
@@ -67,6 +79,8 @@ function webx_crp_post_type_uid_map(): array
         'mission-item' => 'wp:mission',
         'org-unit' => 'wp:org-unit',
         'document' => 'wp:document',
+        'event' => 'wp:event',
+        'member' => 'wp:member',
         'poll' => 'wp:poll',
         'complaint' => 'wp:complaint',
         'contact-message' => 'wp:contact-message',
@@ -82,14 +96,53 @@ function webx_crp_post_type_uid_map(): array
  * and 'breaking_news'/'breaking-news' (WP post_type slugs use underscores,
  * their rest_base overrides use hyphens); every other type's post_type and
  * rest_base are identical strings. See webx_crp_post_type_uid_map()'s
- * comment for why the six public-forms types below were added. */
+ * comment for why the eight public-forms/Phase-3 types below were added. */
 function webx_crp_governed_post_types(): array
 {
     return [
         'post', 'page', 'service', 'publication', 'faq', 'resource', 'timeline-event', 'mission-item', 'org-unit', 'document',
+        'event', 'member',
         'poll', 'complaint', 'contact_message', 'job', 'application', 'breaking_news',
     ];
 }
+
+// --- consistency check (2026-09-12, M16 audit finding) --------------------
+// event/member above were found missing from these two lists by manually
+// cross-referencing custom-post-types.php's own register_taxonomy_for_
+// object_type('wtenant', ...) calls — the exact same failure mode as C4
+// (poll/complaint/job/application/breaking-news, closed earlier this
+// session) and M2's Strapi-side equivalent
+// (warnIfTenantRelationMissingFromScoped in strapi-cms/src/index.ts). Four
+// independent hand-maintained lists (post type registration, ACF fields,
+// REST routes, this file's governed-type maps) with nothing enforcing they
+// stay in sync is the root cause named in the audit's own M16 finding — a
+// full unification is a bigger refactor than this pass, but WordPress's OWN
+// taxonomy registry is already the ground truth for "which post types are
+// meant to be tenant-scoped" (get_taxonomy('wtenant')->object_type), so a
+// boot-time diagnostic against it costs little and catches this exact class
+// of bug the moment a new tenant-scoped post type is registered without
+// also being added here.
+add_action('init', function () {
+    $tax = get_taxonomy('wtenant');
+    if (!$tax) return; // wtenant-taxonomy.php hasn't run yet or isn't loaded — nothing to check against
+    $governed = webx_crp_governed_post_types();
+    // 'attachment' (media library) deliberately excluded — wtenant tags
+    // uploaded files by tenant (for the media library UI), but attachment
+    // writes go through a completely different capability model
+    // (upload_files / the REST media endpoint), not this plugin's
+    // post-content governance at all.
+    $missing = array_diff($tax->object_type, $governed, ['attachment']);
+    if ($missing) {
+        add_action('admin_notices', function () use ($missing) {
+            echo '<div class="notice notice-error"><p><strong>WebX:</strong> the post type(s) <code>' . esc_html(implode(', ', $missing))
+                . '</code> have the <code>wtenant</code> taxonomy attached (meaning they are meant to be tenant-scoped) but '
+                . 'are missing from <code>webx_crp_governed_post_types()</code> in custom-role-enforcement.php — cross-tenant '
+                . 'write enforcement does NOT apply to them. Add each one to both that function and '
+                . '<code>webx_crp_post_type_uid_map()</code>.</p></div>';
+        });
+        error_log('[webx-custom-role] post type(s) missing from governed enforcement: ' . implode(', ', $missing));
+    }
+}, 20); // after every post-type/taxonomy registration (custom-post-types.php, public-forms-post-types.php, wtenant-taxonomy.php all run at the default priority 10)
 
 /** The inverse of the three post_type/rest_base spellings that actually
  * differ (see webx_crp_governed_post_types()'s own comment) — needed by the
@@ -99,6 +152,25 @@ function webx_crp_post_type_to_rest_base(string $post_type): string
 {
     $overrides = ['post' => 'posts', 'page' => 'pages', 'contact_message' => 'contact-message', 'breaking_news' => 'breaking-news'];
     return $overrides[$post_type] ?? $post_type;
+}
+
+/** The set of field names a custom role has marked hidden or readonly (so
+ * neither should be writable) for the content type $perms was resolved
+ * against — a one-line computation, but one that used to be independently
+ * re-implemented in webx-blocks-sync.php too (M18, 2026-09-12 audit
+ * finding): that file writes the `blocks` ACF field through update_field()
+ * rather than the REST request param this plugin's own write filter
+ * inspects, so it has to re-run the same "is this field forbidden" check
+ * itself or it would silently reopen the exact hole the readonly flag
+ * exists to close. Two copies of a one-liner "diverging" isn't really a
+ * failure mode a hand test would catch, but it's still the same pattern as
+ * everywhere else in this codebase where enforcement logic is duplicated
+ * instead of shared — extracted once here, both call sites now import
+ * whatever webx_crp_fetch() itself returns rather than re-deriving it. */
+function webx_crp_forbidden_fields(?array $perms): array
+{
+    if (!$perms) return [];
+    return array_merge($perms['hidden'] ?? [], $perms['readonly'] ?? []);
 }
 
 /** Fetches (and caches) the acting user's tenant + (if any) custom-role
@@ -137,6 +209,53 @@ function webx_crp_fetch(string $email, string $uid): ?array
     set_transient($cache_key, $data, 15); // matches the 15s TTL used by every other custom-role cache in this system
     return $data;
 }
+
+// --- secret-mismatch detection (2026-09-12 audit finding M13) -------------
+// Every enforcement check above fails OPEN and only logs to error_log on a
+// lookup failure — a reasonable default for an ordinary transient outage,
+// but it means a MISCONFIGURED shared secret (as opposed to Strapi being
+// down) silently disables every cross-tenant protection in this plugin with
+// no operator-visible signal at all. This isn't hypothetical: it happened
+// live during this audit — docker-compose.wordpress.yml's
+// WEBX_INTERNAL_SECRET fell back to a dev default while Strapi used a
+// different real secret, and the only trace was a line in error_log nobody
+// was watching. A wp-admin banner is what an operator actually sees.
+//
+// Cached in a transient (not checked on every single admin page load) and
+// distinguishes a genuine secret mismatch (Strapi reachable, answers 401 —
+// see internal.ts's health handler, a zero-data-exposure endpoint added
+// specifically for this check) from Strapi simply being unreachable (a
+// network-level failure, which stays silent here exactly like every other
+// resolver in this file — an ordinary outage isn't a misconfiguration).
+function webx_crp_secret_health_check(): void
+{
+    $cached = get_transient('webx_crp_secret_mismatch');
+    if ($cached === false) {
+        $base = rtrim((string) getenv('STRAPI_INTERNAL_URL'), '/');
+        $secret = getenv('WEBX_INTERNAL_SECRET');
+        $mismatch = false;
+        if ($base && $secret) {
+            $resp = wp_remote_get($base . '/api/internal/health', ['timeout' => 3, 'headers' => ['X-Internal-Secret' => $secret]]);
+            if (!is_wp_error($resp)) {
+                $code = wp_remote_retrieve_response_code($resp);
+                if ($code === 401) $mismatch = true;
+                // any other code (200, or unreachable) — not a mismatch; leave $mismatch false
+            }
+        }
+        $cached = $mismatch ? 'yes' : 'no';
+        set_transient('webx_crp_secret_mismatch', $cached, 5 * MINUTE_IN_SECONDS);
+    }
+    if ($cached === 'yes') {
+        add_action('admin_notices', function () {
+            echo '<div class="notice notice-error"><p><strong>WebX:</strong> cross-tenant write protection is currently DISABLED. '
+                . 'WEBX_INTERNAL_SECRET on this WordPress site does not match STRAPI_INTERNAL_SECRET on the Strapi backend '
+                . '(Strapi answered 401 to a request signed with this site\'s secret). '
+                . 'Every tenant editor can currently read/write every OTHER tenant\'s content through wp-admin or the REST API '
+                . 'until this is fixed — see DEPLOY.md\'s WordPress engine checklist.</p></div>';
+        });
+    }
+}
+add_action('admin_init', 'webx_crp_secret_health_check');
 
 /** The tenant a post currently belongs to, via its own wtenant term — same
  * source of truth governance.ts's tenantGuard() reads for WordPress content. */
@@ -247,7 +366,7 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
     // ship nested under acf:{...} on the wire, so check both locations for
     // each forbidden field name.
     if (in_array($action, ['create', 'update'], true)) {
-        $forbidden = array_merge($perms['hidden'] ?? [], $perms['readonly'] ?? []);
+        $forbidden = webx_crp_forbidden_fields($perms);
         foreach ($forbidden as $field) {
             unset($request[$field]);
             $acf = $request->get_param('acf');

@@ -80,10 +80,10 @@ add_action('rest_after_insert_page', function (WP_Post $post, WP_REST_Request $r
     $user = wp_get_current_user();
     if ($user && $user->exists() && !empty($user->user_email) && function_exists('webx_crp_fetch')) {
         $perms = webx_crp_fetch(strtolower($user->user_email), 'wp:page');
-        if ($perms) {
-            $forbidden = array_merge($perms['hidden'] ?? [], $perms['readonly'] ?? []);
-            if (in_array('blocks', $forbidden, true)) return;
-        }
+        // webx_crp_forbidden_fields() — shared with custom-role-enforcement.php's
+        // own REST write filter (M18, 2026-09-12 audit finding: this was an
+        // independently re-implemented copy of the same one-liner).
+        if (function_exists('webx_crp_forbidden_fields') && in_array('blocks', webx_crp_forbidden_fields($perms), true)) return;
     }
 
     $synced = array_values(array_filter(array_map('webx_blocks_sync_map_block', $webx_blocks)));

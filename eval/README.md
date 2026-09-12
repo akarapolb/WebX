@@ -1,8 +1,10 @@
 # Thai RAG retrieval eval
 
 Validates that retrieval actually surfaces the right Thai/government source for a
-question — *before* you lock the RAG stack, and as a CI quality gate. Zero
-dependencies (Node 18+).
+question — *before* you lock the RAG stack, and as a CI quality gate (keyword mode
+runs on every push/PR via `.github/workflows/ci.yml`'s `eval-thai-retrieval` job,
+against a freshly-seeded throwaway Strapi instance — a 2026-09-12 audit fix; this
+claim used to be aspirational, not actually wired in). Zero dependencies (Node 18+).
 
 Two modes, scored side by side:
 - **keyword** — always runs. Thai-friendly character **3-gram** overlap (Jaccard),
