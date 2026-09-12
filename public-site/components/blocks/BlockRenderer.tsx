@@ -6,6 +6,7 @@
 // implemented so this is a genuine renderer, not a two-case special case.
 import { Icon } from "../IconSprite";
 import { mediaUrl, fmtDateTh, fmtViewsTh, getCollectionEntries, SLUGGED_PLURALS } from "@/lib/cms";
+import { sanitizeCmsHtml } from "@/lib/sanitize";
 import NewsPanelBlock from "./NewsPanelBlock";
 import FaqBlock from "./FaqBlock";
 import EmbedBlock from "./EmbedBlock";
@@ -97,7 +98,7 @@ function HeroBlock({ b }: { b: any }) {
 }
 
 function RichTextBlock({ b }: { b: any }) {
-  return <div className="block" dangerouslySetInnerHTML={{ __html: b.body || "" }} />;
+  return <div className="block" dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(b.body) }} />;
 }
 
 function ImageBlock({ b }: { b: any }) {
@@ -488,7 +489,7 @@ function CollectionListBlock({ b, items, tenant }: { b: any; items: any[]; tenan
 function CustomBlock({ b, types }: { b: any; types: Record<string, BlockTypeDef> }) {
   const bt = types[b.typeKey];
   if (!bt) return null;
-  return <div className="block" dangerouslySetInnerHTML={{ __html: interpolate(bt, b.props || {}) }} />;
+  return <div className="block" dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(interpolate(bt, b.props || {})) }} />;
 }
 
 // `homeData` is the same object `getHomeData()` already produces for

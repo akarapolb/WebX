@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useLang } from "./LangProvider";
+import { sanitizeCmsHtml } from "@/lib/sanitize";
 
 // Lightweight WYSIWYG for Strapi CKEditor (HTML) fields. Edits & emits HTML.
 export default function RichText({
@@ -14,7 +15,7 @@ export default function RichText({
   // Sync external value (e.g. AI assist) without disturbing the caret while typing.
   useEffect(() => {
     const el = ref.current;
-    if (el && document.activeElement !== el && el.innerHTML !== value) el.innerHTML = value || "";
+    if (el && document.activeElement !== el && el.innerHTML !== value) el.innerHTML = sanitizeCmsHtml(value);
   }, [value]);
 
   function cmd(command: string, arg?: string) {

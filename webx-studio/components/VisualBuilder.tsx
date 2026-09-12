@@ -15,6 +15,7 @@ import type { Path } from "./blockPreview/editing";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
+import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
 import { TYPES, ORST_TYPES, ROYALSOCIETY_TYPES, GENERIC_TYPES, BLOCK_CATEGORIES, ALL_TYPES, metaOf } from "@/lib/blockCatalog";
@@ -1009,7 +1010,7 @@ export default function VisualBuilder() {
         <InlineText as="span" className="vbk-btn" value={b.buttonLabel || ""} onChange={(v) => setField(i, "buttonLabel", v)} placeholder="Button" />
       </div>
     );
-    if (c === "block.richtext") return <div className="vbk-rich" dangerouslySetInnerHTML={{ __html: b.body || "<p style='color:#999'>Rich text… (edit in panel)</p>" }} />;
+    if (c === "block.richtext") return <div className="vbk-rich" dangerouslySetInnerHTML={{ __html: b.body ? sanitizeCmsHtml(b.body) : "<p style='color:#999'>Rich text… (edit in panel)</p>" }} />;
     if (c === "block.image") return (
       <figure className="vbk-image">
         {b.image?.url ? <img src={(b.image.url as string).startsWith("http") ? b.image.url : "/api/strapi" + b.image.url} alt="" /> : <div className="vbk-imgph"><Icon name="img" /></div>}
@@ -1037,7 +1038,7 @@ export default function VisualBuilder() {
     if (c === "block.custom") {
       const bt = customTypes.find((x) => x.key === b.typeKey);
       if (!bt) return <div className="vbk-rich"><span className="muted">Unknown block: {b.typeKey}</span></div>;
-      return <div className="vbk-custom" dangerouslySetInnerHTML={{ __html: interpolate(bt, b.props || {}) }} />;
+      return <div className="vbk-custom" dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(interpolate(bt, b.props || {})) }} />;
     }
     if (c === "block.stat-row") {
       const items = Array.isArray(b.items) ? b.items : [];

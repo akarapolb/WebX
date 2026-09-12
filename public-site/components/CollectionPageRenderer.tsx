@@ -3,6 +3,7 @@ import Footer from "./Footer";
 import { mediaUrl, fmtDateTh } from "@/lib/cms";
 import { parseVideoUrl } from "@/lib/video";
 import { brandCssVars } from "@/lib/brandColor";
+import { sanitizeCmsHtml } from "@/lib/sanitize";
 import type { NavItem, Tenant, CollectionPageConfig } from "@/lib/cms";
 
 // The detail-page pair to BlockRenderer.tsx's CollectionListBlock — same
@@ -47,7 +48,7 @@ export default function CollectionPageRenderer({
           )}
           <h1 className="cp-title">{title}</h1>
           {date && <p className="cp-meta">{fmtDateTh(date)}</p>}
-          {body && <div className="cp-body" dangerouslySetInnerHTML={{ __html: String(body) }} />}
+          {body && <div className="cp-body" dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(String(body)) }} />}
         </article>
       </main>
       <Footer tenant={tenant} />

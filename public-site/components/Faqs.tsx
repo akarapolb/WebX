@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { jsonForScript } from "@/lib/sanitize";
 
 // The original built this FAQPage JSON-LD client-side, after the CMS fetch
 // resolved. Rendered directly into the static HTML here instead — a real
@@ -45,7 +46,7 @@ export default function Faqs({ items }: { items: any[] }) {
           })}
         </div>
       </div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForScript(ld) }} />
     </section>
   );
 }

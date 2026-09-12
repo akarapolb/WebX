@@ -4,6 +4,7 @@
 // pattern as FaqBlock.tsx (single-open, aria-expanded/aria-controls/hidden),
 // generalized from live FAQ data to admin-authored richtext panels.
 import { useState } from "react";
+import { sanitizeCmsHtml } from "@/lib/sanitize";
 
 export default function TabsAccordionBlock({ b }: { b: any }) {
   const items = Array.isArray(b.items) ? b.items : [];
@@ -27,7 +28,7 @@ export default function TabsAccordionBlock({ b }: { b: any }) {
                   </button>
                 </h3>
                 <div className="tb-acc-a" id={aid} role="region" aria-labelledby={qid} hidden={!expanded}>
-                  <div dangerouslySetInnerHTML={{ __html: it.body || "" }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(it.body) }} />
                 </div>
               </div>
             );
@@ -49,7 +50,7 @@ export default function TabsAccordionBlock({ b }: { b: any }) {
         </div>
         {items.map((it: any, i: number) => (
           <div key={i} role="tabpanel" id={"tb-panel" + i} aria-labelledby={"tb-tab" + i} className="tb-panel" hidden={active !== i}
-            dangerouslySetInnerHTML={{ __html: it.body || "" }} />
+            dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(it.body) }} />
         ))}
       </div>
     </section>

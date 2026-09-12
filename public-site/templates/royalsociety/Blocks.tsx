@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { sanitizeCmsHtml } from "@/lib/sanitize";
 import HeroSlider from "./HeroSlider";
 import { RsIcon, RS_ICON_IDS, type RsIconId } from "./icons";
 import ContactForm from "./ContactInteractive";
@@ -593,7 +594,7 @@ function IntroFeature({ b }: { b: Block }) {
           <div className="about-intro-v3-feature">
             {b.eyebrow ? <span className="about-kicker-light">{b.eyebrow}</span> : null}
             <h2 id="about-intro-title">{b.heading}</h2>
-            {b.html ? <div dangerouslySetInnerHTML={{ __html: b.html }} /> : null}
+            {b.html ? <div dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(b.html) }} /> : null}
             {b.highlightLabel ? (
               <div className="about-intro-v3-highlight">
                 <strong>{b.highlightLabel}</strong>

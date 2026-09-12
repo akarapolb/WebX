@@ -31,6 +31,7 @@ import EditableImage from "./EditableImage";
 import EditableIconPicker from "./EditableIconPicker";
 import type { EditBag, Path } from "./editing";
 import { FORM_FIELD_DEFS } from "../../lib/formFieldDefs";
+import { sanitizeCmsHtml, jsonForScript } from "../../lib/sanitize";
 
 function mediaUrl(m: any): string {
   if (!m) return "";
@@ -120,7 +121,7 @@ function HeroBlock({ b, edit }: { b: any; edit?: EditBag }) {
 }
 
 function RichTextBlock({ b, edit }: { b: any; edit?: EditBag }) {
-  return <div className={cls("block", edit)} onClick={editRoot(edit).onClick} dangerouslySetInnerHTML={{ __html: b.body || "" }} />;
+  return <div className={cls("block", edit)} onClick={editRoot(edit).onClick} dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(b.body) }} />;
 }
 
 function ImageBlock({ b, edit }: { b: any; edit?: EditBag }) {
@@ -417,7 +418,7 @@ function TabsAccordionBlock({ b, edit }: { b: any; edit?: EditBag }) {
                     <span className="tb-acc-ic" aria-hidden="true" />
                   </button>
                 </h3>
-                <div className="tb-acc-a" hidden={!expanded}><div dangerouslySetInnerHTML={{ __html: it.body || "" }} /></div>
+                <div className="tb-acc-a" hidden={!expanded}><div dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(it.body) }} /></div>
               </div>
             );
           })}
@@ -432,7 +433,7 @@ function TabsAccordionBlock({ b, edit }: { b: any; edit?: EditBag }) {
             ))}
           </div>
           {items.map((it, i) => (
-            <div key={i} role="tabpanel" className="tb-panel" hidden={active !== i} dangerouslySetInnerHTML={{ __html: it.body || "" }} />
+            <div key={i} role="tabpanel" className="tb-panel" hidden={active !== i} dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(it.body) }} />
           ))}
         </div>
       )}
@@ -633,7 +634,7 @@ function EmbedBlock({ b, edit }: { b: any; edit?: EditBag }) {
 function CustomBlock({ b, edit, types }: { b: any; edit?: EditBag; types: Record<string, BlockTypeDef> }) {
   const bt = types[b.typeKey];
   if (!bt) return null;
-  return <div className={cls("block", edit)} onClick={editRoot(edit).onClick} dangerouslySetInnerHTML={{ __html: interpolate(bt, b.props || {}) }} />;
+  return <div className={cls("block", edit)} onClick={editRoot(edit).onClick} dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(interpolate(bt, b.props || {})) }} />;
 }
 
 function NewsCard({ a, feature }: { a: any; feature?: boolean }) {
@@ -728,7 +729,7 @@ function FaqBlock({ faqs, eyebrow, title, edit }: { faqs: any[]; eyebrow?: strin
           })}
         </div>
       </div>
-      {!edit && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />}
+      {!edit && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForScript(ld) }} />}
     </section>
   );
 }

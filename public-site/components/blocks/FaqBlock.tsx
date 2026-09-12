@@ -3,6 +3,7 @@
 // block-driven framing config (eyebrow/title) — faqs still come from the
 // live `homeData.faqs` fetch, not from the block's own record.
 import { useState } from "react";
+import { jsonForScript } from "@/lib/sanitize";
 
 export default function FaqBlock({ faqs, eyebrow, title }: { faqs: any[]; eyebrow?: string; title?: string }) {
   const items = faqs || [];
@@ -45,7 +46,7 @@ export default function FaqBlock({ faqs, eyebrow, title }: { faqs: any[]; eyebro
           })}
         </div>
       </div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForScript(ld) }} />
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { sanitizeCmsHtml } from "@/lib/sanitize";
 import FaqAccordion from "./FaqAccordion";
 import ContactFormBlock from "./ContactFormBlock";
 import PollBlock from "./PollBlock";
@@ -158,7 +159,7 @@ function RichText({ b }: { b: Block }) {
   if (b.html) {
     return (
       <Section block={b}>
-        <div className={cls} dangerouslySetInnerHTML={{ __html: b.html }} />
+        <div className={cls} dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(b.html) }} />
       </Section>
     );
   }
