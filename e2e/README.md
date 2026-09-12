@@ -33,6 +33,7 @@ npm run test:users          # user management + rebuild-now (needs STRAPI_SCHEDU
 npm run test:wp-admin       # WordPress admin direct edit (needs WP_ADMIN_PASSWORD)
 npm run test:agent-panel    # WebX Agent docked panel + workspace UI (mocked backend, needs STRAPI_SCHEDULER_PASSWORD only)
 npm run test:agent          # WebX Agent real backend run (needs DGA_EDITOR_PASSWORD + webx-studio pointed at the mock LLM — see Suite 5)
+npm run test:isolation      # cross-tenant isolation (needs DGA_EDITOR_PASSWORD + PEA_EDITOR_PASSWORD)
 ```
 
 ## Suite 1 — public-site rendering
@@ -146,6 +147,28 @@ tab with background jobs turned off, and **Continue in background** turning a
 stopped conversation into a job. Schedules: a weekly audit saved from the
 Schedules tab with its recurrence, then turned off.
 
+## Suite 7 — cross-tenant isolation
+
+Added in a full-codebase audit (2026-09-12), which found no test anywhere in
+this repo — unit or e2e — exercising the single most security-critical
+guarantee the whole system makes: tenant A cannot read or write tenant B's
+data. That gap is exactly why real cross-tenant bugs shipped undetected
+(see `cross-tenant-isolation.spec.ts`'s own header comment for the list).
+
+Logs in as both seeded demo-tenant editors (`dga-editor@dga.local`,
+`pea-editor@pea.local`) and confirms, through webx-studio's real governed
+API, that neither can read, list, update, or delete the other's rows —
+covering both a content type that's always been tenant-scoped (`service`)
+and one that was found missing from tenant scoping in the same audit
+(`block-type`), so a regression in either shows up here. Needs
+`DGA_EDITOR_PASSWORD` + `PEA_EDITOR_PASSWORD`:
+
+```bash
+export DGA_EDITOR_PASSWORD="dga-editor's password"
+export PEA_EDITOR_PASSWORD="pea-editor's password"
+npm run test:isolation
+```
+
 ## Config
 
-`WP_ADMIN_USER`, `PUBLIC_SITE_URL`, `WEBX_STUDIO_URL`, `STRAPI_URL`, `WORDPRESS_URL`, `DGA_EDITOR_EMAIL`, `MOCK_LITELLM_PORT` are all overridable via env vars (see `tests/_helpers.ts`) — the defaults match this repo's standard local dev ports and seeded accounts.
+`WP_ADMIN_USER`, `PUBLIC_SITE_URL`, `WEBX_STUDIO_URL`, `STRAPI_URL`, `WORDPRESS_URL`, `DGA_EDITOR_EMAIL`, `PEA_EDITOR_EMAIL`, `MOCK_LITELLM_PORT` are all overridable via env vars (see `tests/_helpers.ts`) — the defaults match this repo's standard local dev ports and seeded accounts.

@@ -23,6 +23,21 @@ const SCOPED = new Set([
   'api::event.event', 'api::location.location', 'api::sitemap-node.sitemap-node',
   'api::menu-item.menu-item', 'api::contact-message.contact-message',
   'api::breaking-news.breaking-news',
+  // block-type, icon, release, review: each carries a `tenant` relation
+  // (same shape as everything else above) but was missing from this set —
+  // found in a full-codebase audit (2026-09-12). Since this middleware
+  // return-nexts immediately for anything not in SCOPED, block-type/icon
+  // had ZERO tenant filter/stamp/ownership-check despite Editor/Author
+  // already holding full content-manager CRUD on both (seed.ts) — any
+  // tenant's editor could read/write/delete another tenant's custom block
+  // definitions and icon library. release/review share the same schema gap
+  // but aren't currently granted to non-super-admin roles, so were latent
+  // rather than confirmed-exploitable. Root cause: this Set is hand-
+  // enumerated rather than derived from "has a `tenant` relation" — a
+  // schema-driven SCOPED (or a boot-time assertion that fails loudly on any
+  // tenant-relation content type missing here) would prevent this class of
+  // bug recurring a fifth time.
+  'api::block-type.block-type', 'api::icon.icon', 'api::release.release', 'api::review.review',
   // Deliberately NOT 'plugin::upload.file' here (media library gap, TOR —
   // search/tag/reuse/crop/caption): confirmed live that NEITHER path this
   // middleware could otherwise ride on actually reaches it — the upload
@@ -184,6 +199,28 @@ export default {
       }
 
       if (eff) {
+        // Single-document reads (findOne, by documentId) need an explicit
+        // ownership check BEFORE falling through to the generic filter
+        // merge below — found live writing this session's cross-tenant
+        // e2e test (2026-09-12): content-manager's own findOne controller
+        // correctly returns an EMPTY `data` for another tenant's document
+        // once the filter below is merged in (confirmed: never leaks the
+        // real title/body/PII fields), but still answers HTTP 200 instead
+        // of 403/404, and its separate `meta.availableLocales` computation
+        // does NOT go through the same filtered query — it leaks a
+        // document's existence, timestamps, and a handful of schema fields
+        // (confirmed harmless for the PII-bearing types, none of which have
+        // draftAndPublish enabled, but real for any draftAndPublish type).
+        // Throwing here closes both: no meta computation ever runs, and the
+        // caller gets a real 403 instead of a misleadingly-empty 200.
+        if (context.params.documentId && READS.has(action)) {
+          const docId = context.params.documentId;
+          const existing = await strapi.db.query(context.uid).findOne({ where: { documentId: docId }, populate: { tenant: true } });
+          const owner = existing?.tenant?.key;
+          if (owner && owner !== eff.key) {
+            throw new errors.ForbiddenError('ไม่มีสิทธิ์เข้าถึงข้อมูลของหน่วยงานอื่น (cross-tenant)');
+          }
+        }
         if (READS.has(action)) {
           const tf = { tenant: { key: eff.key } };
           context.params.filters = context.params.filters ? { $and: [context.params.filters, tf] } : tf;

@@ -6,6 +6,24 @@
 // (webx-studio/lib/cms/{strapi,wordpress}.ts) — same idea, same normalization
 // choices, just a plainer shape suited to CLI/MCP call sites.
 
+// The whole point of this client (per both mcp-webx's tool descriptions and
+// cli-webx/README.md) is "agents/scripts can draft and edit, but can never
+// publish or delete" — delete is enforced by simply never exposing
+// remove()/DELETE as a callable tool, but publish was NOT actually enforced
+// here: create()/update() forwarded the caller's `data` object completely
+// unfiltered, so a caller could set Strapi's `publishedAt` or WordPress's
+// `status: "publish"` directly and the entry would go live with no human
+// ever touching it. Found in a full-codebase audit (2026-09-12). Stripping
+// these fields here (not just omitting them from the tool schema) means the
+// guarantee holds even against a caller who ignores the documented contract.
+const LIFECYCLE_FIELDS = ["publishedAt", "status"];
+function stripLifecycleFields(data) {
+  if (!data || typeof data !== "object") return data;
+  const out = { ...data };
+  for (const f of LIFECYCLE_FIELDS) delete out[f];
+  return out;
+}
+
 function buildStrapiQuery({ page, pageSize, sort, q, filters } = {}) {
   const parts = [];
   if (page != null) parts.push("pagination[page]=" + page);
@@ -49,11 +67,11 @@ function createStrapiClient({ baseUrl, token }) {
       return j.data;
     },
     async create(type, data) {
-      const j = await request("/api/" + type, { method: "POST", body: JSON.stringify({ data }) });
+      const j = await request("/api/" + type, { method: "POST", body: JSON.stringify({ data: stripLifecycleFields(data) }) });
       return j.data;
     },
     async update(type, id, data) {
-      const j = await request("/api/" + type + "/" + id, { method: "PUT", body: JSON.stringify({ data }) });
+      const j = await request("/api/" + type + "/" + id, { method: "PUT", body: JSON.stringify({ data: stripLifecycleFields(data) }) });
       return j.data;
     },
     async remove(type, id) {
@@ -141,11 +159,22 @@ function createWordPressClient({ baseUrl, token }) {
       return normalizeWpPost(body);
     },
     async create(type, data) {
-      const { body } = await request("/wp/v2/" + type, { method: "POST", body: JSON.stringify({ status: "draft", ...data }) });
+      // "draft" goes last so it always wins over anything the caller put in
+      // data — spreading data first, then applying the forced status, is
+      // the only order that actually enforces "never publishes" (the
+      // previous {status: "draft", ...data} spread the default FIRST,
+      // letting data.status override it).
+      const { body } = await request("/wp/v2/" + type, { method: "POST", body: JSON.stringify({ ...stripLifecycleFields(data), status: "draft" }) });
       return normalizeWpPost(body);
     },
     async update(type, id, data) {
-      const { body } = await request("/wp/v2/" + type + "/" + id, { method: "POST", body: JSON.stringify(data) });
+      // No forced status here (unlike create) — an update to an already-
+      // published post must be able to leave it published without this
+      // client silently reverting it to draft. What matters is that the
+      // CALLER can't use an update to newly flip status draft->publish;
+      // stripLifecycleFields removes `status` from the payload entirely so
+      // WordPress just keeps the post's current status either way.
+      const { body } = await request("/wp/v2/" + type + "/" + id, { method: "POST", body: JSON.stringify(stripLifecycleFields(data)) });
       return normalizeWpPost(body);
     },
     async remove(type, id) {

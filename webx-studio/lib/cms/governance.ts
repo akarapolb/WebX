@@ -93,6 +93,17 @@ const SCOPED = new Set([
   "api::event.event", "api::location.location", "api::sitemap-node.sitemap-node",
   "api::menu-item.menu-item", "api::contact-message.contact-message",
   "api::breaking-news.breaking-news",
+  // block-type/icon: same shape as everything else here (a real `tenant`
+  // relation), but missing from BOTH this set and strapi-cms/src/index.ts's
+  // own SCOPED — found in a full-codebase audit (2026-09-12). Strapi's own
+  // side is the one that actually enforced the gap in practice (interactive
+  // editor sessions hit Strapi with their own JWT, so its hook resolves the
+  // real caller identity regardless of this file); added here too so these
+  // two get the same redundant explicit stamp (tenantStamp below) every
+  // other SCOPED type already gets, instead of depending solely on the
+  // other layer the way review/release deliberately do for a documented
+  // reason (see tenantStamp's own comment) that doesn't apply here.
+  "api::block-type.block-type", "api::icon.icon",
 ]);
 
 // Phase 5 — WordPress-hosted content types that carry tenant scoping (via the
@@ -2431,8 +2442,16 @@ async function tenantItemCountWordpress(tenantKey: string): Promise<number> {
 /** Backs the /api/cms/content-usage route — the same number Billing.tsx
  * displays as "used", computed the same way enforceItemLimit() below checks
  * it, so a tenant never sees a usage figure that disagrees with what's
- * actually gating their next create. */
+ * actually gating their next create. Same scoping rule as every other
+ * per-tenant governed call (e.g. complianceSecuritySignal): a workspace
+ * admin can only see their own workspace's number, an unscoped admin can
+ * see any. Previously this route had no auth check at all and trusted
+ * ?tenant= outright — low severity (aggregate counts only, no PII) but
+ * unscoped, so closed here rather than left as a standing gap. */
 export async function contentUsageFor(tenantKey: string): Promise<{ contentTotal: number }> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  assertCanActOnTenant(eff, tenantKey);
   const tenant = await resolveTenantByKey(tenantKey);
   const total = tenant?.engine === "wordpress" ? await tenantItemCountWordpress(tenantKey) : await tenantItemCount(tenantKey);
   return { contentTotal: total };

@@ -59,6 +59,13 @@ services:
       # seedScheduler) — must match what's set on `webx` and `release-scheduler`
       # below, since all three just reference the same .env value.
       STRAPI_SCHEDULER_PASSWORD: ${STRAPI_SCHEDULER_PASSWORD:?set STRAPI_SCHEDULER_PASSWORD}
+      # Seeds the two bundled demo-tenant editor logins (seed.ts's
+      # seedEditors — dga-editor@dga.local / pea-editor@pea.local). Found
+      # unconditional with a hardcoded, public password and no override at
+      # all in a full-codebase audit (2026-09-12) — same class of problem as
+      # STRAPI_SCHEDULER_PASSWORD above, fixed the same way.
+      DGA_EDITOR_PASSWORD: ${DGA_EDITOR_PASSWORD:?set DGA_EDITOR_PASSWORD}
+      PEA_EDITOR_PASSWORD: ${PEA_EDITOR_PASSWORD:?set PEA_EDITOR_PASSWORD}
       # Shared secret for the /api/internal/* routes (tenant-of,
       # custom-role-permissions) — must match webx's own STRAPI_INTERNAL_SECRET
       # and wordpress's WEBX_INTERNAL_SECRET below (same .env value, three

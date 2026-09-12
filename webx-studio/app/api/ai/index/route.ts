@@ -1,10 +1,19 @@
 // RAG indexer: chunk published tenant content → embed (LLM-agnostic) → store
 // vectors via the pluggable vector store (in-app cosine or pgvector).
+//
+// Tenant scoping: see app/api/ai/search/route.ts's header comment — this
+// route had the same bug (client-supplied `tenant` trusted outright), and
+// it's actually worse here since it's a WRITE: any authenticated editor of
+// ANY tenant could tag their own content as another tenant's, poisoning that
+// tenant's search results. Fixed the same way: derive tenant from the
+// caller's own session instead of trusting the body.
 import { NextRequest, NextResponse } from "next/server";
 import { sessionToken } from "@/lib/strapi";
 import { embed, llmConfigured } from "@/lib/llm";
 import { STRAPI_URL } from "@/lib/config";
 import { vectorUpsert, vectorBackend, type VecUpsert } from "@/lib/vectorstore";
+import { requireUser, resolveMyTenant } from "@/lib/cms/governance";
+import { CmsError } from "@/lib/cms/types";
 
 const INDEXABLE = ["api::article.article", "api::service.service", "api::faq.faq", "api::landing.landing", "api::blog.blog"];
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -13,7 +22,21 @@ export async function POST(req: NextRequest) {
   const token = await sessionToken();
   if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!llmConfigured()) return NextResponse.json({ error: "LLM not configured" }, { status: 503 });
-  const { tenant, contentType } = await req.json().catch(() => ({} as any));
+  const { tenant: requestedTenant, contentType } = await req.json().catch(() => ({} as any));
+  let tenant: string;
+  try {
+    await requireUser();
+    const eff = await resolveMyTenant();
+    // Same rule as ai/search: a scoped caller can only ever index their own
+    // tenant's content — the body's tenant is ignored, not trusted. An
+    // unscoped (super-admin) caller must name one explicitly.
+    if (eff) tenant = eff.key;
+    else if (typeof requestedTenant === "string" && requestedTenant) tenant = requestedTenant;
+    else return NextResponse.json({ error: "tenant required" }, { status: 400 });
+  } catch (e: any) {
+    if (e instanceof CmsError) return NextResponse.json({ error: e.message }, { status: e.status || 401 });
+    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  }
   const types: string[] = contentType ? [contentType] : INDEXABLE;
   const tf = tenant ? "&filters[tenant][key][$eq]=" + encodeURIComponent(tenant) : "";
   const auth = { Authorization: "Bearer " + token };

@@ -9,7 +9,8 @@
     "test:users": "playwright test tests/user-management.spec.ts",
     "test:wp-admin": "playwright test tests/wp-admin.spec.ts",
     "test:agent": "playwright test tests/agent.spec.ts",
-    "test:agent-panel": "playwright test tests/agent-panel.spec.ts"
+    "test:agent-panel": "playwright test tests/agent-panel.spec.ts",
+    "test:isolation": "playwright test tests/cross-tenant-isolation.spec.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",

@@ -44,6 +44,18 @@ function webx_crp_post_type_uid_map(): array
     // rest_base -> uid). No shared package between PHP and TS — kept in
     // sync by hand, same as SCOPED already is between strapi-cms/src/index.ts
     // and webx-studio/lib/cms/governance.ts.
+    //
+    // poll/complaint/contact-message/job/application/breaking-news were
+    // added here in a full-codebase audit (2026-09-12) — they're registered
+    // in public-forms-post-types.php and already known to POST_TYPES in
+    // wordpress.ts, but were never added to this map, so neither this map
+    // nor webx_crp_governed_post_types() below ever recognized them: they
+    // fell through both the cross-tenant write filter and the read-scoping
+    // filter entirely. Any WP user with ordinary edit_others_posts (any
+    // Editor/Administrator, regardless of which tenant they were
+    // provisioned for) could read/write every tenant's complaints/
+    // applications/contact-messages (PII-bearing) and publish a
+    // breaking-news alert onto a tenant they don't own.
     return [
         'posts' => 'wp:post',
         'pages' => 'wp:page',
@@ -55,16 +67,28 @@ function webx_crp_post_type_uid_map(): array
         'mission-item' => 'wp:mission',
         'org-unit' => 'wp:org-unit',
         'document' => 'wp:document',
+        'poll' => 'wp:poll',
+        'complaint' => 'wp:complaint',
+        'contact-message' => 'wp:contact-message',
+        'job' => 'wp:job',
+        'application' => 'wp:application',
+        'breaking-news' => 'wp:breaking-news',
     ];
 }
 
 /** Same governed set as webx_crp_post_type_uid_map(), but keyed by the WP
  * post_type slug rather than the REST rest_base — the two differ for
- * 'post'/'posts' and 'page'/'pages'; every other type's post_type and
- * rest_base are identical strings. */
+ * 'post'/'posts', 'page'/'pages', and 'contact_message'/'contact-message'
+ * and 'breaking_news'/'breaking-news' (WP post_type slugs use underscores,
+ * their rest_base overrides use hyphens); every other type's post_type and
+ * rest_base are identical strings. See webx_crp_post_type_uid_map()'s
+ * comment for why the six public-forms types below were added. */
 function webx_crp_governed_post_types(): array
 {
-    return ['post', 'page', 'service', 'publication', 'faq', 'resource', 'timeline-event', 'mission-item', 'org-unit', 'document'];
+    return [
+        'post', 'page', 'service', 'publication', 'faq', 'resource', 'timeline-event', 'mission-item', 'org-unit', 'document',
+        'poll', 'complaint', 'contact_message', 'job', 'application', 'breaking_news',
+    ];
 }
 
 /** Fetches (and caches) the acting user's tenant + (if any) custom-role

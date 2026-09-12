@@ -88,7 +88,19 @@ location.replace(redirect);
     ctx.body = { ok: true, tenant: target.key, brand: data.brand, template: data.template, watermark: data.watermark, liveChat: data.liveChat, footerColumns: data.footerColumns };
   },
 
-  /** ส่งออกข้อมูลฟอร์มเป็น Excel (TOR ข้อ 17.9) — admin-only, scope ตาม tenant */
+  /** ส่งออกข้อมูลฟอร์มเป็น Excel (TOR ข้อ 17.9) — admin-only, scope ตาม tenant
+   *
+   * Was resolving its tenant from ctx.state.tenantId — the public,
+   * client-suppliable `?tenant=`/X-Tenant/Host resolution the global::tenant
+   * middleware sets for EVERY request, not the caller's own admin
+   * membership. Every sibling action in this file (updateBranding, users,
+   * updateUsers) already resolves tenant correctly (adminEmails membership
+   * for a non-super-admin, ?tenant= honored only for a confirmed super
+   * admin) — this was the one that wasn't, letting any tenant's editor
+   * export another tenant's complaints/applications/registrations/contact
+   * messages (PII) by just naming it in the query string. Found in a
+   * full-codebase audit (2026-09-12). Fixed to match the pattern already
+   * used by every other action here. */
   async exportData(ctx: any) {
     const strapi = (global as any).strapi;
     const XLSX = require('xlsx');
@@ -101,7 +113,23 @@ location.replace(redirect);
     const type = String(ctx.query.type || 'application');
     const uid = MAP[type];
     if (!uid) { ctx.status = 400; ctx.body = { error: 'ชนิดข้อมูลไม่ถูกต้อง' }; return; }
-    const tenantId = ctx.state?.tenantId;
+
+    const admin = ctx.state.adminUser || {};
+    const email = lc(admin.email);
+    const sup = await isSuperAdmin(strapi, admin.id);
+    const all = await strapi.db.query('api::tenant.tenant').findMany({ select: ['id', 'key', 'adminEmails'], limit: 200 }).catch(() => []);
+    let target: any;
+    if (sup) { const k = lc(ctx.query.tenant); target = k ? all.find((t: any) => t.key === k) : null; }
+    else { target = all.find((t: any) => (t.adminEmails || []).map(lc).includes(email)); }
+    if (!sup && !target) { ctx.status = 403; ctx.body = { error: 'ไม่พบหน่วยงานที่มีสิทธิ์เข้าถึง' }; return; }
+    // A super admin with no ?tenant= exports across every tenant (the same
+    // "unscoped sees all" convention used elsewhere in this file/system);
+    // one with an unrecognized ?tenant= gets an explicit error rather than
+    // silently falling through to that same "export everything" behavior.
+    if (sup && ctx.query.tenant && !target) { ctx.status = 404; ctx.body = { error: 'ไม่พบหน่วยงานที่ระบุ' }; return; }
+    const tenantId = target?.id;
+    const tenantKey = target?.key;
+
     const where = tenantId ? { tenant: tenantId } : {};
     const rows = await strapi.db.query(uid).findMany({ where, limit: 10000, orderBy: { id: 'desc' } });
     const clean = rows.map((r: any) => {
@@ -115,7 +143,7 @@ location.replace(redirect);
     XLSX.utils.book_append_sheet(wb, ws, type);
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     ctx.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    ctx.set('Content-Disposition', `attachment; filename="${type}-${tenantId || 'all'}.xlsx"`);
+    ctx.set('Content-Disposition', `attachment; filename="${type}-${tenantKey || 'all'}.xlsx"`);
     ctx.body = buf;
   },
 

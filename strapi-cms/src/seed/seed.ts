@@ -799,7 +799,17 @@ export async function ensureBlockTypeFieldPermissions(strapi: any) {
   }
 }
 
-/* ---------- Admin editors ผูกกับ tenant (per-tenant RBAC) ---------- */
+/* ---------- Admin editors ผูกกับ tenant (per-tenant RBAC) ----------
+ * Demo accounts for the two bundled reference tenants (dga/pea) — used by
+ * this repo's own e2e suite and by local dev/demo sessions. Same public-repo
+ * problem seedScheduler() below already solves for its own account (env
+ * override, `docker-compose.yml`'s `:?set ...` enforcing it in production):
+ * until a full-codebase audit (2026-09-12) these two ran unconditionally,
+ * including in production, with a hardcoded password and NO override at
+ * all — a public, well-known credential with standing Editor access on any
+ * real self-hosted deploy that left seeding on. Now matches seedScheduler's
+ * own pattern exactly: env override, same hardcoded value only as the dev
+ * fallback. */
 export async function seedEditors(strapi: any) {
   const role = await strapi.db.query("admin::role").findOne({ where: { code: "strapi-editor" } });
   if (!role) {
@@ -807,8 +817,8 @@ export async function seedEditors(strapi: any) {
     return;
   }
   const editors = [
-    { email: "dga-editor@dga.local", firstname: "DGA", lastname: "Editor", password: "DgaEd@2569" },
-    { email: "pea-editor@pea.local", firstname: "PEA", lastname: "Editor", password: "PeaEd@2569" },
+    { email: "dga-editor@dga.local", firstname: "DGA", lastname: "Editor", password: process.env.DGA_EDITOR_PASSWORD || "DgaEd@2569" },
+    { email: "pea-editor@pea.local", firstname: "PEA", lastname: "Editor", password: process.env.PEA_EDITOR_PASSWORD || "PeaEd@2569" },
   ];
   for (const e of editors) {
     const existing = await strapi.db.query("admin::user").findOne({ where: { email: e.email } });

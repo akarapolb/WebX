@@ -43,6 +43,12 @@ export const STRAPI_SCHEDULER_PASSWORD = process.env.STRAPI_SCHEDULER_PASSWORD |
 export const DGA_EDITOR_EMAIL = process.env.DGA_EDITOR_EMAIL || "dga-editor@dga.local";
 export const DGA_EDITOR_PASSWORD = process.env.DGA_EDITOR_PASSWORD || "";
 
+// The seeded pea tenant editor (strapi-cms/src/seed/seed.ts, pea's own
+// adminEmails) — cross-tenant-isolation.spec.ts needs TWO real tenant-scoped
+// sessions (dga and pea) to prove neither can reach the other's data.
+export const PEA_EDITOR_EMAIL = process.env.PEA_EDITOR_EMAIL || "pea-editor@pea.local";
+export const PEA_EDITOR_PASSWORD = process.env.PEA_EDITOR_PASSWORD || "";
+
 // The mock LLM server's port (webx-studio/tests/harness/mockLlmServer.ts) —
 // agent.spec.ts starts that process itself, but the ALREADY-RUNNING webx-studio dev server must have been
 // started with LITELLM_URL pointing at this same port (env vars in

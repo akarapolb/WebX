@@ -8,6 +8,15 @@
  */
 let cache: { at: number; list: any[] } = { at: 0, list: [] };
 
+/** Called from the tenant content-type's lifecycles (create/update/delete)
+ * so a brand-new or just-edited tenant is visible immediately instead of
+ * waiting out the 30s window below — see WebX-handoff-2026-09-11.md #1 for
+ * the bug this fixes (a fresh signup's first request could resolve against
+ * a stale, unrelated tenant's cached row). */
+export function invalidateTenantCache(): void {
+  cache = { at: 0, list: [] };
+}
+
 async function loadTenants(strapi: any): Promise<any[]> {
   const now = Date.now();
   if (now - cache.at < 30000 && cache.list.length) return cache.list;
