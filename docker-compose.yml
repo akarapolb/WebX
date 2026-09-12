@@ -75,7 +75,17 @@ services:
     volumes:
       - strapi-uploads:/app/public/uploads
     ports:
-      - "${STRAPI_PORT:-1337}:1337"
+      # `webx` is the actual product surface (its login proxies to Strapi
+      # server-side, over the internal docker network — a browser never
+      # needs to reach this port for the normal editor workflow). This port
+      # only matters for Strapi's own native /admin UI (a fallback/service-
+      # account surface) and direct API calls. Bound to loopback by default
+      # so an operator can still reach it (SSH tunnel, or a shell on the
+      # host) without it being open to the network by default — found
+      # publicly reachable with no reverse-proxy/TLS step required in front
+      # of it in a full-codebase audit (2026-09-12). Remove the
+      # "127.0.0.1:" prefix if you have a real reason to expose it directly.
+      - "127.0.0.1:${STRAPI_PORT:-1337}:1337"
 
   webx:
     build: ./webx-studio
@@ -358,12 +368,27 @@ services:
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
     environment:
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
+      # Was ${LITELLM_MASTER_KEY:-} (silently blank-able) — LiteLLM treats an
+      # unset/empty master key as "no auth required" on its own OpenAI-
+      # compatible endpoints, so an operator who ran this profile without
+      # setting it got a gateway holding real ANTHROPIC/OPENAI/GEMINI keys
+      # reachable with zero auth on whatever LITELLM_PORT is bound to. Found
+      # in a full-codebase audit (2026-09-12). Now hard-required, matching
+      # every other secret in this file.
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     ports:
-      - "${LITELLM_PORT:-4000}:4000"
+      # Pure backend gateway — nothing ever reaches it directly from a
+      # browser (every AI feature calls it server-side, from `webx`, over
+      # the internal docker network). Bound to loopback by default so it's
+      # reachable for an operator's own debugging (an SSH tunnel, or a shell
+      # on the host itself) without being open to the network by default;
+      # remove the "127.0.0.1:" prefix to expose it directly if you have a
+      # real reason to (found publicly reachable in a full-codebase audit,
+      # 2026-09-12, combined with the master-key gap above).
+      - "127.0.0.1:${LITELLM_PORT:-4000}:4000"
 
   # Keycloak — optional (profile "keycloak"): SSO/OIDC identity broker for
   # tenants with SSO configured (see webx-studio's SsoSettings.tsx /

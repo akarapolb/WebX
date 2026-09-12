@@ -275,11 +275,18 @@ function withTenantFilter(existing: EntryQuery["filter"] | undefined, field: str
  * and see every tenant's, every user's, agent conversation threads
  * completely unfiltered — governed.list/get's own tenant filter only
  * applies to WP_SCOPED uids, and agent-thread (owner-scoped, not just
- * tenant-scoped) isn't in that set at all. audit-log/field-policy/
- * custom-role have the SAME kind of gap today (pre-existing, not introduced
- * by this change) but can't be closed the same way without a dedicated
- * bypass read path first — out of scope here, flagged separately. */
-const GENERIC_ROUTE_READ_BLOCKED_UIDS = new Set([AGENT_THREAD_UID, AGENT_JOB_UID, AGENT_SCHEDULE_UID]);
+ * tenant-scoped) isn't in that set at all. audit-log/field-policy have
+ * their own dedicated scoping branches further down (see AUDIT_UID's own
+ * branch in governed.list/get); custom-role's generic-route read was the
+ * one still genuinely open (found in a full-codebase audit, 2026-09-12) —
+ * any authenticated admin of ANY tenant could read every other workspace's
+ * custom-role names and permission matrices via
+ * /api/cms/entries/api::custom-role.custom-role. Its own dedicated,
+ * properly-tenant-scoped reader (listCustomRoles(), backing
+ * /api/cms/roles — the real Roles page's own data source) already existed,
+ * so blocking the generic route here has no legitimate caller to break,
+ * same reasoning as audit-log below. */
+const GENERIC_ROUTE_READ_BLOCKED_UIDS = new Set([AGENT_THREAD_UID, AGENT_JOB_UID, AGENT_SCHEDULE_UID, CUSTOM_ROLE_UID]);
 
 type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecretEnc?: string; realm?: string };
 // `features` is the pre-existing free-form per-tenant JSON bag ("unset = all
