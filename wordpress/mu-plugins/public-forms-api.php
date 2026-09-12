@@ -207,6 +207,7 @@ add_action('rest_api_init', function () {
         'methods' => 'POST',
         'permission_callback' => '__return_true',
         'callback' => function (WP_REST_Request $req) {
+            global $wpdb;
             $id = (int) $req['id'];
             $option_index = (int) $req->get_param('optionIndex');
             $post = get_post($id);
@@ -214,14 +215,35 @@ add_action('rest_api_init', function () {
                 return new WP_Error('not_found', 'poll not found', ['status' => 404]);
             }
             if (!get_field('active', $id)) return new WP_Error('not_found', 'poll not found', ['status' => 404]);
-            $options = json_decode((string) get_field('options', $id), true);
-            if (!is_array($options) || !isset($options[$option_index])) {
-                return new WP_Error('bad_request', 'invalid option', ['status' => 400]);
+
+            // Read-modify-write on a plain postmeta string (get_field/
+            // update_field, not an atomic SQL increment — this field is a
+            // JSON-encoded string, not a real ACF Repeater, per the
+            // json_decode below) — two concurrent votes could both read the
+            // same options, increment locally, then the later write clobbers
+            // the earlier vote (lost update). Found in a full-codebase audit
+            // (2026-09-12). A MySQL named lock serializes concurrent votes
+            // for the SAME poll id (a different poll's votes proceed in
+            // parallel, unaffected) without needing to touch ACF's own
+            // storage format. GET_LOCK's own 5s timeout is the fallback if a
+            // lock is somehow never released (e.g. a killed request) —
+            // matches this being a low-stakes, best-effort counter, not a
+            // financial transaction.
+            $lock_name = 'webx_poll_vote_' . $id;
+            $got_lock = (int) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 5)', $lock_name)) === 1;
+            if (!$got_lock) return new WP_Error('locked', 'Please try again in a moment.', ['status' => 429]);
+            try {
+                $options = json_decode((string) get_field('options', $id), true);
+                if (!is_array($options) || !isset($options[$option_index])) {
+                    return new WP_Error('bad_request', 'invalid option', ['status' => 400]);
+                }
+                $options[$option_index]['votes'] = (int) ($options[$option_index]['votes'] ?? 0) + 1;
+                $total = array_sum(array_column($options, 'votes'));
+                update_field('options', wp_json_encode($options), $id);
+                update_field('total_votes', $total, $id);
+            } finally {
+                $wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
             }
-            $options[$option_index]['votes'] = (int) ($options[$option_index]['votes'] ?? 0) + 1;
-            $total = array_sum(array_column($options, 'votes'));
-            update_field('options', wp_json_encode($options), $id);
-            update_field('total_votes', $total, $id);
             return ['data' => ['question' => get_field('question', $id), 'options' => $options, 'totalVotes' => $total]];
         },
     ]);

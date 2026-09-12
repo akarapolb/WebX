@@ -152,6 +152,32 @@ On a Strapi outage during a scheduled static-export build, `listTenants()` silen
 
 ---
 
+## Fourth fix pass (2026-09-12, the Medium list)
+
+11 of 19 Medium findings fixed and verified; 8 deliberately deferred with reasoning. Table below is updated in place — status noted per row.
+
+- **M2 — fixed, live-verified**: added a boot-time diagnostic (`warnIfTenantRelationMissingFromScoped` in `strapi-cms/src/index.ts`) that scans every `api::*` content type for a `tenant` relation not in `SCOPED` and logs a loud warning if it finds one — the exact backstop that would have caught C3 before it shipped. Verified both ways: temporarily removed `block-type` from `SCOPED` and confirmed the warning fired naming exactly that type, then restored it and confirmed silence.
+- **M3 — fixed, live-verified, and corrected**: the original finding (14 content types missing from every permission-bootstrap function) was based on static schema/code cross-referencing. Checked empirically against this project's actual running database instead of trusting that analysis: **only `breaking-news` actually has zero Editor/Author permissions** — the other 13 already have full CRUD, presumably added early enough to catch Strapi's one-time default-role sync. Added `ensureBreakingNewsPermissions()` (Editor: full CRUD+publish, Author: CRUD, matching the existing role-split convention); confirmed live it grants exactly 5+4 permissions on first boot and zero on the next (idempotent).
+- **M4 — fixed**: `governance.ts` now logs a loud `console.error` at import time if `STRAPI_INTERNAL_SECRET` is empty in production — the cross-tenant write guard silently disabling itself now has a signal.
+- **M5 — fixed**: `genPassword.ts` switched from `Math.random()` to `crypto.randomInt` throughout.
+- **M8 — fixed, both mirrored implementations**: `resolveCustomRolePermissions` (webx-studio) and `resolveCustomRolePerms` (strapi-cms) now return a fully-restricted permission object instead of `null` when an assigned custom role no longer exists — deleting a restrictive role now denies access until reassigned, instead of silently expanding it back to the user's native admin role.
+- **M9 — fixed**: `MFA_SECRET`/`MFA_COOKIE_SECRET`/`MFA_ENABLED` were never wired through `docker-compose.yml` at all — a value in `.env` was silently ignored and the hardcoded fallback always applied in every deployment. Now passed through (optional, not required — this is a documented demo/soft gate, not real protection; see H9).
+- **M10 — fixed**: `/api/internal/tenant-of` now validates its `uid` query param against the same `SCOPED` set (now exported from `src/index.ts`) before querying, closing the "existence/ownership oracle for any model" gap.
+- **M11 — fixed**: `traffic-log.ts` now reads `ctx.request.ip` (same as `rate-limit.ts` already did) instead of parsing `X-Forwarded-For` itself unconditionally. Added a new `TRUST_PROXY` env var (`config/server.ts`'s `proxy` option) so `X-Forwarded-For` is only trusted at all when an operator explicitly confirms a real reverse proxy sits in front — off by default.
+- **M12 — fixed**: SSO callback's open redirect closed — rejects `next` values starting with `//` and confirms the resolved URL is same-origin before trusting it.
+- **M17 — fixed in code, not live-tested** (no WordPress running this session): the poll-vote read-modify-write race now holds a MySQL named lock (`GET_LOCK`/`RELEASE_LOCK`, scoped per poll id) around the read-modify-write, closing the lost-update window without touching ACF's own storage format.
+- **M19 — fixed**: `PGVECTOR_URL`'s example is now genuinely blank instead of a real-looking connection string.
+- **M15 — attempted, deferred**: writing a real unit test for seat-limit enforcement needs `governed.auth.create` to run outside the acting-job bypass path, which means mocking a real interactive session — every existing test either uses the acting-session bypass (no session needed) or tests pure extracted functions. `requireUser()` calls Next's `cookies()`, which throws when called outside an actual request scope, so this needs either a session-mocking harness this test suite doesn't have yet or a dependency-injection refactor of `requireUser()` itself. Judged as more test-infrastructure risk than the finding's severity warrants for this pass — left as a known gap rather than shipping something fragile.
+
+**Deferred, not attempted** — architecture/infra decisions or need a live environment this session didn't have, not quick code fixes:
+- **M1** (governance.ts god-file) — a real structural refactor of the highest-blast-radius file in the codebase; doing it safely needs the M15-class test coverage this file doesn't have yet, not a same-session drive-by.
+- **M6/M7** (multi-replica cache/rate-limit staleness) — both need a shared store (Redis, or equivalent) across instances; that's an infrastructure decision for whoever runs a multi-replica deployment, not a code change to make unilaterally.
+- **M13** (cross-service secret-mismatch detection) — a new health-check feature, not a bug fix; reasonable future work, out of scope for a fix pass.
+- **M14** (LiteLLM's floating `:main-latest` tag) — tried to resolve a real pinned release tag via the registry and couldn't verify one with confidence; pinning to a guessed/wrong tag risks completely breaking the AI gateway for every self-hosted operator, worse than the current floating-tag risk. Needs a maintainer to confirm the right tag from LiteLLM's own release notes.
+- **M16/M18** (WordPress: 4 hand-maintained public-forms lists; duplicated blocks-field-permission check) — both are refactors of live plugin registration/enforcement code; comfortable fixing a small, self-contained bug there without live-testing (M17, and C4 earlier), less comfortable restructuring how content types get registered or where a permission check lives without a real WordPress instance to confirm nothing broke.
+
+Verified across this whole pass: `tsc --noEmit` clean on both `strapi-cms` and `webx-studio`, all 189 webx-studio unit tests and the cross-tenant-isolation e2e suite (6/6) still pass after every restart.
+
 ## Medium
 
 | # | Finding | Location |

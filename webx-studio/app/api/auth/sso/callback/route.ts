@@ -38,6 +38,16 @@ export async function GET(req: NextRequest) {
   jar.set(ENGINE_COOKIE, "strapi", { ...base, maxAge: SESSION_TTL });
   if (login.refresh) jar.set(REFRESH_COOKIE, login.refresh, { ...base, maxAge: REFRESH_TTL });
 
-  const dest = pending.next && pending.next.startsWith("/") ? pending.next : "/dashboard";
+  // `next.startsWith("/")` alone lets a protocol-relative value through —
+  // "//evil.com" passes that check but new URL("//evil.com", req.url)
+  // resolves to https://evil.com, an open redirect at the end of a real
+  // login flow. Found in a full-codebase audit (2026-09-12). Reject "//"
+  // explicitly and, as a second check, confirm the resolved URL is
+  // actually same-origin before trusting it.
+  let dest = "/dashboard";
+  if (pending.next && pending.next.startsWith("/") && !pending.next.startsWith("//")) {
+    const resolved = new URL(pending.next, req.url);
+    if (resolved.origin === new URL(req.url).origin) dest = pending.next;
+  }
   return NextResponse.redirect(new URL(dest, req.url));
 }

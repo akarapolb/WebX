@@ -47,8 +47,17 @@ export default (_config: any, _deps: any) => {
       // ข้ามไฟล์ static (asset ของแอดมิน/เว็บ) เพื่อให้ log เป็นเหตุการณ์เข้าถึงจริง
       if (SKIP.test(url) && ctx.method === 'GET') return;
       const now = new Date();
-      const xff = (ctx.request.headers['x-forwarded-for'] || '').toString();
-      const ip = (xff.split(',')[0].trim()) || ctx.request.ip || '-';
+      // Used to parse X-Forwarded-For itself, unconditionally — any
+      // external client could forge the source IP this legally-mandated
+      // log records just by sending the header, since nothing here checked
+      // whether the request actually came through a trusted proxy. Now
+      // reads ctx.request.ip, same as middlewares/rate-limit.ts already
+      // does — Koa only trusts X-Forwarded-For for this when
+      // config/server.ts's `proxy` option (TRUST_PROXY env var) is on,
+      // which an operator sets only when Strapi genuinely sits behind a
+      // reverse proxy they control. Found in a full-codebase audit
+      // (2026-09-12).
+      const ip = ctx.request.ip || '-';
       const entry = {
         ts: now.toISOString(),
         ip,

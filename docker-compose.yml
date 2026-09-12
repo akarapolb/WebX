@@ -27,6 +27,11 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      # Off by default — only set true if a reverse proxy you control sits
+      # in front (see config/server.ts's own comment and
+      # .env.production.example). Wires rate-limit.ts and traffic-log.ts's
+      # IP resolution together (2026-09-12 audit fix).
+      TRUST_PROXY: ${TRUST_PROXY:-false}
       DATABASE_CLIENT: postgres
       DATABASE_HOST: db
       DATABASE_PORT: 5432
@@ -45,6 +50,22 @@ services:
       # ENCRYPTION_KEY (Strapi core's own) and WEBX_ENCRYPTION_KEY (webx's,
       # below) by design — different security domains.
       PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:?set PII_ENCRYPTION_KEY}
+      # Demo MFA gate on Strapi's own native /admin UI (utils/mfa.ts) — TOTP
+      # secret + HMAC cookie-signing secret. These were never wired through
+      # to this container at all, so a value set in .env was silently
+      # ignored and the code's own hardcoded fallbacks (a literal
+      # well-known example TOTP secret) always applied in every deployment,
+      # found in a full-codebase audit (2026-09-12). Left optional, not
+      # `:?`-required like the secrets above — this gate is a documented
+      # demo/soft protection (doesn't cover the real admin login API, only
+      # direct browser navigation — see MFA_ENABLED below to turn it off
+      # instead of relying on it). Set real values here if you want it to
+      # mean anything in production; MFA_COOKIE_SECRET falls back to
+      # ADMIN_JWT_SECRET when unset, which is a reasonable default once that
+      # secret itself is real.
+      MFA_ENABLED: ${MFA_ENABLED:-true}
+      MFA_SECRET: ${MFA_SECRET:-}
+      MFA_COOKIE_SECRET: ${MFA_COOKIE_SECRET:-}
       # Public-site's real production domain(s), comma-separated — needed so
       # its browser-side calls (e.g. the cookie-consent banner) pass CORS.
       # Leave unset for a Docker-Compose-only deploy where public-site is

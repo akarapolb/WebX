@@ -766,6 +766,42 @@ export async function ensurePageBuilderEditorPermissions(strapi: any) {
   if (created) strapi.log.info(`[seed] granted ${created} missing page-builder perms (page/landing) to role ${role.code}`);
 }
 
+/** Same recurring bug class as ensurePageBuilderEditorPermissions above —
+ * api::breaking-news.breaking-news had ZERO admin permissions for either
+ * Editor or Author (confirmed empirically against a real running instance
+ * during a full-codebase audit, 2026-09-12; a static schema/permission
+ * cross-reference had flagged 14 candidate content types missing from
+ * every ensure*Permissions function, but only this one turned out to
+ * actually be missing anything live — the other 13 already had full
+ * permissions, likely added early enough to catch Strapi's one-time
+ * default-role sync). Editor/Author on a Strapi-engine tenant (dga/pea)
+ * could not create, edit, or publish a breaking-news alert at all — a
+ * silent 403 from the very first attempt, same shape as the page/landing
+ * bug this function's neighbor already fixed. Same role split as every
+ * other content type here: Editor gets publish, Author doesn't. */
+export async function ensureBreakingNewsPermissions(strapi: any) {
+  const SUBJECT = "api::breaking-news.breaking-news";
+  const WANT: Record<string, string[]> = {
+    "strapi-editor": ["create", "read", "update", "delete", "publish"],
+    "strapi-author": ["create", "read", "update", "delete"],
+  };
+  const roles = await strapi.db.query("admin::role").findMany({ where: { code: { $in: Object.keys(WANT) } } });
+  for (const role of roles) {
+    const existing = await strapi.db.query("admin::permission").findMany({ where: { role: role.id } });
+    const have = new Set(existing.map((p: any) => p.action + "|" + p.subject));
+    let created = 0;
+    for (const action of WANT[role.code]) {
+      const key = `plugin::content-manager.explorer.${action}|${SUBJECT}`;
+      if (have.has(key)) continue;
+      await strapi.db.query("admin::permission").create({
+        data: { action: `plugin::content-manager.explorer.${action}`, actionParameters: {}, subject: SUBJECT, properties: {}, conditions: [], role: role.id },
+      });
+      created++;
+    }
+    if (created) strapi.log.info(`[seed] granted ${created} missing breaking-news perms to role ${role.code}`);
+  }
+}
+
 /** ปิดช่องโหว่อีกจุด: create/read/update ของ api::block-type.block-type สำหรับ
  * role Editor/Author ถูก seed ไว้ตั้งแต่แรกด้วย properties.fields แบบ allowlist
  * ตายตัว (["key","name","icon","fieldsSchema","template","tenant"]) — เมื่อเพิ่ม

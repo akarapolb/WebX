@@ -56,6 +56,22 @@ import { planLimit } from "../plans";
 import { generateSecret, otpauthUri, verifyTOTP, generateRecoveryCodes, hashRecoveryCode } from "../totp";
 import { keycloakAdminToken, listEnabledKeycloakEmails, realmFromIssuerUrl } from "../keycloakAdmin";
 
+// trueOwnerOf()/tenantGuard() below are the dedicated cross-tenant write
+// guard for every SCOPED update/delete/publish reaching Strapi through a
+// background job's unscoped scheduler credential — without a real
+// STRAPI_INTERNAL_SECRET, trueOwnerOf() can't ask Strapi who actually owns
+// a document, and the guard fails open (silently disables itself) with
+// zero signal anywhere. Found in a full-codebase audit (2026-09-12): a
+// misconfiguration here (env var missing/empty) had no warning at all — a
+// production deployment could run for months with this guard quietly doing
+// nothing. Loud at import time instead, once, so it shows up in server
+// logs immediately rather than being discovered by an incident.
+if (process.env.NODE_ENV === "production" && !STRAPI_INTERNAL_SECRET) {
+  console.error(
+    "[governance] STRAPI_INTERNAL_SECRET is not set — the cross-tenant write guard for background/scheduler-credential writes (trueOwnerOf/tenantGuard) is silently disabled. Set it to a real value (must match strapi-cms's own WEBX_INTERNAL_SECRET)."
+  );
+}
+
 // The one swap point (Phase 2, made per-session in Phase 6): every
 // `governed.*` content operation goes through whichever adapter THIS
 // session's own login resolved to (see lib/strapi.ts's sessionEngine()) —
@@ -1025,11 +1041,14 @@ export async function deleteCustomRole(tenantKey: string, roleKey: string): Prom
   await strapiBookkeeping(() => strapiAdapter.entries.remove(CUSTOM_ROLE_UID, existing.documentId ?? existing.id));
   invalidateCustomRoleCache();
 
-  // Scrub dangling assignments so a stale roleKey doesn't quietly become a
-  // deny-all for whoever still points at it — resolveCustomRolePermissions
-  // fails open (falls back to pre-custom-role behavior) when the assigned
-  // role no longer exists, but cleaning up here keeps that a rare/transient
-  // state rather than the steady state.
+  // Scrub dangling assignments so a stale roleKey doesn't sit as a
+  // permanent deny-all for whoever still points at it —
+  // resolveCustomRolePermissions now fails CLOSED (deny everything) when
+  // the assigned role no longer exists (2026-09-12 audit fix), so cleaning
+  // up here matters more than before: without it, a user whose role was
+  // deleted through this normal path would stay fully locked out instead
+  // of falling back to their native admin role, until an admin notices and
+  // assigns them a real one again.
   const target = await resolveTenantByKey(tenantKey);
   if (target) {
     const assignments = { ...(target.customRoleAssignments || {}) };
@@ -1073,7 +1092,18 @@ async function resolveCustomRolePermissions(user: CurrentUser, eff: Tenant | nul
   const roleKey = (eff.customRoleAssignments || {})[user.email.toLowerCase()];
   if (!roleKey) return null;
   const role = (await getCustomRoles()).find((r) => r.tenantKey === eff.key && r.roleKey === roleKey);
-  if (!role) return null; // assigned role since deleted — fail open, see deleteCustomRole's own cleanup above
+  if (!role) {
+    // Assigned role vanished without the assignment itself being cleared —
+    // deleteCustomRole's own normal path always scrubs assignments in the
+    // same operation (see its comment), so reaching this branch means
+    // something else deleted the role directly (Strapi's own native admin,
+    // or a partial failure between the two steps). Deleting a restrictive
+    // role is a natural "revoke access" action; failing OPEN here used to
+    // mean it instead expanded the user back to their full native role —
+    // found in a full-codebase audit (2026-09-12). Fail closed instead:
+    // deny every action until an admin assigns a real role again.
+    return { view: false, create: false, update: false, delete: false, publish: false, embedCode: false, hidden: [], readonly: [] };
+  }
   const perm: CustomRolePermission = (role.permissions || {})[uid] || {};
   return {
     view: Boolean(perm.view), create: Boolean(perm.create), update: Boolean(perm.update),

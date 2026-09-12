@@ -1,4 +1,5 @@
 import { adminTenantFor, resolveCustomRolePerms } from '../../../utils/custom-role';
+import { SCOPED } from '../../../index';
 
 /**
  * internal controller — narrow, secret-protected lookups for webx-studio's
@@ -27,6 +28,13 @@ export default {
     const uid = ctx.query.uid;
     const id = ctx.query.id;
     if (!uid || !id) { ctx.status = 400; ctx.body = { error: 'uid and id required' }; return; }
+    // Was accepting ANY content-type uid, turning what's meant to be a
+    // narrow "who owns this SCOPED document" lookup into a general
+    // existence/ownership oracle for every model in the system — protected
+    // by the shared secret above, so not directly attacker-reachable, but
+    // under-scoped for what this endpoint is actually for. Found in a
+    // full-codebase audit (2026-09-12).
+    if (!SCOPED.has(uid)) { ctx.status = 400; ctx.body = { error: 'uid is not a tenant-scoped content type' }; return; }
     try {
       const row = await strapi.db.query(uid).findOne({ where: { documentId: id }, populate: { tenant: true } });
       ctx.body = { tenant: row?.tenant ? { key: row.tenant.key, id: row.tenant.id } : null };

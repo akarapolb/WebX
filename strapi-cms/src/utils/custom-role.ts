@@ -37,7 +37,14 @@ export async function resolveCustomRolePerms(strapi: any, eff: any, adminEmail: 
   if (!roleKey) return null;
   const roles = await getCustomRoles(strapi);
   const role = roles.find((r: any) => r.tenantKey === eff.key && r.roleKey === roleKey);
-  if (!role) return null; // assigned role since deleted — fail open, same as governance.ts's own resolver
+  if (!role) {
+    // Same fix as governance.ts's own mirrored resolver (2026-09-12 audit):
+    // an assigned role that no longer exists used to fail OPEN (no gate
+    // applied, native admin role governs) — deleting a restrictive role is
+    // a natural "revoke access" action, so that silently expanded rather
+    // than restricted. Fail closed instead.
+    return { create: false, update: false, delete: false, publish: false, hidden: [], readonly: [] };
+  }
   const perm = (role.permissions || {})[uid] || {};
   return {
     create: Boolean(perm.create), update: Boolean(perm.update), delete: Boolean(perm.delete), publish: Boolean(perm.publish),

@@ -5,13 +5,17 @@ import {
   seedTenants, seedOrstRoyalSocietyTenants, backfillTenant, seedTenantBContent, seedEditors, grantLocalesToEditorRoles,
   ensureTenantAnalytics, seedModules, seedFulltextDemo, ensureTenantLiveChat, seedLanding, seedGroupA, enrichGroupB, seedCmsCore,
   seedScheduler, ensureEditorPublishPermissions, seedFlatNavItems, ensurePageBuilderEditorPermissions, ensureBlockTypeFieldPermissions,
+  ensureBreakingNewsPermissions,
 } from './seed/seed';
 import { seedCollectionPages } from './seed/seedCollectionPages';
 import { seedFormPages } from './seed/seedFormPages';
 import { adminTenantFor, resolveCustomRolePerms } from './utils/custom-role';
 
-/** content type ที่ผูกกับ tenant (ต้อง scope) */
-const SCOPED = new Set([
+/** content type ที่ผูกกับ tenant (ต้อง scope) — exported so
+ * api/internal/controllers/internal.ts's tenantOf() can validate its own
+ * caller-supplied `uid` against the same set, rather than accepting any
+ * content-type uid at all (found in a full-codebase audit, 2026-09-12). */
+export const SCOPED = new Set([
   'api::home-page.home-page',
   'api::article.article', 'api::service.service', 'api::faq.faq', 'api::job.job',
   'api::banner.banner', 'api::video.video', 'api::award.award',
@@ -52,6 +56,34 @@ const SCOPED = new Set([
 const READS = new Set(['findMany', 'findFirst', 'findOne', 'count']);
 const GUARDED = new Set(['update', 'delete', 'publish', 'unpublish']);
 const WRITE_ACTIONS = new Set(['create', 'update', 'delete', 'publish', 'unpublish']);
+
+/** Boot-time backstop for exactly the bug class SCOPED's own comment above
+ * describes (block-type/icon/release/review were all missing a `tenant`
+ * relation from this hand-enumerated set until a full-codebase audit,
+ * 2026-09-12) — a loud, impossible-to-miss warning in server logs on every
+ * boot if it ever happens a fifth time, rather than relying on someone
+ * noticing during a security review. Diagnostic only: logs, never throws
+ * or blocks boot, since a content type CAN legitimately carry a `tenant`
+ * relation without needing this middleware's scoping (e.g. a type that's
+ * already handled by its own purpose-built API, the way media-meta handles
+ * uploads) — a human still has to look and decide, this just makes sure
+ * they're prompted to. */
+function warnIfTenantRelationMissingFromScoped(strapi: any) {
+  const missing: string[] = [];
+  for (const [uid, model] of Object.entries<any>(strapi.contentTypes || {})) {
+    if (!uid.startsWith('api::') || uid === 'api::tenant.tenant' || SCOPED.has(uid)) continue;
+    const attrs = model?.attributes || {};
+    const hasTenantRelation = Object.values<any>(attrs).some(
+      (a: any) => a?.type === 'relation' && a?.target === 'api::tenant.tenant'
+    );
+    if (hasTenantRelation) missing.push(uid);
+  }
+  if (missing.length) {
+    strapi.log.warn(
+      `[tenant-scoping] ${missing.length} content type(s) carry a 'tenant' relation but are NOT in src/index.ts's SCOPED set — reads/writes for them get NO tenant filter/stamp/ownership-check from this middleware: ${missing.join(', ')}. Add them to SCOPED if they should be tenant-isolated, or note here why not if they're deliberately handled elsewhere (e.g. their own dedicated API).`
+    );
+  }
+}
 
 /** Field-level RBAC — policy cache + strip ฟิลด์ที่ role ปัจจุบันไม่มีสิทธิ์เขียน (hidden/readonly) */
 let policyCache: { at: number; list: any[] } = { at: 0, list: [] };
@@ -278,6 +310,7 @@ export default {
    * Bootstrap — locale ไทย, tenants, seed เนื้อหา, backfill, editor accounts, สิทธิ์ public
    */
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    warnIfTenantRelationMissingFromScoped(strapi);
     try {
       await ensureThaiLocale(strapi);
       await seedTenants(strapi);
@@ -305,6 +338,7 @@ export default {
       await ensureEditorPublishPermissions(strapi);
       await ensurePageBuilderEditorPermissions(strapi);
       await ensureBlockTypeFieldPermissions(strapi);
+      await ensureBreakingNewsPermissions(strapi);
       await ensurePublicPermissions(strapi);
     } catch (err) {
       strapi.log.error('[bootstrap] seed/setup failed: ' + (err as Error).stack);
