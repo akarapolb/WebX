@@ -53,7 +53,7 @@ import {
   STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD,
   WORDPRESS_SCHEDULER_USERNAME, WORDPRESS_SCHEDULER_APP_PASSWORD,
 } from "../config";
-import { planLimit, seatLimitExceeded } from "../plans";
+import { planLimit, seatLimitExceeded, tokenBudgetExceeded, agentUsagePercent } from "../plans";
 import { generateSecret, otpauthUri, verifyTOTP, generateRecoveryCodes, hashRecoveryCode } from "../totp";
 import { keycloakAdminToken, listEnabledKeycloakEmails, realmFromIssuerUrl } from "../keycloakAdmin";
 
@@ -1774,6 +1774,121 @@ export async function checkAgentRunBudget(user: CurrentUser): Promise<void> {
   return enforceAgentRunLimit(eff);
 }
 
+/** Sums one numeric field across every row matching `filter` on `uid`,
+ * created since `monthStart` — shared by enforceAgentTokenBudget's two
+ * sources (background jobs' tokensUsed, interactive runs' audit-log
+ * tokens). Paginates rather than trusting one page: a busy Pro workspace
+ * can accumulate more rows in a month than fit in one request — an earlier
+ * version of this kind of check (see enforceItemLimit) only ever needed a
+ * count, not a sum, so it could get away with reading just `total` from
+ * page 1; this one needs every row's own value. */
+async function sumMonthlyField(uid: string, tenantKey: string, monthStart: Date, field: string): Promise<number> {
+  let sum = 0;
+  let page = 1;
+  const pageSize = 500;
+  for (;;) {
+    const { data, total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(uid, {
+      page, pageSize,
+      filter: [
+        { field: "tenantKey", op: "eq", value: tenantKey },
+        { field: "createdAt", op: "gte", value: monthStart.toISOString() },
+      ],
+    }));
+    for (const row of data) sum += Number(row?.[field]) || 0;
+    if (page * pageSize >= total || data.length === 0) break;
+    page++;
+  }
+  return sum;
+}
+
+/** This calendar month's real AI-token usage for a workspace, from the same
+ * two sources enforceAgentTokenBudget checks against:
+ *   - background jobs' own `tokensUsed` (the running total jobs/runner.ts's
+ *     checkpoint already tracks per job, from the checkpoint's own
+ *     prompt+completion counters — see that file's tokensOf());
+ *   - interactive chat runs' token deltas, recorded by recordAgentRunUsage
+ *     below onto a dedicated audit-log row per run (phase 2 — chat runs
+ *     used to go uncounted entirely, since agent-thread's own `usage` JSON
+ *     field only ever holds the LATEST run's numbers, not a history; see
+ *     that content type's own schema comment).
+ * Shared by enforceAgentTokenBudget (the gate) and getAgentUsageSummary
+ * below (the Billing page's own display) — one real number, not two
+ * separately-maintained ideas of "how much has this workspace used". */
+async function monthlyAgentTokenUsage(eff: Tenant): Promise<number> {
+  const monthStart = new Date();
+  monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0);
+  const [fromJobs, fromChat] = await Promise.all([
+    sumMonthlyField(AGENT_JOB_UID, eff.key, monthStart, "tokensUsed"),
+    sumMonthlyField(AUDIT_UID, eff.key, monthStart, "tokens"),
+  ]);
+  return fromJobs + fromChat;
+}
+
+/** Monthly AI-token budget (PLAN_LIMITS.agentMonthlyJobTokens) — the first
+ * real enforcement of a field that previously wasn't read anywhere (see
+ * lib/plans.ts's own comment on it). Same "count what's already
+ * persisted, don't invent a new counter" discipline
+ * enforceAgentRunLimit/enforceItemLimit already use. */
+async function enforceAgentTokenBudget(eff: Tenant | null): Promise<void> {
+  if (!eff) return;
+  if (!Number.isFinite(planLimit(eff.plan).agentMonthlyJobTokens)) return; // unlimited plan — skip the sums entirely
+  try {
+    const used = await monthlyAgentTokenUsage(eff);
+    if (tokenBudgetExceeded(eff.plan, used)) {
+      throw new CmsError("This workspace has reached its monthly AI usage limit — talk to us about Enterprise to raise it.", 403);
+    }
+  } catch (e) {
+    if (e instanceof CmsError) throw e;
+    // the lookup itself failed — fail open, same posture as every other
+    // limit/gate check in this file
+  }
+}
+
+/** The one exported entry point app/api/agent/run/route.ts calls, once,
+ * before opening the SSE stream — a mid-stream 403 would be an awkward,
+ * non-standard shape (see that route's own header comment on why its
+ * checkAgentRunBudget call already works this way). Keeps Tenant itself
+ * fully private to this module. */
+export async function checkAgentTokenBudget(user: CurrentUser): Promise<void> {
+  const eff = await resolveEffectiveTenant(user.email);
+  return enforceAgentTokenBudget(eff);
+}
+
+/** Billing.tsx's own AI-usage bar. Deliberately never sends the raw
+ * used/limit token numbers to the browser — only a 0–100 percent (or a
+ * status for the two plan shapes a percentage can't describe) — same
+ * posture as the pricing page's own "fair usage, managed automatically"
+ * copy: a real limit is enforced, but the actual number stays server-side
+ * so it can be retuned later without a client change, and so it never
+ * shows up in a network response a technically curious admin could
+ * inspect (see agentUsagePercent's own comment in lib/plans.ts).
+ *
+ *   - "unavailable": this plan has no AI at all (Free) — Billing.tsx hides
+ *     the row entirely rather than showing 0%, which would read as "you
+ *     have a budget and haven't used it" instead of "not on this plan".
+ *   - "unlimited": Enterprise's real Infinity — shown as a filled/labeled
+ *     bar with no percentage math to do (dividing by Infinity isn't a
+ *     percentage).
+ *   - "metered": the normal Pro case — a real percentage of a real budget.
+ *
+ * Fails open to {status: "metered", percentUsed: 0} on a lookup error,
+ * same posture as the enforcement gate itself — a broken counter should
+ * show as "0% used", not break the billing page. */
+export type AgentUsageSummary = { status: "unavailable" } | { status: "unlimited" } | { status: "metered"; percentUsed: number };
+
+export async function getAgentUsageSummary(user: CurrentUser): Promise<AgentUsageSummary> {
+  const eff = await resolveEffectiveTenant(user.email);
+  const limit = planLimit(eff?.plan).agentMonthlyJobTokens;
+  if (!eff || limit <= 0) return { status: "unavailable" };
+  if (!Number.isFinite(limit)) return { status: "unlimited" };
+  try {
+    const used = await monthlyAgentTokenUsage(eff);
+    return { status: "metered", percentUsed: agentUsagePercent(eff.plan, used) };
+  } catch {
+    return { status: "metered", percentUsed: 0 };
+  }
+}
+
 /** The metering row enforceAgentRunLimit/checkAgentRunBudget counts —
  * written explicitly (not via writeAudit's own ambient-actor prefixing,
  * since this call IS the thing announcing an agent run started, not a
@@ -1787,6 +1902,26 @@ export async function recordAgentRunStart(user: CurrentUser, runId: string): Pro
       action: "agent_run", contentType: "agent", entryId: runId,
       adminEmail: user.email, tenantKey: eff?.key ?? null, at: new Date().toISOString(),
       actor: "agent", targetRef: runId,
+    }));
+  } catch { /* metering only — never block a run over this */ }
+}
+
+/** The completion-time counterpart to recordAgentRunStart, written once a
+ * run's real token usage is known (runtime.ts, right after runSlice
+ * returns) — a separate row rather than updating the start-time one, since
+ * this file's audit rows are treated as append-only everywhere else. Only
+ * this row's `tokens` field feeds enforceAgentTokenBudget's monthly sum;
+ * the `agent_run` row from recordAgentRunStart is left at 0/untouched and
+ * still only used for the run-count budget. Never throws — same posture as
+ * recordAgentRunStart. */
+export async function recordAgentRunUsage(user: CurrentUser, runId: string, tokens: number): Promise<void> {
+  if (!(tokens > 0)) return;
+  const eff = await resolveEffectiveTenant(user.email);
+  try {
+    await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
+      action: "agent_run_usage", contentType: "agent", entryId: runId,
+      adminEmail: user.email, tenantKey: eff?.key ?? null, at: new Date().toISOString(),
+      actor: "agent", targetRef: runId, tokens: Math.round(tokens),
     }));
   } catch { /* metering only — never block a run over this */ }
 }
@@ -1980,6 +2115,7 @@ async function insertAgentJob(user: CurrentUser, eff: Tenant, policy: AgentPolic
     throw new CmsError(`This workspace already has ${unfinished} unfinished background jobs, the most its plan allows. Wait for some to finish or cancel them.`, 429);
   }
   await checkAgentRunBudget(user);
+  await enforceAgentTokenBudget(eff);
 
   const within = (asked: number | undefined, max: number) => (asked && asked > 0 ? Math.min(asked, max) : max);
   const created: any = await strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_JOB_UID, {

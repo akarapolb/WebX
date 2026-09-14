@@ -2,7 +2,7 @@
 // checks happen in the API route before this is called; the loop itself
 // lives in ./engine so background jobs can run the same code in slices.
 import "server-only";
-import { recordAgentRunStart, type AgentPolicy } from "@/lib/cms/governance";
+import { recordAgentRunStart, recordAgentRunUsage, type AgentPolicy } from "@/lib/cms/governance";
 import { applyInput, startRun } from "./engine/checkpoint";
 import { serverDeps } from "./engine/deps.server";
 import { limitsFor } from "./engine/limits";
@@ -88,13 +88,19 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
   if (counters.promptTokens + counters.completionTokens > 0) {
     emit({ type: "usage", promptTokens: counters.promptTokens, completionTokens: counters.completionTokens });
   }
+  const usage = { promptTokens: counters.promptTokens - before.prompt, completionTokens: counters.completionTokens - before.completion };
+  // Completion-time counterpart to recordAgentRunStart above — that call
+  // only counts this as a metered run, since actual usage isn't known until
+  // now. This is what lets enforceAgentTokenBudget see chat-run tokens at
+  // all (previously only background jobs' own tokensUsed were counted).
+  recordAgentRunUsage(input.user as any, input.runId, usage.promptTokens + usage.completionTokens).catch(() => {});
 
   return {
     finalText: r.finalText,
     toolSteps: r.steps,
     proposals: r.proposals,
     applied: r.applied,
-    usage: { promptTokens: counters.promptTokens - before.prompt, completionTokens: counters.completionTokens - before.completion },
+    usage,
     aborted: r.stop === "aborted",
     stopReason: r.stop,
     stopMessage: r.stopMessage,
