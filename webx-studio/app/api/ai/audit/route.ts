@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sessionToken } from "@/lib/strapi";
 import { structured, llmConfigured } from "@/lib/llm";
-import { STRAPI_URL } from "@/lib/config";
+import { STRAPI_URL, STRAPI_INTERNAL_SECRET } from "@/lib/config";
 
 const TYPES = ["api::article.article", "api::service.service", "api::faq.faq", "api::landing.landing", "api::blog.blog"];
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const { tenant, contentType } = await req.json().catch(() => ({} as any));
   const types: string[] = contentType ? [contentType] : TYPES;
   const tf = tenant ? "&filters[tenant][key][$eq]=" + encodeURIComponent(tenant) : "";
-  const auth = { Authorization: "Bearer " + token };
+  const auth = { Authorization: "Bearer " + token, ...(STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {}) };
   const now = Date.now();
 
   const entries: { docId: string; uid: string; title: string; body: string; bodyHtml: string; meta: string; updatedAt: string }[] = [];

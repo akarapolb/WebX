@@ -23,8 +23,9 @@ model_list:
       api_base: https://api.moonshot.ai/v1   # this key is on the international platform, not api.moonshot.cn
   - model_name: webx-embed              # RAG embeddings (keep one model per index)
     litellm_params:
-      model: openai/text-embedding-3-small
-      api_key: os.environ/OPENAI_API_KEY
+      model: huggingface/tei             # oneweb.tech ML sandbox — TEI-style embeddings endpoint
+      api_base: http://mlsandbox.oneweb.tech/api/emb/
+      api_key: os.environ/MLSANDBOX_EMB_API_KEY
 
 router_settings:
   fallbacks: [{ "webx-default": ["webx-thai"] }]   # auto-failover if a provider is down

@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sessionToken } from "@/lib/strapi";
 import { structured, llmConfigured } from "@/lib/llm";
-import { STRAPI_URL } from "@/lib/config";
+import { STRAPI_URL, STRAPI_INTERNAL_SECRET } from "@/lib/config";
 
 // localized text fields we attempt to translate, in display order
 const CAND = ["title", "name", "subject", "question", "categoryLabel", "excerpt", "summary", "description", "answer", "body", "content"];
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { uid, docId, locale, targetLocale } = await req.json().catch(() => ({} as any));
   if (!uid || !docId || !targetLocale) return NextResponse.json({ error: "uid, docId, targetLocale required" }, { status: 400 });
-  const auth = { Authorization: "Bearer " + token };
+  const auth = { Authorization: "Bearer " + token, ...(STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {}) };
 
   // 1. load the source entry
   const src = locale ? "?locale=" + encodeURIComponent(locale) : "";

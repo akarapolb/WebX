@@ -23,7 +23,7 @@
 // exception below.
 import { NextRequest, NextResponse } from "next/server";
 import { sessionToken } from "@/lib/strapi";
-import { STRAPI_URL } from "@/lib/config";
+import { STRAPI_URL, STRAPI_INTERNAL_SECRET } from "@/lib/config";
 
 const ALLOWED_EXACT: Record<string, Set<string>> = {
   "api/analytics/summary": new Set(["GET"]),
@@ -54,7 +54,14 @@ async function handle(req: NextRequest, path: string[]) {
   if (!isAllowed(path, req.method)) return NextResponse.json({ error: "Not allowed through this proxy" }, { status: 403 });
 
   const target = `${STRAPI_URL}/${path.join("/")}${req.nextUrl.search}`;
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  // Most allowlisted paths above (content-manager/*, upload) aren't under
+  // Strapi's /api/* prefix, so admin-mfa middleware gates them behind MFA
+  // unless this header is present (see strapi-cms/src/middlewares/admin-mfa.ts) —
+  // without it every one of those calls 401s.
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    ...(STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {}),
+  };
   const ct = req.headers.get("content-type");
   if (ct) headers["Content-Type"] = ct; // preserve multipart boundary for file uploads
   const init: RequestInit = { method: req.method, headers, cache: "no-store" };

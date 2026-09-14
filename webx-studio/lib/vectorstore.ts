@@ -4,7 +4,7 @@
 //   • "pgvector" (production scale) — set WEBX_VECTOR=pgvector + PGVECTOR_URL.
 //     Uses Postgres + the pgvector extension for ANN at scale. Requires `pg`
 //     (npm i pg) and a provisioned database; loaded only when selected.
-import { STRAPI_URL } from "@/lib/config";
+import { STRAPI_URL, STRAPI_INTERNAL_SECRET } from "@/lib/config";
 
 export type VecUpsert = { documentRef: string; contentType: string; title: string; text: string; url?: string; vector: number[] };
 export type VecHit = { title: string; text: string; url?: string; contentType?: string; score: number };
@@ -24,7 +24,11 @@ export function vectorBackend(): "pgvector" | "strapi" {
 
 // ── strapi backend (default) ────────────────────────────────────────────────
 async function strapiUpsert(docs: VecUpsert[], o: Opts) {
-  const auth = { Authorization: "Bearer " + o.token };
+  // Strapi's admin-mfa middleware gates content-manager routes behind MFA
+  // unless this header is present (see strapi-cms/src/middlewares/admin-mfa.ts).
+  // Without it every call below 401s — upsert silently drops every doc,
+  // query silently returns zero hits.
+  const auth = { Authorization: "Bearer " + o.token, ...(STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {}) };
   let n = 0;
   for (const d of docs) {
     try {
@@ -39,7 +43,11 @@ async function strapiUpsert(docs: VecUpsert[], o: Opts) {
   return n;
 }
 async function strapiQuery(vec: number[], o: Opts): Promise<VecHit[]> {
-  const auth = { Authorization: "Bearer " + o.token };
+  // Strapi's admin-mfa middleware gates content-manager routes behind MFA
+  // unless this header is present (see strapi-cms/src/middlewares/admin-mfa.ts).
+  // Without it every call below 401s — upsert silently drops every doc,
+  // query silently returns zero hits.
+  const auth = { Authorization: "Bearer " + o.token, ...(STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {}) };
   const tf = o.tenant ? "&filters[tenantKey][$eq]=" + encodeURIComponent(o.tenant) : "";
   const r = await fetch(STRAPI_URL + "/content-manager/collection-types/" + EM + "?pageSize=500" + tf, { headers: auth, cache: "no-store" });
   const rows: any[] = r.ok ? ((await r.json()).results ?? []) : [];

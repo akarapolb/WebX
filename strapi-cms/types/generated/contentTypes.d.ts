@@ -1649,37 +1649,6 @@ export interface ApiHomePageHomePage extends Struct.CollectionTypeSchema {
   };
 }
 
-export interface ApiIconIcon extends Struct.CollectionTypeSchema {
-  collectionName: 'icons';
-  info: {
-    description: '\u0E44\u0E2D\u0E04\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E40\u0E2D\u0E07 (no-code) \u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A Feature grid / Stat row \u0E43\u0E19 Visual Builder';
-    displayName: 'Icon';
-    pluralName: 'icons';
-    singularName: 'icon';
-  };
-  options: {
-    draftAndPublish: false;
-  };
-  attributes: {
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    image: Schema.Attribute.Media<'images'> & Schema.Attribute.Required;
-    key: Schema.Attribute.String &
-      Schema.Attribute.Required &
-      Schema.Attribute.Unique;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'api::icon.icon'> &
-      Schema.Attribute.Private;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
-    publishedAt: Schema.Attribute.DateTime;
-    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-  };
-}
-
 export interface ApiJobJob extends Struct.CollectionTypeSchema {
   collectionName: 'jobs';
   info: {
@@ -3213,7 +3182,6 @@ declare module '@strapi/strapi' {
       'api::field-policy.field-policy': ApiFieldPolicyFieldPolicy;
       'api::gallery.gallery': ApiGalleryGallery;
       'api::home-page.home-page': ApiHomePageHomePage;
-      'api::icon.icon': ApiIconIcon;
       'api::job.job': ApiJobJob;
       'api::landing.landing': ApiLandingLanding;
       'api::location.location': ApiLocationLocation;

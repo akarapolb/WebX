@@ -10,7 +10,16 @@ export default async (policyCtx: any, _config: any, { strapi }: { strapi: any })
   try {
     const port = strapi.config.get('server.port', 1337);
     const res = await fetch(`http://127.0.0.1:${port}/admin/users/me`, {
-      headers: { Authorization: authz, Accept: 'application/json' },
+      headers: {
+        Authorization: authz,
+        Accept: 'application/json',
+        // Own admin-mfa middleware gates this same loopback route behind
+        // MFA (see middlewares/admin-mfa.ts) — exempt this trusted
+        // server-to-server self-check the same way webx-studio's own
+        // calls are exempted, or every admin-only-gated route (media,
+        // analytics, console/branding) 403s regardless of MFA status.
+        'X-Internal-Secret': process.env.WEBX_INTERNAL_SECRET || '',
+      },
     });
     if (!res.ok) return false;
     const body: any = await res.json();

@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sessionToken } from "@/lib/strapi";
 import { embed, llmConfigured } from "@/lib/llm";
-import { STRAPI_URL } from "@/lib/config";
+import { STRAPI_URL, STRAPI_INTERNAL_SECRET } from "@/lib/config";
 import { vectorUpsert, vectorBackend, type VecUpsert } from "@/lib/vectorstore";
 import { requireUser, resolveMyTenant } from "@/lib/cms/governance";
 import { CmsError } from "@/lib/cms/types";
@@ -39,7 +39,13 @@ export async function POST(req: NextRequest) {
   }
   const types: string[] = contentType ? [contentType] : INDEXABLE;
   const tf = tenant ? "&filters[tenant][key][$eq]=" + encodeURIComponent(tenant) : "";
-  const auth = { Authorization: "Bearer " + token };
+  // Strapi's admin-mfa middleware gates content-manager routes behind MFA
+  // unless this header is present (see strapi-cms/src/middlewares/admin-mfa.ts) —
+  // same exemption governance.ts's authHeaders() already applies to every
+  // other server-to-server call. Without it every fetch below 401s and the
+  // `if (!r.ok) continue` below silently drops it, so indexing always found
+  // 0 docs with no error.
+  const auth = { Authorization: "Bearer " + token, ...(STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {}) };
 
   const docs: { documentRef: string; contentType: string; title: string; text: string }[] = [];
   for (const uid of types) {
