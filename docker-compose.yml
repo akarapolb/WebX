@@ -263,6 +263,7 @@ services:
       - |
         while true; do
           node scripts/backup-db.js || echo "[db-backup] backup failed"
+          node scripts/restore-test.js || echo "[db-backup] RESTORE DRILL FAILED — the backup just taken may not be restorable"
           sleep "$$INTERVAL_SECONDS"
         done
 
@@ -378,6 +379,7 @@ services:
       - |
         while true; do
           node scripts/backup-db.js || echo "[wp-db-backup] backup failed"
+          node scripts/restore-test.js || echo "[wp-db-backup] RESTORE DRILL FAILED — the backup just taken may not be restorable"
           sleep "$$INTERVAL_SECONDS"
         done
 
@@ -412,6 +414,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # litellm/config.yaml's webx-kimi model has read os.environ/MOONSHOT_API_KEY
+      # since it was added, but this var was never passed through here — an
+      # operator could set MOONSHOT_API_KEY in their root .env and it would
+      # silently never reach the container, since docker-compose only forwards
+      # env vars a service's own `environment:` block explicitly names. Found
+      # while walking someone through setting up Kimi (2026-09-14).
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
     ports:
       # Pure backend gateway — nothing ever reaches it directly from a
       # browser (every AI feature calls it server-side, from `webx`, over
