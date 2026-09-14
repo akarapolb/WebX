@@ -656,9 +656,20 @@ export async function grantLocalesToEditorRoles(strapi: any) {
   if (!locales.length) return;
 
   // content type ที่เปิด i18n (ต้องมี dimension locale ใน permission)
+  // api::page.page / api::landing.landing joined 2026-09-14 when Visual
+  // Builder pages became i18n-enabled — WITHOUT this, the exact same bug
+  // ensureEditorPublishPermissions' own comment documents (an i18n subject's
+  // permission with no `locales` key is an EMPTY allow-list, not
+  // "unrestricted") would lock every tenant editor out of Page/Landing
+  // ENTIRELY, not just the new English locale: ensurePageBuilderEditorPermissions
+  // already created their create/read/update/delete/publish rows with
+  // `properties: {}` back when these types weren't localized, and this is
+  // the only function that goes back and merges `locales` onto an EXISTING
+  // permission row rather than skipping it as already-present.
   const I18N_SUBJECTS = new Set([
     "api::home-page.home-page", "api::article.article", "api::service.service", "api::faq.faq",
     "api::job.job", "api::banner.banner", "api::video.video", "api::award.award",
+    "api::page.page", "api::landing.landing",
   ]);
   const roles = await strapi.db.query("admin::role").findMany({ where: { code: { $in: ["strapi-editor", "strapi-author"] } } });
   for (const role of roles) {
@@ -697,6 +708,7 @@ export async function ensureEditorPublishPermissions(strapi: any) {
   const I18N_SUBJECTS = [
     "api::home-page.home-page", "api::article.article", "api::service.service", "api::faq.faq",
     "api::job.job", "api::banner.banner", "api::video.video", "api::award.award",
+    "api::page.page", "api::landing.landing",
   ];
   const WANT: Record<string, string[]> = {
     "strapi-editor": ["delete", "publish"],
@@ -748,6 +760,23 @@ export async function ensurePageBuilderEditorPermissions(strapi: any) {
   // content-manager endpoint actually checks.
   const SUBJECTS = ["api::page.page", "api::landing.landing", "api::page-template.page-template", "api::icon.icon"];
   const ACTIONS = ["create", "read", "update", "delete", "publish"];
+  // page.page/landing.landing became i18n-enabled 2026-09-14 — an i18n
+  // subject's permission with no `locales` key is an EMPTY allow-list (deny
+  // all), same gotcha ensureEditorPublishPermissions' own comment documents.
+  // This function runs AFTER grantLocalesToEditorRoles in the bootstrap
+  // sequence (see index.ts) and is the one that actually creates page.page's
+  // create/read/update rows in the first place — on a fresh install (or the
+  // first boot after enabling i18n on a new subject) grantLocalesToEditorRoles
+  // never sees them, since they don't exist yet when IT runs. Populating
+  // locales here too, not just in the other two ensure*Permissions functions,
+  // is what makes one boot enough instead of needing a second restart to
+  // self-heal via grantLocalesToEditorRoles finding these rows next time.
+  let locales: string[] = [];
+  try {
+    const list = await strapi.plugin("i18n").service("locales").find();
+    locales = (list || []).map((l: any) => l.code);
+  } catch (e) { /* no i18n plugin / no locales yet */ }
+  const I18N_SUBJECTS = new Set(["api::page.page", "api::landing.landing"]);
   const role = await strapi.db.query("admin::role").findOne({ where: { code: "strapi-editor" } });
   if (!role) return;
   const existing = await strapi.db.query("admin::permission").findMany({ where: { role: role.id } });
@@ -757,8 +786,9 @@ export async function ensurePageBuilderEditorPermissions(strapi: any) {
     for (const action of ACTIONS) {
       const key = `plugin::content-manager.explorer.${action}|${subject}`;
       if (have.has(key)) continue;
+      const properties = I18N_SUBJECTS.has(subject) && locales.length ? { locales } : {};
       await strapi.db.query("admin::permission").create({
-        data: { action: `plugin::content-manager.explorer.${action}`, actionParameters: {}, subject, properties: {}, conditions: [], role: role.id },
+        data: { action: `plugin::content-manager.explorer.${action}`, actionParameters: {}, subject, properties, conditions: [], role: role.id },
       });
       created++;
     }

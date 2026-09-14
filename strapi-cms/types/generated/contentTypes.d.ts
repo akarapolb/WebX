@@ -1820,9 +1820,25 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
   options: {
     draftAndPublish: true;
   };
+  pluginOptions: {
+    i18n: {
+      localized: true;
+    };
+  };
   attributes: {
-    abEnabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    abEnabled: Schema.Attribute.Boolean &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<false>;
     abSplit: Schema.Attribute.Integer &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
       Schema.Attribute.SetMinMax<
         {
           max: 100;
@@ -1831,7 +1847,13 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<50>;
-    active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    active: Schema.Attribute.Boolean &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<true>;
     blocks: Schema.Attribute.DynamicZone<
       [
         'block.hero',
@@ -1851,30 +1873,81 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
         'block.tabs',
         'block.comparison',
       ]
-    >;
+    > &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    enterSiteLabel: Schema.Attribute.String;
+    enterSiteLabel: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     enterSiteUrl: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
       Schema.Attribute.DefaultTo<'index.html'>;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    locale: Schema.Attribute.String;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::landing.landing'
-    > &
-      Schema.Attribute.Private;
+    >;
     publishedAt: Schema.Attribute.DateTime;
-    publishEnd: Schema.Attribute.DateTime;
-    publishStart: Schema.Attribute.DateTime;
-    seoDescription: Schema.Attribute.Text;
-    slug: Schema.Attribute.UID<'title'> & Schema.Attribute.Required;
-    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
-    title: Schema.Attribute.String & Schema.Attribute.Required;
+    publishEnd: Schema.Attribute.DateTime &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    publishStart: Schema.Attribute.DateTime &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    seoDescription: Schema.Attribute.Text &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    slug: Schema.Attribute.UID<'title'> &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    title: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    variantBlocks: Schema.Attribute.JSON;
+    variantBlocks: Schema.Attribute.JSON &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
   };
 }
 
@@ -2072,6 +2145,11 @@ export interface ApiPagePage extends Struct.CollectionTypeSchema {
   options: {
     draftAndPublish: true;
   };
+  pluginOptions: {
+    i18n: {
+      localized: true;
+    };
+  };
   attributes: {
     blocks: Schema.Attribute.DynamicZone<
       [
@@ -2099,18 +2177,44 @@ export interface ApiPagePage extends Struct.CollectionTypeSchema {
         'block.tabs',
         'block.comparison',
       ]
-    >;
+    > &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'api::page.page'> &
-      Schema.Attribute.Private;
+    locale: Schema.Attribute.String;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::page.page'>;
     publishedAt: Schema.Attribute.DateTime;
-    seoDescription: Schema.Attribute.Text;
-    slug: Schema.Attribute.String & Schema.Attribute.Required;
-    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
-    title: Schema.Attribute.String & Schema.Attribute.Required;
+    seoDescription: Schema.Attribute.Text &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    slug: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    title: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
