@@ -19,6 +19,11 @@ export type EntryQuery = {
   status?: "draft" | "published" | "";
   /** full-text search */
   q?: string;
+  /** Only meaningful against a content type with `localized: true`
+   * (ContentTypeInfo) — Strapi's `find` reads this from the query string
+   * (confirmed by reading @strapi/content-manager's collection-types
+   * controller directly). Omitted entirely for non-localized types. */
+  locale?: string;
 };
 
 export type EntryList<T = any> = {
@@ -145,7 +150,13 @@ export interface CmsAdapter {
     list<T = any>(uid: string, query?: EntryQuery): Promise<EntryList<T>>;
     /** Throws CmsError on a non-2xx response. */
     get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null>;
-    create<T = any>(uid: string, data: Record<string, any>): Promise<T>;
+    /** `opts.locale` on a `localized:true` content type: creates that locale
+     * directly (Strapi reads `locale` off the request body itself, same as
+     * `update` — confirmed by reading @strapi/content-manager's
+     * `createDocument`/`updateDocument` controllers directly). On a
+     * documentId that already exists in another locale this is how you add
+     * the missing one; there is no separate "create locale" endpoint. */
+    create<T = any>(uid: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T>;
     update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T>;
     remove(uid: string, id: string, opts?: { locale?: string }): Promise<void>;
   };

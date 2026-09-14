@@ -60,6 +60,7 @@ export function buildQuery(q?: EntryQuery): string {
   if (q.sort) parts.push("sort=" + q.sort);
   if (q.status) parts.push("status=" + q.status);
   if (q.q && q.q.trim()) parts.push("_q=" + encodeURIComponent(q.q.trim()));
+  if (q.locale) parts.push("locale=" + encodeURIComponent(q.locale));
   for (const f of q.filter || []) {
     const path = f.field.split(".").map((seg) => "[" + seg + "]").join("");
     parts.push("filters" + path + "[$" + f.op + "]=" + encodeURIComponent(String(f.value)));
@@ -141,11 +142,20 @@ export const strapiAdapter: CmsAdapter = {
       const j = await json(r);
       return (j?.data ?? j) as T;
     },
-    async create<T = any>(uid: string, data: Record<string, any>): Promise<T> {
+    async create<T = any>(uid: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T> {
+      // Strapi reads `locale` off the request BODY for create too (confirmed
+      // by reading @strapi/content-manager's createDocument controller
+      // directly), same merge `update()` below already does. This always
+      // makes a brand-new documentId, born in this locale — to add a locale
+      // to an EXISTING documentId, call update(uid, documentId, data,
+      // {locale}) instead (Strapi's own updateDocument controller treats "no
+      // existing version in that locale, but the document exists" as "create
+      // this locale" — there is no separate "create locale" endpoint).
+      const body = opts?.locale ? { ...data, locale: opts.locale } : data;
       const r = await fetch(entryUrl(uid), {
         method: "POST",
         headers: await authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(data),
+        body: JSON.stringify(body),
         cache: "no-store",
       });
       if (!r.ok) throw new CmsError(await errorMessage(r, "create failed"), r.status);

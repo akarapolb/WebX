@@ -19,7 +19,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 import { levelAtLeast, type AgentRunContext, type AgentLevel } from "../lib/agent/types";
-import { availableTools, executeTool } from "../lib/agent/tools";
+import { availableTools, executeTool, extractBlockTranslatable, applyBlockTranslations } from "../lib/agent/tools";
 import { auditEntry, THAI_ID_RE } from "../lib/agent/auditRules";
 import { systemPrompt, untrustedBlock } from "../lib/agent/prompts";
 import { clampAgentLevel } from "../lib/cms/governance";
@@ -90,6 +90,19 @@ describe("buildQuery (lib/cms/strapi.ts) — \"gte\" filter op mapping", () => {
     assert.match(qs, /filters\[tenantKey\]\[\$eq\]=orst/);
     assert.match(qs, /filters\[action\]\[\$eq\]=agent_run/);
     assert.match(qs, /filters\[at\]\[\$gte\]=/);
+  });
+  // Added for the Visual Builder locale switcher — Strapi's own `find`
+  // reads `locale` from the query string (confirmed by reading
+  // @strapi/content-manager's collection-types controller directly).
+  test("locale appends as a plain ?locale= query param, not a filters[] entry", () => {
+    const qs = buildQuery({ locale: "en" });
+    assert.equal(qs, "?locale=en");
+  });
+  test("locale coexists with the other query pieces", () => {
+    const qs = buildQuery({ pageSize: 1, locale: "en", filter: [{ field: "tenant.key", op: "eq", value: "dga" }] });
+    assert.match(qs, /pageSize=1/);
+    assert.match(qs, /locale=en/);
+    assert.match(qs, /filters\[tenant\]\[key\]\[\$eq\]=dga/);
   });
 });
 
@@ -293,6 +306,48 @@ describe("translate_fields (lib/agent/tools.ts) — refuses content types with n
     const r = await executeTool(ctx({ cms: fc.cms }), "translate_fields", JSON.stringify({ uid: "api::mystery.mystery", id: "1", targetLocale: "th" }));
     assert.equal(r.ok, false);
     assert.match(r.summary, /no separate per-locale copy/);
+  });
+});
+
+// Page/Landing's own real content lives inside blocks[], not the flat field
+// list translate_fields's CAND covers (only `title` matches there) — these
+// two pure functions are what let a translated Page actually carry its
+// hero headings/richtext body/etc., not just its title.
+describe("extractBlockTranslatable / applyBlockTranslations (lib/agent/tools.ts)", () => {
+  test("extracts each block's own translatable fields (from blockCatalog.ts's real field list), keyed by index", () => {
+    const blocks = [
+      { __component: "block.hero", heading: "Welcome", subheading: "Come visit", ctaLabel: "Go", align: "center" },
+      { __component: "block.richtext", body: "<p>Hello</p>" },
+    ];
+    const out = extractBlockTranslatable(blocks);
+    assert.deepEqual(out, {
+      "blocks.0.heading": "Welcome",
+      "blocks.0.subheading": "Come visit",
+      "blocks.0.ctaLabel": "Go",
+      "blocks.1.body": "<p>Hello</p>",
+    });
+  });
+  test("skips code fields (block.embed's raw html) and blank/missing fields", () => {
+    const out = extractBlockTranslatable([
+      { __component: "block.embed", label: "", html: "<script>alert(1)</script>" },
+      { __component: "block.hero", heading: "  " },
+    ]);
+    assert.deepEqual(out, {});
+  });
+  test("ignores an unknown block type instead of throwing", () => {
+    const out = extractBlockTranslatable([{ __component: "block.not-real", heading: "x" }]);
+    assert.deepEqual(out, {});
+  });
+  test("applyBlockTranslations writes translated values back at the same index/field, leaving the rest of the block untouched", () => {
+    const blocks = [{ __component: "block.hero", heading: "Welcome", ctaLabel: "Go", align: "center" }];
+    const next = applyBlockTranslations(blocks, { "blocks.0.heading": "ยินดีต้อนรับ", "blocks.0.ctaLabel": "ไป" });
+    assert.deepEqual(next, [{ __component: "block.hero", heading: "ยินดีต้อนรับ", ctaLabel: "ไป", align: "center" }]);
+    assert.equal(blocks[0].heading, "Welcome", "must not mutate the input array");
+  });
+  test("applyBlockTranslations ignores an out-of-range index rather than throwing", () => {
+    const blocks = [{ __component: "block.hero", heading: "Welcome" }];
+    const next = applyBlockTranslations(blocks, { "blocks.5.heading": "x" });
+    assert.deepEqual(next, blocks);
   });
 });
 
