@@ -290,6 +290,16 @@ const TOOLS: ToolDef[] = [
     },
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
+      // Applying a translation review calls update(uid, id, fields, {locale})
+      // (ReviewBoard.tsx's applyTranslation) — on a content type with no real
+      // per-locale copy (Strapi's i18n plugin off, e.g. Page/Landing, which
+      // Visual Builder pages use) that just overwrites the SAME single entry
+      // instead of writing a second-language version. Refuse up front rather
+      // than let a human "Apply" a translation that destroys the original.
+      const schema = await cmsOf(ctx).contentTypeSchema(args.uid);
+      if (!schema?.localized) {
+        throw new CmsError(`"${args.uid}" has no separate per-locale copy (i18n isn't enabled for it), so a translation would overwrite the only copy instead of adding a second language. Create a new, separate entry with the translated content instead.`, 422);
+      }
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.sourceLocale });
       if (!e) throw new CmsError("Entry not found", 404);
       const CAND = ["title", "name", "subject", "question", "categoryLabel", "excerpt", "summary", "description", "answer", "body", "content"];

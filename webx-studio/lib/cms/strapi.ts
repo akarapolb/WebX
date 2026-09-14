@@ -117,6 +117,7 @@ export const strapiAdapter: CmsAdapter = {
           api: x.apiID ?? "",
           pluralName: x.info?.pluralName ?? "",
           attributes: x.attributes || {},
+          localized: x.pluginOptions?.i18n?.localized === true,
         }))
         .sort((a: ContentTypeInfo, b: ContentTypeInfo) => a.name.localeCompare(b.name));
     },

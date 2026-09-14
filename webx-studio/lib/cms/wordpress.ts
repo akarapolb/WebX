@@ -335,6 +335,7 @@ export const wordpressAdapter: CmsAdapter = {
       // completely empty post create. One entry per registered type.
       return Object.entries(POST_TYPES).map(([uid, t]) => ({
         uid, name: t.name, api: t.restBase, pluralName: t.restBase, attributes: { title: { type: "string", required: true } },
+        localized: false, // no per-locale copy mechanism modeled for WordPress here
       }));
     },
   },

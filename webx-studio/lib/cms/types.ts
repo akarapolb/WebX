@@ -36,6 +36,12 @@ export type ContentTypeInfo = {
    * has no admin session to re-derive this any other way). */
   pluralName: string;
   attributes: Record<string, any>;
+  /** Strapi's own pluginOptions.i18n.localized — true only for content types
+   * with a real separate per-locale copy. false (WordPress: always false, no
+   * such mechanism modeled here) means translate_fields must refuse: writing
+   * a "translation" onto a non-localized entry would silently overwrite its
+   * only copy instead of producing a second-language version. */
+  localized: boolean;
 };
 
 export type MediaAsset = {

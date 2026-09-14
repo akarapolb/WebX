@@ -1009,7 +1009,7 @@ export async function getContentTypeSchema(uid: string): Promise<ContentTypeSche
     hidden.push(...crp.hidden);
     readonly.push(...crp.readonly);
   }
-  return digestContentType({ uid, name: info.name, attributes }, { hidden, readonly });
+  return digestContentType({ uid, name: info.name, attributes, localized: info.localized }, { hidden, readonly });
 }
 
 export async function saveCustomRole(tenantKey: string, input: CustomRoleInput): Promise<any> {

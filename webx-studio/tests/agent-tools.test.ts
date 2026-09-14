@@ -24,6 +24,7 @@ import { auditEntry, THAI_ID_RE } from "../lib/agent/auditRules";
 import { systemPrompt, untrustedBlock } from "../lib/agent/prompts";
 import { clampAgentLevel } from "../lib/cms/governance";
 import { buildQuery } from "../lib/cms/strapi";
+import { fakeCms } from "./harness/fakeCms";
 
 function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
@@ -267,6 +268,31 @@ describe("availableTools / executeTool (lib/agent/tools.ts) — the actual enfor
   test("a real, correctly-shaped uid is not rejected by the shape check itself", async () => {
     const r = await executeTool(ctx({ level: "suggest" }), "create_draft_entry", JSON.stringify({ uid: "wp:page", fields: { title: "Draft" } }));
     assert.equal(r.ok, true); // downgraded to a proposal at "suggest" — proves the shape check let "wp:page" through
+  });
+});
+
+// Found live: asked the Agent to translate a Visual Builder page ("Community
+// Programs", api::page.page) to Thai. Page/Landing never had Strapi's i18n
+// plugin enabled (pluginOptions: {} in their schema.json), so ReviewBoard.tsx's
+// applyTranslation — update(uid, id, fields, {locale}) — would have silently
+// overwritten the entry's only copy instead of adding a second language.
+// translate_fields must refuse before that review is even filed.
+describe("translate_fields (lib/agent/tools.ts) — refuses content types with no real per-locale copy", () => {
+  test("rejects a non-localized content type before fetching the entry or calling the translator", async () => {
+    const fc = fakeCms(
+      [{ uid: "api::page.page", name: "Page", attributes: { title: { type: "string" } }, localized: false }],
+      { "api::page.page": [{ documentId: "1", title: "Community Programs" }] }
+    );
+    const r = await executeTool(ctx({ cms: fc.cms }), "translate_fields", JSON.stringify({ uid: "api::page.page", id: "1", targetLocale: "th" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /no separate per-locale copy/);
+    assert.ok(!fc.calls.some((c) => c.op === "get"), "must refuse before fetching the entry");
+  });
+  test("a content type with no explicit `localized` flag is treated as non-localized (fail closed, not open)", async () => {
+    const fc = fakeCms([{ uid: "api::mystery.mystery", name: "Mystery", attributes: { title: { type: "string" } } }]);
+    const r = await executeTool(ctx({ cms: fc.cms }), "translate_fields", JSON.stringify({ uid: "api::mystery.mystery", id: "1", targetLocale: "th" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /no separate per-locale copy/);
   });
 });
 
