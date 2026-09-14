@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { t, localePath, otherLocale, type Locale } from "@/lib/i18n";
 import { LOGIN_URL, CONTACT_URL, CONTACT_EMAIL } from "@/lib/config";
+import type { SitePath } from "@/lib/meta";
 
-export default function SiteFooter({ locale, path }: { locale: Locale; path: "/" | "/pricing" }) {
+export default function SiteFooter({ locale, path }: { locale: Locale; path: SitePath }) {
   const s = t(locale);
   const home = localePath(locale, "/");
   const hash = (h: string) => (home === "/" ? "/" : home + "/") + "#" + h;
@@ -26,6 +27,7 @@ export default function SiteFooter({ locale, path }: { locale: Locale; path: "/"
             <h4>{s.footer.company}</h4>
             <ul>
               <li><Link href={hash("compliance")}>{s.nav.compliance}</Link></li>
+              <li><Link href={localePath(locale, "/privacy")}>{s.footer.privacy}</Link></li>
               <li><a href={LOGIN_URL}>{s.footer.signin}</a></li>
             </ul>
           </div>

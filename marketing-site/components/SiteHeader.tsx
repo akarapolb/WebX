@@ -4,8 +4,9 @@ import Link from "next/link";
 import Icon from "./Icon";
 import { t, localePath, otherLocale, type Locale } from "@/lib/i18n";
 import { SIGNUP_URL, LOGIN_URL } from "@/lib/config";
+import type { SitePath } from "@/lib/meta";
 
-export default function SiteHeader({ locale, path }: { locale: Locale; path: "/" | "/pricing" }) {
+export default function SiteHeader({ locale, path }: { locale: Locale; path: SitePath }) {
   const s = t(locale);
   const [open, setOpen] = useState(false);
   const home = localePath(locale, "/");
