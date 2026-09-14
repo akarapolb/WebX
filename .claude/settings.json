@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "Bash(py --version)",
+      "Bash(pip --version)",
+      "PowerShell(docker --version)",
+      "PowerShell(python --version)",
+      "PowerShell(py --version)",
+      "PowerShell(winget --version)",
+      "Bash(npm install *)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); python --version; pip --version)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); pip install \"litellm[proxy]\" 2>&1 | Select-Object -Last 40)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
