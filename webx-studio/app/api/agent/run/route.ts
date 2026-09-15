@@ -10,7 +10,7 @@
 // next user turn.
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { requireUser, resolveAgentPolicy, checkAgentRunBudget } from "@/lib/cms/governance";
+import { requireUser, resolveAgentPolicy, checkAgentRunBudget, checkAgentTokenBudget } from "@/lib/cms/governance";
 import { CmsError } from "@/lib/cms/types";
 import { llmConfigured } from "@/lib/llm";
 import { runAgent, type ChatMsg, type RunResult } from "@/lib/agent/runtime";
@@ -92,12 +92,20 @@ export async function POST(req: NextRequest) {
   if (resume && !threadId) return Response.json({ error: "threadId is required to continue a run" }, { status: 400 });
 
   // Continue belongs to a run that was already counted; a new message is a new run.
+  // The token-budget check runs regardless of resume/new-message, unlike the
+  // run-count check above it: a workspace already over its monthly usage
+  // shouldn't be able to burn more tokens by pressing Continue either.
   if (message.trim()) {
     try {
       await checkAgentRunBudget(user);
     } catch (e) {
       return Response.json({ error: e instanceof CmsError ? e.message : "Budget check failed" }, { status: errorStatus(e, 403) });
     }
+  }
+  try {
+    await checkAgentTokenBudget(user);
+  } catch (e) {
+    return Response.json({ error: e instanceof CmsError ? e.message : "Budget check failed" }, { status: errorStatus(e, 403) });
   }
 
   let existingMessages: any[] = [];

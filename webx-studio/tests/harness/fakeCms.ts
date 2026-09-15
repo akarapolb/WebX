@@ -6,7 +6,7 @@ import { CmsError, type EntryQuery } from "../../lib/cms/types";
 import { digestContentType } from "../../lib/agent/schemaDigest";
 import type { AgentCms } from "../../lib/agent/types";
 
-export type FakeType = { uid: string; name: string; attributes: Record<string, any> };
+export type FakeType = { uid: string; name: string; attributes: Record<string, any>; localized?: boolean };
 export type FakeCmsOp = "list" | "get" | "create" | "update" | "listContentTypes" | "contentTypeSchema";
 
 export function fakeCms(types: FakeType[], seed: Record<string, Record<string, any>[]> = {}) {

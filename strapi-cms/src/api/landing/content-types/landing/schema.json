@@ -10,41 +10,54 @@
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {},
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
   "attributes": {
     "title": {
       "type": "string",
-      "required": true
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "slug": {
       "type": "uid",
       "targetField": "title",
-      "required": true
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "active": {
       "type": "boolean",
-      "default": true
+      "default": true,
+      "pluginOptions": { "i18n": { "localized": false } }
     },
     "seoDescription": {
-      "type": "text"
+      "type": "text",
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "enterSiteLabel": {
       "type": "string",
-      "description": "ข้อความปุ่มเข้าสู่เว็บหลัก (TOR ข้อ 26.3)"
+      "description": "ข้อความปุ่มเข้าสู่เว็บหลัก (TOR ข้อ 26.3)",
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "enterSiteUrl": {
       "type": "string",
-      "default": "index.html"
+      "default": "index.html",
+      "pluginOptions": { "i18n": { "localized": false } }
     },
     "publishStart": {
       "type": "datetime",
-      "description": "ตั้งเวลาเริ่มแสดง Landing (TOR ข้อ 26.4)"
+      "description": "ตั้งเวลาเริ่มแสดง Landing (TOR ข้อ 26.4)",
+      "pluginOptions": { "i18n": { "localized": false } }
     },
     "publishEnd": {
       "type": "datetime",
-      "description": "ตั้งเวลาสิ้นสุดแสดง Landing"
+      "description": "ตั้งเวลาสิ้นสุดแสดง Landing",
+      "pluginOptions": { "i18n": { "localized": false } }
     },
     "blocks": {
+      "pluginOptions": { "i18n": { "localized": true } },
       "type": "dynamiczone",
       "components": [
         "block.hero",
@@ -68,23 +81,27 @@
     "abEnabled": {
       "type": "boolean",
       "default": false,
-      "description": "เปิดการทดสอบ A/B (เสิร์ฟ variant A หรือ B แบบสุ่มต่อผู้เข้าชม)"
+      "description": "เปิดการทดสอบ A/B (เสิร์ฟ variant A หรือ B แบบสุ่มต่อผู้เข้าชม)",
+      "pluginOptions": { "i18n": { "localized": false } }
     },
     "abSplit": {
       "type": "integer",
       "default": 50,
       "min": 0,
       "max": 100,
-      "description": "เปอร์เซ็นต์ทราฟฟิกที่เสิร์ฟ variant B (ที่เหลือเป็น A)"
+      "description": "เปอร์เซ็นต์ทราฟฟิกที่เสิร์ฟ variant B (ที่เหลือเป็น A)",
+      "pluginOptions": { "i18n": { "localized": false } }
     },
     "variantBlocks": {
       "type": "json",
-      "description": "บล็อกของ variant B (เก็บเป็น JSON เพื่อ render บนเว็บจริงเหมือน blocks หลัก)"
+      "description": "บล็อกของ variant B (เก็บเป็น JSON เพื่อ render บนเว็บจริงเหมือน blocks หลัก)",
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "tenant": {
       "type": "relation",
       "relation": "manyToOne",
-      "target": "api::tenant.tenant"
+      "target": "api::tenant.tenant",
+      "pluginOptions": { "i18n": { "localized": false } }
     }
   }
 }

@@ -20,6 +20,12 @@ function Frame({ src, alt, url, eager }: { src: string; alt: string; url: string
 export default function Home({ locale }: { locale: Locale }) {
   const s = t(locale);
   const pricing = localePath(locale, "/pricing");
+  // Screenshots are captioned by the feature card they illustrate, looked up
+  // by icon (a stable id) — not by array position, which silently mislabels
+  // both images the moment the feature list is reordered.
+  const feat = (icon: string) => s.features.items.find((f) => f.icon === icon)!;
+  const builder = feat("layout");
+  const analytics = feat("chart");
   return (
     <>
       <SiteHeader locale={locale} path="/" />
@@ -67,12 +73,12 @@ export default function Home({ locale }: { locale: Locale }) {
             </div>
             <div className="tour" style={{ marginTop: 28 }}>
               <figure>
-                <Frame src="/shots/builder.webp" alt={s.features.items[1].t} url="studio.webx.io/builder" />
-                <figcaption><b>{s.features.items[1].t}</b>{s.features.items[1].d}</figcaption>
+                <Frame src="/shots/builder.webp" alt={builder.t} url="studio.webx.io/builder" />
+                <figcaption><b>{builder.t}</b>{builder.d}</figcaption>
               </figure>
               <figure>
-                <Frame src="/shots/analytics.webp" alt={s.features.items[7].t} url="studio.webx.io/analytics" />
-                <figcaption><b>{s.features.items[7].t}</b>{s.features.items[7].d}</figcaption>
+                <Frame src="/shots/analytics.webp" alt={analytics.t} url="studio.webx.io/analytics" />
+                <figcaption><b>{analytics.t}</b>{analytics.d}</figcaption>
               </figure>
             </div>
           </div>

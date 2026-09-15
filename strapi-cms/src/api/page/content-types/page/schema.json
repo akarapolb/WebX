@@ -10,21 +10,29 @@
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {},
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
   "attributes": {
     "title": {
       "type": "string",
-      "required": true
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "slug": {
       "type": "string",
       "required": true,
-      "description": "ตั้งใจใช้ string ธรรมดา ไม่ใช้ uid — Strapi บังคับ uid ให้ unique ข้าม tenant ทั้งระบบ (ไม่ scope ตาม tenant), ซึ่งชนกันจริงเมื่อหลาย tenant ต้องการ slug เดียวกัน เช่น home-blocks ของแต่ละหน่วยงาน"
+      "description": "ตั้งใจใช้ string ธรรมดา ไม่ใช้ uid — Strapi บังคับ uid ให้ unique ข้าม tenant ทั้งระบบ (ไม่ scope ตาม tenant), ซึ่งชนกันจริงเมื่อหลาย tenant ต้องการ slug เดียวกัน เช่น home-blocks ของแต่ละหน่วยงาน",
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "seoDescription": {
-      "type": "text"
+      "type": "text",
+      "pluginOptions": { "i18n": { "localized": true } }
     },
     "blocks": {
+      "pluginOptions": { "i18n": { "localized": true } },
       "type": "dynamiczone",
       "components": [
         "block.hero",
@@ -55,7 +63,8 @@
     "tenant": {
       "type": "relation",
       "relation": "manyToOne",
-      "target": "api::tenant.tenant"
+      "target": "api::tenant.tenant",
+      "pluginOptions": { "i18n": { "localized": false } }
     }
   }
 }

@@ -11,4 +11,10 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client default-mysql-client && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY scripts/backup-db.js ./scripts/backup-db.js
+# restore-test.js restores the backup just taken into a disposable scratch
+# database and integrity-checks it — docker-compose.yml's backup loops run
+# it right after every backup-db.js, so a silently-broken backup is caught
+# on the day it breaks, not on the day it's needed. Both scripts share the
+# same DATABASE_* env and the same zero-dep footprint.
+COPY scripts/restore-test.js ./scripts/restore-test.js
 CMD ["node", "scripts/backup-db.js"]

@@ -18,6 +18,10 @@
     "actor": { "type": "string" },
     "targetRef": { "type": "string" },
     "method": { "type": "string" },
-    "path": { "type": "text" }
+    "path": { "type": "text" },
+    "tokens": {
+      "type": "integer",
+      "description": "Set only on action:'agent_run_usage' rows (governance.ts's recordAgentRunUsage) — an interactive agent run's own prompt+completion token delta, the completion-time counterpart to agent-thread's own 'usage' JSON field (which only ever holds the LATEST run's numbers, not a history). Lets enforceAgentTokenBudget sum a workspace's real monthly AI usage across chat runs, not just background jobs."
+    }
   }
 }

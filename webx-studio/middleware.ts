@@ -67,10 +67,16 @@ export function middleware(req: NextRequest) {
   // app/api/internal/releases/process-due, called by an external scheduler
   // with no session cookie) stay open, same as before — just no longer
   // excluded from the matcher entirely, since the rate limiter above still
-  // needs to see them.
+  // needs to see them. api/webhooks joins them for the same reason as
+  // api/internal: Stripe's own servers call this with no session cookie at
+  // all (auth is stripe.webhooks.constructEvent's signature check inside
+  // the route itself, not a cookie) — found live testing app/api/webhooks/
+  // stripe/route.ts: without this, every real Stripe delivery silently
+  // redirected to the login page's HTML instead of ever reaching the
+  // handler, so no subscription state would ever update after checkout.
   if (
     pathname === "/login" || pathname === "/signup" ||
-    pathname.startsWith(AUTH_PREFIX) || pathname.startsWith("/api/internal")
+    pathname.startsWith(AUTH_PREFIX) || pathname.startsWith("/api/internal") || pathname.startsWith("/api/webhooks")
   ) {
     return NextResponse.next();
   }

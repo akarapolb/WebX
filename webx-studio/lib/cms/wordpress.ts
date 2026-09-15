@@ -124,7 +124,13 @@ const ACF_FIELDS: Record<string, string[]> = {
   "wp:publication": ["icon"],
   "wp:resource": ["icon"],
   "wp:faq": ["icon"],
-  "wp:page": ["blocks"],
+  // "blocks_en" already existed as an orphaned ACF field (acf-fields.php's
+  // group_page_layout) — public-site's getWpPage() has read it for a while,
+  // but nothing here could write or even see it, so only a one-off seed
+  // script (wordpress/seed-en-content-blocks.mjs) ever populated it. This
+  // registers it as a normal second top-level field so Visual Builder's
+  // locale switcher (and the Agent) can read/write it like any other field.
+  "wp:page": ["blocks", "blocks_en"],
   // Phase 7 — field names match each CPT's ACF group 1:1 (see
   // wordpress/mu-plugins/public-forms-acf.php).
   "wp:poll": ["question", "options", "active", "total_votes"],
@@ -155,7 +161,7 @@ function splitAcfFields(uid: string, data: Record<string, any>): Record<string, 
 // nothing above this module (or public-site's parseBlocks, its own mirror
 // of this same string<->array boundary) ever sees the wire format.
 const ACF_JSON_FIELDS: Record<string, string[]> = {
-  "wp:page": ["blocks"],
+  "wp:page": ["blocks", "blocks_en"],
   "wp:poll": ["options"],
   "wp:complaint": ["steps"],
   "wp:job": ["responsibilities", "qualifications", "benefits"],
@@ -335,6 +341,7 @@ export const wordpressAdapter: CmsAdapter = {
       // completely empty post create. One entry per registered type.
       return Object.entries(POST_TYPES).map(([uid, t]) => ({
         uid, name: t.name, api: t.restBase, pluralName: t.restBase, attributes: { title: { type: "string", required: true } },
+        localized: false, // no per-locale copy mechanism modeled for WordPress here
       }));
     },
   },

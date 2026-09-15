@@ -79,6 +79,21 @@
       "default": "active",
       "description": "active | trialing | past_due | canceled (from billing provider)"
     },
+    "stripeCustomerId": {
+      "type": "string",
+      "private": true,
+      "description": "Stripe Customer id (cus_...). Written only by the checkout route / Stripe webhook — never client-writable (webx-studio/lib/cms/governance.ts's lockedTenantFields)."
+    },
+    "stripeSubscriptionId": {
+      "type": "string",
+      "private": true,
+      "description": "Stripe Subscription id (sub_...). Written only by the Stripe webhook — never client-writable."
+    },
+    "stripePriceId": {
+      "type": "string",
+      "private": true,
+      "description": "The Stripe Price id this tenant's subscription is on (price_...). Written only by the Stripe webhook — never client-writable."
+    },
     "features": {
       "type": "json",
       "description": "Per-tenant front-end feature toggles, e.g. { a11y:true, simplify:true, serviceFinder:true, pwa:true } — unset = all on"

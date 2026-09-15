@@ -19,11 +19,12 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 import { levelAtLeast, type AgentRunContext, type AgentLevel } from "../lib/agent/types";
-import { availableTools, executeTool } from "../lib/agent/tools";
+import { availableTools, executeTool, extractBlockTranslatable, applyBlockTranslations } from "../lib/agent/tools";
 import { auditEntry, THAI_ID_RE } from "../lib/agent/auditRules";
 import { systemPrompt, untrustedBlock } from "../lib/agent/prompts";
-import { clampAgentLevel } from "../lib/cms/governance";
+import { clampAgentLevel, lockedTenantFields } from "../lib/cms/governance";
 import { buildQuery } from "../lib/cms/strapi";
+import { fakeCms } from "./harness/fakeCms";
 
 function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
@@ -72,6 +73,32 @@ describe("clampAgentLevel (lib/cms/governance.ts) — tenant/role policy merge",
   });
 });
 
+// Found live while scoping Stripe billing: assertBookkeepingWriteAllowed's
+// TENANT_UID branch (governance.ts) only ever checked cross-tenant id
+// ownership — a plain PUT of {"plan":"enterprise","seats":999} onto a
+// caller's own tenant row succeeded outright, no field restriction at all.
+// lockedTenantFields is the pure decision extracted from that fix (real
+// enforcement needs a live session/Strapi, out of scope for this file by
+// design — see the header comment).
+describe("lockedTenantFields (lib/cms/governance.ts) — tenant billing-field write guard", () => {
+  test("flags plan/subscriptionStatus/seats and every stripe* field", () => {
+    assert.deepEqual(lockedTenantFields({ plan: "enterprise" }), ["plan"]);
+    assert.deepEqual(lockedTenantFields({ subscriptionStatus: "active", seats: 999 }), ["subscriptionStatus", "seats"]);
+    assert.deepEqual(lockedTenantFields({ stripeCustomerId: "cus_x", stripeSubscriptionId: "sub_x", stripePriceId: "price_x" }),
+      ["stripeCustomerId", "stripeSubscriptionId", "stripePriceId"]);
+  });
+  test("an ordinary field (name, brand, adminEmails) is never flagged", () => {
+    assert.deepEqual(lockedTenantFields({ name: "New Name", brand: { orgName: { en: "x" } }, adminEmails: ["a@b.com"] }), []);
+  });
+  test("a mixed payload flags only the locked keys, not the whole write", () => {
+    assert.deepEqual(lockedTenantFields({ name: "New Name", plan: "pro" }), ["plan"]);
+  });
+  test("no data at all (e.g. a delete) flags nothing", () => {
+    assert.deepEqual(lockedTenantFields(undefined), []);
+    assert.deepEqual(lockedTenantFields({}), []);
+  });
+});
+
 describe("buildQuery (lib/cms/strapi.ts) — \"gte\" filter op mapping", () => {
   test("maps gte into Strapi's own filters[field][$gte]=value shape", () => {
     const qs = buildQuery({ filter: [{ field: "at", op: "gte", value: "2026-09-01T00:00:00.000Z" }] });
@@ -89,6 +116,19 @@ describe("buildQuery (lib/cms/strapi.ts) — \"gte\" filter op mapping", () => {
     assert.match(qs, /filters\[tenantKey\]\[\$eq\]=orst/);
     assert.match(qs, /filters\[action\]\[\$eq\]=agent_run/);
     assert.match(qs, /filters\[at\]\[\$gte\]=/);
+  });
+  // Added for the Visual Builder locale switcher — Strapi's own `find`
+  // reads `locale` from the query string (confirmed by reading
+  // @strapi/content-manager's collection-types controller directly).
+  test("locale appends as a plain ?locale= query param, not a filters[] entry", () => {
+    const qs = buildQuery({ locale: "en" });
+    assert.equal(qs, "?locale=en");
+  });
+  test("locale coexists with the other query pieces", () => {
+    const qs = buildQuery({ pageSize: 1, locale: "en", filter: [{ field: "tenant.key", op: "eq", value: "dga" }] });
+    assert.match(qs, /pageSize=1/);
+    assert.match(qs, /locale=en/);
+    assert.match(qs, /filters\[tenant\]\[key\]\[\$eq\]=dga/);
   });
 });
 
@@ -267,6 +307,73 @@ describe("availableTools / executeTool (lib/agent/tools.ts) — the actual enfor
   test("a real, correctly-shaped uid is not rejected by the shape check itself", async () => {
     const r = await executeTool(ctx({ level: "suggest" }), "create_draft_entry", JSON.stringify({ uid: "wp:page", fields: { title: "Draft" } }));
     assert.equal(r.ok, true); // downgraded to a proposal at "suggest" — proves the shape check let "wp:page" through
+  });
+});
+
+// Found live: asked the Agent to translate a Visual Builder page ("Community
+// Programs", api::page.page) to Thai. Page/Landing never had Strapi's i18n
+// plugin enabled (pluginOptions: {} in their schema.json), so ReviewBoard.tsx's
+// applyTranslation — update(uid, id, fields, {locale}) — would have silently
+// overwritten the entry's only copy instead of adding a second language.
+// translate_fields must refuse before that review is even filed.
+describe("translate_fields (lib/agent/tools.ts) — refuses content types with no real per-locale copy", () => {
+  test("rejects a non-localized content type before fetching the entry or calling the translator", async () => {
+    const fc = fakeCms(
+      [{ uid: "api::page.page", name: "Page", attributes: { title: { type: "string" } }, localized: false }],
+      { "api::page.page": [{ documentId: "1", title: "Community Programs" }] }
+    );
+    const r = await executeTool(ctx({ cms: fc.cms }), "translate_fields", JSON.stringify({ uid: "api::page.page", id: "1", targetLocale: "th" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /no separate per-locale copy/);
+    assert.ok(!fc.calls.some((c) => c.op === "get"), "must refuse before fetching the entry");
+  });
+  test("a content type with no explicit `localized` flag is treated as non-localized (fail closed, not open)", async () => {
+    const fc = fakeCms([{ uid: "api::mystery.mystery", name: "Mystery", attributes: { title: { type: "string" } } }]);
+    const r = await executeTool(ctx({ cms: fc.cms }), "translate_fields", JSON.stringify({ uid: "api::mystery.mystery", id: "1", targetLocale: "th" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /no separate per-locale copy/);
+  });
+});
+
+// Page/Landing's own real content lives inside blocks[], not the flat field
+// list translate_fields's CAND covers (only `title` matches there) — these
+// two pure functions are what let a translated Page actually carry its
+// hero headings/richtext body/etc., not just its title.
+describe("extractBlockTranslatable / applyBlockTranslations (lib/agent/tools.ts)", () => {
+  test("extracts each block's own translatable fields (from blockCatalog.ts's real field list), keyed by index", () => {
+    const blocks = [
+      { __component: "block.hero", heading: "Welcome", subheading: "Come visit", ctaLabel: "Go", align: "center" },
+      { __component: "block.richtext", body: "<p>Hello</p>" },
+    ];
+    const out = extractBlockTranslatable(blocks);
+    assert.deepEqual(out, {
+      "blocks.0.heading": "Welcome",
+      "blocks.0.subheading": "Come visit",
+      "blocks.0.ctaLabel": "Go",
+      "blocks.1.body": "<p>Hello</p>",
+    });
+  });
+  test("skips code fields (block.embed's raw html) and blank/missing fields", () => {
+    const out = extractBlockTranslatable([
+      { __component: "block.embed", label: "", html: "<script>alert(1)</script>" },
+      { __component: "block.hero", heading: "  " },
+    ]);
+    assert.deepEqual(out, {});
+  });
+  test("ignores an unknown block type instead of throwing", () => {
+    const out = extractBlockTranslatable([{ __component: "block.not-real", heading: "x" }]);
+    assert.deepEqual(out, {});
+  });
+  test("applyBlockTranslations writes translated values back at the same index/field, leaving the rest of the block untouched", () => {
+    const blocks = [{ __component: "block.hero", heading: "Welcome", ctaLabel: "Go", align: "center" }];
+    const next = applyBlockTranslations(blocks, { "blocks.0.heading": "ยินดีต้อนรับ", "blocks.0.ctaLabel": "ไป" });
+    assert.deepEqual(next, [{ __component: "block.hero", heading: "ยินดีต้อนรับ", ctaLabel: "ไป", align: "center" }]);
+    assert.equal(blocks[0].heading, "Welcome", "must not mutate the input array");
+  });
+  test("applyBlockTranslations ignores an out-of-range index rather than throwing", () => {
+    const blocks = [{ __component: "block.hero", heading: "Welcome" }];
+    const next = applyBlockTranslations(blocks, { "blocks.5.heading": "x" });
+    assert.deepEqual(next, blocks);
   });
 });
 

@@ -24,12 +24,12 @@ export type FieldInfo = {
   note?: string;
 };
 
-export type ContentTypeSchema = { uid: string; name: string; fields: FieldInfo[] };
+export type ContentTypeSchema = { uid: string; name: string; fields: FieldInfo[]; localized: boolean };
 
 const SYSTEM_FIELDS = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt", "createdBy", "updatedBy", "locale", "localizations"]);
 
 export function digestContentType(
-  ct: { uid: string; name: string; attributes: Record<string, any> },
+  ct: { uid: string; name: string; attributes: Record<string, any>; localized?: boolean },
   o: { hidden?: string[]; readonly?: string[] } = {},
 ): ContentTypeSchema {
   const hidden = new Set(o.hidden || []);
@@ -105,7 +105,7 @@ export function digestContentType(
 
   // Required fields first; otherwise the schema's own order.
   fields.sort((x, y) => Number(Boolean(y.required)) - Number(Boolean(x.required)));
-  return { uid: ct.uid, name: ct.name, fields };
+  return { uid: ct.uid, name: ct.name, fields, localized: ct.localized === true };
 }
 
 /** Strapi-shaped attributes for a WordPress post type, from its ACF field names. */

@@ -845,6 +845,7 @@ export interface ApiAuditLogAuditLog extends Struct.CollectionTypeSchema {
     publishedAt: Schema.Attribute.DateTime;
     targetRef: Schema.Attribute.String;
     tenantKey: Schema.Attribute.String;
+    tokens: Schema.Attribute.Integer;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1788,9 +1789,25 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
   options: {
     draftAndPublish: true;
   };
+  pluginOptions: {
+    i18n: {
+      localized: true;
+    };
+  };
   attributes: {
-    abEnabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    abEnabled: Schema.Attribute.Boolean &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<false>;
     abSplit: Schema.Attribute.Integer &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
       Schema.Attribute.SetMinMax<
         {
           max: 100;
@@ -1799,7 +1816,13 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<50>;
-    active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    active: Schema.Attribute.Boolean &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<true>;
     blocks: Schema.Attribute.DynamicZone<
       [
         'block.hero',
@@ -1819,30 +1842,81 @@ export interface ApiLandingLanding extends Struct.CollectionTypeSchema {
         'block.tabs',
         'block.comparison',
       ]
-    >;
+    > &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    enterSiteLabel: Schema.Attribute.String;
+    enterSiteLabel: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     enterSiteUrl: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
       Schema.Attribute.DefaultTo<'index.html'>;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    locale: Schema.Attribute.String;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::landing.landing'
-    > &
-      Schema.Attribute.Private;
+    >;
     publishedAt: Schema.Attribute.DateTime;
-    publishEnd: Schema.Attribute.DateTime;
-    publishStart: Schema.Attribute.DateTime;
-    seoDescription: Schema.Attribute.Text;
-    slug: Schema.Attribute.UID<'title'> & Schema.Attribute.Required;
-    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
-    title: Schema.Attribute.String & Schema.Attribute.Required;
+    publishEnd: Schema.Attribute.DateTime &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    publishStart: Schema.Attribute.DateTime &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    seoDescription: Schema.Attribute.Text &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    slug: Schema.Attribute.UID<'title'> &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    title: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    variantBlocks: Schema.Attribute.JSON;
+    variantBlocks: Schema.Attribute.JSON &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
   };
 }
 
@@ -2040,6 +2114,11 @@ export interface ApiPagePage extends Struct.CollectionTypeSchema {
   options: {
     draftAndPublish: true;
   };
+  pluginOptions: {
+    i18n: {
+      localized: true;
+    };
+  };
   attributes: {
     blocks: Schema.Attribute.DynamicZone<
       [
@@ -2067,18 +2146,44 @@ export interface ApiPagePage extends Struct.CollectionTypeSchema {
         'block.tabs',
         'block.comparison',
       ]
-    >;
+    > &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'api::page.page'> &
-      Schema.Attribute.Private;
+    locale: Schema.Attribute.String;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::page.page'>;
     publishedAt: Schema.Attribute.DateTime;
-    seoDescription: Schema.Attribute.Text;
-    slug: Schema.Attribute.String & Schema.Attribute.Required;
-    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
-    title: Schema.Attribute.String & Schema.Attribute.Required;
+    seoDescription: Schema.Attribute.Text &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    slug: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    title: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2422,6 +2527,41 @@ export interface ApiSsoCredentialSsoCredential
   };
 }
 
+export interface ApiStripeWebhookEventStripeWebhookEvent
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'stripe_webhook_events';
+  info: {
+    description: "Idempotency ledger for /api/webhooks/stripe \u2014 one row per processed Stripe event.id. A unique-constraint conflict on eventId at creation time is how the handler detects a redelivery and skips re-running side effects, instead of an in-memory cache that wouldn't survive a restart or multiple instances.";
+    displayName: 'Stripe Webhook Event';
+    pluralName: 'stripe-webhook-events';
+    singularName: 'stripe-webhook-event';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    eventId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::stripe-webhook-event.stripe-webhook-event'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    receivedAt: Schema.Attribute.DateTime;
+    resolved: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    type: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   collectionName: 'tenants';
   info: {
@@ -2467,6 +2607,9 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     seats: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
     social: Schema.Attribute.JSON;
     sso: Schema.Attribute.JSON;
+    stripeCustomerId: Schema.Attribute.String & Schema.Attribute.Private;
+    stripePriceId: Schema.Attribute.String & Schema.Attribute.Private;
+    stripeSubscriptionId: Schema.Attribute.String & Schema.Attribute.Private;
     subscriptionStatus: Schema.Attribute.String &
       Schema.Attribute.DefaultTo<'active'>;
     template: Schema.Attribute.JSON;
@@ -3198,6 +3341,7 @@ declare module '@strapi/strapi' {
       'api::service.service': ApiServiceService;
       'api::sitemap-node.sitemap-node': ApiSitemapNodeSitemapNode;
       'api::sso-credential.sso-credential': ApiSsoCredentialSsoCredential;
+      'api::stripe-webhook-event.stripe-webhook-event': ApiStripeWebhookEventStripeWebhookEvent;
       'api::tenant.tenant': ApiTenantTenant;
       'api::top-graphic.top-graphic': ApiTopGraphicTopGraphic;
       'api::video.video': ApiVideoVideo;

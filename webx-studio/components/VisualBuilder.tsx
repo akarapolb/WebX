@@ -182,6 +182,22 @@ export default function VisualBuilder() {
   const isWpPage = uid === WP_PAGE_UID;
   const [pages, setPages] = useState<Page[]>([]);
   const [sel, setSel] = useState<Page | null>(null);
+  // The other-language toggle shown next to the page picker. Two different
+  // mechanisms share this one piece of UI state, both keyed off sel.locale:
+  // a Strapi page (api::page.page/api::landing.landing, i18n-enabled
+  // 2026-09-14) has a REAL second documentId-linked entry, fetched via
+  // open()'s existing cms.entries.get(uid, docId, {locale}) — reused
+  // unchanged. A WordPress page has no such thing; "the other locale" is
+  // just a second whole-array field (blocks_en) on the SAME entry, so
+  // open()/pageBody() below pick between "blocks" and "blocks_en" by
+  // sel.locale instead of re-fetching a different document.
+  // localeMissing: true when a Strapi page's requested locale doesn't exist
+  // yet — Strapi returns 200 with an empty {} body for that (confirmed by
+  // reading @strapi/content-manager's findOne controller directly), NOT a
+  // 404, so this can't be detected via a thrown CmsError; open() sets this
+  // explicitly by checking for a missing documentId/id on the response.
+  const [localeMissing, setLocaleMissing] = useState(false);
+  const [creatingLocale, setCreatingLocale] = useState(false);
   // Mirrors `sel` for loadPages' own "is a page already open" check below —
   // a ref (not the state var) because loadPages must read the CURRENT
   // selection, not whatever `sel` was when its own closure was last
@@ -375,6 +391,38 @@ export default function VisualBuilder() {
     finally { setSaving(false); }
   }
 
+  // The other-language toggle next to the page picker. WordPress just
+  // re-opens the SAME entry with the other field selected (see open()'s
+  // isWpPage branch) — no network round trip needed beyond the refetch
+  // open() already does. Strapi re-opens with a different `locale`; if that
+  // locale doesn't exist yet, open() sets localeMissing and this function's
+  // sibling below (createLocale) offers to make it.
+  function switchLocale(locale: "th" | "en") {
+    if (!sel || sel.locale === locale || !confirmDiscardIfDirty()) return;
+    open({ ...sel, locale });
+  }
+  // Strapi only (isWpPage's "other locale" already exists the moment the
+  // page does — it's just an empty blocks_en field, not a missing entry).
+  // Writes just a `title` so the locale exists at all — Strapi's own
+  // updateDocument treats "documentId exists, no row in this locale yet" as
+  // "create it" (confirmed by reading @strapi/content-manager's
+  // controller directly), the exact mechanism write_draft_fields's own
+  // `locale` param already relies on for the Agent. Reopens afterward so
+  // the canvas reflects the now-real (empty) locale instead of staying on
+  // the localeMissing placeholder.
+  async function createLocale(locale: "en") {
+    if (!sel) return;
+    setCreatingLocale(true); setMsg(null);
+    try {
+      await cms.entries.update(uid, sel.docId, { title: sel.title }, { locale });
+      await open({ ...sel, locale });
+    } catch (e) {
+      if (e instanceof CmsError) setMsg({ t: "Could not create the English version (HTTP " + e.status + ")", ok: false });
+      else setMsg({ t: "Cannot reach the backend.", ok: false });
+    }
+    finally { setCreatingLocale(false); }
+  }
+
   const loadTypes = useCallback(async () => {
     try {
       // NOTE: intentionally left as a raw fetch — this $or/$null filter combo
@@ -430,9 +478,23 @@ export default function VisualBuilder() {
 
   async function open(p: Page) {
     selRef.current = p;
-    setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null); clearUndo();
+    setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null); clearUndo(); setLocaleMissing(false);
     try {
+      // WordPress's own adapter ignores a 3rd (opts) argument entirely (it
+      // has no per-locale-entry concept) — safe to pass unconditionally.
       const data: any = await cms.entries.get(uid, p.docId, p.locale ? { locale: p.locale } : undefined);
+      // A Strapi page whose documentId exists but has no row in the
+      // requested locale yet comes back 200 OK with an empty body (`{}`,
+      // no documentId/id) — not a 404 — confirmed by reading
+      // @strapi/content-manager's findOne controller directly. Show an
+      // explicit "doesn't exist in this language yet" state rather than a
+      // blank canvas indistinguishable from a genuinely empty page.
+      if (!isWpPage && p.locale && !data?.documentId && !data?.id) {
+        setLocaleMissing(true); setBlocks([]); setActive(-1);
+        setOtherBlocks([]); setEditing("A"); setAbEnabled(false); setAbSplit(50);
+        savedSnapshotRef.current = snapshotOf([], [], "A", false, 50, template);
+        return;
+      }
       // For a session with no single home tenant (the shared wpadmin/
       // scheduler login — tenantKey is "" since it isn't in any one
       // tenant's adminEmails, see governance.ts's resolveEffectiveTenant),
@@ -456,8 +518,11 @@ export default function VisualBuilder() {
       }
       // toBuilder is the identity function for template === "gov-portal"
       // (every existing Strapi tenant), so this is safe to call
-      // unconditionally — see blockDialect.ts.
-      const bl = toBuilder((data.blocks ?? []) as any[], pageTemplate) as Block[];
+      // unconditionally — see blockDialect.ts. A WordPress page's "other
+      // locale" is the sibling blocks_en field on this SAME entry (see
+      // wordpress.ts's ACF_FIELDS/ACF_JSON_FIELDS), not a second document.
+      const rawBlocks = isWpPage && p.locale === "en" ? (data.blocks_en ?? []) : (data.blocks ?? []);
+      const bl = toBuilder(rawBlocks as any[], pageTemplate) as Block[];
       setBlocks(bl); setActive(bl.length ? 0 : -1);
       let variantBlocks: Block[] = [];
       let ab = false, split = 50;
@@ -715,7 +780,9 @@ export default function VisualBuilder() {
   // serializeWire + toWire instead of serialize — see both functions' own
   // comments for why the Strapi-shaped one is wrong here.
   function pageBody() {
-    if (isWpPage) return { blocks: toWire(stripAgentMarks(blocks).map(serializeWire), template) };
+    // The WordPress "other locale" is a sibling field (blocks_en) on the
+    // SAME entry, not a second document — see open()'s matching read side.
+    if (isWpPage) return { [sel?.locale === "en" ? "blocks_en" : "blocks"]: toWire(stripAgentMarks(blocks).map(serializeWire), template) };
     if (!isLanding) return { blocks: stripAgentMarks(blocks).map(serialize), ...(sel?.locale ? { locale: sel.locale } : {}) };
     const aBlocks = editing === "A" ? stripAgentMarks(blocks) : otherBlocks;
     const bBlocks = editing === "B" ? stripAgentMarks(blocks) : otherBlocks;
@@ -1178,6 +1245,16 @@ export default function VisualBuilder() {
             }} title={t("vb.pages")}>
               {pages.map((p) => <option key={p.docId} value={p.docId}>{p.title}</option>)}
             </select>
+          )}
+          {/* Same toggle for both engines; switchLocale()/open() pick the
+              right mechanism (a real second Strapi entry vs. a sibling
+              blocks_en field on the same WordPress entry) — see their own
+              comments. Hidden with no page open; there's nothing to switch. */}
+          {sel && (
+            <div className="seg" title={t("vb.locale")}>
+              <button className={sel.locale !== "en" ? "on" : ""} onClick={() => switchLocale("th")}>TH</button>
+              <button className={sel.locale === "en" ? "on" : ""} onClick={() => switchLocale("en")}>EN</button>
+            </div>
           )}
           {/* WordPress page slugs are globally unique and public-site looks
               them up as "<tenant>-<slug>"; app/orst/[page]/page.tsx's
@@ -1797,7 +1874,14 @@ export default function VisualBuilder() {
         </aside>
 
         <div className="vb-stage">
-          {!sel || loading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{loading ? t("vb.loading") : t("vb.empty")}</div> : gpSupported ? (
+          {!sel || loading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{loading ? t("vb.loading") : t("vb.empty")}</div> : localeMissing ? (
+            <div className="muted" style={{ padding: 50, textAlign: "center" }}>
+              <p>{t("vb.localemissing")}</p>
+              <button className="btn btn--p" onClick={() => createLocale("en")} disabled={creatingLocale}>
+                <Icon name="plus" />{creatingLocale ? t("vb.creatinglocale") : t("vb.createlocale")}
+              </button>
+            </div>
+          ) : gpSupported ? (
             previewLoading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.loading")}</div> :
             <div className="vb-frame" style={{ maxWidth: DEVW[device], margin: device === "desktop" ? undefined : "0 auto" }}>
               {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th"}</span><span className="vb-dev-tag">{device}</span></div>}

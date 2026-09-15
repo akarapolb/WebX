@@ -86,6 +86,41 @@ function buildBlock(comp: string, fields: Record<string, any>): Record<string, a
   assertSafeBlockContent(block);
   return block;
 }
+/** translate_fields's CAND list only ever matched Page/Landing's own
+ * `title` — everything else a Visual Builder page actually says lives
+ * inside `blocks[]`, so "translate this page" translated almost nothing.
+ * Walks each block's own field list from blockCatalog.ts (metaOf) — the
+ * SAME registry buildBlock() above uses, not a second copy — and returns
+ * translatable string values keyed "blocks.<index>.<field>". Deliberately
+ * shallow: only the top-level fields metaOf lists, not nested item arrays
+ * (e.g. feature-grid's items[].title) — a real gap, left for later rather
+ * than silently claimed as complete. `code` fields (block.embed's raw
+ * html) are never translated — that's script content, not copy. */
+export function extractBlockTranslatable(blocks: any[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  blocks.forEach((b, i) => {
+    const meta = metaOf(b?.__component);
+    if (!meta) return;
+    for (const f of meta.fields || []) {
+      if ((f as any).code) continue;
+      const v = b[f.k];
+      if (typeof v === "string" && v.trim()) out[`blocks.${i}.${f.k}`] = v;
+    }
+  });
+  return out;
+}
+/** The inverse of extractBlockTranslatable — writes translated values back
+ * onto a copy of the builder-shape blocks array at the same paths. */
+export function applyBlockTranslations(blocks: any[], translated: Record<string, string>): any[] {
+  const next = blocks.map((b) => ({ ...b }));
+  for (const [path, v] of Object.entries(translated)) {
+    const m = /^blocks\.(\d+)\.(.+)$/.exec(path);
+    if (!m) continue;
+    const i = Number(m[1]);
+    if (next[i]) next[i][m[2]] = v;
+  }
+  return next;
+}
 /** A page-version snapshot BEFORE the agent's own edit — the exact same
  * safety net VisualBuilder.tsx's own saveVersion() creates before a human's
  * save, labelled so it's identifiable in the History panel. Never blocks
@@ -242,7 +277,7 @@ const TOOLS: ToolDef[] = [
   {
     name: "write_draft_fields",
     mode: "draft",
-    description: "Write field values onto an entry as a DRAFT. When an editor is already open for this exact entry, or the agent's level is \"suggest\", this returns a proposal for a human to apply instead of writing directly.",
+    description: "Write field values onto an entry as a DRAFT. When an editor is already open for this exact entry, or the agent's level is \"suggest\", this returns a proposal for a human to apply instead of writing directly. On a content type with a real per-locale copy (check get_content_type_schema's `localized`), passing a `locale` this entry doesn't have yet CREATES that locale (e.g. add an English version of an existing Thai page) — call this once with at least `title` before insert_blocks can add that locale's blocks.",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id", "fields"],
       properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, fields: { type: "object" } },
@@ -283,18 +318,35 @@ const TOOLS: ToolDef[] = [
   {
     name: "translate_fields",
     mode: "draft",
-    description: "Translate an entry's text fields into another locale. Never writes the entry directly — files a translation review a human applies from the Reviews board (or, at \"suggest\" level, returns a preview only).",
+    description: "Translate an entry's text fields into another locale, including a page's own blocks[] content (headings, body text, CTA labels — not nested item-grid text yet). Never writes the entry directly — files a translation review a human applies from the Reviews board (or, at \"suggest\" level, returns a preview only).",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id", "targetLocale"],
       properties: { uid: { type: "string" }, id: { type: "string" }, sourceLocale: { type: "string" }, targetLocale: { type: "string" } },
     },
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
+      // Applying a translation review calls update(uid, id, fields, {locale})
+      // (ReviewBoard.tsx's applyTranslation) — on a content type with no real
+      // per-locale copy (Strapi's i18n plugin off, e.g. Page/Landing, which
+      // Visual Builder pages use) that just overwrites the SAME single entry
+      // instead of writing a second-language version. Refuse up front rather
+      // than let a human "Apply" a translation that destroys the original.
+      const schema = await cmsOf(ctx).contentTypeSchema(args.uid);
+      if (!schema?.localized) {
+        throw new CmsError(`"${args.uid}" has no separate per-locale copy (i18n isn't enabled for it), so a translation would overwrite the only copy instead of adding a second language. Create a new, separate entry with the translated content instead.`, 422);
+      }
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.sourceLocale });
       if (!e) throw new CmsError("Entry not found", 404);
       const CAND = ["title", "name", "subject", "question", "categoryLabel", "excerpt", "summary", "description", "answer", "body", "content"];
       const source: Record<string, string> = {};
       for (const k of CAND) { const v = e[k]; if (typeof v === "string" && v.trim()) source[k] = v; }
+      // Page/Landing's own real content lives in blocks[], not the flat CAND
+      // list above (their only CAND match is `title`) — walk it too, in the
+      // SAME builder shape get_page_blocks/insert_blocks use, keyed
+      // "blocks.<index>.<field>" so it round-trips through one flat
+      // translation call alongside the plain fields above.
+      const blockList = Array.isArray(e.blocks) ? toBuilder(e.blocks, dialectOf(ctx)) : null;
+      if (blockList) Object.assign(source, extractBlockTranslatable(blockList));
       if (!Object.keys(source).length) throw new CmsError("No translatable text fields on this entry", 422);
       const langName = String(args.targetLocale).toLowerCase().startsWith("en") ? "English" : "Thai";
       const out = await structured<{ fields: Record<string, string> }>({
@@ -303,12 +355,26 @@ const TOOLS: ToolDef[] = [
         schema: { type: "object", additionalProperties: false, required: ["fields"], properties: { fields: { type: "object", additionalProperties: { type: "string" } } } },
         cache: true,
       }).catch(() => null);
-      const fields: Record<string, string> = {};
-      for (const k of Object.keys(source)) { const v = out?.fields?.[k]; if (typeof v === "string" && v.trim()) fields[k] = v; }
-      if (!Object.keys(fields).length) throw new CmsError("Translation produced nothing usable", 502);
+      const translated: Record<string, string> = {};
+      for (const k of Object.keys(source)) { const v = out?.fields?.[k]; if (typeof v === "string" && v.trim()) translated[k] = v; }
+      if (!Object.keys(translated).length) throw new CmsError("Translation produced nothing usable", 502);
+      // Reassemble: plain top-level keys go straight onto `fields`; any
+      // "blocks.N.key" entries get folded back into a real blocks[] array
+      // (wire shape, via toWire) as a single `fields.blocks` value — a
+      // translation review's payload has to be a normal fields object
+      // ReviewBoard.tsx's applyTranslation can update() with directly, not
+      // the dotted intermediate shape used only for the LLM round trip.
+      const fields: Record<string, any> = {};
+      const blockTranslations: Record<string, string> = {};
+      for (const [k, v] of Object.entries(translated)) {
+        if (k.startsWith("blocks.")) blockTranslations[k] = v; else fields[k] = v;
+      }
+      if (blockList && Object.keys(blockTranslations).length) {
+        fields.blocks = toWire(applyBlockTranslations(blockList, blockTranslations), dialectOf(ctx));
+      }
       if (ctx.level === "suggest") {
         return {
-          summary: `Translated ${Object.keys(fields).length} field(s) to ${args.targetLocale} (preview only)`,
+          summary: `Translated ${Object.keys(translated).length} field(s) to ${args.targetLocale} (preview only)`,
           proposal: { id: randomUUID(), kind: "fields", target: { uid: args.uid, id: args.id, locale: args.targetLocale }, title: "Translation preview", fields },
         };
       }
@@ -378,7 +444,7 @@ const TOOLS: ToolDef[] = [
   {
     name: "insert_blocks",
     mode: "draft",
-    description: "Insert one or more new blocks (sections) into a page at a given position. Provide each block's type (from list_block_types) and field values — fields you don't set get that type's own sensible defaults. When an editor is already open for this exact page, this returns a proposal for a human to apply instead of writing directly.",
+    description: "Insert one or more new blocks (sections) into a page at a given position. Provide each block's type (from list_block_types) and field values — fields you don't set get that type's own sensible defaults. When an editor is already open for this exact page, this returns a proposal for a human to apply instead of writing directly. `locale` must already exist for this page (write_draft_fields creates a new locale; this tool never does) — it fails with \"Page not found\" otherwise.",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id", "at", "blocks"],
       properties: {
