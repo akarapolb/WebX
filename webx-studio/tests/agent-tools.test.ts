@@ -22,7 +22,7 @@ import { levelAtLeast, type AgentRunContext, type AgentLevel } from "../lib/agen
 import { availableTools, executeTool, extractBlockTranslatable, applyBlockTranslations } from "../lib/agent/tools";
 import { auditEntry, THAI_ID_RE } from "../lib/agent/auditRules";
 import { systemPrompt, untrustedBlock } from "../lib/agent/prompts";
-import { clampAgentLevel } from "../lib/cms/governance";
+import { clampAgentLevel, lockedTenantFields } from "../lib/cms/governance";
 import { buildQuery } from "../lib/cms/strapi";
 import { fakeCms } from "./harness/fakeCms";
 
@@ -70,6 +70,32 @@ describe("clampAgentLevel (lib/cms/governance.ts) — tenant/role policy merge",
     const tenantLevel: AgentLevel = "suggest";
     const roleTriesToWiden: AgentLevel = "draft_submit";
     assert.equal(clampAgentLevel(tenantLevel, roleTriesToWiden), "suggest");
+  });
+});
+
+// Found live while scoping Stripe billing: assertBookkeepingWriteAllowed's
+// TENANT_UID branch (governance.ts) only ever checked cross-tenant id
+// ownership — a plain PUT of {"plan":"enterprise","seats":999} onto a
+// caller's own tenant row succeeded outright, no field restriction at all.
+// lockedTenantFields is the pure decision extracted from that fix (real
+// enforcement needs a live session/Strapi, out of scope for this file by
+// design — see the header comment).
+describe("lockedTenantFields (lib/cms/governance.ts) — tenant billing-field write guard", () => {
+  test("flags plan/subscriptionStatus/seats and every stripe* field", () => {
+    assert.deepEqual(lockedTenantFields({ plan: "enterprise" }), ["plan"]);
+    assert.deepEqual(lockedTenantFields({ subscriptionStatus: "active", seats: 999 }), ["subscriptionStatus", "seats"]);
+    assert.deepEqual(lockedTenantFields({ stripeCustomerId: "cus_x", stripeSubscriptionId: "sub_x", stripePriceId: "price_x" }),
+      ["stripeCustomerId", "stripeSubscriptionId", "stripePriceId"]);
+  });
+  test("an ordinary field (name, brand, adminEmails) is never flagged", () => {
+    assert.deepEqual(lockedTenantFields({ name: "New Name", brand: { orgName: { en: "x" } }, adminEmails: ["a@b.com"] }), []);
+  });
+  test("a mixed payload flags only the locked keys, not the whole write", () => {
+    assert.deepEqual(lockedTenantFields({ name: "New Name", plan: "pro" }), ["plan"]);
+  });
+  test("no data at all (e.g. a delete) flags nothing", () => {
+    assert.deepEqual(lockedTenantFields(undefined), []);
+    assert.deepEqual(lockedTenantFields({}), []);
   });
 });
 

@@ -1467,7 +1467,29 @@ async function tenantGuard(uid: string, id: string, eff: Tenant | null, adapter:
  * for those, allow an unscoped caller freely (matches every other unscoped
  * exemption in this file), and otherwise require the target row's own tenant
  * to match the caller's. */
-async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff: Tenant | null, user: CurrentUser): Promise<void> {
+// Fields on api::tenant.tenant no scoped caller may ever set directly via
+// the generic write path (governed.create/update), regardless of any
+// field-policy config — plan/subscriptionStatus/seats are billing state a
+// tenant admin could otherwise grant themselves for free (confirmed live:
+// nothing before this guard stopped a plain PUT of {"plan":"enterprise"}
+// onto a caller's own tenant row from succeeding), and the stripe* fields
+// are how the Stripe webhook links this row to a real Stripe customer/
+// subscription — letting a client set them would let someone redirect their
+// own billing to a different Stripe customer. These fields are only ever
+// meant to be written by code, not a caller: the signup path already
+// bypasses governed.create entirely (calls strapiAdapter.entries.create
+// directly — see resolveEffectiveTenant's signup flow), and the Stripe
+// webhook handler does the same (calls strapiBookkeeping/strapiAdapter
+// directly, never governed.update) for exactly this reason — neither needs
+// an exemption here because neither one goes through this function at all.
+const TENANT_WRITE_LOCKED_FIELDS = new Set(["plan", "subscriptionStatus", "seats", "stripeCustomerId", "stripeSubscriptionId", "stripePriceId"]);
+/** Pure and exported specifically so tests can exercise the lock list
+ * without standing up a session/tenant/Strapi — see its one call site in
+ * assertBookkeepingWriteAllowed just below. */
+export function lockedTenantFields(data?: Record<string, any>): string[] {
+  return Object.keys(data || {}).filter((k) => TENANT_WRITE_LOCKED_FIELDS.has(k));
+}
+async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff: Tenant | null, user: CurrentUser, data?: Record<string, any>): Promise<void> {
   if (!BOOKKEEPING_UIDS.has(uid)) return;
   if (GENERIC_ROUTE_WRITE_BLOCKED_UIDS.has(uid)) {
     throw new CmsError("This content type must be managed through its own screen, not written directly.", 403);
@@ -1490,6 +1512,8 @@ async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff
   if (!eff) return; // unscoped super admin — allowed, same exemption as everywhere else in this file
   if (uid === TENANT_UID) {
     if (id && id !== String(eff.documentId ?? eff.id)) throw new CmsError("Cross-tenant operation not permitted", 403);
+    const locked = lockedTenantFields(data);
+    if (locked.length) throw new CmsError(`Cannot set ${locked.join(", ")} directly — billing state is managed by checkout/webhooks, not editable here.`, 403);
     return;
   }
   if (uid === RELEASE_UID && id) {
@@ -2999,7 +3023,7 @@ export const governed = {
     assertActingUid(uid);
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
-    await assertBookkeepingWriteAllowed(uid, null, eff, user);
+    await assertBookkeepingWriteAllowed(uid, null, eff, user, data);
     await enforceItemLimit(eff, uid);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.create) throw new CmsError("Your role does not permit creating this content", 403);
@@ -3020,7 +3044,7 @@ export const governed = {
     assertActingUid(uid);
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
-    await assertBookkeepingWriteAllowed(uid, id, eff, user);
+    await assertBookkeepingWriteAllowed(uid, id, eff, user, data);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.update) throw new CmsError("Your role does not permit updating this content", 403);
     if (crp && !crp.embedCode && PAGE_LIKE_UIDS.has(uid) && hasEmbedBlock(data)) {
