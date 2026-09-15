@@ -19,7 +19,20 @@ echo "[wp-bootstrap] waiting for wp-config.php (written by the wordpress service
 until [ -f /var/www/html/wp-config.php ]; do sleep 2; done
 
 echo "[wp-bootstrap] waiting for the database..."
-until $WP db check >/dev/null 2>&1; do sleep 3; done
+# Not `$WP db check` — that shells out to the system `mysql`/`mariadb-check`
+# binary, whose bundled mariadb-connector-c in this image predates
+# caching_sha2_password (MySQL 8's default auth plugin since 8.0, and the
+# only one enabled by default from 8.4 on) and can never authenticate against
+# the wp-mysql service, hanging here forever on a fresh clone. wp-config.php
+# itself (and the real `core install` below) connect via PHP's mysqli
+# extension instead, which already supports it fine — so probe with that
+# same driver, not the CLI tool.
+until $WP --skip-wordpress eval '
+  $parts = explode(":", getenv("WORDPRESS_DB_HOST") ?: "");
+  $host = $parts[0]; $port = isset($parts[1]) ? (int) $parts[1] : 3306;
+  $m = @new mysqli($host, getenv("WORDPRESS_DB_USER"), getenv("WORDPRESS_DB_PASSWORD"), getenv("WORDPRESS_DB_NAME"), $port);
+  if ($m->connect_error) { exit(1); }
+' >/dev/null 2>&1; do sleep 3; done
 
 if $WP core is-installed >/dev/null 2>&1; then
   echo "[wp-bootstrap] already installed — skipping core install."

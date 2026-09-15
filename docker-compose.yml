@@ -93,6 +93,11 @@ services:
       # env-var names on three services, intentional — see internal.ts's
       # own comment).
       WEBX_INTERNAL_SECRET: ${STRAPI_INTERNAL_SECRET:?set STRAPI_INTERNAL_SECRET}
+      # AI (optional): src/api/assist/controllers/assist.ts calls the same
+      # litellm gateway directly for its own AI Search / assist endpoints.
+      LITELLM_URL: ${LITELLM_URL:-}
+      LITELLM_KEY: ${LITELLM_KEY:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-}
     volumes:
       - strapi-uploads:/app/public/uploads
     ports:
@@ -123,6 +128,7 @@ services:
       # AI (optional): point at the litellm service or any OpenAI-compatible gateway
       LITELLM_URL: ${LITELLM_URL:-}
       LITELLM_KEY: ${LITELLM_KEY:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-}
       # RAG vector store: leave WEBX_VECTOR empty for in-app cosine, or 'pgvector'
       WEBX_VECTOR: ${WEBX_VECTOR:-}
       PGVECTOR_URL: ${PGVECTOR_URL:-}
@@ -334,6 +340,18 @@ services:
       WORDPRESS_SCHEDULER_USERNAME: ${WORDPRESS_SCHEDULER_USERNAME:?set WORDPRESS_SCHEDULER_USERNAME}
       WP_ADMIN_PASSWORD: ${WORDPRESS_ADMIN_PASSWORD:?set WORDPRESS_ADMIN_PASSWORD}
       WP_ADMIN_EMAIL: ${WORDPRESS_ADMIN_EMAIL:?set WORDPRESS_ADMIN_EMAIL}
+      # wp-config.php's getenv_docker() reads these directly (the `wp` CLI in
+      # THIS container runs PHP itself — it doesn't reuse the `wordpress`
+      # service's env). Without them every `wp` command here falls back to
+      # wp-config.php's own literal defaults (host "mysql", user
+      # "example username") instead of this compose file's actual wp-mysql
+      # service, so `wp db check` in bootstrap.sh never succeeds and the
+      # script hangs forever on "waiting for the database" — found when a
+      # fresh clone's WordPress bootstrap never completed.
+      WORDPRESS_DB_HOST: wp-mysql:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?set WORDPRESS_DB_PASSWORD}
     entrypoint: ["sh", "-c", "sh /bootstrap.sh; tail -f /dev/null"]
 
   # WordPress's own daily database + content backup — TOR gap audit finding:
@@ -412,6 +430,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      # webx-embed model (litellm/config.yaml) — the oneweb.tech ML sandbox's
+      # TEI-style embeddings endpoint, used for AI Search's real vectors.
+      MLSANDBOX_EMB_API_KEY: ${MLSANDBOX_EMB_API_KEY:-}
     ports:
       # Pure backend gateway — nothing ever reaches it directly from a
       # browser (every AI feature calls it server-side, from `webx`, over
