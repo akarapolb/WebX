@@ -121,6 +121,16 @@ services:
     environment:
       NODE_ENV: production
       STRAPI_URL: http://strapi:1337
+      # lib/config.ts's own fallback ("http://localhost:8081/wp-json") is a
+      # host-machine default for local `npm run dev`, meaningless inside this
+      # container — WordPress is the separate `wordpress` service, reachable
+      # only by its Docker network hostname on its internal port 80, never
+      # localhost. Left unset entirely before this fix, so WordPress-engine
+      # login (POST /api/auth/login with engine:"wordpress") and every other
+      # WordPress-backed feature failed with "Cannot reach WordPress" on any
+      # deployment of this compose file that also runs the wordpress
+      # profile — found while checking whether WordPress login works at all.
+      WORDPRESS_URL: http://wordpress:80/wp-json
       # Shared secret for governance.ts's internal cross-tenant/custom-role
       # lookups (GET /api/internal/tenant-of, /custom-role-permissions) —
       # must match strapi's own WEBX_INTERNAL_SECRET above.
@@ -315,6 +325,13 @@ services:
       # Compose's implicit default bridge already resolves service names).
       STRAPI_INTERNAL_URL: http://strapi:1337
       WEBX_INTERNAL_SECRET: ${STRAPI_INTERNAL_SECRET:?set STRAPI_INTERNAL_SECRET}
+      # Off by default (mu-plugins/auth-header-fix.php) — WordPress correctly
+      # refuses Application Passwords over plain HTTP; a real deployment
+      # terminates TLS in front and never needs this. Set to "1" in .env only
+      # for a local no-HTTPS dev/test run of THIS compose file (matching what
+      # docker-compose.wordpress.yml's dedicated dev instance already does),
+      # never for anything reachable over the network as this plain HTTP.
+      WP_ALLOW_HTTP_APP_PASSWORDS: ${WP_ALLOW_HTTP_APP_PASSWORDS:-}
     volumes:
       - wp-content-data:/var/www/html
     ports:
