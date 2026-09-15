@@ -2558,6 +2558,41 @@ export interface ApiSsoCredentialSsoCredential
   };
 }
 
+export interface ApiStripeWebhookEventStripeWebhookEvent
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'stripe_webhook_events';
+  info: {
+    description: "Idempotency ledger for /api/webhooks/stripe \u2014 one row per processed Stripe event.id. A unique-constraint conflict on eventId at creation time is how the handler detects a redelivery and skips re-running side effects, instead of an in-memory cache that wouldn't survive a restart or multiple instances.";
+    displayName: 'Stripe Webhook Event';
+    pluralName: 'stripe-webhook-events';
+    singularName: 'stripe-webhook-event';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    eventId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::stripe-webhook-event.stripe-webhook-event'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    receivedAt: Schema.Attribute.DateTime;
+    resolved: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    type: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   collectionName: 'tenants';
   info: {
@@ -2603,6 +2638,9 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     seats: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
     social: Schema.Attribute.JSON;
     sso: Schema.Attribute.JSON;
+    stripeCustomerId: Schema.Attribute.String & Schema.Attribute.Private;
+    stripePriceId: Schema.Attribute.String & Schema.Attribute.Private;
+    stripeSubscriptionId: Schema.Attribute.String & Schema.Attribute.Private;
     subscriptionStatus: Schema.Attribute.String &
       Schema.Attribute.DefaultTo<'active'>;
     template: Schema.Attribute.JSON;
@@ -3335,6 +3373,7 @@ declare module '@strapi/strapi' {
       'api::service.service': ApiServiceService;
       'api::sitemap-node.sitemap-node': ApiSitemapNodeSitemapNode;
       'api::sso-credential.sso-credential': ApiSsoCredentialSsoCredential;
+      'api::stripe-webhook-event.stripe-webhook-event': ApiStripeWebhookEventStripeWebhookEvent;
       'api::tenant.tenant': ApiTenantTenant;
       'api::top-graphic.top-graphic': ApiTopGraphicTopGraphic;
       'api::video.video': ApiVideoVideo;

@@ -323,7 +323,7 @@ type TenantSso = { enabled: boolean; issuerUrl?: string; clientId?: string; clie
 // agent runtime can resolve a caller's block-catalog dialect the same way
 // the Builder itself does (open()'s own tenants.list lookup), instead of a
 // second, divergent fetch.
-type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string>; features?: Record<string, any>; publicTemplate?: string };
+type Tenant = { key: string; id: any; documentId?: any; name?: string; brand?: any; engine?: "strapi" | "wordpress"; adminEmails?: string[]; plan?: string; subscriptionStatus?: string; stripeCustomerId?: string; stripeSubscriptionId?: string; stripePriceId?: string; sso?: TenantSso; customRoleAssignments?: Record<string, string>; features?: Record<string, any>; publicTemplate?: string };
 
 // Tenant/field-policy/audit bookkeeping lives in Strapi regardless of which
 // engine THIS session is authenticated against (see the module header), and
@@ -357,7 +357,7 @@ async function refreshTenantCache(): Promise<typeof tenantCache> {
     const byKey = new Map<string, Tenant>();
     data.forEach((t: any) => {
       const adminEmails: string[] = t.adminEmails || [];
-      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan, sso: t.sso, customRoleAssignments: t.customRoleAssignments, features: t.features, publicTemplate: t.publicTemplate };
+      const tenant: Tenant = { key: t.key, id: t.id, documentId: t.documentId, name: t.name, brand: t.brand, engine: t.engine || "strapi", adminEmails, plan: t.plan, subscriptionStatus: t.subscriptionStatus, stripeCustomerId: t.stripeCustomerId, stripeSubscriptionId: t.stripeSubscriptionId, stripePriceId: t.stripePriceId, sso: t.sso, customRoleAssignments: t.customRoleAssignments, features: t.features, publicTemplate: t.publicTemplate };
       byKey.set(t.key, tenant);
       adminEmails.forEach((e: string) => byEmail.set(String(e).toLowerCase(), tenant));
     });
@@ -365,7 +365,7 @@ async function refreshTenantCache(): Promise<typeof tenantCache> {
   }
   return tenantCache;
 }
-async function resolveEffectiveTenant(email?: string): Promise<Tenant | null> {
+export async function resolveEffectiveTenant(email?: string): Promise<Tenant | null> {
   const acting = actingSession();
   if (acting) {
     // A background job: its owner's own tenant, never unscoped (fail closed).
@@ -385,8 +385,74 @@ async function resolveTenantByKey(key: string): Promise<Tenant | null> {
   const { byKey } = await refreshTenantCache();
   return byKey.get(key) || null;
 }
-function invalidateTenantCache(): void {
+export function invalidateTenantCache(): void {
   tenantCache.at = 0;
+}
+
+// ---------- Billing (Stripe) ----------
+// app/api/webhooks/stripe/route.ts's own writer — deliberately bypasses
+// governed.update entirely, the same way the signup flow bypasses
+// governed.create (see resolveEffectiveTenant's own signup path): this is a
+// system-initiated write with no caller to check permissions for, not a
+// request a human or the Agent made. Threading it through governed.update
+// would hit assertBookkeepingWriteAllowed's lockedTenantFields guard, which
+// exists specifically to block a CALLER from setting these exact fields —
+// applying that guard here would make it impossible for the webhook to ever
+// do its job. Same strapiBookkeeping (scheduler-credential) pattern the SSO
+// config writer above already uses for the identical "webx-studio itself
+// writes tenant fields no client should" shape.
+export type StripeTenantFields = Partial<Pick<Tenant, "plan" | "subscriptionStatus" | "stripeCustomerId" | "stripeSubscriptionId" | "stripePriceId">>;
+export async function applyStripeWebhookUpdate(by: { tenantKey?: string; stripeCustomerId?: string }, fields: StripeTenantFields): Promise<Tenant | null> {
+  let target: Tenant | null = by.tenantKey ? await resolveTenantByKey(by.tenantKey) : null;
+  if (!target && by.stripeCustomerId) {
+    const { data } = await strapiBookkeeping(() =>
+      strapiAdapter.entries.list<any>(TENANT_UID, { pageSize: 1, filter: [{ field: "stripeCustomerId", op: "eq", value: by.stripeCustomerId! }] })
+    );
+    const t = data[0];
+    if (t) target = { key: t.key, id: t.id, documentId: t.documentId };
+  }
+  if (!target) return null;
+  await strapiBookkeeping(() => strapiAdapter.entries.update(TENANT_UID, target!.documentId ?? target!.id, fields));
+  invalidateTenantCache();
+  const actor: CurrentUser = { id: "stripe-webhook", email: "billing@system", roles: [], isSuperAdmin: true };
+  await writeAudit("billing_webhook", TENANT_UID, target.documentId ?? target.id, actor, target.key);
+  return target;
+}
+const STRIPE_EVENT_UID = "api::stripe-webhook-event.stripe-webhook-event";
+/** True the first time this exact Stripe event.id is seen; false once it's
+ * been claimed before. Stripe redelivers events (including out of order) —
+ * this is the idempotency gate app/api/webhooks/stripe/route.ts checks
+ * before running any side effect, backed by a real unique DB constraint
+ * (eventId) rather than an in-memory set, so it survives a restart or
+ * multiple instances. A genuinely unrelated failure (Strapi unreachable,
+ * not a duplicate) is NOT swallowed here — it rethrows, so the route
+ * responds 500 and Stripe's own retry logic redelivers later, instead of
+ * silently treating "couldn't check" the same as "already handled." Only a
+ * write that looks like the real unique-constraint conflict (status 400,
+ * "unique" in the message — Strapi's own validation-error shape for this)
+ * is treated as "already claimed." */
+export async function claimStripeEvent(eventId: string, type: string): Promise<boolean> {
+  try {
+    await strapiBookkeeping(() => strapiAdapter.entries.create(STRIPE_EVENT_UID, { eventId, type, receivedAt: new Date().toISOString() }));
+    return true;
+  } catch (e) {
+    if (e instanceof CmsError && e.status === 400 && /unique/i.test(e.message)) return false;
+    throw e;
+  }
+}
+/** Flips a claimed event's row to resolved:true once its tenant update has
+ * actually been applied — a row left at its default resolved:false (never
+ * called here) means the event was claimed but couldn't be matched to any
+ * tenant (neither metadata.tenantKey nor a stripeCustomerId lookup found
+ * one), kept for operator visibility into a real misconfiguration. The
+ * route returns 200 to Stripe either way so an unresolvable event doesn't
+ * sit retrying forever — this is a diagnostics trail, not a retry gate. */
+export async function markStripeEventResolved(eventId: string): Promise<void> {
+  try {
+    const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(STRIPE_EVENT_UID, { pageSize: 1, filter: [{ field: "eventId", op: "eq", value: eventId }] }));
+    const row = data[0];
+    if (row) await strapiBookkeeping(() => strapiAdapter.entries.update(STRIPE_EVENT_UID, row.documentId ?? row.id, { resolved: true }));
+  } catch { /* best-effort diagnostics only — never let this fail the webhook response */ }
 }
 
 /** The logged-in admin's own tenant (name/brand included) — used by

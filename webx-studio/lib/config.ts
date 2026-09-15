@@ -69,3 +69,18 @@ export const WEBX_SCHEDULER_SECRET = process.env.WEBX_SCHEDULER_SECRET || "";
 export const KEYCLOAK_URL = process.env.KEYCLOAK_URL || "";
 export const KEYCLOAK_ADMIN = process.env.KEYCLOAK_ADMIN || "";
 export const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || "";
+
+// Stripe (Pro plan billing). STRIPE_SECRET_KEY was already referenced
+// directly via process.env in app/api/billing/checkout/route.ts's own
+// "is billing configured" check — centralized here, same as every other
+// secret in this file. STRIPE_WEBHOOK_SECRET verifies
+// app/api/webhooks/stripe/route.ts's inbound signature (Stripe's own
+// per-endpoint signing secret, unrelated to any secret above). Enterprise
+// is sales-assisted only — no Price ID for it, ever.
+export const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "";
+export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
+export const STRIPE_PRICE_ID_PRO = process.env.STRIPE_PRICE_ID_PRO || "";
+// NEXT_PUBLIC_* reaches the browser bundle (Stripe.js/Elements needs a
+// publishable key client-side to tokenize card details — never the secret
+// key above, which stays server-only).
+export const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";

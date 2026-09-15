@@ -64,6 +64,10 @@ DB persist in named volumes (`strapi-uploads`, `db-data`).
 - [ ] File-permission / OS hardening on whatever host actually runs these containers: WordPress's own uploads directory (`wp-content/uploads`) should not be script-executable (`php_admin_flag engine off` in an nginx/Apache location block, or the equivalent for the real reverse proxy in front of it — not configurable from inside this repo, since it depends on the real host's web-server config); container filesystems should run read-only where the image allows it, with only the actual data volumes (`wp-content-data`, `strapi-uploads`, the Postgres/MySQL data dirs) writable; and the containers should run as their images' own non-root user (verify with `docker inspect --format '{{.Config.User}}'` — the official WordPress/Strapi images already default to this, so the risk is a deploy script overriding it with `--user root`, not the base images themselves).
 - [ ] Least-privilege Strapi API token for the MCP/CLI (review find/create only
       if those tools are used).
+- [ ] Billing (Stripe): `STRIPE_SECRET_KEY`/`STRIPE_PRICE_ID_PRO`/`STRIPE_WEBHOOK_SECRET`/
+      `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` set (see "Billing (Stripe)" below) —
+      without `STRIPE_SECRET_KEY`, Pro checkout stays disabled (503) and the
+      UI degrades to "contact sales," same as before this feature existed.
 - [ ] PDPA: submission content types are **not** public-readable (verify roles).
 - [ ] Cookie TTLs match Strapi `auth.sessions.*` lifespans.
 - [ ] WordPress engine, if used: after adding or changing a file under
@@ -183,6 +187,46 @@ again. It also turns off if they lose access to the workspace, if the agent's
 permissions drop below what the job needs, or after three failed runs in a
 row. Strapi deletes finished jobs after 90 days (their checkpoints after 7)
 and turned-off schedules after 180.
+
+## Billing (Stripe)
+
+Pro ($79/mo) is the only self-serve paid tier — Enterprise stays
+sales-assisted (no Checkout, no Price id; a workspace admin manually sets
+`plan: "enterprise"` on the tenant record, e.g. via `scheduler@webx.local`'s
+Super Admin session, which is the only identity exempt from the
+client-write lock described below). Four env vars, all required together:
+
+- `STRIPE_SECRET_KEY` / `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — from the
+  Stripe Dashboard's API keys page. The publishable key is safe to ship to
+  the browser (it powers the Elements payment-method form in `Billing.tsx`);
+  the secret key must never leave the server.
+- `STRIPE_PRICE_ID_PRO` — the recurring monthly Price id (`price_...`, not
+  the Product id) for Pro's $79/mo.
+- `STRIPE_WEBHOOK_SECRET` — create a webhook endpoint in the Stripe
+  Dashboard pointed at `https://<your-domain>/api/webhooks/stripe`,
+  subscribed to `checkout.session.completed`, `customer.subscription.updated`,
+  `customer.subscription.deleted`, `invoice.payment_failed`, and
+  `invoice.paid` — then paste its signing secret here. **This is the one
+  step that can't be done from a local/dev environment** — Stripe's servers
+  need a real, publicly reachable HTTPS URL to deliver to, so this endpoint
+  only gets configured once the app is actually deployed. Until it is, plan/
+  subscription changes never reach a tenant's record after checkout —
+  Checkout itself will still work, but nothing updates the tenant afterward.
+- `/api/webhooks/stripe` is deliberately exempt from `middleware.ts`'s
+  session-cookie gate (Stripe's servers carry no session; the route
+  authenticates the request itself via `stripe.webhooks.constructEvent`'s
+  signature check) — if you ever restructure that middleware, keep this
+  route (and `/api/internal/*`, exempt for the same reason) out of the
+  cookie requirement, or every real Stripe delivery silently 302s to the
+  login page instead of ever reaching the handler.
+- `plan`/`subscriptionStatus`/`stripeCustomerId`/`stripeSubscriptionId`/
+  `stripePriceId` on the Tenant record can only be set by the webhook
+  handler or an unscoped (Super Admin) session — `lib/cms/governance.ts`'s
+  `lockedTenantFields` rejects them from any ordinary tenant-scoped write,
+  including the Agent's own tools. This closed a real pre-existing gap
+  found while building this feature: before it, any tenant admin could
+  `PUT` their own tenant row with `{"plan":"enterprise"}` and have it
+  silently succeed.
 
 ## DGA / government on-prem notes
 
