@@ -44,9 +44,18 @@ const AI_ACTIONS: { id: string; instr: string }[] = [
 ];
 
 export default function EntryEditor({
-  uid, docId, locale, typeName, mediaKeys, onClose, onSaved,
+  uid, docId, locale, typeName, mediaKeys, draftAndPublish = true, onClose, onSaved,
 }: {
   uid: string; docId: string; locale?: string; typeName: string; mediaKeys?: string[];
+  // false for content types with Strapi's draftAndPublish option off (log/
+  // internal types — ab-event, audit-log, agent-job, tenant, review,
+  // release, ...): Strapi's document service has no publish()/unpublish()
+  // for those at all, and calling either 500s ("strapi.documents(...)
+  // .publish is not a function" — found live, 2026-09-15). Every entry of
+  // such a type is effectively always "live" the moment it's saved, so
+  // there's no publish step to expose. Defaults true so any caller that
+  // doesn't pass it keeps today's behavior.
+  draftAndPublish?: boolean;
   onClose: () => void; onSaved: () => void;
 }) {
   const { t, lang } = useLang();
@@ -483,7 +492,9 @@ export default function EntryEditor({
           <div className="fld" style={{ borderTop: "1px solid var(--line)", marginTop: 10, paddingTop: 12 }}>
             <label style={{ color: "var(--bad)" }}>{t("e.danger")}</label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn btn--g" onClick={unpublishEntry} disabled={delBusy !== ""}><Icon name="eye" />{delBusy === "unpub" ? "…" : t("e.unpublish")}</button>
+              {draftAndPublish && (
+                <button className="btn btn--g" onClick={unpublishEntry} disabled={delBusy !== ""}><Icon name="eye" />{delBusy === "unpub" ? "…" : t("e.unpublish")}</button>
+              )}
               <button className="btn btn--g" style={{ color: "var(--bad)", borderColor: "var(--bad)" }} onClick={() => { setDelAck(false); setConfirmDel(true); }} disabled={delBusy !== ""}><Icon name="trash" />{t("e.delete")}</button>
             </div>
             <div className="muted" style={{ fontSize: 11 }}>{t("e.dangerNote")}</div>
@@ -495,9 +506,11 @@ export default function EntryEditor({
             {msg ? <span className={"toast-in " + (msg.ok ? "ok" : "bad")}>{msg.t}</span> : t("e.draftNote")}
           </span>
           <button className="btn btn--g" onClick={onClose}>{t("e.cancel")}</button>
-          <button className="btn btn--g" onClick={publish} disabled={busy !== ""}>
-            <Icon name="spark" />{busy === "publish" ? t("e.publishing") : t("e.publish")}
-          </button>
+          {draftAndPublish && (
+            <button className="btn btn--g" onClick={publish} disabled={busy !== ""}>
+              <Icon name="spark" />{busy === "publish" ? t("e.publishing") : t("e.publish")}
+            </button>
+          )}
           <button className="btn btn--p" onClick={save} disabled={busy !== "" || loading}>
             {busy === "save" ? t("e.saving") : t("e.save")}
           </button>

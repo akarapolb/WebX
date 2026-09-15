@@ -87,6 +87,14 @@ services:
       # STRAPI_SCHEDULER_PASSWORD above, fixed the same way.
       DGA_EDITOR_PASSWORD: ${DGA_EDITOR_PASSWORD:?set DGA_EDITOR_PASSWORD}
       PEA_EDITOR_PASSWORD: ${PEA_EDITOR_PASSWORD:?set PEA_EDITOR_PASSWORD}
+      # Strapi core's own /admin/login throttle (config/admin.ts) — was never
+      # actually forwarded to this container despite being documented in
+      # .env.production.example, so it silently used the hardcoded default
+      # (20/10min) regardless of what .env said. Also read by this repo's own
+      # middlewares/rate-limit.ts (its per (ip,email) login cap) for the same
+      # "raise it for local testing" reason as webx's AUTH_RATE_LIMIT_MAX.
+      ADMIN_LOGIN_RATE_LIMIT_MAX: ${ADMIN_LOGIN_RATE_LIMIT_MAX:-}
+      ADMIN_LOGIN_RATE_LIMIT_WINDOW_MIN: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW_MIN:-}
       # Shared secret for the /api/internal/* routes (tenant-of,
       # custom-role-permissions) — must match webx's own STRAPI_INTERNAL_SECRET
       # and wordpress's WEBX_INTERNAL_SECRET below (same .env value, three
@@ -131,6 +139,10 @@ services:
       # deployment of this compose file that also runs the wordpress
       # profile — found while checking whether WordPress login works at all.
       WORDPRESS_URL: http://wordpress:80/wp-json
+      # middleware.ts's own auth-endpoint rate limit cap (default 10/10min if
+      # unset) — raise only for local dev/testing sessions doing many logins
+      # in a row; never for a real deployment.
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-}
       # Shared secret for governance.ts's internal cross-tenant/custom-role
       # lookups (GET /api/internal/tenant-of, /custom-role-permissions) —
       # must match strapi's own WEBX_INTERNAL_SECRET above.

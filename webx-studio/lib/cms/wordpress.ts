@@ -342,6 +342,7 @@ export const wordpressAdapter: CmsAdapter = {
       return Object.entries(POST_TYPES).map(([uid, t]) => ({
         uid, name: t.name, api: t.restBase, pluralName: t.restBase, attributes: { title: { type: "string", required: true } },
         localized: false, // no per-locale copy mechanism modeled for WordPress here
+        draftAndPublish: true, // every native WP post type has its own draft/publish status
       }));
     },
   },

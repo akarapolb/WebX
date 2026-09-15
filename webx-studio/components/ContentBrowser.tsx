@@ -7,7 +7,7 @@ import { useTenant } from "./TenantProvider";
 import { planLimit } from "@/lib/plans";
 import { cms, CmsError } from "@/lib/cms";
 
-type CType = { uid: string; name: string; api: string };
+type CType = { uid: string; name: string; api: string; draftAndPublish?: boolean };
 type Entry = Record<string, any>;
 type Status = "" | "draft" | "published";
 
@@ -41,12 +41,19 @@ export default function ContentBrowser() {
   const [editing, setEditing] = useState<{ docId: string; locale?: string } | null>(null);
   const [schemas, setSchemas] = useState<Record<string, any>>({});
   const [creating, setCreating] = useState(false);
+  // Bulk "add to release" — Releases.tsx's own "New release" button has
+  // nothing to add entries WITH beyond EntryEditor's one-at-a-time dropdown;
+  // this is the batch equivalent for the list view (2026-09-15).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [releases, setReleases] = useState<any[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<{ t: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await cms.schema.listContentTypes();
-        const list: CType[] = raw.map((x) => ({ uid: x.uid, name: x.name, api: x.api }));
+        const list: CType[] = raw.map((x) => ({ uid: x.uid, name: x.name, api: x.api, draftAndPublish: x.draftAndPublish }));
         setTypes(list);
         const sch: Record<string, any> = {};
         raw.forEach((x) => { sch[x.uid] = x.attributes || {}; });
@@ -102,7 +109,51 @@ export default function ContentBrowser() {
   const tenantKey = (uid && tenantUids.has(uid) && currentKey && currentKey !== "workspace") ? currentKey : "";
   const opts = { status, q, page, tenantKey };
 
+  useEffect(() => {
+    cms.entries.list<any>("api::release.release", { pageSize: 50, sort: "updatedAt:DESC", filter: [{ field: "state", op: "ne", value: "done" }] })
+      .then(({ data }) => setReleases(data)).catch(() => setReleases([]));
+  }, []);
+
   useEffect(() => { setPage(1); }, [uid, status, currentKey]);
+
+  // A selection only makes sense against the currently-visible rows — switching
+  // type, tenant, or page invalidates it rather than silently carrying stale ids.
+  useEffect(() => { setSelected(new Set()); setBulkMsg(null); }, [uid, status, page, currentKey]);
+
+  async function bulkAddToRelease(relId: string) {
+    const rel = releases.find((r) => String(r.documentId ?? r.id) === String(relId));
+    if (!rel || selected.size === 0) return;
+    setBulkBusy(true); setBulkMsg(null);
+    const existing = Array.isArray(rel.items) ? rel.items : [];
+    const already = new Set(existing.map((it: any) => it.documentRef));
+    const toAdd = entries
+      .filter((e) => selected.has(String(e.documentId ?? e.id)) && !already.has(String(e.documentId ?? e.id)))
+      .map((e) => ({ contentType: uid, documentRef: String(e.documentId ?? e.id), title: titleOf(e) }));
+    try {
+      await cms.entries.update("api::release.release", String(rel.documentId ?? rel.id), { items: [...existing, ...toAdd] });
+      setBulkMsg({ t: t("c.addedToRelease").replace("{n}", String(toAdd.length)), ok: true });
+      setSelected(new Set());
+    } catch {
+      setBulkMsg({ t: "Cannot reach the backend.", ok: false });
+    } finally { setBulkBusy(false); }
+  }
+
+  const allOnPageSelected = entries.length > 0 && entries.every((e) => selected.has(String(e.documentId ?? e.id)));
+  function toggleAll() {
+    setSelected((prev) => {
+      if (allOnPageSelected) return new Set();
+      const next = new Set(prev);
+      entries.forEach((e) => next.add(String(e.documentId ?? e.id)));
+      return next;
+    });
+  }
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
   useEffect(() => {
     if (!uid) return;
     const id = setTimeout(() => { setPage(1); loadEntries(uid, { status, q, page: 1, tenantKey }); }, q ? 350 : 0);
@@ -203,17 +254,34 @@ export default function ContentBrowser() {
               </div>
             </div>
 
+            {selected.size > 0 && (
+              <div className="panel" style={{ padding: "10px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span className="badge b-acc"><span className="dot" />{t("c.selected").replace("{n}", String(selected.size))}</span>
+                {bulkMsg && <span className={bulkMsg.ok ? "muted" : "auth-err"}>{bulkMsg.t}</span>}
+                <select className="vb-sel" style={{ marginLeft: "auto", minWidth: 170 }} value="" disabled={bulkBusy || releases.length === 0}
+                  aria-label={t("rl.addto")} onChange={(e) => { if (e.target.value) bulkAddToRelease(e.target.value); e.currentTarget.selectedIndex = 0; }}>
+                  <option value="">{releases.length === 0 ? t("c.noReleases") : t("rl.addto")}</option>
+                  {releases.map((r) => <option key={r.id} value={r.documentId ?? r.id}>{r.name}</option>)}
+                </select>
+                <button className="btn btn--g" onClick={() => { setSelected(new Set()); setBulkMsg(null); }} disabled={bulkBusy}>{t("c.clearSelection")}</button>
+              </div>
+            )}
             <div className="panel" style={{ padding: "8px 0", minHeight: 200 }}>
               {loadingRows && <div className="muted" style={{ padding: 20 }}>{t("c.loadingRows")}</div>}
               {!loadingRows && entries.length === 0 && <div className="muted" style={{ padding: 24, textAlign: "center" }}>{t("c.noEntries")}</div>}
               {!loadingRows && entries.length > 0 && (
                 <>
                   <table className="tbl">
-                    <thead><tr><th>{t("c.colTitle")}</th><th>{t("c.colStatus")}</th><th>{t("c.colLocale")}</th><th>{t("c.colUpdated")}</th></tr></thead>
+                    <thead><tr>
+                      <th style={{ width: 32 }}><input type="checkbox" aria-label={t("c.selectAll")} checked={allOnPageSelected} onChange={toggleAll} /></th>
+                      <th>{t("c.colTitle")}</th><th>{t("c.colStatus")}</th><th>{t("c.colLocale")}</th><th>{t("c.colUpdated")}</th></tr></thead>
                     <tbody>
                       {entries.map((e) => (
                         <tr className="row" key={e.documentId ?? e.id}
                           onClick={() => setEditing({ docId: String(e.documentId ?? e.id), locale: e.locale })}>
+                          <td onClick={(ev) => ev.stopPropagation()}>
+                            <input type="checkbox" checked={selected.has(String(e.documentId ?? e.id))} onChange={() => toggleOne(String(e.documentId ?? e.id))} />
+                          </td>
                           <td><b>{titleOf(e)}</b></td>
                           <td>{(e.status === "published" || e.publishedAt)
                             ? <span className="badge b-ok"><span className="dot" />{t("c.published")}</span>
@@ -244,6 +312,7 @@ export default function ContentBrowser() {
         <EntryEditor
           uid={current.uid} docId={editing.docId} locale={editing.locale} typeName={current.name}
           mediaKeys={Object.entries(schemas[current.uid] || {}).filter(([, a]: any) => a?.type === "media" && a?.multiple !== true).map(([k]) => k)}
+          draftAndPublish={current.draftAndPublish}
           onClose={() => setEditing(null)} onSaved={() => loadEntries(current.uid, opts)}
         />
       )}

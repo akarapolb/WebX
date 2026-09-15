@@ -272,6 +272,11 @@ export const DICT: Record<string, Entry> = {
   "c.page": { en: "Page", th: "หน้า" },
   "c.prev": { en: "Prev", th: "ก่อนหน้า" },
   "c.next": { en: "Next", th: "ถัดไป" },
+  "c.selectAll": { en: "Select all", th: "เลือกทั้งหมด" },
+  "c.selected": { en: "{n} selected", th: "เลือกแล้ว {n} รายการ" },
+  "c.clearSelection": { en: "Clear", th: "ล้างการเลือก" },
+  "c.noReleases": { en: "No open releases", th: "ไม่มีรอบเผยแพร่ที่เปิดอยู่" },
+  "c.addedToRelease": { en: "Added {n} entries to release.", th: "เพิ่ม {n} รายการเข้ารอบเผยแพร่แล้ว" },
   // editor
   "e.edit": { en: "Edit", th: "แก้ไข" },
   "e.loading": { en: "Loading entry…", th: "กำลังโหลด…" },

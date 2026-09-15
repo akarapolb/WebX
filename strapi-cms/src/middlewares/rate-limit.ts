@@ -52,7 +52,12 @@ export default (_config: any, _ctx: any) => {
       if (p === '/admin/login' || p === '/admin/forgot-password' || p === '/api/mfa/verify') {
         const email = String(ctx.request.body?.email || '').toLowerCase();
         if (email !== SCHEDULER_EMAIL) {
-          ok = hit('login:' + ip + ':' + (email || 'unknown'), 10, 10 * 60 * 1000); // 10 ครั้ง/10 นาที ต่อ (ip, email)
+          // Configurable so a local dev/test session doesn't sit out a real
+          // 10-minute cooldown per account after routine testing — unset (or
+          // non-numeric) keeps the original 10/10min default. Never raise
+          // this for a real deployment.
+          const loginMax = Number(process.env.ADMIN_LOGIN_RATE_LIMIT_MAX) || 10;
+          ok = hit('login:' + ip + ':' + (email || 'unknown'), loginMax, 10 * 60 * 1000); // 10 ครั้ง/10 นาที ต่อ (ip, email)
         }
       } else if (p.indexOf('/api/') === 0) {
         ok = hit('api:' + ip, 60, 60 * 1000); // 60 ครั้ง/นาที

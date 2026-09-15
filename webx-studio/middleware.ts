@@ -46,8 +46,15 @@ export function middleware(req: NextRequest) {
     // brute-force/credential-stuffing surface, matches Strapi's own
     // /admin/login convention (10 per 10 min). Everything else under
     // /api/* gets the broader general-abuse backstop.
+    // Configurable so a local dev/test session (this whole IP-wide bucket is
+    // shared by every account and every /api/auth/* flow, since there's no
+    // reverse proxy setting X-Forwarded-For — see clientIp() above) doesn't
+    // have to sit out a real 10-minute cooldown after routine testing.
+    // Unset (or any non-numeric value) keeps the original 10/10min default —
+    // never raise this for a real deployment.
+    const authMax = Number(process.env.AUTH_RATE_LIMIT_MAX) || 10;
     const ok = pathname.startsWith(AUTH_PREFIX)
-      ? hit("auth:" + ip, 10, 10 * 60 * 1000)
+      ? hit("auth:" + ip, authMax, 10 * 60 * 1000)
       : hit("api:" + ip, 60, 60 * 1000);
     if (!ok) {
       return NextResponse.json(

@@ -47,6 +47,16 @@ export type ContentTypeInfo = {
    * a "translation" onto a non-localized entry would silently overwrite its
    * only copy instead of producing a second-language version. */
   localized: boolean;
+  /** Strapi's own options.draftAndPublish. false for internal/log-style
+   * types (ab-event, audit-log, agent-job, tenant, review, release, ...) —
+   * Strapi's document service has no publish()/unpublish() at all for these,
+   * so calling either 500s ("strapi.documents(...).publish is not a
+   * function" — found live, 2026-09-15). Always true for WordPress (every
+   * post type there natively has a draft/publish status). Callers must hide
+   * publish/unpublish controls when this is false, not just handle the
+   * error after the fact. Optional (not every construction site sets it
+   * yet, e.g. test fixtures) — treat undefined the same as true. */
+  draftAndPublish?: boolean;
 };
 
 export type MediaAsset = {
