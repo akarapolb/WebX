@@ -65,7 +65,7 @@ type Ctx = {
   messages: ChatMsg[];
   running: boolean;
   usage: { promptTokens: number; completionTokens: number };
-  send: (text: string) => void;
+  send: (text: string, image?: { dataUrl: string; mimeType: string }) => void;
   /** Continues the thread's stopped run from the checkpoint the server saved for it. */
   resume: () => void;
   abort: () => void;
@@ -190,10 +190,10 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   // derived from the route rather than threaded through every send() call
   // site, since "which surface is this" is exactly what `suppressed`
   // already answers.
-  const send = useCallback((text: string) => {
+  const send = useCallback((text: string, image?: { dataUrl: string; mimeType: string }) => {
     const t = text.trim();
-    if (!t || run.running || !policy || policy.level === "off") return;
-    run.send({ message: t, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
+    if ((!t && !image) || run.running || !policy || policy.level === "off") return;
+    run.send({ message: t, image, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
   }, [run, lang, ref, threadId, policy, suppressed]);
 
   const resume = useCallback(() => {

@@ -10,7 +10,11 @@ import type { AgentContextRef, AgentProposal, PlanItem } from "@/lib/agent/types
 
 export type ToolStep = { id: string; name: string; ok?: boolean; summary?: string; pending: boolean };
 export type ChatMsg =
-  | { kind: "user"; id: string; text: string }
+  /** `image` (a real data URL) is only ever set for the message just sent in
+   * THIS session — `hadImage` marks a rehydrated older turn that had one
+   * (buildPersistMessages, app/api/agent/run/route.ts, never persists the
+   * raw picture; see that function's own comment). */
+  | { kind: "user"; id: string; text: string; image?: string; hadImage?: boolean }
   | { kind: "assistant"; id: string; text: string }
   | { kind: "tools"; id: string; steps: ToolStep[] }
   | { kind: "proposal"; id: string; proposal: AgentProposal; status: "pending" | "applied" | "undone" | "stale" }
@@ -25,6 +29,10 @@ export type ChatMsg =
 type SendOpts = {
   /** Empty when continuing a stopped run. */
   message: string;
+  /** An optional image attached alongside `message` — a human-pasted picture
+   * for the model to look at, not a URL for a tool to fetch (see
+   * lib/agent/urlImage.ts for that separate, tool-driven path). */
+  image?: { dataUrl: string; mimeType: string };
   /** Continue the thread's stopped run from its saved checkpoint. */
   resume?: boolean;
   mode: "docked" | "workspace";
@@ -51,7 +59,7 @@ export function chatMsgsFromThread(rows: any[], resumable = false): ChatMsg[] {
   rows.forEach((r, i) => {
     const id = "h" + i;
     if (!r || typeof r !== "object") return;
-    if (r.role === "user" && typeof r.content === "string") out.push({ kind: "user", id, text: r.content });
+    if (r.role === "user" && typeof r.content === "string") out.push({ kind: "user", id, text: r.content, hadImage: Boolean(r.hadImage) });
     else if (r.role === "assistant" && typeof r.content === "string") out.push({ kind: "assistant", id, text: r.content });
     else if (r.role === "tools" && Array.isArray(r.steps)) {
       out.push({ kind: "tools", id, steps: r.steps.map((s: any, j: number) => ({ id: id + "-" + j, name: s?.name || "", ok: s?.ok, summary: s?.summary, pending: false })) });
@@ -120,7 +128,7 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
   }, []);
 
   const send = useCallback(async (opts: SendOpts) => {
-    const userMsg: ChatMsg | null = opts.message ? { kind: "user", id: nid(), text: opts.message } : null;
+    const userMsg: ChatMsg | null = (opts.message || opts.image) ? { kind: "user", id: nid(), text: opts.message, image: opts.image?.dataUrl } : null;
     // Any new run retires older Continue buttons (the server keeps only the
     // newest checkpoint) and settles open questions (this message answers them).
     setMessages((m) => {
@@ -142,7 +150,7 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: opts.message || undefined, resume: opts.resume || undefined, mode: opts.mode, lang: opts.lang,
+          message: opts.message || undefined, image: opts.image || undefined, resume: opts.resume || undefined, mode: opts.mode, lang: opts.lang,
           context: opts.context, threadId: opts.threadId || undefined,
         }),
         signal: ac.signal,

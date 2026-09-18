@@ -6,11 +6,17 @@ import type { AgentContextRef, AgentEvent, AgentProposal, RunPlan } from "../typ
 export type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 export type ToolSpec = { type: "function"; function: { name: string; description: string; parameters: Record<string, any> } };
 export type TextBlock = { type: "text"; text: string; cache_control?: { type: "ephemeral" } };
+/** A human-pasted image for the model to look at (vision) — a data URL or a
+ * plain http(s) URL, passed through un-transformed to LiteLLM (see
+ * lib/llm.ts's chat()). Distinct from set_block_background_image's own URL
+ * fetch (lib/agent/urlImage.ts), which is a tool the MODEL calls with a link
+ * it decides to fetch, not something a human attaches to their own turn. */
+export type ImageBlock = { type: "image_url"; image_url: { url: string } };
 
 /** One message as sent to an OpenAI-compatible /chat/completions endpoint. */
 export type WireMsg = {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | TextBlock[] | null;
+  content: string | (TextBlock | ImageBlock)[] | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -60,7 +66,11 @@ export type ToolResultRec = {
 };
 
 export type HItem =
-  | { kind: "user"; text: string }
+  /** `image` is a data URL or http(s) URL — degraded to a plain text marker
+   * by fitCheckpoint once it's no longer the most recent user turn, so an
+   * older attachment can't sink every later checkpoint save (checkpoint.ts's
+   * own MAX bytes budget). */
+  | { kind: "user"; text: string; image?: string }
   | { kind: "assistant_text"; text: string; reasoning?: ReasoningPayload }
   | {
       kind: "exchange";

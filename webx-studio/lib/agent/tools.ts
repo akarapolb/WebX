@@ -19,6 +19,9 @@ import { ALL_TYPES, metaOf } from "@/lib/blockCatalog";
 import { auditEntry } from "./auditRules";
 import { untrustedBlock } from "./prompts";
 import { validateArgs } from "./validateArgs";
+import { resolveBackgroundImageFromUrl } from "./urlImage";
+import { fetchWordpressPage } from "./wordpressImport";
+import { fetchUrlPageContent } from "./pageContent";
 import { levelAtLeast, type AgentCms, type AgentRunContext, type ToolDef, type ToolMode, type AgentProposal } from "./types";
 
 const REVIEW_UID = "api::review.review";
@@ -37,6 +40,25 @@ const PAGE_UIDS = new Set(["api::page.page", "api::landing.landing", "wp:page"])
 // permission, not "should the agent specifically be allowed to inject
 // arbitrary script" — a materially different question this rejects outright.
 const BLOCK_TYPE_DENY = /embed/i;
+// Block types with a real image-backed background, verified against their
+// actual render component (blockPreview/blocks.tsx's HeroBlock/ImageBlock,
+// both keyed on `b.image` via that file's mediaUrl()) — NOT declared in
+// blockCatalog.ts's own `fields` list (that upload affordance is hardcoded
+// into each component's JSX, not a generic schema field the sidebar form or
+// metaOf() knows about), so set_block_background_image keeps its own small
+// hand-verified map here instead of trusting metaOf() the way set_block_style
+// trusts it for variant/tone.
+const BLOCK_BACKGROUND_IMAGE_FIELD: Record<string, string> = {
+  "block.hero": "image",
+  "block.image": "image",
+};
+// Shared by both import tools' descriptions: imported content comes back in
+// two shapes because the two engines' block palettes accept different ones
+// (see lib/agent/htmlText.ts). Saying so in the tool description is what
+// stops a WordPress-dialect run from trying to push raw HTML into a field
+// that only takes escaped strings.
+const IMPORT_SHAPE_HINT =
+  "Returns the content twice: `bodyHtml` (sanitized HTML — use it for a gov-portal tenant's `block.richtext` `body` field) and `paragraphs` (a plain string array — use it for a WordPress-dialect tenant's `orst.rich-text`/`orst.two-column` `paragraphs`, or any structured item list, since those palettes accept NO raw HTML). Call list_block_types first if unsure which applies to this workspace.";
 // A basic script-content heuristic applied to every string value in a
 // block the agent is about to write — defense in depth alongside
 // governed.update's own embedCode gate and the block.embed type-level
@@ -529,6 +551,100 @@ const TOOLS: ToolDef[] = [
       await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
       await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Removed block ${args.index}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "set_block_style",
+    mode: "draft",
+    description: "Change one existing block's own built-in style option (its `variant` or `tone` field — a color/tone/layout accent already defined for that block type) without touching any other field on it. Unlike replace_block (which rebuilds the whole block from that type's defaults), this merges onto the block's REAL current content. Only some block types declare this option at all — call get_page_blocks to see the block's own type at this index, then list_block_types to check whether that type's sample fields include a variant/tone before calling this; the error message lists the allowed values if you guess wrong or the type has none.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "value"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 }, value: { type: "string" } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const block = current[args.index];
+      const meta = metaOf(block.__component);
+      const styleField = meta?.fields.find((f: any) => f.k === "variant" || f.k === "tone");
+      if (!styleField) throw new CmsError(`Block type "${block.__component}" has no style option (variant/tone) to change.`, 400);
+      if (styleField.select && !styleField.select.includes(args.value)) {
+        throw new CmsError(`"${args.value}" is not a valid ${styleField.k} for "${block.__component}" — allowed: ${styleField.select.map((s: string) => s || "(default)").join(", ")}`, 400);
+      }
+      const updated = { ...block, [styleField.k]: args.value };
+      if (shouldPropose(ctx)) {
+        return {
+          summary: `Proposed changing ${styleField.k} to "${args.value}"`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Change ${styleField.k} to "${args.value}"`, blocks: [updated], replace: args.index },
+        };
+      }
+      const next = current.map((b: any, i: number) => (i === args.index ? updated : b));
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
+      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Changed ${styleField.k} to "${args.value}" on block ${args.index}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "set_block_background_image",
+    mode: "draft",
+    description: "Set an existing block's background/main image from a URL a human pasted — either a direct image link, or an ordinary webpage link (that page's own og:image is used instead of rendering it). Only works for block types with a real image-backed background (currently block.hero and block.image) — the error message says so if this block type has none. Fetches the URL server-side first to confirm it resolves to a real, public, reasonably-sized image before saving anything; merges onto the block's real current content, so its other fields (heading, text, …) are preserved.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "url"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 }, url: { type: "string" } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const block = current[args.index];
+      const imageField = BLOCK_BACKGROUND_IMAGE_FIELD[block.__component];
+      if (!imageField) throw new CmsError(`Block type "${block.__component}" has no image-backed background to set.`, 400);
+      const resolvedUrl = await resolveBackgroundImageFromUrl(args.url);
+      const updated = { ...block, [imageField]: { url: resolvedUrl } };
+      assertSafeBlockContent(updated);
+      if (shouldPropose(ctx)) {
+        return {
+          summary: `Proposed setting the background image from "${args.url}"`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: "Set background image", blocks: [updated], replace: args.index },
+        };
+      }
+      const next = current.map((b: any, i: number) => (i === args.index ? updated : b));
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
+      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Set background image on block ${args.index} from "${args.url}"`, data: { uid: args.uid, id: args.id, imageUrl: resolvedUrl } };
+    },
+  },
+  {
+    name: "import_wordpress_page",
+    mode: "read",
+    description: `Fetch one page's title, content, and featured image from a WordPress site's public REST API — either an external WordPress site, or one of this app's own WordPress-engine tenants (their content is public the same way). Reads a page built in WordPress's own editor AND one built in this app's Visual Builder (whose content lives in a custom field, not WordPress's native content). Does NOT create anything by itself: use the returned content afterward with create_draft_entry then insert_blocks — the same two-step flow used to build any other page from scratch. ${IMPORT_SHAPE_HINT} \`siteUrl\` is the site's WordPress REST API base (e.g. "http://localhost:8081/wp-json" or "https://example.gov/wp-json"), NOT the page's own permalink; \`slug\` is the page's own slug (the part after the domain on its real URL, e.g. "about-us").`,
+    parameters: {
+      type: "object", additionalProperties: false, required: ["siteUrl", "slug"],
+      properties: { siteUrl: { type: "string" }, slug: { type: "string" } },
+    },
+    async run(_ctx, args) {
+      const c = await fetchWordpressPage(args.siteUrl, args.slug);
+      return { summary: `Fetched "${c.title}" from ${args.siteUrl}`, data: c };
+    },
+  },
+  {
+    name: "import_url_page",
+    mode: "read",
+    description: `Fetch an ordinary webpage (any link, not necessarily WordPress) and extract its title, content, and a representative image if one exists. Best-effort, not a full render — works well on reasonably well-structured pages (blogs, docs, articles), poorly on JS-heavy ones. Does NOT create anything by itself: use the returned content afterward with create_draft_entry then insert_blocks, the same two-step flow used to build any other page from scratch. ${IMPORT_SHAPE_HINT}`,
+    parameters: {
+      type: "object", additionalProperties: false, required: ["url"],
+      properties: { url: { type: "string" } },
+    },
+    async run(_ctx, args) {
+      const c = await fetchUrlPageContent(args.url);
+      return { summary: `Fetched "${c.title}" from ${args.url}`, data: c };
     },
   },
 ];

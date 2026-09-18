@@ -463,6 +463,17 @@ add_action('pre_post_update', function (int $post_id) {
 add_action('save_post', function (int $post_id, WP_Post $post, bool $update) {
     static $reverting = [];
     if (!empty($reverting[$post_id])) return; // this save_post firing is our OWN revert call below — don't re-enter
+    // A REST write is ALREADY governed by the rest_request_before_callbacks
+    // filter at the top of this file, which inspects the submitted wtenant
+    // directly — and this hook cannot see that term yet on a REST CREATE:
+    // WP's posts controller runs wp_insert_post() (firing save_post) BEFORE
+    // handle_terms() attaches wtenant, so the create branch below read "no
+    // tenant" and deleted every brand-new page outright. Found live: every
+    // POST /wp/v2/pages 500'd, because the controller then handed the
+    // now-deleted (null) post to rest_after_insert_page. This backstop only
+    // ever needed to cover the NON-REST paths its own header comment names
+    // (classic editor, Quick Edit, WP-CLI's wp_insert_post/wp_update_post).
+    if (defined('REST_REQUEST') && REST_REQUEST) return;
     if (wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) return;
     if (!in_array($post->post_type, webx_crp_governed_post_types(), true)) return;
 

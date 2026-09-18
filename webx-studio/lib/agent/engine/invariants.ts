@@ -24,7 +24,7 @@ export class ProtocolError extends Error {
 
 function contentText(m: WireMsg): string {
   if (typeof m.content === "string") return m.content;
-  if (Array.isArray(m.content)) return m.content.map((b) => b.text).join("");
+  if (Array.isArray(m.content)) return m.content.map((b) => (b.type === "text" ? b.text : "")).join("");
   return "";
 }
 

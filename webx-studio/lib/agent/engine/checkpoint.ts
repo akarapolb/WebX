@@ -1,6 +1,6 @@
 import { providerFor, sameReasoningTarget } from "./providers";
 import { byteLen } from "./toolView";
-import type { ExchangeItem, HItem, ReasoningPayload, RunCheckpoint, RunCounters, RunMode, WireMsg } from "./types";
+import type { ExchangeItem, HItem, ImageBlock, ReasoningPayload, RunCheckpoint, RunCounters, RunMode, TextBlock, WireMsg } from "./types";
 import type { AgentContextRef } from "../types";
 
 export const CHECKPOINT_VERSION = 1 as const;
@@ -19,6 +19,8 @@ export type StartRunInput = {
   model: string;
   priorText?: { role: "user" | "assistant"; content: string }[];
   message: string;
+  /** A human-pasted image (data URL or http(s) URL) attached to this turn. */
+  image?: string;
 };
 
 export function startRun(i: StartRunInput): RunCheckpoint {
@@ -29,7 +31,7 @@ export function startRun(i: StartRunInput): RunCheckpoint {
     // A leading assistant turn (trimmed history) would put an assistant message right after system.
     else if (m.role === "assistant" && history.length) history.push({ kind: "assistant_text", text: m.content });
   }
-  history.push({ kind: "user", text: i.message });
+  history.push({ kind: "user", text: i.message, ...(i.image ? { image: i.image } : {}) });
   return {
     v: CHECKPOINT_VERSION,
     runId: i.runId,
@@ -45,11 +47,11 @@ export function startRun(i: StartRunInput): RunCheckpoint {
   };
 }
 
-export function applyInput(cp: RunCheckpoint, input: { kind: "message" | "answer"; text: string }): RunCheckpoint {
+export function applyInput(cp: RunCheckpoint, input: { kind: "message" | "answer"; text: string; image?: string }): RunCheckpoint {
   if (cp.inflight) throw new Error("Cannot add input while a tool batch is still in flight");
   const next = structuredClone(cp);
   const text = input.text.trim();
-  if (text) next.history.push({ kind: "user", text });
+  if (text || input.image) next.history.push({ kind: "user", text, ...(input.image ? { image: input.image } : {}) });
   next.lastStop = undefined;
   delete next.waiting;
   return next;
@@ -96,6 +98,12 @@ export function buildWireMessages(cp: RunCheckpoint, o: { system: string; target
 
   cp.history.forEach((h, i) => {
     if (h.kind === "user") {
+      if (h.image) {
+        const blocks: (TextBlock | ImageBlock)[] = [{ type: "image_url", image_url: { url: h.image } }];
+        if (h.text.trim()) blocks.unshift({ type: "text", text: h.text });
+        out.push({ role: "user", content: blocks });
+        return;
+      }
       const prev = out[out.length - 1];
       if (prev && prev.role === "user" && typeof prev.content === "string") prev.content = `${prev.content}\n\n${h.text}`;
       else out.push({ role: "user", content: h.text });
@@ -128,6 +136,19 @@ export function fitCheckpoint(cp: RunCheckpoint, maxBytes: number, o: { stripRea
   }
   const fits = () => byteLen(JSON.stringify(c)) <= maxBytes;
   if (fits()) return c;
+  // A pasted image (a data URL) is typically the single biggest thing in the
+  // whole checkpoint — degrade every OLDER one before touching tool results,
+  // keeping only the most recent user turn's image (the one still relevant
+  // to "what should the model look at right now"). Dropped, not summarized:
+  // there's no useful text substitute for a picture the model already
+  // responded to.
+  let lastImageIdx = -1;
+  c.history.forEach((h, i) => { if (h.kind === "user" && h.image) lastImageIdx = i; });
+  if (lastImageIdx >= 0) {
+    let changed = false;
+    c.history.forEach((h, i) => { if (h.kind === "user" && h.image && i !== lastImageIdx) { delete h.image; changed = true; } });
+    if (changed && fits()) return c;
+  }
   for (const h of c.history) {
     if (h.kind !== "exchange") continue;
     for (const r of h.results) r.full = r.digest;

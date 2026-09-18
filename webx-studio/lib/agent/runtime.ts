@@ -32,6 +32,8 @@ export type RunInput = {
   priorText: ChatMsg[];
   /** Empty only when continuing a stopped run. */
   message: string;
+  /** A human-pasted image attached alongside `message`, for the model to look at. */
+  image?: { dataUrl: string; mimeType: string };
   /** The thread's saved checkpoint. When set, the run continues it instead of starting over. */
   resume?: RunCheckpoint | null;
   signal?: AbortSignal;
@@ -61,17 +63,17 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
 
   let cp: RunCheckpoint;
   if (input.resume) {
-    const base = applyInput(input.resume, { kind: "message", text: text || CONTINUE_PROMPT[input.lang] });
+    const base = applyInput(input.resume, { kind: "message", text: text || CONTINUE_PROMPT[input.lang], image: input.image?.dataUrl });
     // The current request decides the model, the surface and which editor is open.
     cp = { ...base, runId: input.runId, threadId: input.threadId, model, mode: input.mode, lang: input.lang, ref: input.ref };
   } else {
     cp = startRun({
       runId: input.runId, threadId: input.threadId, mode: input.mode, lang: input.lang, ref: input.ref, model,
-      priorText: input.priorText, message: input.message,
+      priorText: input.priorText, message: input.message, image: input.image?.dataUrl,
     });
   }
   // A new message is a new metered run; pressing Continue is not.
-  if (text) recordAgentRunStart(input.user as any, input.runId).catch(() => {});
+  if (text || input.image) recordAgentRunStart(input.user as any, input.runId).catch(() => {});
 
   const ctx: AgentRunContext = {
     user: input.user as any, tenantKey: input.policy.tenantKey, level: input.policy.level,

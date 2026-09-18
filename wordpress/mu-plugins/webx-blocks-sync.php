@@ -38,7 +38,15 @@ add_action('add_meta_boxes_page', function () {
     remove_meta_box('acf-group_page_layout', 'page', 'normal');
 }, 20);
 
-add_action('rest_after_insert_page', function (WP_Post $post, WP_REST_Request $request, bool $creating) {
+// $post is deliberately untyped: WP's own REST controller passes whatever
+// get_post() returns after the write, which is NULL if anything removed the
+// post mid-request (custom-role-enforcement.php's own save_post backstop used
+// to do exactly that on every REST create). A strict `WP_Post $post` turned
+// that into an uncaught TypeError — a 500 on the whole request, masking the
+// real cause. Bail quietly instead: there is nothing to sync for a post that
+// no longer exists.
+add_action('rest_after_insert_page', function ($post, WP_REST_Request $request, bool $creating) {
+    if (!$post instanceof WP_Post) return;
     $parsed = parse_blocks($post->post_content);
     $webx_blocks = array_values(array_filter($parsed, function ($b) {
         return !empty($b['blockName']) && str_starts_with($b['blockName'], 'webx/');

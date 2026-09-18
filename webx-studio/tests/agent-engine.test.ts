@@ -395,6 +395,41 @@ describe("checkpoint helpers", () => {
     assert.deepEqual(cp.history.map((h) => h.kind), ["user", "assistant_text", "user"]);
   });
 
+  test("startRun/applyInput attach an image to the user turn, and buildWireMessages sends it as an image_url content block", () => {
+    const cp = startRun({
+      runId: "r", threadId: "t", mode: "docked", lang: "en", ref: { kind: "none" }, model: "webx-default",
+      message: "what's on this page?", image: "data:image/png;base64,AAAA",
+    });
+    assert.equal(cp.history[0].kind, "user");
+    assert.equal((cp.history[0] as any).image, "data:image/png;base64,AAAA");
+
+    const wire = buildWireMessages(cp, { system: "sys", targetModel: "webx-default", digestAfterBytes: LIMITS.digestAfterBytes });
+    const userMsg = wire.find((m) => m.role === "user");
+    assert.ok(Array.isArray(userMsg?.content));
+    const content = userMsg!.content as any[];
+    assert.deepEqual(content, [
+      { type: "text", text: "what's on this page?" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+    ]);
+
+    const next = applyInput(cp, { kind: "message", text: "and this one?", image: "data:image/png;base64,BBBB" });
+    const added: any = next.history[next.history.length - 1];
+    assert.equal(added.image, "data:image/png;base64,BBBB");
+  });
+
+  test("fitCheckpoint keeps only the most recent user turn's image, dropping older ones first", () => {
+    const cp = newRun();
+    cp.history.unshift({ kind: "user", text: "first", image: "data:image/png;base64," + "A".repeat(5_000) });
+    (cp.history[cp.history.length - 1] as any).image = "data:image/png;base64," + "B".repeat(5_000);
+    const max = 7 * 1024;
+    assert.equal(byteLen(JSON.stringify(cp)) > max, true, "sanity: the unfitted checkpoint (two images) is actually oversized");
+    const fitted = fitCheckpoint(cp, max, { stripReasoning: true });
+    assert.ok(fitted, "one image alone should still fit");
+    const withImage = fitted!.history.filter((h: any) => h.kind === "user" && h.image);
+    assert.equal(withImage.length, 1);
+    assert.ok((withImage[0] as any).image.includes("BB"), "the LAST turn's image survives, not the first");
+  });
+
   test("applyInput refuses while a tool batch is in flight", () => {
     const cp = newRun();
     cp.inflight = { exchangeIndex: 0, done: [] };

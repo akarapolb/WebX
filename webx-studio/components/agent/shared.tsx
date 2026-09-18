@@ -210,7 +210,13 @@ export function MessageList({ t, className }: { t: (k: string) => string; classN
   return (
     <div className={className || "ag-body"} ref={bodyRef}>
       {agent.messages.map((m) => {
-        if (m.kind === "user") return <div className="ag-msg user" key={m.id}><div className="ag-msg-tx">{m.text}</div></div>;
+        if (m.kind === "user") return (
+          <div className="ag-msg user" key={m.id}>
+            {m.image && <img className="ag-msg-img" src={m.image} alt="" />}
+            {!m.image && m.hadImage && <div className="ag-msg-hadimg mono"><Icon name="img" />{t("ag.hadImage")}</div>}
+            {m.text && <div className="ag-msg-tx">{m.text}</div>}
+          </div>
+        );
         if (m.kind === "assistant") return (
           <div className="ag-msg" key={m.id}>
             <div className="ag-msg-av"><Icon name="spark" /></div>
@@ -238,34 +244,59 @@ export function MessageList({ t, className }: { t: (k: string) => string; classN
  * sites elsewhere (Toolbox's old .vb-ai generator) can prefill + autosend
  * regardless of which surface (docked panel or /agent workspace) is
  * mounted when that happens. */
+const MAX_ATTACH_BYTES = 4_000_000; // pre-base64 file size cap — a data URL runs ~33% larger again
+
 export function Composer({ t }: { t: (k: string) => string }) {
   const agent = useAgent();
   const [text, setText] = useState("");
+  const [image, setImage] = useState<{ dataUrl: string; mimeType: string } | null>(null);
+  const [attachError, setAttachError] = useState("");
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const composing = useRef(false);
 
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the exact same file next time
+    if (!f) return;
+    setAttachError("");
+    if (!f.type.startsWith("image/")) { setAttachError(t("ag.attachBadType")); return; }
+    if (f.size > MAX_ATTACH_BYTES) { setAttachError(t("ag.attachTooBig")); return; }
+    const reader = new FileReader();
+    reader.onload = () => setImage({ dataUrl: String(reader.result || ""), mimeType: f.type });
+    reader.onerror = () => setAttachError(t("ag.attachTooBig"));
+    reader.readAsDataURL(f);
+  }
+
+  // Prefill + autosend are applied in ONE effect, off `draftPrompt` itself.
+  // They used to be two: the second one gated on `text.trim()`, but
+  // openWith() sets draftPrompt and autosendPending in the same render, so
+  // that effect read `text` from a closure where setText() hadn't landed yet
+  // ("" → never sent), and `[autosendPending]` alone never changed again to
+  // re-run it. Net effect: the Builder's own "Ask the agent" button prefilled
+  // the composer and then silently did nothing (found live). Reading the
+  // prompt straight off draftPrompt sidesteps the stale-state race entirely.
   useEffect(() => {
-    if (agent.draftPrompt) { setText(agent.draftPrompt); agent.setDraftPrompt(""); }
+    const p = agent.draftPrompt;
+    if (!p) return;
+    agent.setDraftPrompt("");
+    if (agent.autosendPending) {
+      agent.consumeAutosend();
+      if (p.trim()) { setText(""); agent.send(p); return; }
+    }
+    setText(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.draftPrompt]);
-
-  useEffect(() => {
-    if (agent.autosendPending && text.trim()) {
-      const t2 = text;
-      agent.consumeAutosend();
-      setText("");
-      agent.send(t2);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent.autosendPending]);
 
   const policy = agent.policy;
   const disabled = !policy || policy.level === "off";
 
   function submit() {
     const v = text.trim();
-    if (!v || agent.running) return;
+    if ((!v && !image) || agent.running) return;
     setText("");
-    agent.send(v);
+    const img = image;
+    setImage(null);
+    agent.send(v, img || undefined);
   }
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !composing.current) { e.preventDefault(); submit(); }
@@ -277,6 +308,13 @@ export function Composer({ t }: { t: (k: string) => string }) {
 
   return (
     <>
+      {image && (
+        <div className="ag-attach">
+          <img src={image.dataUrl} alt="" />
+          <button className="ag-attach-rm" onClick={() => setImage(null)} title={t("ag.attachRemove")} data-testid="agent-attach-remove"><Icon name="close" /></button>
+        </div>
+      )}
+      {attachError && <div className="ag-hint ag-err mono">{attachError}</div>}
       <div className="ag-comp">
         <textarea
           rows={1} value={text} placeholder={t("ag.placeholder")}
@@ -288,11 +326,13 @@ export function Composer({ t }: { t: (k: string) => string }) {
           data-testid="agent-composer"
         />
         <div className="ag-comp-row">
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickFile} data-testid="agent-attach-input" />
+          <button className="ag-attach-btn" onClick={() => fileRef.current?.click()} disabled={disabled || agent.running} title={t("ag.attachImage")} data-testid="agent-attach-button"><Icon name="img" /></button>
           <span className="sp" />
           <span className="ag-model mono">{policy?.model || "Claude"}</span>
           {agent.running
             ? <button className="ag-send" onClick={agent.abort} title={t("ag.stop")} data-testid="agent-stop"><Icon name="stop" /></button>
-            : <button className="ag-send" onClick={submit} disabled={!text.trim() || disabled} title={t("ag.send")} data-testid="agent-send"><Icon name="up" /></button>}
+            : <button className="ag-send" onClick={submit} disabled={(!text.trim() && !image) || disabled} title={t("ag.send")} data-testid="agent-send"><Icon name="up" /></button>}
         </div>
       </div>
       <div className="ag-hint mono"><span>{t("ag.hintSend")}</span><span>{t("ag.hintDraft")}</span></div>

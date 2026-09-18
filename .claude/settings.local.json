@@ -114,7 +114,12 @@
       "PowerShell(Get-NetTCPConnection -State Listen -LocalPort 3000,3001,55400 -ErrorAction SilentlyContinue)",
       "PowerShell(try { $r = Invoke-RestMethod \"http://localhost:3001/v1/catalog/search-platform?q=cement\" -TimeoutSec 20; \"results: \" + $r.results.Count; $r.results | Select-Object -First 4 name_en, merchant_name, price_satang } catch { \"ERR \" + $_.Exception.Message })",
       "PowerShell(foreach \\($q in 'serum','drill','vitamin'\\) { try { $r = Invoke-RestMethod \"http://localhost:3001/v1/catalog/search-platform?q=$q\" -TimeoutSec 20; \"$q -> $\\($r.results.Count\\): \" + \\(\\($r.results | Select-Object -First 3 | ForEach-Object { \"$\\($_.name_en\\) [$\\($_.merchant_name\\)]\" }\\) -join ', '\\) } catch { \"$q ERR \" + $_.Exception.Message } })",
-      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:55400/vela\" npm run db:migrate)"
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:55400/vela\" npm run db:migrate)",
+      "Bash(npm install *)",
+      "Bash(npm audit *)",
+      "Bash(npx tsc *)",
+      "Bash(npm test *)",
+      "Bash(curl -sf http://localhost:3000 -o /dev/null)"
     ]
   }
 }

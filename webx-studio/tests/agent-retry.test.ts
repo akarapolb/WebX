@@ -122,7 +122,11 @@ describe("model request retries in the loop", () => {
   });
 
   test("a wait that would not fit in the slice stops resumably instead of sleeping", async () => {
-    const chat = scriptedChat([{ throws: llmErr(429, "rate_limit", { retryAfterMs: 200_000 }) }]);
+    // Derived from the slice budget rather than a fixed 200s: this asserts
+    // "a wait longer than the slice stops instead of sleeping", so it has to
+    // keep exceeding whatever docked's own maxWallMs currently is.
+    const tooLongToWait = limitsFor("docked").maxWallMs * 2;
+    const chat = scriptedChat([{ throws: llmErr(429, "rate_limit", { retryAfterMs: tooLongToWait }) }]);
     const h = harness(chat, noTools());
     const start = h.clock.now();
     const r = await runSlice(newRun(), h.deps, limitsFor("docked"));

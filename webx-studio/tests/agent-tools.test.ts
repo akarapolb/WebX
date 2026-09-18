@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 
 import { levelAtLeast, type AgentRunContext, type AgentLevel } from "../lib/agent/types";
 import { availableTools, executeTool, extractBlockTranslatable, applyBlockTranslations } from "../lib/agent/tools";
+import { sanitizeContentHtml, htmlToParagraphs } from "../lib/agent/htmlText";
 import { auditEntry, THAI_ID_RE } from "../lib/agent/auditRules";
 import { systemPrompt, untrustedBlock } from "../lib/agent/prompts";
 import { clampAgentLevel, lockedTenantFields } from "../lib/cms/governance";
@@ -482,5 +483,154 @@ describe("page-building tools (lib/agent/tools.ts) — Phase 8 follow-up", () =>
     assert.ok(suggestNames.includes("insert_blocks"));
     assert.ok(suggestNames.includes("replace_block"));
     assert.ok(suggestNames.includes("remove_block"));
+  });
+});
+
+// set_block_style — added after a live test found no way for the agent to
+// change a section's color/tone without replace_block's destructive
+// rebuild-from-defaults (it would have silently dropped the block's other
+// real content). block.hero (gov-portal's own image-driven hero) has no
+// such option at all — these tests use royalsociety.page-hero, one of the
+// block types that already declares a real `variant`/`tone` field.
+const PAGE_TYPE = { uid: "api::page.page", name: "Page", attributes: { title: { type: "string" }, blocks: { type: "json" } } };
+describe("set_block_style (lib/agent/tools.ts)", () => {
+  test("changes only the variant field, preserving the block's other real content", async () => {
+    const fc = fakeCms([PAGE_TYPE], {
+      "api::page.page": [{ documentId: "1", blocks: [{ __component: "royalsociety.page-hero", heading: "Hello", eyebrow: "Welcome", variant: "" }] }],
+    });
+    const r = await executeTool(ctx({ level: "draft_submit", cms: fc.cms }), "set_block_style", JSON.stringify({ uid: "api::page.page", id: "1", index: 0, value: "deep" }));
+    assert.equal(r.ok, true);
+    const block = fc.rows("api::page.page")[0].blocks[0];
+    assert.equal(block.variant, "deep");
+    assert.equal(block.heading, "Hello");
+    assert.equal(block.eyebrow, "Welcome");
+  });
+  test("rejects a value outside the block type's own allowed list", async () => {
+    const fc = fakeCms([PAGE_TYPE], {
+      "api::page.page": [{ documentId: "1", blocks: [{ __component: "royalsociety.page-hero", heading: "Hi", variant: "" }] }],
+    });
+    const r = await executeTool(ctx({ level: "draft_submit", cms: fc.cms }), "set_block_style", JSON.stringify({ uid: "api::page.page", id: "1", index: 0, value: "purple" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /not a valid variant/);
+  });
+  test("rejects a block type that declares no variant/tone option at all", async () => {
+    const fc = fakeCms([PAGE_TYPE], {
+      "api::page.page": [{ documentId: "1", blocks: [{ __component: "block.hero", heading: "Hi" }] }],
+    });
+    const r = await executeTool(ctx({ level: "draft_submit", cms: fc.cms }), "set_block_style", JSON.stringify({ uid: "api::page.page", id: "1", index: 0, value: "green" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /has no style option/);
+  });
+  test("at \"suggest\" level, downgrades to a \"blocks\" proposal that still carries the block's real other fields", async () => {
+    const fc = fakeCms([PAGE_TYPE], {
+      "api::page.page": [{ documentId: "1", blocks: [{ __component: "royalsociety.page-hero", heading: "Hi", variant: "" }] }],
+    });
+    const r = await executeTool(ctx({ level: "suggest", cms: fc.cms }), "set_block_style", JSON.stringify({ uid: "api::page.page", id: "1", index: 0, value: "deep" }));
+    assert.equal(r.ok, true);
+    assert.equal(r.proposal!.kind, "blocks");
+    assert.equal(r.proposal!.replace, 0);
+    assert.equal(r.proposal!.blocks![0].variant, "deep");
+    assert.equal(r.proposal!.blocks![0].heading, "Hi");
+    // the underlying row is untouched at "suggest" — no write happened
+    assert.equal(fc.rows("api::page.page")[0].blocks[0].variant, "");
+  });
+});
+
+// set_block_background_image — the network-fetching happy path (resolving a
+// URL/og:image via urlImage.ts's real fetch + SSRF guard) is intentionally
+// left to a live/e2e check, same convention as this file's own header note
+// on real-network-round-trip tests being out of scope for this suite. These
+// cover the deterministic checks that happen BEFORE any network call.
+describe("set_block_background_image (lib/agent/tools.ts) — pre-fetch checks", () => {
+  test("rejects a block type with no image-backed background before fetching anything", async () => {
+    const fc = fakeCms([PAGE_TYPE], {
+      "api::page.page": [{ documentId: "1", blocks: [{ __component: "block.richtext", body: "<p>hi</p>" }] }],
+    });
+    const r = await executeTool(
+      ctx({ level: "draft_submit", cms: fc.cms }), "set_block_background_image",
+      JSON.stringify({ uid: "api::page.page", id: "1", index: 0, url: "https://example.com/pic.jpg" })
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /has no image-backed background/);
+  });
+  test("rejects an out-of-range index before fetching anything", async () => {
+    const fc = fakeCms([PAGE_TYPE], {
+      "api::page.page": [{ documentId: "1", blocks: [{ __component: "block.hero", heading: "Hi" }] }],
+    });
+    const r = await executeTool(
+      ctx({ level: "draft_submit", cms: fc.cms }), "set_block_background_image",
+      JSON.stringify({ uid: "api::page.page", id: "1", index: 5, url: "https://example.com/pic.jpg" })
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /No block at index/);
+  });
+});
+
+// import_wordpress_page / import_url_page — mode:"read" tools that only
+// fetch+extract content (the model composes create_draft_entry/insert_blocks
+// itself afterward, same as the create-page-then-add-section scenario) —
+// so there's no CMS write path to test here at all. Only the deterministic
+// validation that runs before any network call is unit-testable; the real
+// fetch (WP REST / arbitrary HTML + the SSRF guard) is a live/e2e check,
+// same convention as set_block_background_image's own tests above.
+describe("import_wordpress_page / import_url_page (lib/agent/tools.ts) — pre-fetch checks", () => {
+  test("import_wordpress_page rejects an invalid siteUrl before fetching anything", async () => {
+    const r = await executeTool(ctx({ level: "read" }), "import_wordpress_page", JSON.stringify({ siteUrl: "not a url", slug: "about" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /not a valid URL/);
+  });
+  test("import_wordpress_page rejects a non-http(s) siteUrl", async () => {
+    const r = await executeTool(ctx({ level: "read" }), "import_wordpress_page", JSON.stringify({ siteUrl: "ftp://example.com", slug: "about" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /Only http\(s\) URLs/);
+  });
+  test("import_wordpress_page rejects an empty slug", async () => {
+    const r = await executeTool(ctx({ level: "read" }), "import_wordpress_page", JSON.stringify({ siteUrl: "https://example.com/wp-json", slug: "  " }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /slug is required/);
+  });
+  test("import_url_page rejects an invalid url before fetching anything", async () => {
+    const r = await executeTool(ctx({ level: "read" }), "import_url_page", JSON.stringify({ url: "not a url" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /not a valid URL/);
+  });
+  test("import_url_page rejects a non-http(s) url", async () => {
+    const r = await executeTool(ctx({ level: "read" }), "import_url_page", JSON.stringify({ url: "javascript:alert(1)" }));
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /Only http\(s\) URLs/);
+  });
+  test("both import tools are offered at \"read\" level (pure fetches, no write)", () => {
+    const names = availableTools(ctx({ level: "read" })).map((t) => t.name);
+    assert.ok(names.includes("import_wordpress_page"));
+    assert.ok(names.includes("import_url_page"));
+  });
+});
+
+// htmlText.ts — the shared shaping both import tools depend on. Pure, no
+// network: this is what decides whether an import is usable by a gov-portal
+// tenant (bodyHtml) or a WordPress-dialect one (paragraphs), which is the
+// whole reason both shapes are returned at all.
+describe("htmlText (lib/agent/htmlText.ts) — the two shapes an import returns", () => {
+  test("sanitizeContentHtml strips scripts/attributes but keeps content tags", () => {
+    const out = sanitizeContentHtml('<p onclick="x()">Hi <b>there</b></p><script>alert(1)</script><p>Two</p>');
+    assert.match(out, /<p>Hi <b>there<\/b><\/p>/);
+    assert.ok(!out.includes("script"), "no script tag survives");
+    assert.ok(!out.includes("onclick"), "no event handler attribute survives");
+  });
+  test("sanitizeContentHtml caps an oversized body and still closes its tags", () => {
+    const huge = "<p>" + "ก".repeat(9000) + "</p>";
+    const out = sanitizeContentHtml(huge);
+    assert.ok(out.length < huge.length, "capped");
+    assert.ok(out.trimEnd().endsWith("</p>"), "truncated slice is re-closed, not left dangling");
+  });
+  test("htmlToParagraphs splits per block element, strips tags and decodes entities", () => {
+    const out = htmlToParagraphs("<h2>Title &amp; more</h2><p>First para</p><ul><li>Item one</li><li>Item two</li></ul>");
+    assert.deepEqual(out, ["Title & more", "First para", "Item one", "Item two"]);
+  });
+  test("htmlToParagraphs drops empties and caps a very long single paragraph", () => {
+    const out = htmlToParagraphs("<p>  </p><p>" + "x".repeat(900) + "</p>");
+    assert.equal(out.length, 1);
+    assert.ok(out[0].endsWith("…"), "over-long paragraph is elided, not dropped");
+    assert.ok(out[0].length <= 601);
   });
 });

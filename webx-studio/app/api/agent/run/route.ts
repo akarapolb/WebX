@@ -25,6 +25,11 @@ export const maxDuration = 600;
 
 const MAX_HISTORY_TURNS = 16;
 const MAX_CHECKPOINT_BYTES = 256 * 1024;
+// A data URL runs ~33% larger than its source file — matches
+// Composer's own MAX_ATTACH_BYTES (4MB) with room for that overhead, enforced
+// again here since the client-side cap is only a UX nicety, not a trust
+// boundary.
+const MAX_ATTACH_DATA_URL_CHARS = 6_000_000;
 
 type StoppedEvent = Extract<AgentEvent, { type: "stopped" }>;
 
@@ -53,9 +58,15 @@ function priorTextFrom(messages: any[]): ChatMsg[] {
     .map((m) => ({ role: m.role, content: m.content }));
 }
 
-function buildPersistMessages(userMessage: string, result: RunResult, resumable: boolean): any[] {
+function buildPersistMessages(userMessage: string, hasImage: boolean, result: RunResult, resumable: boolean): any[] {
   const out: any[] = [];
-  if (userMessage.trim()) out.push({ role: "user", content: userMessage });
+  // The raw data URL is NOT persisted here — messages.ts's MAX_MESSAGES
+  // trims by count, not bytes, and a handful of multi-MB images sitting in a
+  // thread row forever would bloat it unboundedly. The live run's own
+  // checkpoint (fitCheckpoint, checkpoint.ts) is what actually carries the
+  // image to the model for THIS run; reopening an old thread later shows
+  // that one was attached, not the picture itself.
+  if (userMessage.trim() || hasImage) out.push({ role: "user", content: userMessage, ...(hasImage ? { hadImage: true } : {}) });
   if (result.toolSteps.length) out.push({ role: "tools", steps: result.toolSteps });
   for (const p of result.proposals) out.push({ role: "proposal", proposal: p });
   if (result.plan) out.push({ role: "plan", items: result.plan });
@@ -83,7 +94,17 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({} as any));
   const resume = body.resume === true;
   const message = typeof body.message === "string" ? body.message.slice(0, 8000) : "";
-  if (!resume && !message.trim()) return Response.json({ error: "message is required" }, { status: 400 });
+  let image: { dataUrl: string; mimeType: string } | undefined;
+  if (body.image && typeof body.image.dataUrl === "string") {
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(body.image.dataUrl)) {
+      return Response.json({ error: "Attached image must be a data URL." }, { status: 400 });
+    }
+    if (body.image.dataUrl.length > MAX_ATTACH_DATA_URL_CHARS) {
+      return Response.json({ error: "Attached image is too large." }, { status: 400 });
+    }
+    image = { dataUrl: body.image.dataUrl, mimeType: typeof body.image.mimeType === "string" ? body.image.mimeType : "image/png" };
+  }
+  if (!resume && !message.trim() && !image) return Response.json({ error: "message is required" }, { status: 400 });
   const mode: "docked" | "workspace" = body.mode === "workspace" ? "workspace" : "docked";
   const lang: "en" | "th" = body.lang === "th" ? "th" : "en";
   const ref = normalizeRef(body.context);
@@ -95,7 +116,7 @@ export async function POST(req: NextRequest) {
   // The token-budget check runs regardless of resume/new-message, unlike the
   // run-count check above it: a workspace already over its monthly usage
   // shouldn't be able to burn more tokens by pressing Continue either.
-  if (message.trim()) {
+  if (message.trim() || image) {
     try {
       await checkAgentRunBudget(user);
     } catch (e) {
@@ -122,7 +143,7 @@ export async function POST(req: NextRequest) {
   }
   if (resume && !checkpoint) return Response.json({ error: "This run can no longer be continued." }, { status: 409 });
   if (!threadId) {
-    const created = await createAgentThread({ tenantKey: policy.tenantKey, title: message.slice(0, 60), context: ref as any });
+    const created = await createAgentThread({ tenantKey: policy.tenantKey, title: message.slice(0, 60) || (image ? "[image]" : ""), context: ref as any });
     threadId = String(created?.documentId ?? created?.id ?? "");
   }
   const priorText = priorTextFrom(existingMessages);
@@ -151,11 +172,11 @@ export async function POST(req: NextRequest) {
       };
       try {
         const result = await runAgent(
-          { user, policy, runId, threadId: finalThreadId, mode, lang, ref, priorText, message, resume: checkpoint, signal: abort.signal },
+          { user, policy, runId, threadId: finalThreadId, mode, lang, ref, priorText, message, image, resume: checkpoint, signal: abort.signal },
           emit
         );
         const saved = result.checkpoint ? fitCheckpoint(result.checkpoint, MAX_CHECKPOINT_BYTES, { stripReasoning: true }) : null;
-        const persisted = await appendMessages(finalThreadId, settledMessages, buildPersistMessages(message, result, Boolean(saved)), {
+        const persisted = await appendMessages(finalThreadId, settledMessages, buildPersistMessages(message, Boolean(image), result, Boolean(saved)), {
           runState: result.aborted ? "idle" : saved ? "paused" : "done",
           lastRunId: runId,
           usage: { promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens },

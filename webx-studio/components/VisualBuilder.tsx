@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Icon from "./Icon";
 import RichText from "./RichText";
 import InlineText from "./InlineText";
@@ -169,6 +169,7 @@ export default function VisualBuilder() {
   const agent = useAgentOptional();
   const { currentKey, current, engine } = useTenant();
   const searchParams = useSearchParams();
+  const router = useRouter();
   // Under a WordPress session BOTH Strapi uids are unreachable (the
   // WordPress adapter only knows its own wp: uids — resolvePostType throws)
   // — loadPages() below would swallow that error and the Builder would show
@@ -232,7 +233,14 @@ export default function VisualBuilder() {
   // primary way to place anything, and hiding it behind a toggle by default
   // would just recreate the discoverability problem of the old palette
   // buried at the bottom of the inspector's scroll.
-  const [tbOpen, setTbOpen] = useState(true);
+  // Closed by default: the palette costs 272px of a 3-column layout that the
+  // app's own sidebar has already taken ~250px out of, which left the canvas
+  // itself the NARROWEST column on a 1440px screen (it read as a phone-width
+  // preview even in desktop mode). Most sessions open the Builder to edit
+  // what's already on the page; adding a block is the less common path, and
+  // it's one click away on the toolbar toggle (plus the + affordances
+  // between blocks on the canvas).
+  const [tbOpen, setTbOpen] = useState(false);
   // Distraction-free mode: the builder takes over the whole viewport,
   // hiding the app shell's nav rail and topbar. CSS-fixed rather than the
   // native Fullscreen API on purpose — requestFullscreen() hides the
@@ -816,6 +824,21 @@ export default function VisualBuilder() {
   function confirmDiscardIfDirty(): boolean {
     return !isDirty || window.confirm(t("vb.unsavedwarn"));
   }
+  /** Switches which page-shaped content type this canvas edits. The two live
+   * in separate tables, so the current selection can't survive the switch —
+   * clearing it lets loadPages() (which only auto-opens when nothing is
+   * selected) open the new surface's first page. Until this existed the
+   * choice was reachable ONLY by hand-editing ?uid= in the URL, while the
+   * default landed on Landings — so an agent-created api::page.page entry
+   * looked missing even though it was right there in another surface. */
+  function switchSurface(next: string) {
+    if (next === uid || !confirmDiscardIfDirty()) return;
+    setSel(null);
+    selRef.current = null;
+    const qs = new URLSearchParams(searchParams.toString());
+    qs.set("uid", next);
+    router.push("?" + qs.toString());
+  }
   // Warn on tab close/refresh too — the in-app guards above don't cover that.
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) { if (isDirty) { e.preventDefault(); e.returnValue = ""; } }
@@ -863,10 +886,22 @@ export default function VisualBuilder() {
   // canvas holds unsaved edits (same contract as EntryEditor.tsx's own
   // registration; applyLocally can only ever narrow what the agent does,
   // never widen it).
+  // Registered even with nothing open ({kind:"none"} rather than null): the
+  // panel calls refresh() after any run that actually wrote something
+  // (AgentProvider's handleDone → done.applied), and a run whose only write
+  // was create_draft_entry produces a page this canvas has never heard of.
+  // Registering only when `sel` exists meant that case refreshed nothing at
+  // all, so an agent-created page stayed invisible here until a manual
+  // reload — reported live ("ขึ้นแค่ใน review ไม่ขึ้นใน visual builder").
+  // refresh() now reloads the page LIST too, not just the open page:
+  // loadPages() re-lists (sorted updatedAt:DESC, so a new page lands first)
+  // and auto-opens it when nothing is selected, while an open page is
+  // re-read in place so an agent edit shows without yanking the editor
+  // somewhere else.
   useAgentContext(
-    sel ? { kind: "page", uid, docId: sel.docId, locale: sel.locale, applyLocally: isDirty } : null,
-    { applyProposal: applyAgentProposal, refresh: () => { if (selRef.current) open(selRef.current); } },
-    [uid, sel?.docId, sel?.locale, isDirty]
+    sel ? { kind: "page", uid, docId: sel.docId, locale: sel.locale, applyLocally: isDirty } : { kind: "none" },
+    { applyProposal: applyAgentProposal, refresh: () => { loadPages(); if (selRef.current) open(selRef.current); } },
+    [uid, sel?.docId, sel?.locale, isDirty, loadPages]
   );
 
   async function save() {
@@ -1238,6 +1273,14 @@ export default function VisualBuilder() {
       <div className="vh">
         <div><h1>{t("nav.builder")}</h1>{!fullscreen && <p>{t("vb.sub")}</p>}</div>
         <div className="vh-act">
+          {/* Which page-shaped content type this canvas edits. Hidden for a
+              WordPress session, where wp:page is the only reachable one. */}
+          {!isWpPage && (
+            <div className="seg" title={t("vb.surface")}>
+              <button className={!isLanding ? "on" : ""} onClick={() => switchSurface(PAGE_UID)}>{t("vb.surfacePages")}</button>
+              <button className={isLanding ? "on" : ""} onClick={() => switchSurface(LANDING_UID)}>{t("vb.surfaceLandings")}</button>
+            </div>
+          )}
           {pages.length > 0 && (
             <select className="vb-sel" value={sel?.docId || ""} onChange={(e) => {
               const p = pages.find((x) => x.docId === e.target.value);
