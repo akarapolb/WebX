@@ -17,7 +17,7 @@ import careersData from "@/templates/orst/content/careers.json";
 // "structure" block's own items — a small, build-time-only duplication
 // (this route runs once per static export, not per request) traded for not
 // threading a shared cache between two independent mechanisms.
-import { getWpPage, getWpTimeline, getWpOrgUnits, getWpMembers, getJobs, getTenant, getNavItems } from "@/lib/cms";
+import { getWpPage, getWpTimeline, getWpOrgUnits, getWpMembers, getJobs, getTenant, getNavItems, listWpPageSlugs } from "@/lib/cms";
 import { resolveSources } from "@/lib/blockSource";
 import { pageMetadata } from "@/lib/seo";
 
@@ -49,8 +49,15 @@ function withFields(blocks: any[], blockId: string, fields: Record<string, any>)
   return blocks.map((b) => (b.id === blockId ? { ...b, ...fields } : b));
 }
 
-export function generateStaticParams() {
-  return Object.keys(BLOCK_PAGES).map((page) => ({ page }));
+// The hardcoded map below is the set of pages this route was originally
+// seeded with (each one bundling a content/*.json envelope). A page created
+// afterwards in the Visual Builder exists only in WordPress, so enumerating
+// just the map left it with no route at all — reported live as "created the
+// page but there's no URL for it". Union the two: bundled pages keep their
+// envelope, Builder-authored ones render straight from WordPress.
+export async function generateStaticParams() {
+  const authored = await listWpPageSlugs("orst");
+  return [...new Set([...Object.keys(BLOCK_PAGES), ...authored])].map((page) => ({ page }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ page: string }> }) {
@@ -70,8 +77,11 @@ export async function generateMetadata({ params }: { params: Promise<{ page: str
 export default async function Page({ params }: { params: Promise<{ page: string }> }) {
   const { page } = await params;
 
-  const data = BLOCK_PAGES[page];
-  if (!data) return notFound();
+  // Optional: a Builder-authored page has no bundled envelope at all (see
+  // generateStaticParams). Its layout comes entirely from WordPress, which
+  // is already this route's preferred source below — the envelope only ever
+  // supplied a fallback `blocks` and the nav highlight.
+  const data: { navKey: string; blocks: any[] } | undefined = BLOCK_PAGES[page];
 
   // The Visual Builder writes layout into WordPress (see wordpress/
   // mu-plugins/acf-fields.php's group_page_layout + lib/cms.ts's
@@ -86,7 +96,9 @@ export default async function Page({ params }: { params: Promise<{ page: string 
   if (!wpPage?.blocks?.length) {
     console.warn(`[orst/${page}] no WordPress-authored blocks — falling back to static content/${page}.json`);
   }
-  let blocks = wpPage?.blocks?.length ? wpPage.blocks : data.blocks;
+  // Neither source has anything to render: not a real page on this tenant.
+  if (!wpPage?.blocks?.length && !data) return notFound();
+  let blocks = wpPage?.blocks?.length ? wpPage.blocks : data!.blocks;
 
   // Every block whose id used to be hardcoded here (online-services, media,
   // journals, highlight, announcements, mission, structure, transparency,
@@ -154,7 +166,7 @@ export default async function Page({ params }: { params: Promise<{ page: string 
   return (
     <>
       <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
-      <Header active={data.navKey} navItems={navItems} />
+      <Header active={data?.navKey ?? page} navItems={navItems} />
       <main id="main-content">
         <div id="app-content">
           <Blocks blocks={blocks} />

@@ -445,6 +445,34 @@ export async function listPageSlugs(tenant: string): Promise<string[]> {
   return (rows || []).map((r) => r.slug).filter(Boolean);
 }
 
+/** Every published page slug this tenant owns in WordPress, with the
+ * "<tenant>-" prefix stripped so each one matches a route's own [page] param
+ * (getWpPage above puts that prefix back on). Exists so a page authored in
+ * the Visual Builder gets a real URL: the per-tenant routes used to
+ * enumerate a hardcoded map instead, which made any newly created page an
+ * orphan with no route at all. Failing soft (empty list) keeps a build
+ * working when WordPress is unreachable — the hardcoded pages still ship. */
+export async function listWpPageSlugs(tenant: string): Promise<string[]> {
+  try {
+    const termId = await wtenantId(tenant);
+    if (termId == null) return [];
+    const r = await fetch(
+      WORDPRESS + "/wp/v2/pages?wtenant=" + termId + "&status=publish&per_page=100&_fields=slug",
+      { headers: { Accept: "application/json" } }
+    );
+    if (!r.ok) return [];
+    const rows = (await r.json()) as any[];
+    const prefix = tenant + "-";
+    return (rows || [])
+      .map((p) => String(p?.slug || ""))
+      .filter((s) => s.startsWith(prefix))
+      .map((s) => s.slice(prefix.length))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 // block.collection-list's render-time fetch — a raw call against Strapi's
 // public REST API (same as every other per-collection call in this file),
 // NOT the admin content-manager adapter webx-studio uses: this needs real

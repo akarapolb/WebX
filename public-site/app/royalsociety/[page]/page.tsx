@@ -9,7 +9,7 @@ import publicationsData from "@/templates/royalsociety/content/publications.json
 import servicesData from "@/templates/royalsociety/content/services.json";
 import contactData from "@/templates/royalsociety/content/contact.json";
 import careersData from "@/templates/royalsociety/content/careers.json";
-import { getWpPage, getWpTimeline, getWpOrgUnits, getJobs, getTenant, getNavItems } from "@/lib/cms";
+import { getWpPage, getWpTimeline, getWpOrgUnits, getJobs, getTenant, getNavItems, listWpPageSlugs } from "@/lib/cms";
 import { resolveSources } from "@/lib/blockSource";
 import { pageMetadata } from "@/lib/seo";
 
@@ -35,8 +35,13 @@ function withFields(blocks: any[], blockId: string, fields: Record<string, any>)
   return blocks.map((b) => (b.id === blockId ? { ...b, ...fields } : b));
 }
 
-export function generateStaticParams() {
-  return Object.keys(BLOCK_PAGES).map((page) => ({ page }));
+// Union of the pages this route was seeded with (each bundling a
+// content/*.json envelope) and whatever else exists in WordPress for this
+// tenant — without the second half, a page created in the Visual Builder has
+// no route at all. Same reasoning as the ORST route's own copy.
+export async function generateStaticParams() {
+  const authored = await listWpPageSlugs("royalsociety");
+  return [...new Set([...Object.keys(BLOCK_PAGES), ...authored])].map((page) => ({ page }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ page: string }> }) {
@@ -53,8 +58,11 @@ export async function generateMetadata({ params }: { params: Promise<{ page: str
 
 export default async function Page({ params }: { params: Promise<{ page: string }> }) {
   const { page } = await params;
-  const data = BLOCK_PAGES[page];
-  if (!data) return notFound();
+  // Optional: a Builder-authored page has no bundled envelope (see
+  // generateStaticParams). Its layout comes from WordPress, already this
+  // route's preferred source below — the envelope only ever supplied a
+  // fallback `blocks` and the nav highlight.
+  const data: { navKey: string; blocks: any[] } | undefined = BLOCK_PAGES[page];
 
   // Prefer WordPress-authored blocks (the Visual Builder's own write path)
   // over the static content/*.json this page was seeded from — see
@@ -65,7 +73,9 @@ export default async function Page({ params }: { params: Promise<{ page: string 
   if (!wpPage?.blocks?.length) {
     console.warn(`[royalsociety/${page}] no WordPress-authored blocks — falling back to static content/${page}.json`);
   }
-  let blocks = wpPage?.blocks?.length ? wpPage.blocks : data.blocks;
+  // Neither source has anything to render: not a real page on this tenant.
+  if (!wpPage?.blocks?.length && !data) return notFound();
+  let blocks = wpPage?.blocks?.length ? wpPage.blocks : data!.blocks;
 
   // Every block whose id used to be hardcoded here (databases, articles,
   // activities, publications, services, faq, timeline, mission, structure)
@@ -129,7 +139,7 @@ export default async function Page({ params }: { params: Promise<{ page: string 
 
   return (
     <>
-      <Header active={data.navKey} navItems={navItems} />
+      <Header active={data?.navKey ?? page} navItems={navItems} />
       <main id="main-content">
         <div id="app-content">
           <Blocks blocks={blocks} />
