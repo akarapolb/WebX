@@ -541,6 +541,7 @@ export const DICT: Record<string, Entry> = {
   "vb.noblocks": { en: "No blocks yet — add one below.", th: "ยังไม่มีบล็อก — เพิ่มด้านล่าง" },
   "vb.loading": { en: "Loading…", th: "กำลังโหลด…" },
   "vb.blocks": { en: "Blocks", th: "บล็อก" },
+  "vb.addbelow": { en: "Add a block below", th: "เพิ่มบล็อกถัดจากนี้" },
   "vb.surface": { en: "Which pages to edit", th: "เลือกชุดหน้าที่จะแก้ไข" },
   "vb.surfacePages": { en: "Pages", th: "หน้าเว็บ" },
   "vb.surfaceLandings": { en: "Landings", th: "แลนดิ้ง" },

@@ -219,6 +219,13 @@ export default function VisualBuilder() {
   const [device, setDevice] = useState<Device>("desktop");
   const [dragI, setDragI] = useState<number>(-1);
   const [insAt, setInsAt] = useState<number>(-1);
+  // The inspector list's own insert picker, kept separate from the canvas's
+  // `insAt` so the two can never open at once. It's the ONLY way to place a
+  // block at a chosen position for a tenant whose canvas is the read-only
+  // cross-origin harness iframe (orst/royalsociety) — there the canvas has
+  // no insert affordance at all, so before this the list could reorder,
+  // duplicate and delete but never add.
+  const [sideInsAt, setSideInsAt] = useState<number>(-1);
   const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType; template?: PageTemplate } | null>(null);
   const [dropAt, setDropAt] = useState<number>(-1);
   const [dragBlock, setDragBlock] = useState<number>(-1);
@@ -1382,6 +1389,8 @@ export default function VisualBuilder() {
                     <button aria-label={t("a11y.moveup")} title={t("a11y.moveup")} onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
                     <button aria-label={t("a11y.movedown")} title={t("a11y.movedown")} onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
                     <button aria-label={t("a11y.duplicate")} title={t("a11y.duplicate")} onClick={() => dup(i)}>⧉</button>
+                    <button aria-label={t("vb.addbelow")} title={t("vb.addbelow")} className={sideInsAt === i + 1 ? "on" : ""}
+                      onClick={() => setSideInsAt(sideInsAt === i + 1 ? -1 : i + 1)}><Icon name="plus" /></button>
                     <button aria-label={t("a11y.delete")} title={t("a11y.delete")} className="rm" onClick={() => remove(i)}><Icon name="trash" /></button>
                   </div>
                 </div>
@@ -1909,6 +1918,16 @@ export default function VisualBuilder() {
                         </>
                       );
                     })()}
+                  </div>
+                )}
+                {sideInsAt === i + 1 && (
+                  <div className="vb-block-ins">
+                    <Toolbox compact t={t} dialect={template}
+                      types={paletteTypes as any} categories={BLOCK_CATEGORIES} customTypes={customTypes} templates={templates}
+                      onAdd={(comp) => { addAt(i + 1, comp); setSideInsAt(-1); }}
+                      onAddCustom={(ct) => { addCustomAt(i + 1, ct); setSideInsAt(-1); }}
+                      onApplyTemplate={(tpl) => { addTemplateAt(i + 1, tpl); setSideInsAt(-1); }}
+                      onDragNew={setDragNew} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} />
                   </div>
                 )}
               </div>

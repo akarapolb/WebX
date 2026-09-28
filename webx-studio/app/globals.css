@@ -334,6 +334,11 @@ svg{display:block;width:18px;height:18px;flex:none}
 .vb-block-a button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
 .vb-block-a button:disabled{opacity:.3}
 .vb-block-a .rm:hover{border-color:var(--bad);color:var(--bad)}
+.vb-block-a button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* The inspector's own insert picker (VisualBuilder's sideInsAt) — the only
+   way to place a block at a chosen position when the canvas is the
+   read-only harness iframe. */
+.vb-block-ins{border-top:1px solid var(--line);padding:10px;background:var(--sunk)}
 .vb-block-a svg{width:13px;height:13px}
 .vb-block-b{padding:11px;border-top:1px solid var(--line);background:var(--bg2)}
 .vb-add{margin-top:12px;padding:12px;border:1px dashed var(--line2);border-radius:11px}
