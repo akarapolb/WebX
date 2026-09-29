@@ -113,6 +113,26 @@ function clearLive(root: ParentNode) {
 }
 
 export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ blocks: any[]; indexOffset?: number }> }) {
+  // Opt this route out of the scroll-reveal animation entirely.
+  //
+  // app/layout.tsx adds `js-reveal` to <html> before paint, which is what
+  // makes base.css hide every `.reveal` until ScrollReveal's
+  // IntersectionObserver marks it `.is-visible`. That observer runs once on
+  // mount and unobserves as it goes — correct for a static page, wrong here:
+  // this harness re-renders its blocks on every message from the Builder, so
+  // each new `.reveal` element is one nothing is watching and it stays at
+  // opacity:0 forever. Reported as a card grid showing up in the Builder as
+  // an empty white box (its whole item grid carries the class), but it hit
+  // section headings and most of RoyalSociety's blocks the same way.
+  //
+  // Dropping the class is the whole fix: base.css renders `.reveal` at
+  // opacity:1 by default and only the `html.js-reveal` variant hides it, so
+  // without it content is simply always visible — which is what an editing
+  // surface wants anyway. Only this iframe is affected; the real pages keep
+  // their animation.
+  useEffect(() => {
+    document.documentElement.classList.remove("js-reveal");
+  }, []);
   const [blocks, setBlocks] = useState<any[]>([]);
   const [active, setActive] = useState(-1);
   const [labels, setLabels] = useState<string[]>([]);
