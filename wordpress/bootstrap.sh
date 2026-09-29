@@ -57,6 +57,86 @@ echo "[wp-bootstrap] setting pretty permalinks..."
 $WP rewrite structure '/%postname%/'
 $WP rewrite flush
 
+# ---- per-tenant sign-in accounts -------------------------------------------
+# Every WordPress-engine tenant (ORST, RoyalSociety) needs a real WordPress
+# account to sign into WebX Studio with, and `core install` above only makes
+# the scheduler/admin one. Until this block those accounts were created by
+# hand in wp-admin, so they lived only in the wp-db-data volume: a fresh
+# clone, a new machine or a `compose down -v` left the tenant unable to log
+# in at all, with nothing in the repo saying the account had ever existed.
+#
+# Declared in .env, so the set of accounts is reproducible:
+#   WORDPRESS_TENANT_USERS="orst royalsociety"      (space or comma separated)
+#   WORDPRESS_ORST_USERNAME / _EMAIL / _PASSWORD / _APP_PASSWORD / _ROLE
+# The key is upper-cased into the variable name, so a tenant key of "orst"
+# reads WORDPRESS_ORST_*. Nothing happens when the list is empty.
+#
+# Idempotent: an existing account is left exactly as it is, password
+# included, so this can't silently undo a change made in wp-admin.
+for tenant_key in $(echo "${WORDPRESS_TENANT_USERS:-}" | tr ',' ' '); do
+  VK=$(echo "$tenant_key" | tr '[:lower:]-' '[:upper:]_')
+  eval "wp_login=\${WORDPRESS_${VK}_USERNAME:-}"
+  eval "wp_email=\${WORDPRESS_${VK}_EMAIL:-}"
+  eval "wp_pass=\${WORDPRESS_${VK}_PASSWORD:-}"
+  eval "wp_app=\${WORDPRESS_${VK}_APP_PASSWORD:-}"
+  # Matches the account this was first set up with by hand. Tenant isolation
+  # is enforced by WebX's own governance and the custom-role mu-plugin, not
+  # by the WordPress role, so narrowing this is a separate decision — it is
+  # overridable per tenant rather than changed here.
+  eval "wp_role=\${WORDPRESS_${VK}_ROLE:-administrator}"
+
+  if [ -z "$wp_login" ]; then
+    echo "[wp-bootstrap] $tenant_key: no WORDPRESS_${VK}_USERNAME set — skipping."
+    continue
+  fi
+
+  if $WP user get "$wp_login" --field=ID >/dev/null 2>&1; then
+    echo "[wp-bootstrap] $tenant_key: user '$wp_login' already exists — leaving it alone."
+  else
+    echo "[wp-bootstrap] $tenant_key: creating user '$wp_login'..."
+    $WP user create "$wp_login" "${wp_email:-$wp_login@${tenant_key}.local}" \
+      --role="$wp_role" \
+      ${wp_pass:+--user_pass="$wp_pass"} \
+      --display_name="$wp_login" >/dev/null
+  fi
+
+  # The application password is what WebX Studio actually authenticates
+  # with — wordpressLogin() sends it as HTTP Basic against /wp-json, which
+  # core accepts ONLY as an application password, never the normal one.
+  # Values are passed through the environment rather than interpolated into
+  # the PHP below, so a password containing quotes can't break the snippet.
+  WEBX_LOGIN="$wp_login" WEBX_APPPASS="${wp_app:-}" WEBX_APPNAME="WebX Studio" $WP eval '
+    $u = get_user_by("login", getenv("WEBX_LOGIN"));
+    if (!$u) { fwrite(STDERR, "user missing\n"); exit(1); }
+    $name = getenv("WEBX_APPNAME");
+    if (WP_Application_Passwords::application_name_exists_for_user($u->ID, $name)) { echo "keep\n"; exit(0); }
+    list($pw, $item) = WP_Application_Passwords::create_new_application_password($u->ID, array("name" => $name));
+    $chosen = getenv("WEBX_APPPASS");
+    if ($chosen === false || $chosen === "") { echo "new:" . $pw . "\n"; exit(0); }
+    // WordPress strips every non-alphanumeric character from a submitted
+    // application password before checking it (wp-includes/user.php
+    // wp_authenticate_application_password), because the ones it generates
+    // are displayed in space-separated groups. The stored hash therefore has
+    // to be of the STRIPPED form, or a chosen value containing punctuation
+    // would hash fine here and never authenticate.
+    $stripped = preg_replace("/[^a-z\d]/i", "", $chosen);
+    if ($stripped === "") { fwrite(STDERR, "app password has no alphanumeric characters\n"); exit(1); }
+    $items = WP_Application_Passwords::get_user_application_passwords($u->ID);
+    foreach ($items as $i => $it) {
+      if ($it["uuid"] === $item["uuid"]) { $items[$i]["password"] = WP_Application_Passwords::hash_password($stripped); }
+    }
+    update_user_meta($u->ID, WP_Application_Passwords::USERMETA_KEY_APPLICATION_PASSWORDS, $items);
+    echo "env\n";
+  ' | while read -r result; do
+    case "$result" in
+      keep) echo "[wp-bootstrap] $tenant_key: application password already present — leaving it alone." ;;
+      env)  echo "[wp-bootstrap] $tenant_key: application password installed from WORDPRESS_${VK}_APP_PASSWORD." ;;
+      new:*) echo "[wp-bootstrap] $tenant_key: GENERATED application password: ${result#new:}"
+             echo "[wp-bootstrap] $tenant_key: set WORDPRESS_${VK}_APP_PASSWORD in .env to keep it across a rebuilt volume." ;;
+    esac
+  done
+done
+
 echo "[wp-bootstrap] done. Next manual step (WordPress can't do this non-interactively):"
 echo "[wp-bootstrap]   log into ${WP_SITE_URL}/wp-admin as ${WORDPRESS_SCHEDULER_USERNAME}, then"
 echo "[wp-bootstrap]   Users -> Profile -> Application Passwords -> create one, and set it as"

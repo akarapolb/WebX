@@ -382,6 +382,22 @@ services:
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?set WORDPRESS_DB_PASSWORD}
+      # Per-tenant sign-in accounts, seeded idempotently by bootstrap.sh —
+      # see its own comment. Without these the accounts exist only in the
+      # wp-db-data volume, so a fresh clone or a `compose down -v` leaves
+      # each WordPress-engine tenant with no way to sign into WebX Studio.
+      # Empty list = nothing is created, which is the pre-existing behaviour.
+      WORDPRESS_TENANT_USERS: ${WORDPRESS_TENANT_USERS:-}
+      WORDPRESS_ORST_USERNAME: ${WORDPRESS_ORST_USERNAME:-}
+      WORDPRESS_ORST_EMAIL: ${WORDPRESS_ORST_EMAIL:-}
+      WORDPRESS_ORST_PASSWORD: ${WORDPRESS_ORST_PASSWORD:-}
+      WORDPRESS_ORST_APP_PASSWORD: ${WORDPRESS_ORST_APP_PASSWORD:-}
+      WORDPRESS_ORST_ROLE: ${WORDPRESS_ORST_ROLE:-}
+      WORDPRESS_ROYALSOCIETY_USERNAME: ${WORDPRESS_ROYALSOCIETY_USERNAME:-}
+      WORDPRESS_ROYALSOCIETY_EMAIL: ${WORDPRESS_ROYALSOCIETY_EMAIL:-}
+      WORDPRESS_ROYALSOCIETY_PASSWORD: ${WORDPRESS_ROYALSOCIETY_PASSWORD:-}
+      WORDPRESS_ROYALSOCIETY_APP_PASSWORD: ${WORDPRESS_ROYALSOCIETY_APP_PASSWORD:-}
+      WORDPRESS_ROYALSOCIETY_ROLE: ${WORDPRESS_ROYALSOCIETY_ROLE:-}
     entrypoint: ["sh", "-c", "sh /bootstrap.sh; tail -f /dev/null"]
 
   # WordPress's own daily database + content backup — TOR gap audit finding:
