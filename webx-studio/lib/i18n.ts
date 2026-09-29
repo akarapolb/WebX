@@ -507,6 +507,33 @@ export const DICT: Record<string, Entry> = {
   "vb.orst.servicehub": { en: "Service hub", th: "ศูนย์บริการ" },
   "vb.orst.logomarquee": { en: "Logo marquee", th: "แถบโลโก้เลื่อน" },
   "vb.orst.flexpanel": { en: "Flexible panel (no-code)", th: "แผงเนื้อหาปรับได้ (ไม่ต้องเขียนโค้ด)" },
+  // Server-bound types (ORST + RoyalSociety share these names) — see
+  // blockCatalog.ts's noPalette.
+  "vb.orst.poll": { en: "Poll", th: "แบบสำรวจความคิดเห็น" },
+  "vb.orst.eventcalendar": { en: "Event calendar", th: "ปฏิทินกิจกรรม" },
+  "vb.orst.memberdirectory": { en: "Member directory", th: "ทำเนียบสมาชิก" },
+  "vb.orst.joblisting": { en: "Job listings", th: "ประกาศรับสมัครงาน" },
+  // Block components editor (components/builder/BlockComponents.tsx).
+  "vb.comp.add": { en: "Add component", th: "เพิ่ม component" },
+  "vb.comp.layout.hint": { en: "Drag or resize components on the preview · {d}", th: "ลากหรือปรับขนาด component บนพรีวิวได้ · {d}" },
+  "vb.comp.layout.moved": { en: "{n} component(s) moved on {d}", th: "ย้าย/ปรับขนาดแล้ว {n} ชิ้น บน {d}" },
+  "vb.comp.layout.resetall": { en: "Reset", th: "รีเซ็ต" },
+  "vb.comp.layout.reset": { en: "Reset position & size on this device", th: "รีเซ็ตตำแหน่งและขนาดบน device นี้" },
+  "vb.comp.layout.movedone": { en: "moved", th: "ย้ายแล้ว" },
+  "vb.comp.g.fields": { en: "Fields", th: "ฟิลด์" },
+  "vb.comp.g.objects": { en: "Groups", th: "กลุ่มฟิลด์" },
+  "vb.comp.g.lists": { en: "Lists", th: "ลิสต์" },
+  "vb.comp.k.text": { en: "Text", th: "ข้อความ" },
+  "vb.comp.k.long": { en: "Paragraph", th: "ย่อหน้า" },
+  "vb.comp.k.select": { en: "Option", th: "ตัวเลือก" },
+  "vb.comp.k.icon": { en: "Icon", th: "ไอคอน" },
+  "vb.comp.k.object": { en: "Group", th: "กลุ่ม" },
+  "vb.comp.k.list": { en: "List", th: "ลิสต์" },
+  "vb.comp.remove": { en: "Remove from block", th: "เอาออกจากบล็อก" },
+  "vb.comp.additem": { en: "Add", th: "เพิ่ม" },
+  "vb.comp.empty": { en: "No items yet", th: "ยังไม่มีรายการ" },
+  "vb.comp.none": { en: "This block has no components — add one below.", th: "บล็อกนี้ยังไม่มี component — เพิ่มได้จากด้านล่าง" },
+  "vb.comp.nocols": { en: "Add columns first", th: "เพิ่ม columns ก่อน" },
   // RoyalSociety's own 22 block types (public-site/templates/royalsociety/
   // Blocks.tsx) — see ROYALSOCIETY_TYPES in VisualBuilder.tsx. Same
   // no-i18n-for-field-labels convention as vb.orst.* above.

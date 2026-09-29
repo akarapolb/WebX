@@ -106,48 +106,67 @@ export const TYPES = [
 // site with no permission gate (see governance.ts's hasEmbedBlock, which
 // this palette avoids needing to extend by simply never offering the
 // field). Only the safe, escaped `paragraphs` list is editable.
+// Pieces ORST's shared Section wrapper (Blocks.tsx's Section/SectionHead)
+// reads on every block that goes through it: `variant: "alt"` (tinted
+// background) and a top-right "view all" link (`action: {label, href}`,
+// rendered only when href is set).
+const ORST_SEC = [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "variant", select: ["", "alt"] }];
+const ORST_ACTION = { key: "action", fields: [{ k: "label" }, { k: "href" }] };
+const ACTIONS = { key: "actions", fields: [{ k: "label" }, { k: "href" }, { k: "variant", select: ["", "ghost"] }], def: { label: "ปุ่ม", href: "#" } };
+const uid = (p: string) => p + "-" + Math.random().toString(36).slice(2, 8);
 export const ORST_TYPES = [
   { comp: "orst.page-hero", key: "vb.orst.pagehero", icon: "layout", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
-    items: { key: "actions", fields: [{ k: "label" }, { k: "href" }, { k: "variant", select: ["", "ghost"] }], def: { label: "", href: "#" } },
+    fields: [{ k: "eyebrow" }, { k: "heading", keep: true }, { k: "lead", ta: true }],
+    items: ACTIONS,
+    lists: [{ key: "breadcrumb", fields: [{ k: "label" }, { k: "href" }], def: { label: "หน้าแรก", href: "/" } }],
     def: { heading: "หัวข้อหน้า", lead: "", actions: [] } },
   { comp: "orst.rich-text", key: "vb.orst.richtext", icon: "doc", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "width", select: ["", "full"] }],
+    fields: [...ORST_SEC, { k: "width", select: ["", "full"] }],
+    objects: [ORST_ACTION],
     items: { key: "paragraphs", scalar: true, def: "" },
     def: { heading: "", paragraphs: ["เขียนเนื้อหาที่นี่"] } },
   { comp: "orst.card-grid", key: "vb.orst.cardgrid", icon: "card", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "columns", select: ["1", "2", "3", "4"] }],
+    fields: [...ORST_SEC, { k: "columns", select: ["1", "2", "3", "4"] }],
+    objects: [ORST_ACTION],
     items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }, { k: "meta" }, { k: "tag" }, { k: "href" }],
       def: { icon: "i-file", title: "หัวข้อ", body: "", href: "#" } },
     def: { heading: "", columns: "3", items: [] } },
   { comp: "orst.feature-list", key: "vb.orst.featurelist", icon: "grid", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "columns", select: ["1", "2", "3", "4"] }],
+    fields: [...ORST_SEC, { k: "columns", select: ["1", "2", "3", "4"] }],
+    objects: [ORST_ACTION],
     items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }], def: { icon: "i-shield", title: "หัวข้อ", body: "" } },
     def: { heading: "", columns: "3", items: [] } },
   { comp: "orst.stat-row", key: "vb.orst.statrow", icon: "grid", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    fields: ORST_SEC,
+    objects: [ORST_ACTION],
     items: { key: "items", fields: [{ k: "value" }, { k: "label" }, { k: "note" }], def: { value: "0", label: "ป้ายกำกับ" } },
     def: { heading: "", items: [] } },
   { comp: "orst.link-list", key: "vb.orst.linklist", icon: "doc", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    fields: ORST_SEC,
+    objects: [ORST_ACTION],
     items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "desc", ta: true }, { k: "tag" }, { k: "meta" }, { k: "href" }],
       def: { icon: "i-file", title: "หัวข้อ", href: "#" } },
     def: { heading: "", items: [] } },
   { comp: "orst.media-grid", key: "vb.orst.mediagrid", icon: "img", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "columns", select: ["1", "2", "3", "4"] }],
+    fields: [...ORST_SEC, { k: "columns", select: ["1", "2", "3", "4"] }],
+    objects: [ORST_ACTION],
     items: { key: "items", fields: [{ k: "image" }, { k: "alt" }, { k: "title" }, { k: "desc", ta: true }, { k: "tag" }, { k: "href" }],
       def: { image: "", title: "หัวข้อ" } },
     def: { heading: "", columns: "3", items: [] } },
   { comp: "orst.steps", key: "vb.orst.steps", icon: "layout", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    fields: ORST_SEC,
+    objects: [ORST_ACTION],
     items: { key: "items", fields: [{ k: "title" }, { k: "body", ta: true }], def: { title: "ขั้นตอน", body: "" } },
     def: { heading: "", items: [] } },
   { comp: "orst.two-column", key: "vb.orst.twocolumn", icon: "layout", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "subheading" }, { k: "image" }, { k: "imageAlt" }, { k: "imageSide", select: ["", "left"] }],
+    fields: [...ORST_SEC, { k: "subheading" }, { k: "image", keep: true }, { k: "imageAlt" }, { k: "imageSide", select: ["", "left"] }],
+    objects: [ORST_ACTION],
     items: { key: "paragraphs", scalar: true, def: "" },
+    lists: [ACTIONS],
     def: { heading: "", subheading: "", image: "", paragraphs: [] } },
   { comp: "orst.contact-info", key: "vb.orst.contactinfo", icon: "msg", cat: "orst", tpl: "orst",
-    fields: [{ k: "address", ta: true }, { k: "phone" }, { k: "email" }, { k: "hours" }, { k: "mapEmbed" }],
+    fields: [...ORST_SEC, { k: "address", ta: true }, { k: "phone" }, { k: "email" }, { k: "hours" }, { k: "mapEmbed" }],
+    objects: [ORST_ACTION],
     def: { address: "", phone: "", email: "", hours: "" } },
   // Ported from ContactPage.tsx during its full decomposition into blocks
   // (see app/orst/[page]/page.tsx) — a hero with an attached info-card,
@@ -176,28 +195,41 @@ export const ORST_TYPES = [
   // Ported from HomePage.tsx during its full decomposition. A third,
   // distinct hero style (see Blocks.tsx's HomeHero comment) — no
   // breadcrumb/actions, no info card.
+  // `image` falls back to a built-in hero picture when absent (Blocks.tsx's
+  // HomeHero), so it can be replaced but not removed.
   { comp: "orst.home-hero", key: "vb.orst.homehero", icon: "layout", cat: "orst", tpl: "orst",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    fields: [{ k: "eyebrow" }, { k: "heading", keep: true }, { k: "lead", ta: true }, { k: "image", keep: true }, { k: "imageAlt" }],
+    items: ACTIONS,
     def: { heading: "หัวข้อหน้าแรก", lead: "" } },
-  // media-tabs/news-tabs/service-hub/logo-marquee: only top-level framing
-  // is exposed here — the tabs/items arrays are genuinely nested (tabs
-  // containing items, or featured+side groups) in a shape the generic
-  // single-list items editor can't represent, same scope line as the table
-  // block's columns/rows. Edit the tabs/items content via the Content
-  // screen (raw JSON) for now; a nested-items editor is a natural follow-up
-  // if this turns out to need frequent hands-on editing.
+  // media-tabs/news-tabs: genuinely nested (tabs containing items, or a
+  // featured object + side list per tab) — edited through ListDesc's own
+  // nested `lists`/`objects`. A tab's `id` drives the renderer's DOM ids and
+  // tab state, so new tabs get a unique one generated rather than a blank.
   { comp: "orst.media-tabs", key: "vb.orst.mediatabs", icon: "grid", cat: "orst", tpl: "orst",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    lists: [{ key: "tabs", fields: [{ k: "label" }, { k: "kind", select: ["pub", "media"] }],
+      def: () => ({ id: uid("tab"), label: "แท็บใหม่", kind: "pub", items: [] }),
+      lists: [{ key: "items", fields: [{ k: "image" }, { k: "tag" }, { k: "title" }, { k: "caption", ta: true }], def: { image: "", title: "หัวข้อ", caption: "" } }] }],
     def: { heading: "คลังสื่อและองค์ความรู้", tabs: [] } },
   { comp: "orst.news-tabs", key: "vb.orst.newstabs", icon: "doc", cat: "orst", tpl: "orst",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    lists: [{ key: "tabs", fields: [{ k: "label" }],
+      def: () => ({ id: uid("tab"), label: "แท็บใหม่", featured: { title: "หัวข้อข่าว" }, side: [] }),
+      objects: [{ key: "featured", fields: [{ k: "image" }, { k: "badge" }, { k: "date" }, { k: "category" }, { k: "title" }, { k: "body", ta: true }, { k: "ctaLabel" }] }],
+      lists: [{ key: "side", fields: [{ k: "image" }, { k: "type" }, { k: "title" }, { k: "body", ta: true }], def: { title: "หัวข้อข่าว" } }] }],
     def: { heading: "ข่าวสารและกิจกรรม", tabs: [] } },
+  // Two lists: the intro panel's numbered `steps` (numbers are automatic)
+  // and the service `items` cards.
   { comp: "orst.service-hub", key: "vb.orst.servicehub", icon: "inbox", cat: "orst", tpl: "orst",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" },
       { k: "introLabel" }, { k: "introHeading" }, { k: "introLead", ta: true }],
+    items: { key: "items", fields: [{ k: "badge" }, { k: "time" }, { k: "title" }, { k: "body", ta: true }, { k: "buttonLabel" }, { k: "href" }],
+      def: { title: "บริการใหม่", body: "", buttonLabel: "ใช้บริการ" } },
+    lists: [{ key: "steps", fields: [{ k: "label" }], def: { label: "ขั้นตอน" } }],
     def: { heading: "บริการประชาชนดิจิทัล", steps: [], items: [] } },
   { comp: "orst.logo-marquee", key: "vb.orst.logomarquee", icon: "grid", cat: "orst", tpl: "orst",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    items: { key: "items", fields: [{ k: "name" }, { k: "image" }, { k: "href" }], def: { name: "หน่วยงาน", href: "#" } },
     def: { heading: "หน่วยงานและระบบที่เกี่ยวข้อง", items: [] } },
   // The one no-code "compose a new block" escape hatch for this template —
   // see Blocks.tsx's FlexPanel for the full rationale. `layout` picks which
@@ -209,11 +241,28 @@ export const ORST_TYPES = [
     // FlexPanel), and "banner" is the one layout that never reads `items` —
     // hiding both elsewhere keeps the sidebar from showing controls that
     // silently do nothing for whichever layout is currently selected.
-    fields: [{ k: "layout", select: ["cards", "banner", "list", "cta", "stats", "feature"] }, { k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true },
+    // "cta" is the one layout that skips Section, so it reads neither
+    // eyebrow nor variant/action.
+    fields: [{ k: "layout", select: ["cards", "banner", "list", "cta", "stats", "feature"] },
+      { k: "eyebrow", when: (b: any) => b.layout !== "cta" }, { k: "heading" }, { k: "lead", ta: true },
+      { k: "variant", select: ["", "alt"], when: (b: any) => b.layout !== "cta" },
       { k: "tone", select: ["info", "warn", "success"], when: (b: any) => b.layout === "banner" }],
-    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "หัวข้อ" },
-      when: (b: any) => b.layout !== "banner" },
+    objects: [{ ...ORST_ACTION, when: (b: any) => b.layout !== "cta" }],
+    items: { key: "items", fields: [{ k: "icon", icon: true, when: (b: any) => !["cta", "stats"].includes(b.layout) }, { k: "title" },
+      { k: "body", ta: true, when: (b: any) => !["cta", "feature"].includes(b.layout) }, { k: "href", when: (b: any) => !["stats", "feature"].includes(b.layout) }],
+      def: { title: "หัวข้อ" }, when: (b: any) => b.layout !== "banner" },
     def: { layout: "cards", heading: "", items: [] } },
+  // Server-bound types — their content comes from a live WordPress feed
+  // (`source`) or a WordPress poll post, so only the framing is editable
+  // here and they're kept out of the palette (see noPalette).
+  { comp: "orst.poll", key: "vb.orst.poll", icon: "msg", cat: "orst", tpl: "orst", noPalette: true,
+    fields: [{ k: "heading" }, { k: "pollId", keep: true }], def: {} },
+  { comp: "orst.event-calendar", key: "vb.orst.eventcalendar", icon: "doc", cat: "orst", tpl: "orst", noPalette: true,
+    fields: ORST_SEC, objects: [ORST_ACTION], def: {} },
+  { comp: "orst.member-directory", key: "vb.orst.memberdirectory", icon: "users", cat: "orst", tpl: "orst", noPalette: true,
+    fields: ORST_SEC, objects: [ORST_ACTION], def: {} },
+  { comp: "orst.job-listing", key: "vb.orst.joblisting", icon: "doc", cat: "orst", tpl: "orst", noPalette: true,
+    fields: [...ORST_SEC, { k: "emptyLabel" }, { k: "formHeading" }], objects: [ORST_ACTION], def: {} },
 ];
 // RoyalSociety's own 22 block types (public-site/templates/royalsociety/
 // Blocks.tsx) — same "shared vocabulary, per-template skin" split as ORST's
@@ -230,6 +279,8 @@ export const ORST_TYPES = [
 // as `orst.rich-text` — that field is a bespoke server-side merge from the
 // wp:page "about" post's own native content (see app/royalsociety/[page]/
 // page.tsx), not a Builder-editable raw-HTML sink.
+const RS_SEC = [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }];
+const isKnowledge = (b: any) => b.variant === "knowledge";
 export const ROYALSOCIETY_TYPES = [
   { comp: "royalsociety.page-hero", key: "vb.rs.pagehero", icon: "layout", cat: "royalsociety", tpl: "royalsociety",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "variant", select: ["", "deep"] }],
@@ -241,11 +292,12 @@ export const ROYALSOCIETY_TYPES = [
     fields: [{ k: "eyebrow" }, { k: "heading" }],
     def: { heading: "หัวข้อหน้าแรก" } },
   { comp: "royalsociety.trust-strip", key: "vb.rs.truststrip", icon: "grid", cat: "royalsociety", tpl: "royalsociety",
-    fields: [],
+    // eyebrow is only the section's aria-label here (screen readers), not visible text.
+    fields: [{ k: "eyebrow" }],
     items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }], def: { icon: "i-book", title: "หัวข้อ" } },
     def: { items: [] } },
   { comp: "royalsociety.news-feed", key: "vb.rs.newsfeed", icon: "doc", cat: "royalsociety", tpl: "royalsociety",
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }, { k: "badgeLabel" }, { k: "readMoreLabel" }],
     items: { key: "items", fields: [{ k: "date" }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "หัวข้อข่าว" } },
     def: { heading: "ข่าวสารและกิจกรรมล่าสุด", items: [] } },
   { comp: "royalsociety.list-panel", key: "vb.rs.listpanel", icon: "doc", cat: "royalsociety", tpl: "royalsociety",
@@ -287,8 +339,8 @@ export const ROYALSOCIETY_TYPES = [
     def: { heading: "", items: [] } },
   { comp: "royalsociety.feature-directory", key: "vb.rs.featuredirectory", icon: "card", cat: "royalsociety", tpl: "royalsociety",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "variant", select: ["services", "knowledge"] },
-      { k: "featureLabel" }, { k: "featureTitle" }, { k: "featureBody", ta: true }, { k: "featureLinkLabel" }, { k: "featureLinkUrl" }, { k: "linkLabel" }],
-    items: { key: "items", fields: [{ k: "title" }, { k: "body", ta: true }, { k: "href" }, { k: "linkLabel" }], def: { title: "" } },
+      ...["featureLabel", "featureTitle", "featureBody", "featureLinkLabel", "featureLinkUrl", "linkLabel"].map((k) => ({ k, ta: k === "featureBody", when: isKnowledge }))],
+    items: { key: "items", fields: [{ k: "title" }, { k: "body", ta: true }, { k: "href" }, { k: "linkLabel", when: isKnowledge }], def: { title: "" } },
     def: { heading: "", variant: "services", items: [] } },
   { comp: "royalsociety.recommended-carousel", key: "vb.rs.recommended", icon: "card", cat: "royalsociety", tpl: "royalsociety",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
@@ -298,6 +350,7 @@ export const ROYALSOCIETY_TYPES = [
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" },
       { k: "mainLabel" }, { k: "mainTitle" }, { k: "mainBody", ta: true }, { k: "mainActionLabel" }, { k: "mainHref" }, { k: "processLabel" }],
     items: { key: "items", fields: [{ k: "label" }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "" } },
+    lists: [{ key: "steps", scalar: true, def: "ขั้นตอน" }],
     def: { heading: "", items: [], steps: [] } },
   { comp: "royalsociety.logo-marquee", key: "vb.rs.logomarquee", icon: "grid", cat: "royalsociety", tpl: "royalsociety",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
@@ -318,11 +371,19 @@ export const ROYALSOCIETY_TYPES = [
     // branch. Hiding each where it's a no-op keeps the sidebar honest about
     // which fields the current layout actually uses.
     fields: [{ k: "layout", select: ["cards", "banner", "list", "cta", "stats", "feature"] },
-      { k: "eyebrow", when: (b: any) => b.layout !== "feature" }, { k: "heading", when: (b: any) => b.layout !== "feature" }, { k: "lead", ta: true, when: (b: any) => b.layout !== "feature" },
+      { k: "eyebrow", when: (b: any) => b.layout !== "feature" && b.layout !== "cta" }, { k: "heading", when: (b: any) => b.layout !== "feature" }, { k: "lead", ta: true, when: (b: any) => b.layout !== "feature" },
       { k: "tone", select: ["info", "warn", "success"], when: (b: any) => b.layout === "banner" }],
-    items: { key: "items", fields: [{ k: "icon", icon: true }, { k: "title" }, { k: "body", ta: true }, { k: "href" }], def: { title: "หัวข้อ" },
-      when: (b: any) => b.layout !== "banner" },
+    items: { key: "items", fields: [{ k: "icon", icon: true, when: (b: any) => b.layout === "feature" }, { k: "title" },
+      { k: "body", ta: true, when: (b: any) => !["cta", "feature"].includes(b.layout) }, { k: "href", when: (b: any) => ["cards", "list", "cta"].includes(b.layout || "cards") }],
+      def: { title: "หัวข้อ" }, when: (b: any) => b.layout !== "banner" },
     def: { layout: "cards", heading: "", items: [] } },
+  // Server-bound types — see ORST_TYPES' own identical entries.
+  { comp: "royalsociety.event-calendar", key: "vb.orst.eventcalendar", icon: "doc", cat: "royalsociety", tpl: "royalsociety", noPalette: true,
+    fields: RS_SEC, def: {} },
+  { comp: "royalsociety.member-directory", key: "vb.orst.memberdirectory", icon: "users", cat: "royalsociety", tpl: "royalsociety", noPalette: true,
+    fields: RS_SEC, def: {} },
+  { comp: "royalsociety.job-listing", key: "vb.orst.joblisting", icon: "doc", cat: "royalsociety", tpl: "royalsociety", noPalette: true,
+    fields: [...RS_SEC, { k: "emptyLabel" }, { k: "formHeading" }], def: {} },
 ];
 // Shared across EVERY WordPress-dialect tenant (orst, royalsociety, and any
 // future one — e.g. nbtc, which today has no dialect entry of its own at
@@ -335,21 +396,34 @@ export const ROYALSOCIETY_TYPES = [
 // omitted; paletteTypes below shows these for ANY WP dialect instead of
 // gating on one specific `tpl` value.
 export const GENERIC_TYPES = [
+  // `variant`/`action` below are ORST-only (its Section wrapper reads them;
+  // RoyalSociety's doesn't) — gated with `tpl` so a RoyalSociety editor
+  // isn't shown controls that do nothing.
   { comp: "table", key: "vb.wp.table", icon: "grid", cat: "wp-shared", generic: true,
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "caption" }],
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "caption" }, { k: "variant", select: ["", "alt"], tpl: "orst" }],
+    objects: [{ ...ORST_ACTION, tpl: "orst" }],
+    // Header cells, then one row per entry with a cell per column.
+    lists: [{ key: "columns", scalar: true, def: "หัวข้อ" }, { key: "rows", matrix: "columns", def: [] }],
     def: { heading: "", columns: [], rows: [] } },
   { comp: "faq", key: "vb.wp.faq", icon: "doc", cat: "wp-shared", generic: true,
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }],
+    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "variant", select: ["", "alt"], tpl: "orst" }],
+    objects: [{ ...ORST_ACTION, tpl: "orst" }],
     items: { key: "items", fields: [{ k: "q" }, { k: "a", ta: true }], def: { q: "คำถาม", a: "" } },
     def: { heading: "", items: [] } },
+  // ORST renders the full section head above the notice; RoyalSociety only
+  // its eyebrow.
   { comp: "notice", key: "vb.wp.notice", icon: "doc", cat: "wp-shared", generic: true,
-    fields: [{ k: "title" }, { k: "body", ta: true }, { k: "tone", select: ["info", "warn", "success"] }],
+    fields: [{ k: "eyebrow" }, { k: "heading", tpl: "orst" }, { k: "lead", ta: true, tpl: "orst" }, { k: "variant", select: ["", "alt"], tpl: "orst" },
+      { k: "title" }, { k: "body", ta: true }, { k: "tone", select: ["info", "warn", "success"] }],
+    objects: [{ ...ORST_ACTION, tpl: "orst" }],
     def: { title: "", body: "", tone: "info" } },
   // RoyalSociety's own definition carried an extra `eyebrow` field ORST's
   // didn't — included here (harmless as an always-present optional field
   // for ORST too, same convention already used throughout both catalogs).
+  // …except ORST's CtaBand turned out never to render it, so it's gated to
+  // RoyalSociety rather than offered as a control that does nothing.
   { comp: "cta-band", key: "vb.wp.ctaband", icon: "cta", cat: "wp-shared", generic: true,
-    fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "body", ta: true }],
+    fields: [{ k: "eyebrow", tpl: "royalsociety" }, { k: "heading", keep: true }, { k: "body", ta: true }],
     items: { key: "actions", fields: [{ k: "label" }, { k: "href" }, { k: "variant", select: ["", "ghost"] }], def: { label: "", href: "#" } },
     def: { heading: "", body: "", actions: [] } },
 ];
@@ -377,12 +451,48 @@ export const ALL_TYPES = [...TYPES, ...GENERIC_TYPES, ...ORST_TYPES, ...ROYALSOC
 // `when(b)` — optional per-field/per-items visibility gate, keyed off the
 // block's OWN current field values (e.g. FlexPanel's `layout` select).
 // Omitted means always visible, same as before this existed.
-export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean };
+// On item fields, `when(b)` still receives the BLOCK (not the item), so one
+// field can be hidden for a layout/variant that never renders it.
+// `tpl` — only meaningful under that one template (for GENERIC_TYPES shared
+// across templates whose renderers read different keys). `keep` — the
+// renderer draws this element (or a built-in default) even when the key is
+// absent, so offering "remove" would be a no-op; the sidebar hides its ×.
+export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean; tpl?: string; keep?: boolean };
+// One repeatable list. `def` is the new-item template — a function when each
+// new item needs something unique (e.g. media-tabs' tab `id`, which the
+// renderer uses for DOM ids). Items may themselves hold nested `lists`/
+// `objects` (media-tabs' tabs[].items[], news-tabs' tabs[].featured/side[]).
+// `matrix` — each item is a string[] row with one cell per entry of the
+// sibling scalar list named here (table's rows[][] against columns[]).
+export type ListDesc = {
+  key: string; fields?: ItemField[]; def: any; scalar?: boolean; when?: (b: any) => boolean; tpl?: string;
+  matrix?: string; lists?: ListDesc[]; objects?: ObjDesc[];
+};
+// A single nested object edited as a small group of fields (ORST's section
+// "view all" `action: {label, href}`, news-tabs' `featured`).
+export type ObjDesc = { key: string; fields: ItemField[]; when?: (b: any) => boolean; tpl?: string };
 export type BlockTypeMeta = {
   comp: string; key: string; icon: string; cat: string; fields: ItemField[]; def: any;
-  items?: { key: string; fields?: ItemField[]; def: any; scalar?: boolean; when?: (b: any) => boolean };
+  // The block's PRIMARY list — the one the live-data `source` binding
+  // replaces (when key === "items") and the one lib/agent/tools.ts and the
+  // mockup canvas summarize. Any further lists go in `lists`.
+  items?: ListDesc;
+  lists?: ListDesc[];
+  objects?: ObjDesc[];
   tpl?: string;
   // Shown for every WP-dialect tenant regardless of `tpl` — see GENERIC_TYPES.
   generic?: boolean;
+  // Editable when already on a page, but not offered in the palette/agent's
+  // add-block list — for types whose content is bound server-side (a
+  // `source` feed, a WordPress poll id) and would render empty or broken if
+  // dropped in fresh from the Toolbox.
+  noPalette?: boolean;
 };
 export const metaOf = (c: string) => ALL_TYPES.find((t) => t.comp === c) as BlockTypeMeta | undefined;
+/** Every list a block type exposes, primary `items` first. */
+export const listsOf = (m: BlockTypeMeta | undefined): ListDesc[] => (m ? [...(m.items ? [m.items] : []), ...(m.lists || [])] : []);
+/** A fresh, unshared copy of a `def` (plain value or factory). */
+export const freshDef = (d: any) => (typeof d === "function" ? d() : d === undefined ? undefined : JSON.parse(JSON.stringify(d)));
+/** Same template/`when` gate every sidebar control applies. */
+export const applies = (x: { when?: (b: any) => boolean; tpl?: string }, b: any, template?: string) =>
+  (!x.tpl || x.tpl === template) && (!x.when || x.when(b));

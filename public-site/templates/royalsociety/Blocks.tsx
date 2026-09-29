@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { vc, boxesCss } from "@/templates/_builder/boxes";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import HeroSlider from "./HeroSlider";
 import { RsIcon, RS_ICON_IDS, type RsIconId } from "./icons";
@@ -61,9 +62,9 @@ function SectionHead({ b, titleId }: { b: Block; titleId: string }) {
   if (!b.heading && !b.lead && !b.eyebrow) return null;
   return (
     <div className="section-head reveal">
-      {b.eyebrow ? <span className="eyebrow">{b.eyebrow}</span> : null}
-      {b.heading ? <h2 id={titleId}>{b.heading}</h2> : null}
-      {b.lead ? <p>{b.lead}</p> : null}
+      {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+      {b.heading ? <h2 id={titleId} {...vc(b, "heading")}>{b.heading}</h2> : null}
+      {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
     </div>
   );
 }
@@ -100,9 +101,9 @@ function PageHero({ b, locale }: { b: Block; locale?: "th" | "en" }) {
           <span aria-hidden="true">/</span>
           <span aria-current="page">{b.heading}</span>
         </nav>
-        {b.eyebrow ? <span className="page-hero__kicker">{b.eyebrow}</span> : null}
-        <h1 className="page-hero__title">{b.heading}</h1>
-        {b.lead ? <p className="page-hero__lead">{b.lead}</p> : null}
+        {b.eyebrow ? <span className="page-hero__kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+        <h1 className="page-hero__title" {...vc(b, "heading")}>{b.heading}</h1>
+        {b.lead ? <p className="page-hero__lead" {...vc(b, "lead")}>{b.lead}</p> : null}
       </div>
     </section>
   );
@@ -129,17 +130,17 @@ function AboutHero({ b, locale }: { b: Block; locale?: "th" | "en" }) {
       <div className="about-container">
         <div className="about-hero-clean-grid">
           <div className="about-hero-clean-content">
-            {b.eyebrow ? <span className="about-hero-label">{b.eyebrow}</span> : null}
-            <h1 id="about-hero-title">{b.heading}</h1>
-            {b.subtitle ? <p className="about-hero-clean-subtitle">{b.subtitle}</p> : null}
-            {b.lead ? <p className="about-hero-clean-desc">{b.lead}</p> : null}
+            {b.eyebrow ? <span className="about-hero-label" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h1 id="about-hero-title" {...vc(b, "heading")}>{b.heading}</h1>
+            {b.subtitle ? <p className="about-hero-clean-subtitle" {...vc(b, "subtitle")}>{b.subtitle}</p> : null}
+            {b.lead ? <p className="about-hero-clean-desc" {...vc(b, "lead")}>{b.lead}</p> : null}
             <div className="about-hero-clean-actions" aria-label="ลิงก์ลัดเกี่ยวกับราชบัณฑิตยสภา">
-              {b.action1Label ? <a href={b.action1Href || "#"} className="about-clean-btn primary">{b.action1Label}</a> : null}
-              {b.action2Label ? <a href={b.action2Href || "#"} className="about-clean-btn secondary">{b.action2Label}</a> : null}
+              {b.action1Label ? <a href={b.action1Href || "#"} className="about-clean-btn primary" {...vc(b, "action1Label")}>{b.action1Label}</a> : null}
+              {b.action2Label ? <a href={b.action2Href || "#"} className="about-clean-btn secondary" {...vc(b, "action2Label")}>{b.action2Label}</a> : null}
             </div>
           </div>
           {b.image ? (
-            <aside className="about-hero-clean-visual" aria-label="ภาพประกอบราชบัณฑิตยสภา">
+            <aside className="about-hero-clean-visual" aria-label="ภาพประกอบราชบัณฑิตยสภา" {...vc(b, "image")}>
               <Picture src={b.image} alt="" loading="eager" />
             </aside>
           ) : null}
@@ -174,8 +175,8 @@ function HomeHero({ b }: { b: Block }) {
       <div className="rs-hero__shade"></div>
       <div className="container rs-hero__inner">
         <div className="rs-hero__content reveal">
-          {b.eyebrow ? <span className="rs-hero__kicker">{b.eyebrow}</span> : null}
-          <h1 className="rs-hero-title"><span>{b.heading}</span></h1>
+          {b.eyebrow ? <span className="rs-hero__kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+          <h1 className="rs-hero-title" {...vc(b, "heading")}><span>{b.heading}</span></h1>
         </div>
       </div>
     </section>
@@ -188,9 +189,9 @@ function TrustStrip({ b }: { b: Block }) {
   const items: { icon?: string; title: string }[] = b.items || [];
   return (
     <section className="trust-strip" aria-label={b.eyebrow || "คุณค่าหลักของเว็บไซต์"} id={b.id}>
-      <div className="container trust-grid">
+      <div className="container trust-grid" {...vc(b, "items")}>
         {items.map((it, i) => (
-          <article className="trust-item" key={i}>
+          <article className="trust-item" key={i} {...vc(b, "items." + i)}>
             <SafeRsIcon id={it.icon} className="icon trust-icon" />
             {/* TOR gap audit (accessibility/WCAG) — was <h3>, but this
                 section has no <h2> of its own for it to nest under, so the
@@ -226,23 +227,23 @@ function NewsFeed({ b }: { b: Block }) {
       <div className="container">
         <div className="latest-news-only-head reveal">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            {b.heading ? <h2 id={titleId}>{b.heading}</h2> : null}
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            {b.heading ? <h2 id={titleId} {...vc(b, "heading")}>{b.heading}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
-          {b.viewAllLabel ? <a className="latest-view-all" href={b.viewAllUrl || "#"}>{b.viewAllLabel}<span>→</span></a> : null}
+          {b.viewAllLabel ? <a className="latest-view-all" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}<span>→</span></a> : null}
         </div>
 
-        <div className="latest-news-only-layout reveal">
+        <div className="latest-news-only-layout reveal" {...vc(b, "items")}>
           {featured ? (
-            <article className="latest-main-news">
+            <article className="latest-main-news" {...vc(b, "items.0")}>
               <a href={featured.href || "#"} className="latest-main-news__image">
                 <Picture src={NEWS_IMAGES[0]} alt="" loading="lazy" />
                 {/* Bilingual EN (TOR gap) — badgeLabel/readMoreLabel are new
                     optional block-level fields (read straight off `b`, no
                     per-item field or locale plumbing needed); this used to
                     be a hardcoded Thai literal regardless of locale. */}
-                <span className="latest-main-news__badge">{b.badgeLabel || "ข่าวล่าสุด"}</span>
+                <span className="latest-main-news__badge" {...vc(b, "badgeLabel")}>{b.badgeLabel || "ข่าวล่าสุด"}</span>
               </a>
               <div className="latest-main-news__body">
                 <div className="latest-meta"><time dateTime={featured.date}>{featured.date}</time></div>
@@ -257,7 +258,7 @@ function NewsFeed({ b }: { b: Block }) {
 
           <div className="latest-small-news-grid">
             {rest.map((a, i) => (
-              <article className="latest-small-news" key={i}>
+              <article className="latest-small-news" key={i} {...vc(b, "items." + (i + 1))}>
                 {/* TOR gap audit (accessibility/WCAG) — a real Lighthouse
                     audit flagged this link as focusable with literally no
                     accessible name (a decorative image with alt="" and no
@@ -297,9 +298,9 @@ function ListPanel({ b }: { b: Block }) {
   const items: { date?: string; tag?: string; title: string; body?: string; href?: string }[] = b.items || [];
   return (
     <Section b={b}>
-      <ul className="rs-list">
+      <ul className="rs-list" {...vc(b, "items")}>
         {items.map((it, i) => (
-          <li className="rs-list-item" key={i}>
+          <li className="rs-list-item" key={i} {...vc(b, "items." + i)}>
             {it.date ? <span className="rs-list-item__date"><strong>{it.date}</strong></span> : null}
             <div className="rs-list-item__body">
               {it.tag ? <span className="rs-list-item__tag">{it.tag}</span> : null}
@@ -325,9 +326,9 @@ function CardGrid({ b }: { b: Block }) {
   const flat = b.variant === "flat";
   return (
     <Section b={b}>
-      <div className={colsClass(b.columns) + " reveal"}>
+      <div className={colsClass(b.columns) + " reveal"} {...vc(b, "items")}>
         {items.map((it, i) => (
-          <article className={"rs-card" + (flat ? " rs-card--flat" : "")} key={i}>
+          <article className={"rs-card" + (flat ? " rs-card--flat" : "")} key={i} {...vc(b, "items." + i)}>
             {!flat && it.image ? (
               <a className="rs-card__media" href={it.href || "#"}><Picture src={it.image} alt="" loading="lazy" /></a>
             ) : null}
@@ -351,7 +352,7 @@ function TableBlock({ b }: { b: Block }) {
   return (
     <Section b={b}>
       <ListExport title={b.heading || "รายการ"} columns={columns} rows={rows} />
-      <div className="rs-table-wrap">
+      <div className="rs-table-wrap" {...vc(b, "rows")}>
         <table className="rs-table">
           {b.caption ? <caption className="sr-only">{b.caption}</caption> : null}
           <thead><tr>{columns.map((c, i) => <th scope="col" key={i}>{c}</th>)}</tr></thead>
@@ -375,7 +376,7 @@ function TableBlock({ b }: { b: Block }) {
 function EventCalendarBlock({ b }: { b: Block }) {
   return (
     <Section b={b}>
-      <EventCalendar items={b.items || []} icsHref="/royalsociety/events.ics" />
+      <div {...vc(b, "items")}><EventCalendar items={b.items || []} icsHref="/royalsociety/events.ics" /></div>
     </Section>
   );
 }
@@ -388,7 +389,7 @@ function EventCalendarBlock({ b }: { b: Block }) {
 function MemberDirectoryBlock({ b, locale }: { b: Block; locale?: "th" | "en" }) {
   return (
     <Section b={b}>
-      <MemberDirectory items={b.items || []} locale={locale} />
+      <div {...vc(b, "items")}><MemberDirectory items={b.items || []} locale={locale} /></div>
     </Section>
   );
 }
@@ -403,7 +404,7 @@ function JobListingBlock({ b, tenant }: { b: Block; tenant: string }) {
   return (
     <Section b={b}>
       {jobs.length === 0 ? (
-        <p className="muted">{b.emptyLabel || "ขณะนี้ยังไม่มีตำแหน่งงานว่าง"}</p>
+        <p className="muted" {...vc(b, "emptyLabel")}>{b.emptyLabel || "ขณะนี้ยังไม่มีตำแหน่งงานว่าง"}</p>
       ) : (
         <>
           <div className="wx-job-list">
@@ -424,7 +425,7 @@ function JobListingBlock({ b, tenant }: { b: Block; tenant: string }) {
             ))}
           </div>
           <div style={{ marginTop: 32 }}>
-            {b.formHeading ? <h3>{b.formHeading}</h3> : null}
+            {b.formHeading ? <h3 {...vc(b, "formHeading")}>{b.formHeading}</h3> : null}
             <JobApplicationForm tenant={tenant} jobs={jobs} />
           </div>
         </>
@@ -439,9 +440,9 @@ function Faq({ b }: { b: Block }) {
   const items: { q: string; a: string }[] = b.items || [];
   return (
     <Section b={b}>
-      <div className="rs-accordion">
+      <div className="rs-accordion" {...vc(b, "items")}>
         {items.map((it, i) => (
-          <details key={i} open={i === 0}>
+          <details key={i} open={i === 0} {...vc(b, "items." + i)}>
             <summary>{it.q}</summary>
             <div className="rs-accordion__body">{it.a}</div>
           </details>
@@ -459,9 +460,9 @@ function StatsSteps({ b }: { b: Block }) {
   const items: string[] = b.items || [];
   return (
     <Section b={b}>
-      <div className="rs-stats">
+      <div className="rs-stats" {...vc(b, "items")}>
         {items.map((label, i) => (
-          <div className="rs-stat" key={i}>
+          <div className="rs-stat" key={i} {...vc(b, "items." + i)}>
             <span className="rs-stat__value">{i + 1}</span>
             <span className="rs-stat__label">{label}</span>
           </div>
@@ -477,8 +478,8 @@ function Notice({ b }: { b: Block }) {
   const tone = ["warn", "success"].includes(b.tone) ? " rs-note--" + b.tone : "";
   return (
     <Section b={{ ...b, heading: undefined, lead: undefined }}>
-      <div className={"rs-note" + tone}>
-        {b.title ? <strong>{b.title}</strong> : null}
+      <div className={"rs-note" + tone} {...vc(b, "body")}>
+        {b.title ? <strong {...vc(b, "title")}>{b.title}</strong> : null}
         {b.body}
       </div>
     </Section>
@@ -505,13 +506,13 @@ function CtaBand({ b }: { b: Block }) {
               in 04-components.css for why it stays a single restrained mark
               rather than a repeating pattern. */}
           <span className="rs-ornament" aria-hidden="true" />
-          {b.eyebrow ? <span className="about-kicker">{b.eyebrow}</span> : null}
-          <h2>{b.heading}</h2>
-          {b.body ? <p>{b.body}</p> : null}
+          {b.eyebrow ? <span className="about-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+          <h2 {...vc(b, "heading")}>{b.heading}</h2>
+          {b.body ? <p {...vc(b, "body")}>{b.body}</p> : null}
           {actions.length ? (
-            <div className="rs-btn-row" style={{ marginTop: 18 }}>
+            <div className="rs-btn-row" style={{ marginTop: 18 }} {...vc(b, "actions")}>
               {actions.map((a, i) => (
-                <a key={i} className={"rs-btn " + (a.variant === "ghost" ? "rs-btn--ghost" : "rs-btn--gold")} href={a.href || "#"}>{a.label}</a>
+                <a key={i} {...vc(b, "actions." + i)} className={"rs-btn " + (a.variant === "ghost" ? "rs-btn--ghost" : "rs-btn--gold")} href={a.href || "#"}>{a.label}</a>
               ))}
             </div>
           ) : null}
@@ -545,16 +546,16 @@ function ContactInfo({ b, locale = "th" }: { b: Block; locale?: "th" | "en" }) {
     <section className="section" id={b.id}>
       <div className="container">
         <div className="rs-panel rs-panel--deep">
-          {b.heading ? <h3 style={{ marginTop: 0 }}>{b.heading}</h3> : null}
-          {b.address ? <p>{b.address}</p> : null}
+          {b.heading ? <h3 style={{ marginTop: 0 }} {...vc(b, "heading")}>{b.heading}</h3> : null}
+          {b.address ? <p {...vc(b, "address")}>{b.address}</p> : null}
           <p>
-            {b.phone ? <>{l.phone} <strong>{b.phone}</strong><br /></> : null}
-            {b.email ? <>{l.email} <strong>{b.email}</strong></> : null}
+            {b.phone ? <>{l.phone} <strong {...vc(b, "phone")}>{b.phone}</strong><br /></> : null}
+            {b.email ? <>{l.email} <strong {...vc(b, "email")}>{b.email}</strong></> : null}
           </p>
-          {b.hours ? <p className="rs-field__hint">{l.hours}: {b.hours}</p> : null}
+          {b.hours ? <p className="rs-field__hint" {...vc(b, "hours")}>{l.hours}: {b.hours}</p> : null}
         </div>
         {b.mapEmbed ? (
-          <div className="rs-contact-map">
+          <div className="rs-contact-map" {...vc(b, "mapEmbed")}>
             <iframe src={b.mapEmbed} title={l.map} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
           </div>
         ) : null}
@@ -592,20 +593,20 @@ function IntroFeature({ b }: { b: Block }) {
       <div className="about-container">
         <div className="about-intro-v3-grid">
           <div className="about-intro-v3-feature">
-            {b.eyebrow ? <span className="about-kicker-light">{b.eyebrow}</span> : null}
-            <h2 id="about-intro-title">{b.heading}</h2>
+            {b.eyebrow ? <span className="about-kicker-light" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h2 id="about-intro-title" {...vc(b, "heading")}>{b.heading}</h2>
             {b.html ? <div dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(b.html) }} /> : null}
             {b.highlightLabel ? (
               <div className="about-intro-v3-highlight">
-                <strong>{b.highlightLabel}</strong>
-                <span>{b.highlightText}</span>
+                <strong {...vc(b, "highlightLabel")}>{b.highlightLabel}</strong>
+                <span {...vc(b, "highlightText")}>{b.highlightText}</span>
               </div>
             ) : null}
           </div>
 
-          <div className="about-intro-v3-story" aria-label="ภาพรวมพัฒนาการของราชบัณฑิตยสภา">
+          <div className="about-intro-v3-story" aria-label="ภาพรวมพัฒนาการของราชบัณฑิตยสภา" {...vc(b, "items")}>
             {cards.map((c, i) => (
-              <article className={"about-story-v3-card" + (i === cards.length - 1 ? " accent" : "")} key={i}>
+              <article className={"about-story-v3-card" + (i === cards.length - 1 ? " accent" : "")} key={i} {...vc(b, "items." + i)}>
                 <span className="story-v3-label">{c.label}</span>
                 <div className="story-v3-number">{String(i + 1).padStart(2, "0")}</div>
                 <div><h3>{c.title}</h3><p>{c.body}</p></div>
@@ -626,13 +627,13 @@ function Timeline({ b }: { b: Block }) {
     <section className="about-history-v2" id={b.id} aria-labelledby="history-title">
       <div className="about-container">
         <div className="about-history-head">
-          {b.eyebrow ? <span className="about-kicker">{b.eyebrow}</span> : null}
-          <h2 id="history-title">{b.heading}</h2>
-          {b.lead ? <p>{b.lead}</p> : null}
+          {b.eyebrow ? <span className="about-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+          <h2 id="history-title" {...vc(b, "heading")}>{b.heading}</h2>
+          {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
         </div>
-        <div className="history-timeline-v2" aria-label="ลำดับเหตุการณ์สำคัญของราชบัณฑิตยสภา">
+        <div className="history-timeline-v2" aria-label="ลำดับเหตุการณ์สำคัญของราชบัณฑิตยสภา" {...vc(b, "items")}>
           {items.map((e, i) => (
-            <article className={"history-item-v2" + (i === 0 ? " is-featured" : i === items.length - 1 ? " is-current" : "")} key={i}>
+            <article className={"history-item-v2" + (i === 0 ? " is-featured" : i === items.length - 1 ? " is-current" : "")} key={i} {...vc(b, "items." + i)}>
               <div className="history-year"><time dateTime={e.year || ""}>{e.year || ""}</time></div>
               <div className="history-card">
                 {e.statusLabel ? <span className="history-status">{e.statusLabel}</span> : null}
@@ -656,14 +657,14 @@ function MissionGrid({ b }: { b: Block }) {
       <div className="about-container">
         <div className="mission-v2-grid">
           <div className="mission-v2-head">
-            {b.eyebrow ? <span className="about-kicker">{b.eyebrow}</span> : null}
-            <h2 id="mission-title">{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
-            {b.linkLabel ? <a href={b.linkHref || "#"} className="mission-v2-link">{b.linkLabel}<span>→</span></a> : null}
+            {b.eyebrow ? <span className="about-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h2 id="mission-title" {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+            {b.linkLabel ? <a href={b.linkHref || "#"} className="mission-v2-link" {...vc(b, "linkLabel")}>{b.linkLabel}<span>→</span></a> : null}
           </div>
-          <div className="mission-v2-list" aria-label="บทบาทและภารกิจสำคัญของราชบัณฑิตยสภา">
+          <div className="mission-v2-list" aria-label="บทบาทและภารกิจสำคัญของราชบัณฑิตยสภา" {...vc(b, "items")}>
             {items.map((e, i) => (
-              <article className={"mission-v2-card" + (i === items.length - 1 ? " is-emphasis" : "")} key={i}>
+              <article className={"mission-v2-card" + (i === items.length - 1 ? " is-emphasis" : "")} key={i} {...vc(b, "items." + i)}>
                 <span className="mission-v2-icon" aria-hidden="true"><SafeRsIcon id={e.icon} /></span>
                 <span className="mission-v2-number">{String(i + 1).padStart(2, "0")}</span>
                 <div><h3>{e.title}</h3>{e.body ? <p>{e.body}</p> : null}</div>
@@ -687,37 +688,37 @@ function OrgStructure({ b }: { b: Block }) {
       <div className="about-container">
         <div className="structure-v2-grid">
           <div className="structure-v2-head">
-            {b.eyebrow ? <span className="about-kicker">{b.eyebrow}</span> : null}
-            <h2 id="structure-title">{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="about-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h2 id="structure-title" {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
             {b.image ? (
-              <figure className="structure-v2-image"><Picture src={b.image} alt="" loading="lazy" /></figure>
+              <figure className="structure-v2-image" {...vc(b, "image")}><Picture src={b.image} alt="" loading="lazy" /></figure>
             ) : null}
           </div>
 
           <div className="structure-v2-content">
             <div className="structure-main-flow" aria-label="ส่วนงานหลักของราชบัณฑิตยสภา">
               <article className="structure-main-card">
-                {b.councilLabel ? <span className="structure-label">{b.councilLabel}</span> : null}
-                <h3>{b.councilTitle}</h3>
-                {b.councilBody ? <p>{b.councilBody}</p> : null}
+                {b.councilLabel ? <span className="structure-label" {...vc(b, "councilLabel")}>{b.councilLabel}</span> : null}
+                <h3 {...vc(b, "councilTitle")}>{b.councilTitle}</h3>
+                {b.councilBody ? <p {...vc(b, "councilBody")}>{b.councilBody}</p> : null}
               </article>
               <div className="structure-connector" aria-hidden="true"><span></span></div>
               <article className="structure-main-card soft">
-                {b.officeLabel ? <span className="structure-label">{b.officeLabel}</span> : null}
-                <h3>{b.officeTitle}</h3>
-                {b.officeBody ? <p>{b.officeBody}</p> : null}
+                {b.officeLabel ? <span className="structure-label" {...vc(b, "officeLabel")}>{b.officeLabel}</span> : null}
+                <h3 {...vc(b, "officeTitle")}>{b.officeTitle}</h3>
+                {b.officeBody ? <p {...vc(b, "officeBody")}>{b.officeBody}</p> : null}
               </article>
             </div>
 
             <div className="structure-schools">
               <div className="structure-schools-head">
-                <h3>{b.schoolsHeading}</h3>
-                {b.schoolsLead ? <p>{b.schoolsLead}</p> : null}
+                <h3 {...vc(b, "schoolsHeading")}>{b.schoolsHeading}</h3>
+                {b.schoolsLead ? <p {...vc(b, "schoolsLead")}>{b.schoolsLead}</p> : null}
               </div>
-              <div className="school-v2-grid" aria-label="สามสำนักของราชบัณฑิตยสภา">
+              <div className="school-v2-grid" aria-label="สามสำนักของราชบัณฑิตยสภา" {...vc(b, "items")}>
                 {items.map((e, i) => (
-                  <a href="#" className="school-v2-card" key={i}>
+                  <a href="#" className="school-v2-card" key={i} {...vc(b, "items." + i)}>
                     <span className="school-index">{String(i + 1).padStart(2, "0")}</span>
                     <strong>{e.title}</strong>
                     {e.body ? <span>{e.body}</span> : null}
@@ -747,20 +748,20 @@ function FeatureDirectory({ b }: { b: Block }) {
       <section className="knowledge-standards-v2" id={b.id} aria-labelledby="knowledge-title">
         <div className="about-container">
           <div className="knowledge-standards-head">
-            {b.eyebrow ? <span className="about-kicker">{b.eyebrow}</span> : null}
-            <h2 id="knowledge-title">{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="about-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h2 id="knowledge-title" {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
           <div className="knowledge-standards-layout">
             <article className="knowledge-feature-card">
-              {b.featureLabel ? <span className="knowledge-label">{b.featureLabel}</span> : null}
-              <h3>{b.featureTitle}</h3>
-              {b.featureBody ? <p>{b.featureBody}</p> : null}
-              {b.featureLinkLabel ? <a href={b.featureLinkUrl || "#"} className="knowledge-feature-link">{b.featureLinkLabel}<span>→</span></a> : null}
+              {b.featureLabel ? <span className="knowledge-label" {...vc(b, "featureLabel")}>{b.featureLabel}</span> : null}
+              <h3 {...vc(b, "featureTitle")}>{b.featureTitle}</h3>
+              {b.featureBody ? <p {...vc(b, "featureBody")}>{b.featureBody}</p> : null}
+              {b.featureLinkLabel ? <a href={b.featureLinkUrl || "#"} className="knowledge-feature-link" {...vc(b, "featureLinkLabel")}>{b.featureLinkLabel}<span>→</span></a> : null}
             </article>
-            <div className="knowledge-standards-grid">
+            <div className="knowledge-standards-grid" {...vc(b, "items")}>
               {items.map((it, i) => (
-                <article className="knowledge-standard-card" key={i}>
+                <article className="knowledge-standard-card" key={i} {...vc(b, "items." + i)}>
                   <div>
                     <h3>{it.title}</h3>
                     {it.body ? <p>{it.body}</p> : null}
@@ -779,14 +780,14 @@ function FeatureDirectory({ b }: { b: Block }) {
       <div className="container">
         <div className="ks-layout reveal">
           <div className="ks-main ks-feature-card">
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            <h3 id="services-title">{b.heading}</h3>
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h3 id="services-title" {...vc(b, "heading")}>{b.heading}</h3>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
         </div>
-        <div className="ks-grid reveal">
+        <div className="ks-grid reveal" {...vc(b, "items")}>
           {items.map((it, i) => (
-            <a className="ks-card" href={it.href || "#"} key={i}>
+            <a className="ks-card" href={it.href || "#"} key={i} {...vc(b, "items." + i)}>
               <span className="ks-card-text"><strong>{it.title}</strong>{it.body ? <small>{it.body}</small> : null}</span>
               <span className="ks-arrow">→</span>
             </a>
@@ -808,21 +809,21 @@ function RecommendedCarousel({ b }: { b: Block }) {
       <div className="container">
         <div className="rec-head reveal">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            <h2 id="recommended-title">{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h2 id="recommended-title" {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
           <div className="rec-actions">
-            {b.viewAllLabel ? <a className="rec-view-all" href={b.viewAllUrl || "#"}>{b.viewAllLabel}</a> : null}
+            {b.viewAllLabel ? <a className="rec-view-all" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
             <RsScrollButton rowId={rowId} dir="left" label="เลื่อนรายการไปทางซ้าย" />
             <RsScrollButton rowId={rowId} dir="right" label="เลื่อนรายการไปทางขวา" />
           </div>
         </div>
 
         <div className="rec-shell reveal">
-          <div className="rec-row" id={rowId} tabIndex={0} aria-label="รายการองค์ความรู้แนะนำแบบเลื่อนได้">
+          <div className="rec-row" id={rowId} tabIndex={0} aria-label="รายการองค์ความรู้แนะนำแบบเลื่อนได้" {...vc(b, "items")}>
             {items.map((it, i) => (
-              <article className={"rec-card" + (i === 0 ? " featured" : "")} key={i}>
+              <article className={"rec-card" + (i === 0 ? " featured" : "")} key={i} {...vc(b, "items." + i)}>
                 <a href={it.href || "#"} className="rec-cover">
                   {it.image ? <Picture src={it.image} alt="" loading="lazy" /> : null}
                   {it.type ? <span className="rec-type">{it.type}</span> : null}
@@ -857,29 +858,29 @@ function ServiceGateway({ b }: { b: Block }) {
       <div className="container">
         <div className="ps-gateway-head reveal">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            <h2 id="public-service-title">{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h2 id="public-service-title" {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
-          {b.viewAllLabel ? <a className="ps-gateway-all" href={b.viewAllUrl || "#"}>{b.viewAllLabel}<span>→</span></a> : null}
+          {b.viewAllLabel ? <a className="ps-gateway-all" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}<span>→</span></a> : null}
         </div>
 
         <div className="ps-gateway-layout reveal">
           <a className="ps-main-service" href={b.mainHref || "#"}>
-            {b.mainLabel ? <span className="ps-main-service__label">{b.mainLabel}</span> : null}
+            {b.mainLabel ? <span className="ps-main-service__label" {...vc(b, "mainLabel")}>{b.mainLabel}</span> : null}
             <span className="ps-main-service__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M4.5 5.5h15v10h-8L7 19v-3.5H4.5v-10Z"></path><path d="M8 9h8M8 12h5"></path></svg>
             </span>
             <span className="ps-main-service__text">
-              <strong>{b.mainTitle}</strong>
-              {b.mainBody ? <em>{b.mainBody}</em> : null}
+              <strong {...vc(b, "mainTitle")}>{b.mainTitle}</strong>
+              {b.mainBody ? <em {...vc(b, "mainBody")}>{b.mainBody}</em> : null}
             </span>
-            {b.mainActionLabel ? <span className="ps-main-service__action">{b.mainActionLabel}<i>→</i></span> : null}
+            {b.mainActionLabel ? <span className="ps-main-service__action" {...vc(b, "mainActionLabel")}>{b.mainActionLabel}<i>→</i></span> : null}
           </a>
 
-          <div className="ps-service-list" aria-label="รายการบริการประชาชน">
+          <div className="ps-service-list" aria-label="รายการบริการประชาชน" {...vc(b, "items")}>
             {items.map((it, i) => (
-              <a className="ps-service-item" href={it.href || "#"} key={i}>
+              <a className="ps-service-item" href={it.href || "#"} key={i} {...vc(b, "items." + i)}>
                 <span className="ps-service-item__icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24"><path d="M6 4h9.5L19 8.5V20H6V4Z"></path><path d="M15.5 4v4.5H19"></path><path d="M9 12h6M9 15h4"></path></svg>
                 </span>
@@ -896,8 +897,8 @@ function ServiceGateway({ b }: { b: Block }) {
 
         {steps.length ? (
           <div className="ps-process-strip reveal" aria-label="ขั้นตอนการใช้บริการ">
-            {b.processLabel ? <span>{b.processLabel}</span> : null}
-            <ol>{steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
+            {b.processLabel ? <span {...vc(b, "processLabel")}>{b.processLabel}</span> : null}
+            <ol {...vc(b, "steps")}>{steps.map((s, i) => <li key={i} {...vc(b, "steps." + i)}>{s}</li>)}</ol>
           </div>
         ) : null}
       </div>
@@ -914,7 +915,7 @@ function LogoMarquee({ b }: { b: Block }) {
   const group = (hidden: boolean) => (
     <div className="cn-marquee__group" aria-hidden={hidden || undefined}>
       {items.map((it, i) => (
-        <a className="cn-logo-card" href={it.href || "#"} key={i} target={hidden ? undefined : "_blank"} rel={hidden ? undefined : "noopener"} tabIndex={hidden ? -1 : undefined}>
+        <a className="cn-logo-card" href={it.href || "#"} key={i} target={hidden ? undefined : "_blank"} rel={hidden ? undefined : "noopener"} tabIndex={hidden ? -1 : undefined} {...(hidden ? {} : vc(b, "items." + i))}>
           <span>{it.image ? <Picture src={it.image} alt={hidden ? "" : it.name} loading="lazy" decoding="async" /> : null}</span>
           <strong>{it.name}</strong>
         </a>
@@ -926,16 +927,16 @@ function LogoMarquee({ b }: { b: Block }) {
       <div className="container">
         <div className="cn-marquee-head reveal">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            <h2 id="network-title">{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            <h2 id="network-title" {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
-          {b.viewAllLabel ? <a className="cn-view-all" href={b.viewAllUrl || "#"}>{b.viewAllLabel}<span>→</span></a> : null}
+          {b.viewAllLabel ? <a className="cn-view-all" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}<span>→</span></a> : null}
         </div>
       </div>
       <div className="cn-marquee reveal" aria-label="รายการหน่วยงานและระบบที่เกี่ยวข้อง">
         <div className="cn-marquee__viewport">
-          <div className="cn-marquee__track">{group(false)}{group(true)}</div>
+          <div className="cn-marquee__track" {...vc(b, "items")}>{group(false)}{group(true)}</div>
         </div>
       </div>
     </section>
@@ -950,7 +951,7 @@ function VmStrip({ b }: { b: Block }) {
     <section className="vm-strip-section" id={b.id} aria-label="วิสัยทัศน์และพันธกิจราชบัณฑิตยสภา">
       <div className="container">
         <div className="vm-strip reveal">
-          <div className="vm-strip__items">{items.map((s, i) => <span key={i}>{s}</span>)}</div>
+          <div className="vm-strip__items" {...vc(b, "items")}>{items.map((s, i) => <span key={i} {...vc(b, "items." + i)}>{s}</span>)}</div>
         </div>
       </div>
     </section>
@@ -975,8 +976,8 @@ function FlexPanel({ b }: { b: Block }) {
   if (layout === "banner") {
     return (
       <Section b={{ ...b, heading: undefined, lead: undefined }}>
-        <div className={"rs-note" + toneClass}>
-          {b.heading ? <strong>{b.heading}</strong> : null}
+        <div className={"rs-note" + toneClass} {...vc(b, "lead")}>
+          {b.heading ? <strong {...vc(b, "heading")}>{b.heading}</strong> : null}
           {b.lead}
         </div>
       </Section>
@@ -986,9 +987,9 @@ function FlexPanel({ b }: { b: Block }) {
   if (layout === "list") {
     return (
       <Section b={b}>
-        <ul className="rs-list">
+        <ul className="rs-list" {...vc(b, "items")}>
           {items.map((it, i) => (
-            <li className="rs-list-item" key={i}>
+            <li className="rs-list-item" key={i} {...vc(b, "items." + i)}>
               <div className="rs-list-item__body">
                 <h3><a href={it.href || "#"}>{it.title}</a></h3>
                 {it.body ? <p>{it.body}</p> : null}
@@ -1006,12 +1007,12 @@ function FlexPanel({ b }: { b: Block }) {
       <section className="section" id={b.id}>
         <div className="container">
           <div className="rs-panel rs-panel--deep">
-            <h2>{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
+            <h2 {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
             {items.length ? (
-              <div className="rs-btn-row" style={{ marginTop: 18 }}>
+              <div className="rs-btn-row" style={{ marginTop: 18 }} {...vc(b, "items")}>
                 {items.map((it, i) => (
-                  <a key={i} className="rs-btn rs-btn--gold" href={it.href || "#"}>{it.title}</a>
+                  <a key={i} {...vc(b, "items." + i)} className="rs-btn rs-btn--gold" href={it.href || "#"}>{it.title}</a>
                 ))}
               </div>
             ) : null}
@@ -1024,9 +1025,9 @@ function FlexPanel({ b }: { b: Block }) {
   if (layout === "stats") {
     return (
       <Section b={b}>
-        <div className="rs-stats">
+        <div className="rs-stats" {...vc(b, "items")}>
           {items.map((it, i) => (
-            <div className="rs-stat" key={i}>
+            <div className="rs-stat" key={i} {...vc(b, "items." + i)}>
               <span className="rs-stat__value">{it.title}</span>
               {it.body ? <span className="rs-stat__label">{it.body}</span> : null}
             </div>
@@ -1044,9 +1045,9 @@ function FlexPanel({ b }: { b: Block }) {
     // either.
     return (
       <section className="trust-strip" id={b.id}>
-        <div className="container trust-grid">
+        <div className="container trust-grid" {...vc(b, "items")}>
           {items.map((it, i) => (
-            <article className="trust-item" key={i}>
+            <article className="trust-item" key={i} {...vc(b, "items." + i)}>
               <SafeRsIcon id={it.icon} className="icon trust-icon" />
               <div><h3>{it.title}</h3></div>
             </article>
@@ -1059,9 +1060,9 @@ function FlexPanel({ b }: { b: Block }) {
   // default: cards
   return (
     <Section b={b}>
-      <div className={colsClass(items.length >= 4 ? "4" : "3")}>
+      <div className={colsClass(items.length >= 4 ? "4" : "3")} {...vc(b, "items")}>
         {items.map((it, i) => (
-          <article className="rs-card rs-card--flat" key={i}>
+          <article className="rs-card rs-card--flat" key={i} {...vc(b, "items." + i)}>
             <div className="rs-card__body">
               <h3 className="rs-card__title"><a href={it.href || "#"}>{it.title}</a></h3>
               {it.body ? <p className="rs-card__excerpt">{it.body}</p> : null}
@@ -1122,7 +1123,7 @@ function UnknownBlock({ label, detail }: { label: string; detail: string }) {
   );
 }
 
-export default function Blocks({ blocks, locale }: { blocks: Block[]; locale?: "th" | "en" }) {
+export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Block[]; locale?: "th" | "en"; indexOffset?: number }) {
   return (
     <>
       {(blocks || []).map((block, index) => {
@@ -1135,8 +1136,15 @@ export default function Blocks({ blocks, locale }: { blocks: Block[]; locale?: "
             </Fragment>
           );
         }
+        const idx = indexOffset + index;
         try {
-          return <Fragment key={key}>{render(block, locale)}</Fragment>;
+          const css = boxesCss(block, idx);
+          return (
+            <Fragment key={key}>
+              {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
+              {render({ ...block, __vbi: idx }, locale)}
+            </Fragment>
+          );
         } catch (error: any) {
           return (
             <Fragment key={key}>

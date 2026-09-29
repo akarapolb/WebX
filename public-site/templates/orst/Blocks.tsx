@@ -10,6 +10,7 @@ import ListExport from "@/components/ListExport";
 import Picture from "@/components/Picture";
 import JobApplicationForm from "@/components/JobApplicationForm";
 import type { JobPosting } from "@/lib/cms";
+import { vc, boxesCss } from "@/templates/_builder/boxes";
 
 /* =============================================================================
    Blocks.tsx — React port of the ORST static site's block renderer
@@ -64,12 +65,12 @@ function SectionHead({ block }: { block: Block }) {
   return (
     <div className="section-head reveal">
       <div>
-        {block.eyebrow ? <span className="block-eyebrow">{block.eyebrow}</span> : null}
-        {block.heading ? <h2>{block.heading}</h2> : null}
-        {block.lead ? <p>{block.lead}</p> : null}
+        {block.eyebrow ? <span className="block-eyebrow" {...vc(block, "eyebrow")}>{block.eyebrow}</span> : null}
+        {block.heading ? <h2 {...vc(block, "heading")}>{block.heading}</h2> : null}
+        {block.lead ? <p {...vc(block, "lead")}>{block.lead}</p> : null}
       </div>
       {block.action?.href ? (
-        <a className="view-all" href={block.action.href}>
+        <a className="view-all" href={block.action.href} {...vc(block, "action")}>
           {block.action.label || "ดูทั้งหมด"}
         </a>
       ) : null}
@@ -101,12 +102,12 @@ function Section({
 type ActionItem = { label?: string; href?: string; variant?: string };
 
 /** A row of buttons/links. */
-function Actions({ list }: { list?: ActionItem[] }) {
+function Actions({ list, b, k = "actions" }: { list?: ActionItem[]; b?: Block; k?: string }) {
   if (!list?.length) return null;
   return (
-    <div className="block-actions">
+    <div className="block-actions" {...vc(b, k)}>
       {list.map((a, i) => (
-        <a key={i} className={a.variant === "ghost" ? "block-btn is-ghost" : "block-btn"} href={a.href || "#"}>
+        <a key={i} className={a.variant === "ghost" ? "block-btn is-ghost" : "block-btn"} href={a.href || "#"} {...vc(b, k + "." + i)}>
           {a.label || ""}
         </a>
       ))}
@@ -128,7 +129,7 @@ function PageHero({ b }: { b: Block }) {
     <section className="page-hero" id={b.id}>
       <div className="container">
         {crumbs.length ? (
-          <nav className="block-breadcrumb" aria-label="เส้นทางหน้า">
+          <nav className="block-breadcrumb" aria-label="เส้นทางหน้า" {...vc(b, "breadcrumb")}>
             {crumbs.map((c, i) =>
               i === crumbs.length - 1 ? (
                 <span key={i} aria-current="page">
@@ -143,10 +144,10 @@ function PageHero({ b }: { b: Block }) {
             )}
           </nav>
         ) : null}
-        {b.eyebrow ? <span className="block-eyebrow">{b.eyebrow}</span> : null}
-        <h1>{b.heading}</h1>
-        {b.lead ? <p>{b.lead}</p> : null}
-        <Actions list={b.actions} />
+        {b.eyebrow ? <span className="block-eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+        <h1 {...vc(b, "heading")}>{b.heading}</h1>
+        {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+        <Actions list={b.actions} b={b} />
       </div>
     </section>
   );
@@ -166,9 +167,9 @@ function RichText({ b }: { b: Block }) {
   const paragraphs: string[] = b.paragraphs || [];
   return (
     <Section block={b}>
-      <div className={cls}>
+      <div className={cls} {...vc(b, "paragraphs")}>
         {paragraphs.map((p, i) => (
-          <p key={i}>{p}</p>
+          <p key={i} {...vc(b, "paragraphs." + i)}>{p}</p>
         ))}
       </div>
     </Section>
@@ -181,7 +182,7 @@ function CardGrid({ b }: { b: Block }) {
   const items: any[] = b.items || [];
   return (
     <Section block={b}>
-      <div className={colsClass(b.columns) + " reveal"}>
+      <div className={colsClass(b.columns) + " reveal"} {...vc(b, "items")}>
         {items.map((it, i) => {
           const inner = (
             <>
@@ -197,11 +198,11 @@ function CardGrid({ b }: { b: Block }) {
             </>
           );
           return it.href ? (
-            <a key={i} className="content-card block-card is-link" href={it.href}>
+            <a key={i} className="content-card block-card is-link" href={it.href} {...vc(b, "items." + i)}>
               {inner}
             </a>
           ) : (
-            <article key={i} className="content-card block-card">
+            <article key={i} className="content-card block-card" {...vc(b, "items." + i)}>
               {inner}
             </article>
           );
@@ -217,9 +218,9 @@ function FeatureList({ b }: { b: Block }) {
   const items: any[] = b.items || [];
   return (
     <Section block={b}>
-      <ul className={colsClass(b.columns) + " block-feature-list"}>
+      <ul className={colsClass(b.columns) + " block-feature-list"} {...vc(b, "items")}>
         {items.map((it, i) => (
-          <li className="block-feature" key={i}>
+          <li className="block-feature" key={i} {...vc(b, "items." + i)}>
             <span className="block-feature-icon">
               <BlockIcon id={it.icon || "i-shield"} className="icon-lg" />
             </span>
@@ -240,9 +241,9 @@ function StatRow({ b }: { b: Block }) {
   const items: any[] = b.items || [];
   return (
     <Section block={b}>
-      <div className="block-stat-row">
+      <div className="block-stat-row" {...vc(b, "items")}>
         {items.map((it, i) => (
-          <div className="block-stat" key={i}>
+          <div className="block-stat" key={i} {...vc(b, "items." + i)}>
             <strong>{it.value}</strong>
             <span>{it.label}</span>
             {it.note ? <small>{it.note}</small> : null}
@@ -259,9 +260,9 @@ function LinkList({ b }: { b: Block }) {
   const items: any[] = b.items || [];
   return (
     <Section block={b}>
-      <ul className="block-link-list">
+      <ul className="block-link-list" {...vc(b, "items")}>
         {items.map((it, i) => (
-          <li key={i}>
+          <li key={i} {...vc(b, "items." + i)}>
             <a className="block-link-row" href={it.href || "#"}>
               <span className="block-link-icon">
                 <BlockIcon id={it.icon || "i-file"} />
@@ -286,7 +287,7 @@ function MediaGrid({ b }: { b: Block }) {
   const items: any[] = b.items || [];
   return (
     <Section block={b}>
-      <div className={colsClass(b.columns)}>
+      <div className={colsClass(b.columns)} {...vc(b, "items")}>
         {items.map((it, i) => {
           const inner = (
             <>
@@ -301,11 +302,11 @@ function MediaGrid({ b }: { b: Block }) {
             </>
           );
           return it.href ? (
-            <a key={i} className="block-media-card is-link" href={it.href}>
+            <a key={i} className="block-media-card is-link" href={it.href} {...vc(b, "items." + i)}>
               {inner}
             </a>
           ) : (
-            <div key={i} className="block-media-card">
+            <div key={i} className="block-media-card" {...vc(b, "items." + i)}>
               {inner}
             </div>
           );
@@ -323,7 +324,7 @@ function TableBlock({ b }: { b: Block }) {
   return (
     <Section block={b}>
       <ListExport title={b.heading || "รายการ"} columns={columns} rows={rows} />
-      <div className="block-table-wrap">
+      <div className="block-table-wrap" {...vc(b, "rows")}>
         <table className="block-table">
           {b.caption ? <caption>{b.caption}</caption> : null}
           <thead>
@@ -370,7 +371,9 @@ function Faq({ b }: { b: Block }) {
   const items: { q: string; a: string }[] = b.items || [];
   return (
     <Section block={b}>
-      <FaqAccordion id={b.id} items={items} />
+      <div {...vc(b, "items")}>
+        <FaqAccordion id={b.id} items={items} />
+      </div>
     </Section>
   );
 }
@@ -381,9 +384,9 @@ function Steps({ b }: { b: Block }) {
   const items: any[] = b.items || [];
   return (
     <Section block={b}>
-      <ol className="block-steps">
+      <ol className="block-steps" {...vc(b, "items")}>
         {items.map((it, i) => (
-          <li className="block-step" key={i}>
+          <li className="block-step" key={i} {...vc(b, "items." + i)}>
             <span className="block-step-no" aria-hidden="true">
               {i + 1}
             </span>
@@ -407,13 +410,13 @@ function TwoColumn({ b }: { b: Block }) {
     <Section block={b}>
       <div className={"block-two-col" + side}>
         <div className="block-two-col-text">
-          {b.subheading ? <h3>{b.subheading}</h3> : null}
+          {b.subheading ? <h3 {...vc(b, "subheading")}>{b.subheading}</h3> : null}
           {paragraphs.map((p, i) => (
-            <p key={i}>{p}</p>
+            <p key={i} {...vc(b, "paragraphs." + i)}>{p}</p>
           ))}
-          <Actions list={b.actions} />
+          <Actions list={b.actions} b={b} />
         </div>
-        <div className="block-two-col-media">
+        <div className="block-two-col-media" {...vc(b, "image")}>
           <Picture src={b.image} alt={b.imageAlt || ""} loading="lazy" />
         </div>
       </div>
@@ -434,10 +437,10 @@ function CtaBand({ b }: { b: Block }) {
       <span className="orst-ornament" aria-hidden="true" />
       <div className="container block-cta-inner">
         <div>
-          <h2>{b.heading}</h2>
-          {b.body ? <p>{b.body}</p> : null}
+          <h2 {...vc(b, "heading")}>{b.heading}</h2>
+          {b.body ? <p {...vc(b, "body")}>{b.body}</p> : null}
         </div>
-        <Actions list={b.actions} />
+        <Actions list={b.actions} b={b} />
       </div>
     </section>
   );
@@ -451,13 +454,13 @@ function Notice({ b }: { b: Block }) {
   const tone = ["info", "warn", "success"].includes(b.tone) ? b.tone : "info";
   return (
     <Section block={b}>
-      <div className={"block-notice is-" + tone} role="note">
+      <div className={"block-notice is-" + tone} role="note" {...vc(b, "notice")}>
         <span className="block-notice-icon">
           <BlockIcon id={NOTICE_ICONS[tone]} className="icon-lg" />
         </span>
         <div>
-          {b.title ? <strong>{b.title}</strong> : null}
-          <p>{b.body}</p>
+          {b.title ? <strong {...vc(b, "title")}>{b.title}</strong> : null}
+          <p {...vc(b, "body")}>{b.body}</p>
         </div>
       </div>
     </Section>
@@ -472,7 +475,9 @@ function Notice({ b }: { b: Block }) {
 function EventCalendarBlock({ b }: { b: Block }) {
   return (
     <Section block={b}>
-      <EventCalendar items={b.items || []} icsHref="/orst/events.ics" />
+      <div {...vc(b, "items")}>
+        <EventCalendar items={b.items || []} icsHref="/orst/events.ics" />
+      </div>
     </Section>
   );
 }
@@ -486,7 +491,9 @@ function EventCalendarBlock({ b }: { b: Block }) {
 function MemberDirectoryBlock({ b, locale }: { b: Block; locale?: "th" | "en" }) {
   return (
     <Section block={b}>
-      <MemberDirectory items={b.items || []} locale={locale} />
+      <div {...vc(b, "items")}>
+        <MemberDirectory items={b.items || []} locale={locale} />
+      </div>
     </Section>
   );
 }
@@ -506,7 +513,7 @@ function JobListingBlock({ b, tenant }: { b: Block; tenant: string }) {
         <p className="muted">{b.emptyLabel || "ขณะนี้ยังไม่มีตำแหน่งงานว่าง"}</p>
       ) : (
         <>
-          <div className="wx-job-list">
+          <div className="wx-job-list" {...vc(b, "jobs")}>
             {jobs.map((j) => (
               <article className="wx-job-card content-card" key={j.jobId}>
                 <h3>{j.title}</h3>
@@ -523,8 +530,8 @@ function JobListingBlock({ b, tenant }: { b: Block; tenant: string }) {
               </article>
             ))}
           </div>
-          <div style={{ marginTop: 32 }}>
-            {b.formHeading ? <h3>{b.formHeading}</h3> : null}
+          <div style={{ marginTop: 32 }} {...vc(b, "form")}>
+            {b.formHeading ? <h3 {...vc(b, "formHeading")}>{b.formHeading}</h3> : null}
             <JobApplicationForm tenant={tenant} jobs={jobs} />
           </div>
         </>
@@ -562,7 +569,7 @@ function ContactInfo({ b, locale = "th" }: { b: Block; locale?: "th" | "en" }) {
   return (
     <Section block={b}>
       <div className={"block-contact" + (b.mapEmbed ? " has-map" : "")}>
-        <ul className="block-contact-list">
+        <ul className="block-contact-list" {...vc(b, "contact")}>
           <ContactRow iconId="i-map" label={l.address} value={b.address} />
           <ContactRow
             iconId="i-phone"
@@ -574,7 +581,7 @@ function ContactInfo({ b, locale = "th" }: { b: Block; locale?: "th" | "en" }) {
           <ContactRow iconId="i-eye" label={l.hours} value={b.hours} />
         </ul>
         {b.mapEmbed ? (
-          <div className="block-contact-map">
+          <div className="block-contact-map" {...vc(b, "mapEmbed")}>
             <iframe src={b.mapEmbed} title={l.map} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
           </div>
         ) : null}
@@ -597,24 +604,24 @@ function ContactHero({ b }: { b: Block }) {
     <section className="contact-hero" aria-labelledby="page-title">
       <div className="container contact-hero-inner">
         <div>
-          {b.eyebrow ? <span className="eyebrow">{b.eyebrow}</span> : null}
-          <h1 id="page-title">{b.heading}</h1>
-          {b.lead ? <p>{b.lead}</p> : null}
-          <div className="hero-actions">
+          {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+          <h1 id="page-title" {...vc(b, "heading")}>{b.heading}</h1>
+          {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+          <div className="hero-actions" {...vc(b, "actions")}>
             {b.cta1Label ? (
-              <a className="btn" href={b.cta1Url || "#"}>
+              <a className="btn" href={b.cta1Url || "#"} {...vc(b, "cta1Label")}>
                 <BlockIcon id="i-send" className="icon" />{" "}{b.cta1Label}
               </a>
             ) : null}
             {b.cta2Label ? (
-              <a className="btn secondary" href={b.cta2Url || "#"}>
+              <a className="btn secondary" href={b.cta2Url || "#"} {...vc(b, "cta2Label")}>
                 <BlockIcon id="i-map" className="icon" />{" "}{b.cta2Label}
               </a>
             ) : null}
           </div>
         </div>
 
-        <aside className="hero-info-card" aria-label="ข้อมูลติดต่อโดยสรุป">
+        <aside className="hero-info-card" aria-label="ข้อมูลติดต่อโดยสรุป" {...vc(b, "infoCard")}>
           <h2>ข้อมูลติดต่อสำคัญ</h2>
           {b.officeHours ? (
             <div className="office-status">
@@ -662,22 +669,22 @@ function StatsHero({ b }: { b: Block }) {
     <section className="knowledge-hero" aria-labelledby="page-title">
       <div className="container hero-inner">
         <div className="hero-copy">
-          {b.eyebrow ? <span className="eyebrow">{b.eyebrow}</span> : null}
-          <h1 id="page-title">{b.heading}</h1>
-          {b.lead ? <p>{b.lead}</p> : null}
+          {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+          <h1 id="page-title" {...vc(b, "heading")}>{b.heading}</h1>
+          {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
         </div>
         {stats.length ? (
-          <aside className="hero-panel" aria-label={b.panelLabel || "ภาพรวม"}>
-            {b.panelHeading ? <h2>{b.panelHeading}</h2> : null}
-            <div className="stat-list">
+          <aside className="hero-panel" aria-label={b.panelLabel || "ภาพรวม"} {...vc(b, "panel")}>
+            {b.panelHeading ? <h2 {...vc(b, "panelHeading")}>{b.panelHeading}</h2> : null}
+            <div className="stat-list" {...vc(b, "stats")}>
               {stats.map((s, i) => (
-                <div className="stat-row" key={i}>
+                <div className="stat-row" key={i} {...vc(b, "stats." + i)}>
                   <span>{s.label}</span>
                   <strong>{s.value}</strong>
                 </div>
               ))}
             </div>
-            {b.note ? <div className="hero-note">{b.note}</div> : null}
+            {b.note ? <div className="hero-note" {...vc(b, "note")}>{b.note}</div> : null}
           </aside>
         ) : null}
       </div>
@@ -718,10 +725,10 @@ function HomeHero({ b }: { b: Block }) {
       </div>
       <div className="container orst-hero-wrap">
         <div className="orst-hero-content">
-          {b.eyebrow ? <span className="orst-hero-kicker">{b.eyebrow}</span> : null}
-          <h1 id="hero-title" className="orst-hero-title">{b.heading}</h1>
-          {b.lead ? <p className="orst-hero-lead">{b.lead}</p> : null}
-          <Actions list={b.actions} />
+          {b.eyebrow ? <span className="orst-hero-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+          <h1 id="hero-title" className="orst-hero-title" {...vc(b, "heading")}>{b.heading}</h1>
+          {b.lead ? <p className="orst-hero-lead" {...vc(b, "lead")}>{b.lead}</p> : null}
+          <Actions list={b.actions} b={b} />
         </div>
       </div>
     </section>
@@ -780,12 +787,13 @@ function MediaTabsBlock({ b }: { b: Block }) {
       <div className="container">
         <div className="section-head knowledge-hub-head">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            {b.heading ? <h2>{b.heading}</h2> : null}
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
-          {b.viewAllLabel ? <a className="view-all media-view-all-link" href={b.viewAllUrl || "#"}>{b.viewAllLabel}</a> : null}
+          {b.viewAllLabel ? <a className="view-all media-view-all-link" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
+        <div {...vc(b, "tabs")}>
         <MediaTabs
           tabs={tabs.map((t) => ({
             id: t.id,
@@ -801,6 +809,7 @@ function MediaTabsBlock({ b }: { b: Block }) {
             ),
           }))}
         />
+        </div>
       </div>
     </section>
   );
@@ -870,12 +879,13 @@ function NewsTabsBlock({ b }: { b: Block }) {
       <div className="container">
         <div className="section-head news-events-head">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            {b.heading ? <h2>{b.heading}</h2> : null}
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
-          {b.viewAllLabel ? <a href={b.viewAllUrl || "#"} className="view-all">{b.viewAllLabel}</a> : null}
+          {b.viewAllLabel ? <a href={b.viewAllUrl || "#"} className="view-all" {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
+        <div {...vc(b, "tabs")}>
         <NewsEventsTabs
           calendar={<NewsEventsCalendar />}
           tabs={tabs.map((t) => ({
@@ -931,6 +941,7 @@ function NewsTabsBlock({ b }: { b: Block }) {
             ),
           }))}
         />
+        </div>
       </div>
     </section>
   );
@@ -944,46 +955,63 @@ function NewsTabsBlock({ b }: { b: Block }) {
 function ServiceHub({ b }: { b: Block }) {
   const steps: { label: string }[] = b.steps || [];
   const items: { badge?: string; time?: string; title: string; body?: string; buttonLabel?: string; href?: string }[] = b.items || [];
+  // Each region renders only when it has something in it — the Visual
+  // Builder lets an editor remove any of these parts, and an empty styled
+  // intro panel/head left behind would look like a rendering bug.
+  const hasHead = !!(b.eyebrow || b.heading || b.lead || b.viewAllLabel);
+  const hasIntro = !!(b.introLabel || b.introHeading || b.introLead || steps.length);
   return (
     <section className="section public-service-section" id={b.id}>
       <div className="container">
+        {hasHead ? (
         <div className="service-directory-head">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            {b.heading ? <h2>{b.heading}</h2> : null}
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
-          {b.viewAllLabel ? <a className="view-all" href={b.viewAllUrl || "#"}>{b.viewAllLabel}</a> : null}
+          {b.viewAllLabel ? <a className="view-all" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
-        <div className="service-directory">
-          <aside className="service-directory-intro">
-            {b.introLabel ? <span className="intro-label">{b.introLabel}</span> : null}
-            {b.introHeading ? <h3>{b.introHeading}</h3> : null}
-            {b.introLead ? <p>{b.introLead}</p> : null}
+        ) : null}
+        {hasIntro || items.length ? (
+        <div className="service-directory" style={hasIntro ? undefined : { gridTemplateColumns: "1fr" }}>
+          {/* Without the intro panel, home.css's 300px|1fr desktop grid would
+              squeeze the cards into the 300px track — hence the override. */}
+          {hasIntro ? (
+          <aside className="service-directory-intro" {...vc(b, "intro")}>
+            {b.introLabel ? <span className="intro-label" {...vc(b, "introLabel")}>{b.introLabel}</span> : null}
+            {b.introHeading ? <h3 {...vc(b, "introHeading")}>{b.introHeading}</h3> : null}
+            {b.introLead ? <p {...vc(b, "introLead")}>{b.introLead}</p> : null}
             {steps.length ? (
-              <div className="intro-steps" aria-label="ขั้นตอนการใช้บริการ">
+              <div className="intro-steps" aria-label="ขั้นตอนการใช้บริการ" {...vc(b, "steps")}>
                 {steps.map((s, i) => (
-                  <div key={i}><span>{String(i + 1).padStart(2, "0")}</span><strong>{s.label}</strong></div>
+                  <div key={i} {...vc(b, "steps." + i)}><span>{String(i + 1).padStart(2, "0")}</span><strong>{s.label}</strong></div>
                 ))}
               </div>
             ) : null}
           </aside>
-          <div className="service-directory-list">
+          ) : null}
+          {items.length ? (
+          <div className="service-directory-list" {...vc(b, "items")}>
             {items.map((it, i) => (
-              <article className="public-service-card" key={i}>
+              <article className="public-service-card" key={i} {...vc(b, "items." + i)}>
                 <div className="public-service-content">
+                  {it.badge || it.time ? (
                   <div className="public-service-top">
                     {it.badge ? <span className="service-badge">{it.badge}</span> : null}
                     {it.time ? <span className="service-time">{it.time}</span> : null}
                   </div>
-                  <h3>{it.title}</h3>
+                  ) : null}
+                  {it.title ? <h3>{it.title}</h3> : null}
                   {it.body ? <p>{it.body}</p> : null}
                   {it.buttonLabel ? <a className="service-link-btn" href={it.href || "#contact-form"}>{it.buttonLabel}<span aria-hidden="true">→</span></a> : null}
                 </div>
               </article>
             ))}
           </div>
+          ) : null}
         </div>
+        ) : null}
       </div>
     </section>
   );
@@ -999,7 +1027,7 @@ function LogoMarquee({ b }: { b: Block }) {
   const group = (hidden: boolean) => (
     <div className="network-marquee-group" aria-hidden={hidden || undefined}>
       {items.map((it, i) => (
-        <a className="network-logo-item" href={it.href || "#"} key={i} tabIndex={hidden ? -1 : undefined} aria-label={hidden ? undefined : it.name}>
+        <a className="network-logo-item" href={it.href || "#"} key={i} tabIndex={hidden ? -1 : undefined} aria-label={hidden ? undefined : it.name} {...(hidden ? {} : vc(b, "items." + i))}>
           <span className="network-logo">
             {it.image ? <Picture src={it.image} alt={hidden ? "" : it.name} loading="lazy" /> : <BlockIcon id="i-search" className="icon-lg" />}
           </span>
@@ -1013,13 +1041,13 @@ function LogoMarquee({ b }: { b: Block }) {
       <div className="container">
         <div className="network-head network-head-compact">
           <div>
-            {b.eyebrow ? <span className="section-kicker">{b.eyebrow}</span> : null}
-            {b.heading ? <h2>{b.heading}</h2> : null}
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
-          {b.viewAllLabel ? <a className="view-all" href={b.viewAllUrl || "#"} aria-label={b.viewAllLabel}>{b.viewAllLabel}</a> : null}
+          {b.viewAllLabel ? <a className="view-all" href={b.viewAllUrl || "#"} aria-label={b.viewAllLabel} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
-        <div className="network-marquee" aria-label="โลโก้หน่วยงานและระบบที่เกี่ยวข้อง">
+        <div className="network-marquee" aria-label="โลโก้หน่วยงานและระบบที่เกี่ยวข้อง" {...vc(b, "items")}>
           <div className="network-marquee-track">
             {group(false)}
             {group(true)}
@@ -1049,7 +1077,7 @@ function FlexPanel({ b }: { b: Block }) {
   if (layout === "banner") {
     return (
       <Section block={b}>
-        <div className={"block-notice is-" + tone} role="note">
+        <div className={"block-notice is-" + tone} role="note" {...vc(b, "notice")}>
           <span className="block-notice-icon">
             <BlockIcon id={NOTICE_ICONS[tone]} className="icon-lg" />
           </span>
@@ -1065,9 +1093,9 @@ function FlexPanel({ b }: { b: Block }) {
   if (layout === "list") {
     return (
       <Section block={b}>
-        <ul className="block-link-list">
+        <ul className="block-link-list" {...vc(b, "items")}>
           {items.map((it, i) => (
-            <li key={i}>
+            <li key={i} {...vc(b, "items." + i)}>
               <a className="block-link-row" href={it.href || "#"}>
                 <span className="block-link-icon">
                   <BlockIcon id={it.icon || "i-file"} />
@@ -1089,13 +1117,13 @@ function FlexPanel({ b }: { b: Block }) {
       <section className="block-cta" id={b.id}>
         <div className="container block-cta-inner">
           <div>
-            <h2>{b.heading}</h2>
-            {b.lead ? <p>{b.lead}</p> : null}
+            <h2 {...vc(b, "heading")}>{b.heading}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
           </div>
           {items.length ? (
-            <div className="block-actions">
+            <div className="block-actions" {...vc(b, "items")}>
               {items.map((it, i) => (
-                <a key={i} className="block-btn" href={it.href || "#"}>
+                <a key={i} className="block-btn" href={it.href || "#"} {...vc(b, "items." + i)}>
                   {it.title}
                 </a>
               ))}
@@ -1109,9 +1137,9 @@ function FlexPanel({ b }: { b: Block }) {
   if (layout === "stats") {
     return (
       <Section block={b}>
-        <div className="block-stat-row">
+        <div className="block-stat-row" {...vc(b, "items")}>
           {items.map((it, i) => (
-            <div className="block-stat" key={i}>
+            <div className="block-stat" key={i} {...vc(b, "items." + i)}>
               <strong>{it.title}</strong>
               {it.body ? <span>{it.body}</span> : null}
             </div>
@@ -1124,9 +1152,9 @@ function FlexPanel({ b }: { b: Block }) {
   if (layout === "feature") {
     return (
       <Section block={b}>
-        <ul className={colsClass(items.length >= 4 ? 4 : 3) + " block-feature-list"}>
+        <ul className={colsClass(items.length >= 4 ? 4 : 3) + " block-feature-list"} {...vc(b, "items")}>
           {items.map((it, i) => (
-            <li className="block-feature" key={i}>
+            <li className="block-feature" key={i} {...vc(b, "items." + i)}>
               <span className="block-feature-icon">
                 <BlockIcon id={it.icon || "i-shield"} className="icon-lg" />
               </span>
@@ -1144,7 +1172,7 @@ function FlexPanel({ b }: { b: Block }) {
   // default: cards
   return (
     <Section block={b}>
-      <div className={colsClass(items.length >= 4 ? 4 : 3)}>
+      <div className={colsClass(items.length >= 4 ? 4 : 3)} {...vc(b, "items")}>
         {items.map((it, i) => {
           const inner = (
             <>
@@ -1158,11 +1186,11 @@ function FlexPanel({ b }: { b: Block }) {
             </>
           );
           return it.href ? (
-            <a key={i} className="content-card block-card is-link" href={it.href}>
+            <a key={i} className="content-card block-card is-link" href={it.href} {...vc(b, "items." + i)}>
               {inner}
             </a>
           ) : (
-            <article key={i} className="content-card block-card">
+            <article key={i} className="content-card block-card" {...vc(b, "items." + i)}>
               {inner}
             </article>
           );
@@ -1228,7 +1256,10 @@ function UnknownBlock({ label, detail }: { label: string; detail: string }) {
   );
 }
 
-export default function Blocks({ blocks, locale }: { blocks: Block[]; locale?: "th" | "en" }) {
+// `indexOffset` — the Builder's preview harness renders one block per call
+// (each in its own wrapper), so it passes the block's real page index to keep
+// the `data-vb-s` scope (and the per-block CSS below) unique across the page.
+export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Block[]; locale?: "th" | "en"; indexOffset?: number }) {
   return (
     <>
       {(blocks || []).map((block, index) => {
@@ -1247,7 +1278,17 @@ export default function Blocks({ blocks, locale }: { blocks: Block[]; locale?: "
         }
 
         try {
-          return <Fragment key={key}>{render(block, locale)}</Fragment>;
+          // Free-form component moves/resizes saved from the Visual Builder
+          // (see templates/_builder/boxes.ts) — keys and numbers are
+          // whitelisted/clamped there, so this string is safe to inline.
+          const idx = indexOffset + index;
+          const css = boxesCss(block, idx);
+          return (
+            <Fragment key={key}>
+              {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
+              {render({ ...block, __vbi: idx }, locale)}
+            </Fragment>
+          );
         } catch (error: any) {
           return (
             <Fragment key={key}>

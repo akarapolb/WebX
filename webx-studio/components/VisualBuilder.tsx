@@ -10,6 +10,7 @@ import IconManager, { CustomIcon } from "./IconManager";
 import IconPicker from "./IconPicker";
 import IconSpriteDefs from "./blockPreview/IconSpriteDefs";
 import RealPreview from "./blockPreview/RealPreview";
+import BlockComponents from "./BlockComponents";
 import { FEATURE_ICONS, FEATURE_THEMES, STAT_ICONS } from "./blockPreview/iconChoices";
 import type { Path } from "./blockPreview/editing";
 import { useLang } from "./LangProvider";
@@ -724,6 +725,39 @@ export default function VisualBuilder() {
   const uploadProp = (i: number, key: string, file: File) => uploadFieldImage(i, ["props", key], file);
   const iconOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.icon || "grid") : (metaOf(b.__component)?.icon || "doc");
   const labelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
+  // Block names for the harness preview's selection tab — kept referentially
+  // stable while unchanged, since RealPreview re-posts the whole page to its
+  // iframe whenever this array's identity changes.
+  const labelsKey = blocks.map(labelOf).join("\u0001");
+  const blockLabels = useMemo(() => (labelsKey ? labelsKey.split("\u0001") : []), [labelsKey]);
+  const wireBlocks = useMemo(() => toWire(blocks, template), [blocks, template]);
+  // Figma-style component editing on the harness preview: which component
+  // of which block is picked (sidebar and preview both drive it), and where
+  // a finished move/resize lands — `b.boxes[device][key]`, rendered by
+  // public-site/templates/_builder/boxes.ts. Goes through updateBlockField,
+  // so undo/redo and the unsaved-changes guard see it like any other edit.
+  const [selComp, setSelComp] = useState<{ i: number; key: string } | null>(null);
+  useEffect(() => { setSelComp((c) => (c && c.i === active ? c : null)); }, [active]);
+  const activeComp = selComp && selComp.i === active ? selComp.key : null;
+  const onComponent = useCallback((i: number, key: string | null) => setSelComp(key ? { i, key } : null), []);
+  const setBox = useCallback((i: number, key: string, dev: string, box: any) => {
+    updateBlockField(i, ["boxes", dev, key], box && Object.keys(box).length ? box : undefined);
+  }, [updateBlockField]);
+  // Keep the selected block's editor in view in the sidebar — selection can
+  // come from the canvas/preview (a click on a section there), which would
+  // otherwise leave the sidebar showing some other block. Scrolls only the
+  // sidebar's own scroll box (.vb-insp is sticky + overflow:auto), never the
+  // page, so it can't fight the preview's own scroll-to-block.
+  const inspRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const insp = inspRef.current;
+    const el = insp?.querySelector<HTMLElement>(".vb-block.sel");
+    if (!insp || !el) return;
+    const top = el.getBoundingClientRect().top - insp.getBoundingClientRect().top;
+    // Leave it alone if the block's header is already comfortably visible.
+    if (top >= 0 && top < insp.clientHeight * 0.4) return;
+    insp.scrollTo({ top: insp.scrollTop + top - 8, behavior: "smooth" });
+  }, [active]);
   // Was a direct single-block generator (POST /api/ai/generate → append one
   // block, no review, no governance path at all — it wrote straight into
   // this component's own local `blocks` state same as any manual edit).
@@ -1238,7 +1272,7 @@ export default function VisualBuilder() {
   // filtered out at this one point, so the three render sites below (the
   // insert-between popup, the search results, and the categorized grid)
   // never need their own template check.
-  const paletteTypes = ALL_TYPES.filter((ty: any) => (ty.tpl || "gov-portal") === template || (ty.generic && (template === "orst" || template === "royalsociety")));
+  const paletteTypes = ALL_TYPES.filter((ty: any) => !ty.noPalette && ((ty.tpl || "gov-portal") === template || (ty.generic && (template === "orst" || template === "royalsociety"))));
 
   function ins(index: number) {
     return (
@@ -1358,11 +1392,15 @@ export default function VisualBuilder() {
       {previewMode && <div className="vb-pvbar"><Icon name="eye" />{t("vb.previewhint")}</div>}
       {editing === "B" && !previewMode && <div className="vb-pvbar vb-bbar"><Icon name="split" />{t("vb.editingb")}</div>}
       <div className={"vb2" + (previewMode ? " preview" : "") + (tbOpen && !previewMode ? " tbx-open" : "")}>
-        <aside className="vb-insp">
+        <aside className="vb-insp" ref={inspRef}>
           <div className="vb-insp-h">{t("vb.blocks")} {blocks.length > 0 && <span className="mono" style={{ color: "var(--mut)" }}>{blocks.length}</span>}</div>
           {blocks.map((b, i) => {
             const bm = metaOf(b.__component);
             const isA = i === active;
+            // WordPress-dialect types (ORST/RoyalSociety/shared) get the
+            // full add/remove component editor (BlockComponents.tsx) in
+            // place of the generic fields + single items list below.
+            const wpMeta = !!(bm?.tpl || bm?.generic);
             return (
               <div className={"vb-block" + (isA ? " sel" : "") + (dragI === i ? " drag" : "")} key={i}
                 draggable onDragStart={() => setDragI(i)} onDragEnd={() => setDragI(-1)}
@@ -1402,7 +1440,7 @@ export default function VisualBuilder() {
                     {b.__component === "block.form" && (
                       <div className="notice" style={{ marginBottom: 9 }}><Icon name="shield" />{t("vb.formwarn")}</div>
                     )}
-                    {(bm?.fields || []).filter((f: any) => !f.when || f.when(b)).map((f: any) => (
+                    {!wpMeta && (bm?.fields || []).filter((f: any) => !f.when || f.when(b)).map((f: any) => (
                       <div className="fld" key={f.k} style={{ marginBottom: 9 }}>
                         <label style={{ fontSize: 11 }}>{f.k}</label>
                         {f.rich
@@ -1432,7 +1470,14 @@ export default function VisualBuilder() {
                         — hand-editing items on a source-bound block would
                         silently vanish on the next publish, which is worse
                         than not offering the control at all. */}
-                    {bm?.tpl && bm.items?.key === "items" && (!bm.items.when || bm.items.when(b)) && (
+                    {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons}
+                      device={device} selectedComp={activeComp}
+                      onPickComp={(k) => setSelComp(k ? { i, key: k } : null)}
+                      onResetBox={(k) => setBox(i, k, device, null)}
+                      onResetAllBoxes={() => updateBlockField(i, ["boxes", device], undefined)}
+                      update={(p, v) => updateBlockField(i, p, v)} arrayAdd={(p, it) => onArrayAdd(i, p, it)} arrayRemove={(p, k) => onArrayRemove(i, p, k)}
+                      hidePrimary={bm!.items?.key === "items" && !!b.source}
+                      sourceSlot={bm?.tpl && bm.items?.key === "items" && (!bm.items.when || bm.items.when(b)) && (
                       <div className="fld" style={{ marginBottom: 9 }}>
                         <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
                           <input type="checkbox" checked={!!b.source} onChange={(e) => setField(i, "source", e.target.checked ? { kind: "wp", postType: "service", map: "card" } : undefined)} />
@@ -1455,7 +1500,7 @@ export default function VisualBuilder() {
                           </div>
                         )}
                       </div>
-                    )}
+                    )} />}
                     {/* Generic repeatable-list editor — one `items` descriptor per
                         block type (see ORST_TYPES above) drives add/edit/remove
                         for whichever array that type actually has, through the
@@ -1470,7 +1515,7 @@ export default function VisualBuilder() {
                         when the type's own `items.when(b)` says this block's
                         current field values don't use `items` at all (e.g.
                         FlexPanel's "banner" layout). */}
-                    {bm?.items && (!bm.items.when || bm.items.when(b)) && !(bm.items.key === "items" && b.source) && (
+                    {!wpMeta && bm?.items && (!bm.items.when || bm.items.when(b)) && !(bm.items.key === "items" && b.source) && (
                       <div className="fld" style={{ marginBottom: 9 }}>
                         <label style={{ fontSize: 11 }}>{bm.items.key}</label>
                         {((b[bm.items.key] as any[]) || []).map((it: any, k: number) => (
@@ -1974,7 +2019,9 @@ export default function VisualBuilder() {
                   internal `__component` one blocks is stored in here. Same
                   toWire() translation pageBody() applies before saving; see
                   blockDialect.ts. */}
-              <RealPreview blocks={toWire(blocks, template)} tenant={tenantKey || template} harness={template} />
+              <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template}
+                labels={blockLabels} active={active} onSelect={setActive}
+                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} />
             </div>
           ) : previewMode ? (
             <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.previewunsupported")}</div>

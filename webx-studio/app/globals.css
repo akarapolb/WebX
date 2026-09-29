@@ -346,6 +346,62 @@ svg{display:block;width:18px;height:18px;flex:none}
 .vb-add-btn{display:flex;align-items:center;gap:7px;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--sunk);color:var(--ink2);font-size:12px;font-weight:500;transition:all var(--t)}
 .vb-add-btn:hover{border-color:var(--accent);color:var(--accent)}
 .vb-add-btn svg{width:14px;height:14px;color:var(--accent)}
+.vb-add-btn:disabled{opacity:.5;cursor:not-allowed}
+/* block components editor (components/BlockComponents.tsx) */
+.bc{display:grid;gap:9px}
+.bc-fld,.bc-list{margin:0}
+.bc-lbl{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px}
+.bc-lbl label{font-size:11px;margin:0}
+.bc-count{color:var(--mut);font-size:10.5px;margin-left:4px}
+.bc-x{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;border:none;background:none;color:var(--mut);cursor:pointer;flex:none}
+.bc-x:hover{background:rgba(239,68,68,.12);color:var(--bad)}
+.bc-x svg{width:13px;height:13px}
+.bc-obj{display:grid;gap:6px;background:var(--sunk);border-radius:9px;padding:7px}
+.bc-item{background:var(--sunk);border-radius:9px;margin-bottom:6px;border:1px solid transparent}
+.bc-item:hover{border-color:var(--line)}
+.bc-item-h{display:flex;align-items:center;gap:2px;padding:4px 4px 4px 2px}
+.bc-tog{flex:1;min-width:0;display:flex;align-items:center;gap:6px;border:none;background:none;color:var(--ink2);font-size:12px;padding:3px 4px;cursor:pointer;text-align:left}
+.bc-tog svg{width:12px;height:12px;flex:none}
+.bc-tog .mono{color:var(--mut);font-size:10.5px;flex:none}
+.bc-sum{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bc-mini{width:24px;height:24px;border-radius:6px;border:none;background:none;color:var(--mut);display:grid;place-items:center;cursor:pointer;font-size:12px;flex:none}
+.bc-mini:hover:not(:disabled){background:var(--panel);color:var(--ink)}
+.bc-mini:disabled{opacity:.35;cursor:default}
+.bc-mini svg{width:13px;height:13px}
+.bc-item-b{display:grid;gap:6px;padding:0 7px 7px}
+.bc-sub{border-left:2px solid var(--line);padding-left:8px;margin-top:2px}
+.bc-sub>label{font-size:11px;display:block;margin-bottom:4px}
+.bc-none{font-size:11.5px;padding:2px 0 6px}
+.bc-layout{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,#8b5cf6 10%,var(--sunk));border:1px solid color-mix(in srgb,#8b5cf6 30%,var(--line));font-size:11.5px;color:var(--ink2)}
+.bc-layout>svg{width:14px;height:14px;color:#8b5cf6;flex:none}
+.bc-layout>span{flex:1;min-width:0}
+.bc-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid color-mix(in srgb,#8b5cf6 45%,var(--line));background:color-mix(in srgb,#8b5cf6 14%,transparent);color:#a78bfa;border-radius:999px;padding:2px 8px;font-size:10.5px;font-family:inherit;cursor:pointer;white-space:nowrap;flex:none}
+.bc-chip:hover{background:color-mix(in srgb,#8b5cf6 26%,transparent);color:#fff}
+.bc-lbl .bc-chip{margin-left:auto}
+.bc-item-h .bc-chip{margin:0 2px}
+.bc-pick{cursor:pointer}
+.bc-pick:hover{color:#a78bfa}
+.bc-sel.bc-fld,.bc-sel.bc-list{box-shadow:0 0 0 1.5px #8b5cf6;border-radius:10px;padding:6px;margin:-6px}
+.bc-item.bc-sel{border-color:#8b5cf6}
+.bc-addwrap{position:relative}
+.bc-addbtn{width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;border:1px dashed var(--line2);background:transparent;color:var(--ink2);font:500 12.5px/1.2 inherit;font-family:inherit;cursor:pointer;transition:all var(--t)}
+.bc-addbtn:hover,.bc-addbtn.on{border-color:var(--accent);border-style:solid;color:var(--ink);background:var(--sunk)}
+.bc-addic{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);flex:none}
+.bc-addic svg{width:13px;height:13px}
+.bc-addn{margin-left:auto;font-size:10.5px;color:var(--mut);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:1px 7px}
+.bc-menu{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;background:var(--panel);border:1px solid var(--line2);border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.35);padding:6px;max-height:320px;overflow:auto;animation:bcmenu .12s ease}
+@keyframes bcmenu{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.bc-menu-g+.bc-menu-g{border-top:1px solid var(--line);margin-top:4px;padding-top:4px}
+.bc-menu-h{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:6px 8px 4px}
+.bc-menu-i{width:100%;display:flex;align-items:center;gap:9px;padding:7px 8px;border:none;border-radius:8px;background:none;color:var(--ink);font-size:12.5px;font-family:inherit;cursor:pointer;text-align:left}
+.bc-menu-i:hover,.bc-menu-i:focus-visible{background:var(--sunk);outline:none}
+.bc-menu-ic{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;background:var(--sunk);border:1px solid var(--line);color:var(--ink2);flex:none}
+.bc-menu-i:hover .bc-menu-ic{color:var(--accent);border-color:var(--accent)}
+.bc-menu-ic svg{width:13px;height:13px}
+.bc-menu-k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.bc-menu-t{margin-left:auto;font-size:11px;color:var(--mut)}
+/* .fld input's width:100% also caught checkboxes (e.g. the live-feed toggle) */
+.fld input[type="checkbox"]{width:auto;flex:none;padding:0}
 .vb-search{display:flex;align-items:center;gap:7px;background:var(--sunk);border:1px solid var(--line2);border-radius:9px;padding:7px 10px;margin-bottom:10px}
 .vb-search svg{width:14px;height:14px;color:var(--mut);flex:none}
 .vb-search input{flex:1;background:none;border:none;color:var(--ink);font-size:12.5px;font-family:inherit;min-width:0}

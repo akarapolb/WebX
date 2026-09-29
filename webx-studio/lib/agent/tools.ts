@@ -437,7 +437,7 @@ const TOOLS: ToolDef[] = [
     description: "List the page-section block types available for this workspace's own site design, each with a sample field shape. Call this before insert_blocks/replace_block if you don't already know which block types exist.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
     async run(ctx) {
-      const types = ALL_TYPES.filter((ty: any) => (ty.tpl || "gov-portal") === ctx.dialect || (ty.generic && (ctx.dialect === "orst" || ctx.dialect === "royalsociety")));
+      const types = ALL_TYPES.filter((ty: any) => !ty.noPalette && ((ty.tpl || "gov-portal") === ctx.dialect || (ty.generic && (ctx.dialect === "orst" || ctx.dialect === "royalsociety"))));
       const data = types.map((ty: any) => ({ comp: ty.comp, category: ty.cat, sampleFields: ty.def }));
       return { summary: `${data.length} block type(s) for "${ctx.dialect}"`, data };
     },

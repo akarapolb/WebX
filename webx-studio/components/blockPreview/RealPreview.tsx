@@ -74,18 +74,28 @@ const SHELL = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8" />
 </head><body><div id="root"></div></body></html>`;
 
 // A template with a hosted preview harness route (see public-site/app/
-// orst/preview/page.tsx and templates/_builder/PreviewBridge.tsx) instead
-// of a ported .vbk-* mockup or a same-origin srcDoc iframe. Read-only —
-// inline click-to-edit needs cross-document scripting a genuinely
+// orst/preview/page.tsx and templates/_builder/HarnessBridge.tsx) instead
+// of a ported .vbk-* mockup or a same-origin srcDoc iframe. No inline
+// click-to-edit — that needs cross-document scripting a genuinely
 // cross-origin iframe can't do (srcDoc iframes are same-origin to their
 // parent; `src=` ones to a different port/host are not), so the harness
-// branch below never wires up onSelect/onFieldChange/etc. Sidebar-form
-// editing (already built for wp:page) is unaffected — this only upgrades
-// what the READ-ONLY canvas looks like while editing happens in the sidebar.
+// branch below never wires up onFieldChange/etc. and all field editing
+// happens in the sidebar. SELECTION does cross the boundary, over
+// postMessage: `active` + `labels` go down (the harness outlines the active
+// block and tags it with its name), clicks come back up via onSelect, and
+// the harness reports where the active block sits so this side can scroll
+// the (auto-heighted) iframe to it.
 const HARNESS_PATH: Record<string, string> = { orst: "/orst/preview", royalsociety: "/royalsociety/preview" };
+// The harness is laid out at a REAL device width and scaled down to fit the
+// canvas — otherwise "desktop" (a ~800px-wide canvas) would render the
+// template's tablet layout, and a Figma-style move made there would land in
+// the wrong breakpoint. Each width sits inside the matching range of
+// public-site/templates/_builder/boxes.ts's DEVICE_MEDIA.
+const VIRTUAL_W: Record<string, number> = { desktop: 1280, tablet: 800, mobile: 390 };
 
 export default function RealPreview({
-  blocks, homeData, customTypes, customIcons, collectionData, tenant, harness,
+  blocks, homeData, customTypes, customIcons, collectionData, tenant, harness, labels,
+  device, comp, onComponent, onBox,
   active, onSelect, onFieldChange, onImagePick, onArrayAdd, onArrayRemove, onDeselect,
 }: {
   blocks: any[]; homeData?: any; customTypes?: Record<string, any>; customIcons?: Record<string, any>;
@@ -96,6 +106,16 @@ export default function RealPreview({
    * gov-portal srcDoc/portal mechanism to an actual cross-origin `src=`
    * iframe driven by postMessage. */
   harness?: string;
+  /** Harness mode only: each block's display name (same index as `blocks`),
+   * shown on the selection outline's tab inside the harness. */
+  labels?: string[];
+  /** Harness mode: which device width to lay the harness out at (see VIRTUAL_W). */
+  device?: "desktop" | "tablet" | "mobile";
+  /** Harness mode: the component picked inside the active block (Figma-style editing). */
+  comp?: string | null;
+  onComponent?: (i: number, key: string | null) => void;
+  /** A finished move/resize of component `key` in block `i`, for `device` (null box = reset). */
+  onBox?: (i: number, key: string, device: string, box: any) => void;
   active?: number;
   onSelect?: (i: number) => void;
   onFieldChange?: (i: number, path: Path, value: any) => void;
@@ -111,22 +131,80 @@ export default function RealPreview({
 
   const [harnessReady, setHarnessReady] = useState(false);
   const [harnessHeight, setHarnessHeight] = useState<number>(600);
-  // Re-sends on every blocks change AND once harnessReady flips true (the
-  // child may announce readiness before this effect's first run captured
-  // it, or the iframe can reload independently of a blocks change — e.g.
-  // the device-width toggle remounting it).
+  const scrollMarkRef = useRef<HTMLDivElement>(null);
+  // The last `active` this side told the harness about — a change that did
+  // NOT come from a click inside the harness (i.e. a sidebar click) asks it
+  // to report the block's position so it can be scrolled into view.
+  const sentActive = useRef<number | undefined>(undefined);
+  const clickedInHarness = useRef<number | null>(null);
+  // Re-sends on every blocks/selection change AND once harnessReady flips
+  // true (the child may announce readiness before this effect's first run
+  // captured it, or the iframe can reload independently of a blocks change —
+  // e.g. the device-width toggle remounting it).
   useEffect(() => {
     if (!harnessPath) return;
     const win = iframeRef.current?.contentWindow;
     if (!win || !harnessReady) return;
-    win.postMessage({ type: "webx:builder:render", blocks }, PUBLIC_SITE);
-  }, [harnessPath, harnessReady, blocks]);
+    const changed = sentActive.current !== active;
+    const scroll = changed && (active ?? -1) >= 0 && clickedInHarness.current !== active;
+    sentActive.current = active;
+    clickedInHarness.current = null;
+    win.postMessage({ type: "webx:builder:render", blocks, active: active ?? -1, labels: labels || [], scroll, comp: comp ?? null }, PUBLIC_SITE);
+  }, [harnessPath, harnessReady, blocks, active, labels, comp]);
+  // Latest callbacks without re-subscribing the listener on every render.
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const onComponentRef = useRef(onComponent);
+  onComponentRef.current = onComponent;
+  const onBoxRef = useRef(onBox);
+  onBoxRef.current = onBox;
+  // Fit the real-width harness into the canvas (see VIRTUAL_W).
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!harnessPath || !el) return;
+    const ro = new ResizeObserver(() => setAvail(el.clientWidth));
+    ro.observe(el);
+    setAvail(el.clientWidth);
+    return () => ro.disconnect();
+  }, [harnessPath]);
+  const vw = VIRTUAL_W[device || "desktop"];
+  const scale = avail ? Math.min(1, avail / vw) : 1;
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
   useEffect(() => {
     if (!harnessPath) return;
     function onMessage(e: MessageEvent) {
       if (e.origin !== PUBLIC_SITE) return; // only ever trust the harness's own origin
-      if (e.data?.type === "webx:harness:hello") setHarnessReady(true);
-      else if (e.data?.type === "webx:harness:height" && typeof e.data.px === "number") setHarnessHeight(Math.max(200, e.data.px));
+      if (e.source !== iframeRef.current?.contentWindow) return; // and only THIS preview's own iframe
+      const d = e.data;
+      if (d?.type === "webx:harness:hello") setHarnessReady(true);
+      else if (d?.type === "webx:harness:height" && typeof d.px === "number") setHarnessHeight(Math.max(200, d.px));
+      else if (d?.type === "webx:harness:select" && Number.isInteger(d.index)) {
+        clickedInHarness.current = d.index;
+        onSelectRef.current?.(d.index);
+      } else if (d?.type === "webx:harness:component" && Number.isInteger(d.index)) {
+        onComponentRef.current?.(d.index, typeof d.key === "string" ? d.key : null);
+      } else if (d?.type === "webx:harness:box" && Number.isInteger(d.index) && typeof d.key === "string"
+        && ["desktop", "tablet", "mobile"].includes(d.device) && d.box && typeof d.box === "object") {
+        // Only plain numbers/flag through — the harness is a different
+        // origin, so treat what it sends as untrusted shape-wise too.
+        const n = (v: any) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : undefined);
+        const box = { x: n(d.box.x), y: n(d.box.y), w: n(d.box.w), h: n(d.box.h), ib: d.box.ib === true ? true : undefined };
+        onBoxRef.current?.(d.index, d.key, d.device, JSON.parse(JSON.stringify(box)));
+      } else if (d?.type === "webx:harness:selected" && typeof d.top === "number") {
+        // The iframe is auto-heighted, so whatever scrolls is an ancestor on
+        // THIS side — park a marker at the block's offset inside the
+        // wrapper and let the browser find and scroll that ancestor. The
+        // harness reports in its own (unscaled) pixels.
+        const m = scrollMarkRef.current;
+        if (!m) return;
+        const k = scaleRef.current;
+        m.style.top = Math.max(0, d.top * k - 24) + "px";
+        m.style.height = Math.min(Math.max((d.height || 0) * k, 1), window.innerHeight * 0.6) + "px";
+        m.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -195,8 +273,13 @@ export default function RealPreview({
 
   if (harnessPath) {
     return (
-      <div className="vb-realpreview">
-        <iframe ref={iframeRef} src={PUBLIC_SITE + harnessPath} title="Real preview" style={{ height: harnessHeight, border: 0, width: "100%" }}
+      <div className="vb-realpreview" ref={wrapRef} style={{ position: "relative", height: Math.ceil(harnessHeight * scale), minHeight: 0 }}>
+        <div ref={scrollMarkRef} aria-hidden="true" style={{ position: "absolute", left: 0, width: 1, top: 0, height: 1, pointerEvents: "none" }} />
+        <iframe ref={iframeRef} src={PUBLIC_SITE + harnessPath} title="Real preview"
+          // Absolutely positioned so its real-device width can't widen the
+          // wrapper it's measured against (the wrapper's height is set
+          // explicitly above instead).
+          style={{ position: "absolute", top: 0, left: 0, width: vw, height: harnessHeight, border: 0, display: "block", transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}
           onLoad={() => setHarnessReady(false) /* a reload means the child's own state (and its "hello") is gone — wait for a fresh one before sending */} />
       </div>
     );

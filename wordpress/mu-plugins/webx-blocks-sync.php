@@ -103,7 +103,16 @@ add_action('rest_after_insert_page', function ($post, WP_REST_Request $request, 
     $seen = [];
     $merged = array_map(function ($b) use ($synced_by_id, &$seen) {
         $id = $b['id'] ?? null;
-        if ($id !== null && isset($synced_by_id[$id])) { $seen[$id] = true; return $synced_by_id[$id]; }
+        if ($id !== null && isset($synced_by_id[$id])) {
+            $seen[$id] = true;
+            $s = $synced_by_id[$id];
+            // `boxes` (the Visual Builder's free-form component moves/resizes,
+            // see public-site/templates/_builder/boxes.ts) has no Gutenberg
+            // representation at all — carry it over rather than let a
+            // wp-admin save silently throw the layout away.
+            if (isset($b['boxes']) && !isset($s['boxes'])) $s['boxes'] = $b['boxes'];
+            return $s;
+        }
         return $b;
     }, $existing);
     foreach ($synced as $b) {
