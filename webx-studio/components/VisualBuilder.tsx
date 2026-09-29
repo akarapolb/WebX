@@ -19,6 +19,8 @@ import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { pickLandingPage } from "@/lib/homePage";
+import ComponentStyle from "./ComponentStyle";
+import { pageColors } from "@/lib/color";
 import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
 import { TYPES, ORST_TYPES, ROYALSOCIETY_TYPES, GENERIC_TYPES, BLOCK_CATEGORIES, ALL_TYPES, metaOf } from "@/lib/blockCatalog";
 import { useAgentOptional, useAgent } from "./agent/AgentProvider";
@@ -230,6 +232,8 @@ export default function VisualBuilder() {
   // no insert affordance at all, so before this the list could reorder,
   // duplicate and delete but never add.
   const [sideInsAt, setSideInsAt] = useState<number>(-1);
+  // Which block's name is being edited inline in the list (-1 = none).
+  const [renaming, setRenaming] = useState<number>(-1);
   const [dragNew, setDragNew] = useState<{ comp?: string; custom?: BlockType; template?: PageTemplate } | null>(null);
   const [dropAt, setDropAt] = useState<number>(-1);
   const [dragBlock, setDragBlock] = useState<number>(-1);
@@ -575,36 +579,64 @@ export default function VisualBuilder() {
   // coalesce into one undo step via the 600ms debounce in pushUndo — without
   // it, one Ctrl+Z would only ever remove a single keystroke, which is not
   // what "undo" means to a non-technical editor.
-  const [undoStack, setUndoStack] = useState<Block[][]>([]);
-  const [redoStack, setRedoStack] = useState<Block[][]>([]);
+  // A step remembers WHICH block was selected as well as the content, so
+  // undoing a delete puts you back on the block it restored instead of
+  // leaving nothing selected — the selection is what both the sidebar's
+  // scroll-into-view effect and the preview's scroll-to-block key off, so
+  // restoring it is also what scrolls the view back to where the edit
+  // happened. Without it, Ctrl+Z after a delete silently restored a block
+  // somewhere off-screen.
+  type Step = { blocks: Block[]; active: number };
+  const [undoStack, setUndoStack] = useState<Step[]>([]);
+  const [redoStack, setRedoStack] = useState<Step[]>([]);
   const lastPushRef = useRef<number>(0);
-  const pushUndo = useCallback((prevBlocks: Block[]) => {
+  // The current blocks/selection, readable from a callback that was created
+  // on an earlier render. The window keydown listener below is registered by
+  // an effect that deliberately does NOT depend on `blocks` (re-binding on
+  // every keystroke), so undo/redo/delete driven from the keyboard would
+  // otherwise operate on whatever the array was when that effect last ran —
+  // reproducible as: type into a field, Ctrl+Z, and the redo stack captures
+  // pre-typing content.
+  const blocksRef = useRef<Block[]>(blocks);
+  blocksRef.current = blocks;
+  const activeRef = useRef<number>(active);
+  activeRef.current = active;
+  // Takes its snapshot from the ref rather than an argument. Every caller
+  // runs before its own setBlocks in the same event, so the ref still holds
+  // the pre-mutation array — and a caller that was created on an earlier
+  // render (the agent's applyAgentProposal, registered once per page, and
+  // the window keydown handlers) can no longer hand this a stale array and
+  // corrupt the stack with the wrong "previous" state.
+  const pushUndo = useCallback(() => {
     const now = Date.now();
     if (now - lastPushRef.current < 600) return;
     lastPushRef.current = now;
-    setUndoStack((s) => [...s.slice(-49), prevBlocks]); // cap at 50 steps
+    const step: Step = { blocks: blocksRef.current, active: activeRef.current };
+    setUndoStack((s) => [...s.slice(-49), step]); // cap at 50 steps
     setRedoStack([]);
   }, []);
-  function undo() {
+  // Restoring a selection has to survive the list having shrunk since (redo
+  // of a delete, say) — clamp rather than trust the stored index.
+  const applyStep = useCallback((step: Step) => {
+    setBlocks(step.blocks);
+    setActive(step.active < 0 ? -1 : Math.min(step.active, step.blocks.length - 1));
+  }, []);
+  const undo = useCallback(() => {
     setUndoStack((s) => {
       if (!s.length) return s;
-      const prev = s[s.length - 1];
-      setRedoStack((r) => [...r, blocks]);
-      setBlocks(prev);
-      setActive((a) => Math.min(a, prev.length - 1));
+      setRedoStack((r) => [...r, { blocks: blocksRef.current, active: activeRef.current }]);
+      applyStep(s[s.length - 1]);
       return s.slice(0, -1);
     });
-  }
-  function redo() {
+  }, [applyStep]);
+  const redo = useCallback(() => {
     setRedoStack((s) => {
       if (!s.length) return s;
-      const next = s[s.length - 1];
-      setUndoStack((u) => [...u, blocks]);
-      setBlocks(next);
-      setActive((a) => Math.min(a, next.length - 1));
+      setUndoStack((u) => [...u, { blocks: blocksRef.current, active: activeRef.current }]);
+      applyStep(s[s.length - 1]);
       return s.slice(0, -1);
     });
-  }
+  }, [applyStep]);
   // Jumping to a different page/version/variant makes prior undo history
   // meaningless (undoing "past" that jump would silently land on a DIFFERENT
   // page's content) — clear it rather than let it dangle.
@@ -616,9 +648,9 @@ export default function VisualBuilder() {
   // so the sidebar and the inline-editable canvas can never drift out of
   // sync: both ultimately call setBlocks the same way.
   const updateBlock = useCallback((i: number, patcher: (b: Block) => Block) => {
-    pushUndo(blocks);
+    pushUndo();
     setBlocks((bs) => bs.map((b, j) => (j === i ? patcher(b) : b)));
-  }, [blocks, pushUndo]);
+  }, [pushUndo]);
   const updateBlockField = useCallback((i: number, path: Path, value: any) => {
     updateBlock(i, (b) => setPath(b, path, value));
   }, [updateBlock]);
@@ -656,20 +688,30 @@ export default function VisualBuilder() {
   }, [updateBlock]);
 
   const setField = (i: number, k: string, v: any) => updateBlockField(i, [k], v);
-  const move = (i: number, d: number) => { pushUndo(blocks); setBlocks((b) => { const n = [...b]; const j = i + d; if (j < 0 || j >= n.length) return b; [n[i], n[j]] = [n[j], n[i]]; setActive(j); return n; }); };
-  const reorder = (from: number, to: number) => { pushUndo(blocks); setBlocks((b) => { if (from === to || from < 0) return b; const n = [...b]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; }); };
-  const remove = (i: number) => { pushUndo(blocks); setBlocks((b) => b.filter((_, j) => j !== i)); setActive(-1); };
-  const dup = (i: number) => { pushUndo(blocks); setBlocks((b) => { const c = JSON.parse(JSON.stringify(b[i])); delete c.id; const n = [...b]; n.splice(i + 1, 0, c); setActive(i + 1); return n; }); };
-  const add = (comp: string) => { const m = metaOf(comp); pushUndo(blocks); setBlocks((b) => { setActive(b.length); return [...b, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))]; }); };
-  const addAt = (idx: number, comp: string) => { const m = metaOf(comp); pushUndo(blocks); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))); setActive(idx); return n; }); setInsAt(-1); };
-  const addCustomAt = (idx: number, ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); pushUndo(blocks); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, { __component: "block.custom", typeKey: ct.key, props }); setActive(idx); return n; }); };
+  // Renaming a block. Clearing the field (or typing the type's own name back)
+  // drops `__label` entirely rather than storing a copy of it, so the block
+  // keeps following the type name if that's ever translated or renamed.
+  const commitRename = (i: number, raw: string) => {
+    const name = raw.trim();
+    const current = blocks[i];
+    const next = !name || name === typeLabelOf(current) ? undefined : name.slice(0, 80);
+    if (next !== (current.__label ?? undefined)) setField(i, "__label", next);
+    setRenaming(-1);
+  };
+  const move = (i: number, d: number) => { pushUndo(); setBlocks((b) => { const n = [...b]; const j = i + d; if (j < 0 || j >= n.length) return b; [n[i], n[j]] = [n[j], n[i]]; setActive(j); return n; }); };
+  const reorder = (from: number, to: number) => { pushUndo(); setBlocks((b) => { if (from === to || from < 0) return b; const n = [...b]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; }); };
+  const remove = (i: number) => { pushUndo(); setBlocks((b) => b.filter((_, j) => j !== i)); setActive(-1); };
+  const dup = (i: number) => { pushUndo(); setBlocks((b) => { const c = JSON.parse(JSON.stringify(b[i])); delete c.id; const n = [...b]; n.splice(i + 1, 0, c); setActive(i + 1); return n; }); };
+  const add = (comp: string) => { const m = metaOf(comp); pushUndo(); setBlocks((b) => { setActive(b.length); return [...b, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))]; }); };
+  const addAt = (idx: number, comp: string) => { const m = metaOf(comp); pushUndo(); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, JSON.parse(JSON.stringify({ __component: comp, ...(m?.def || {}) }))); setActive(idx); return n; }); setInsAt(-1); };
+  const addCustomAt = (idx: number, ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); pushUndo(); setBlocks((b) => { const n = [...b]; n.splice(idx, 0, { __component: "block.custom", typeKey: ct.key, props }); setActive(idx); return n; }); };
   // Templates carry whole block arrays, so "insert at index" splices all of
   // them in at once rather than one block — the same gesture as any other
   // toolbox tile, just N blocks wide.
   const addTemplateAt = (idx: number, tpl: PageTemplate) => {
     const bl = (tpl.blocks || []).map((b: any) => JSON.parse(JSON.stringify(b)));
     if (!bl.length) return;
-    pushUndo(blocks);
+    pushUndo();
     setBlocks((b) => { const n = [...b]; n.splice(idx, 0, ...bl); setActive(idx); return n; });
     setInsAt(-1);
   };
@@ -687,7 +729,7 @@ export default function VisualBuilder() {
     const bl = (tpl.blocks || []).map((b: any) => JSON.parse(JSON.stringify(b)));
     if (!bl.length) return;
     if (mode === "replace" && blocks.length && !window.confirm(t("tbx.confirmreplace"))) return;
-    pushUndo(blocks);
+    pushUndo();
     setBlocks((b) => (mode === "replace" ? bl : [...b, ...bl]));
     setActive(mode === "replace" ? 0 : blocks.length);
     setMsg({ t: t("tbx.tplapplied"), ok: true });
@@ -729,11 +771,18 @@ export default function VisualBuilder() {
   }
   const uploadImg = (i: number, file: File) => uploadFieldImage(i, ["image"], file);
   // custom blocks
-  const addCustom = (ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); pushUndo(blocks); setBlocks((b) => { setActive(b.length); return [...b, { __component: "block.custom", typeKey: ct.key, props }]; }); };
+  const addCustom = (ct: BlockType) => { const props: Record<string, any> = {}; (ct.fieldsSchema || []).forEach((f) => (props[f.key] = f.type === "image" ? null : "")); pushUndo(); setBlocks((b) => { setActive(b.length); return [...b, { __component: "block.custom", typeKey: ct.key, props }]; }); };
   const setProp = (i: number, key: string, val: any) => updateBlockField(i, ["props", key], val);
   const uploadProp = (i: number, key: string, file: File) => uploadFieldImage(i, ["props", key], file);
   const iconOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.icon || "grid") : (metaOf(b.__component)?.icon || "doc");
-  const labelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
+  // The block type's own name, which is what an unnamed block shows.
+  const typeLabelOf = (b: Block) => b.__component === "block.custom" ? (customTypes.find((c) => c.key === b.typeKey)?.name || "Custom") : (metaOf(b.__component) ? t(metaOf(b.__component)!.key) : b.__component);
+  // `__label` is a name the editor gave this one block ("Hero — หน้าแรก"
+  // rather than a third "Hero" in the list). Builder metadata, like
+  // __component: never rendered on the public site, but it does have to
+  // survive a save, so anything that rewrites a block server-side has to
+  // carry it (see wordpress/mu-plugins/webx-blocks-sync.php).
+  const labelOf = (b: Block) => (typeof b.__label === "string" && b.__label.trim()) || typeLabelOf(b);
   // Block names for the harness preview's selection tab — kept referentially
   // stable while unchanged, since RealPreview re-posts the whole page to its
   // iframe whenever this array's identity changes.
@@ -749,6 +798,10 @@ export default function VisualBuilder() {
   useEffect(() => { setSelComp((c) => (c && c.i === active ? c : null)); }, [active]);
   const activeComp = selComp && selComp.i === active ? selComp.key : null;
   const onComponent = useCallback((i: number, key: string | null) => setSelComp(key ? { i, key } : null), []);
+  // The "on this page" row in the colour picker: whatever this page's blocks
+  // are already styled with, so a second heading can be matched to the first
+  // without anyone copying a hex code by eye.
+  const pageSwatches = useMemo(() => pageColors(blocks), [blocks]);
   const setBox = useCallback((i: number, key: string, dev: string, box: any) => {
     updateBlockField(i, ["boxes", dev, key], box && Object.keys(box).length ? box : undefined);
   }, [updateBlockField]);
@@ -913,17 +966,16 @@ export default function VisualBuilder() {
 
   // WebX Agent (Phase 8) — applies an insert_blocks/replace_block/remove_block
   // proposal (lib/agent/tools.ts) to this canvas. Deliberately does NOT call
-  // pushUndo(blocks) here (unlike every other mutation helper in this file):
-  // this function is handed to AgentProvider at REGISTRATION time (whenever
+  // This function is handed to AgentProvider at REGISTRATION time (whenever
   // [uid, sel?.docId, sel?.locale] last changed, via useAgentContext below),
-  // not re-created on every render the way an onClick handler is — normal
-  // editing between then and whenever a proposal is actually applied would
-  // leave a directly-closed-over `blocks` stale, and pushUndo takes its
-  // snapshot as a plain argument rather than reading state itself, so a
-  // stale one would corrupt the Ctrl+Z stack with the wrong "previous"
-  // state. setBlocks's own functional-updater form sidesteps that for the
-  // actual mutation; the dedicated `undo` this returns (for the proposal
-  // card's own Undo button) is what stays safe to rely on here, not Ctrl+Z.
+  // not re-created on every render the way an onClick handler is, so normal
+  // editing between then and whenever a proposal is actually applied leaves
+  // anything it closed over directly stale. setBlocks's own functional-
+  // updater form sidesteps that for the mutation, and pushUndo now reads the
+  // live blocks from a ref rather than taking them as an argument, so the
+  // Ctrl+Z stack no longer records a stale "previous" state here either.
+  // The dedicated `undo` this returns still drives the proposal card's own
+  // Undo button, which reverts exactly that proposal regardless of the stack.
   const applyAgentProposal = useCallback((p: AgentProposal): { undo: () => void } | void => {
     if (p.kind !== "blocks" || !Array.isArray(p.blocks)) return;
     // __agent marks the block as agent-authored (see .ag-draft's own CSS —
@@ -1139,18 +1191,24 @@ export default function VisualBuilder() {
       if (isTyping) return;
       if (k === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (k === "y") { e.preventDefault(); redo(); return; }
-      if (k === "d" && active >= 0) { e.preventDefault(); dup(active); return; }
+      if (k === "d" && activeRef.current >= 0) { e.preventDefault(); dup(activeRef.current); return; }
     }
     // Delete/Backspace for the selected block is a separate, lower-priority
     // listener (no modifier key involved) — same isTyping guard, so it never
     // hijacks normal text deletion inside a field.
+    //
+    // Both handlers read the selection from activeRef: this effect
+    // deliberately doesn't re-register on every edit, so a directly closed-
+    // over `active` would be whatever it was when the effect last ran. The
+    // mutation helpers themselves are safe from any render — they mutate
+    // through setBlocks' functional form and snapshot undo from a ref.
     function onKeyDel(e: KeyboardEvent) {
       if (e.key !== "Delete" && e.key !== "Backspace") return;
-      if (active < 0) return;
+      if (activeRef.current < 0) return;
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       e.preventDefault();
-      remove(active);
+      remove(activeRef.current);
     }
     window.addEventListener("keydown", onKey);
     window.addEventListener("keydown", onKeyDel);
@@ -1446,10 +1504,27 @@ export default function VisualBuilder() {
                 <div className="vb-block-h" onClick={() => setActive(isA ? -1 : i)}>
                   <span className="vb-grip"><Icon name="drag" /></span>
                   <Icon name={iconOf(b)} />
-                  <b>{labelOf(b)}</b>
+                  {renaming === i ? (
+                    // Uncontrolled + commit on Enter/blur: a controlled input
+                    // would push one undo step per keystroke through
+                    // setField, so Ctrl+Z after renaming would walk back
+                    // letter by letter.
+                    <input className="vb-rename" autoFocus defaultValue={labelOf(b)}
+                      aria-label={t("vb.rename")}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation(); // don't let Backspace reach the delete-block shortcut
+                        if (e.key === "Enter") { commitRename(i, e.currentTarget.value); }
+                        else if (e.key === "Escape") { setRenaming(-1); }
+                      }}
+                      onBlur={(e) => commitRename(i, e.currentTarget.value)} />
+                  ) : (
+                    <b onDoubleClick={(e) => { e.stopPropagation(); setRenaming(i); }} title={t("vb.renamehint")}>{labelOf(b)}</b>
+                  )}
                   <div className="vb-block-a" onClick={(e) => e.stopPropagation()}>
                     <button aria-label={t("a11y.moveup")} title={t("a11y.moveup")} onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
                     <button aria-label={t("a11y.movedown")} title={t("a11y.movedown")} onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</button>
+                    <button aria-label={t("vb.rename")} title={t("vb.rename")} onClick={() => setRenaming(renaming === i ? -1 : i)}><Icon name="pencil" /></button>
                     <button aria-label={t("a11y.duplicate")} title={t("a11y.duplicate")} onClick={() => dup(i)}>⧉</button>
                     <button aria-label={t("vb.addbelow")} title={t("vb.addbelow")} className={sideInsAt === i + 1 ? "on" : ""}
                       onClick={() => setSideInsAt(sideInsAt === i + 1 ? -1 : i + 1)}><Icon name="plus" /></button>
@@ -1525,6 +1600,22 @@ export default function VisualBuilder() {
                         )}
                       </div>
                     )} />}
+                    {/* Styling for whichever component is picked on the preview.
+                        Same gate as BlockComponents above (wpMeta): only the
+                        ORST/RoyalSociety templates tag their elements with
+                        vc(), and only their Blocks.tsx renders the CSS that
+                        b.styles turns into. Nothing shows until a component is
+                        actually selected — a block-wide style control would be
+                        ambiguous about which of its parts it meant. */}
+                    {wpMeta && isA && activeComp && (
+                      <ComponentStyle
+                        style={b.styles?.[activeComp]}
+                        swatches={pageSwatches}
+                        t={t}
+                        set={(k, v) => updateBlockField(i, ["styles", activeComp, k], v === "" ? undefined : v)}
+                        reset={() => updateBlockField(i, ["styles", activeComp], undefined)}
+                        upload={(f) => uploadFieldImage(i, ["styles", activeComp, "bgImage"], f)} />
+                    )}
                     {/* Generic repeatable-list editor — one `items` descriptor per
                         block type (see ORST_TYPES above) drives add/edit/remove
                         for whichever array that type actually has, through the

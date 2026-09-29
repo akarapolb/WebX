@@ -339,6 +339,84 @@ svg{display:block;width:18px;height:18px;flex:none}
    way to place a block at a chosen position when the canvas is the
    read-only harness iframe. */
 .vb-block-ins{border-top:1px solid var(--line);padding:10px;background:var(--sunk)}
+/* Inline block rename in the list header — sized to sit exactly where the
+   <b> it replaces was, so the row doesn't jump when editing starts. */
+.vb-rename{flex:1;min-width:0;font:inherit;font-weight:700;color:var(--ink);
+  background:var(--bg);border:1px solid var(--accent);border-radius:6px;padding:1px 6px}
+.vb-rename:focus{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ---- per-component style panel (ComponentStyle.tsx) ---------------------- */
+.cs{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+.cs-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cs-head b{font-size:12px;letter-spacing:.02em}
+.cs-reset{font-size:11px;border:1px solid var(--line2);background:var(--bg);border-radius:6px;padding:2px 8px;cursor:pointer}
+.cs-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;position:relative}
+.cs-row>label{flex:none;width:96px;font-size:11px;color:var(--mut)}
+.cs-num{width:72px}
+.cs-unit{font-size:11px;color:var(--mut)}
+.cs-sel{flex:1;min-width:0}
+/* Swatch button: the colour sits on a checkerboard so a translucent value
+   reads as translucent rather than as a lighter opaque one. */
+.cs-swatch{flex:1;min-width:0;display:flex;align-items:center;gap:8px;cursor:pointer;
+  border:1px solid var(--line2);border-radius:7px;padding:3px 7px;background:var(--bg)}
+.cs-swatch.on{border-color:var(--accent)}
+.cs-swatch>span{flex:none;width:18px;height:18px;border-radius:4px;border:1px solid var(--line2)}
+.cs-swatch>span.none{background:
+  linear-gradient(to top right,transparent 46%,var(--bad) 46%,var(--bad) 54%,transparent 54%)}
+.cs-swatch>em{font-style:normal;font-size:11px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Anchored to the row so it can't be clipped by the inspector's own scroll
+   box the way an absolutely-positioned-to-viewport popover would be. */
+.cs-pop{position:absolute;z-index:40;top:calc(100% + 6px);left:96px;right:0;
+  background:var(--bg);border:1px solid var(--line2);border-radius:11px;padding:10px;
+  box-shadow:0 12px 30px rgba(0,0,0,.22)}
+.cs-seg{display:flex;gap:4px}
+.cs-seg button{font-size:11px;border:1px solid var(--line2);background:var(--bg);border-radius:6px;padding:3px 9px;cursor:pointer}
+.cs-seg button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.cs-al{display:block;width:14px;height:10px;
+  background:linear-gradient(var(--mut),var(--mut)) 0 0/100% 2px no-repeat,
+             linear-gradient(var(--mut),var(--mut)) 0 4px/60% 2px no-repeat,
+             linear-gradient(var(--mut),var(--mut)) 0 8px/100% 2px no-repeat}
+.cs-al-center{background-position:0 0,3px 4px,0 8px}
+.cs-al-right{background-position:0 0,right 4px,0 8px}
+.cs-bgimg-c{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.cs-bgimg-c button{font-size:11px;display:inline-flex;align-items:center;gap:5px;
+  border:1px solid var(--line2);background:var(--bg);border-radius:6px;padding:3px 8px;cursor:pointer}
+.cs-bgimg-c button.rm:hover{border-color:var(--bad);color:var(--bad)}
+.cs-bgimg-c svg{width:13px;height:13px}
+.cs-thumb{flex:none;width:30px;height:22px;border-radius:4px;border:1px solid var(--line2);
+  background-size:cover;background-position:center}
+
+/* ---- colour picker (ColorPicker.tsx) ------------------------------------ */
+.cp{display:flex;flex-direction:column;gap:9px;min-width:210px}
+.cp-checker{background-image:
+  linear-gradient(45deg,var(--line2) 25%,transparent 25%,transparent 75%,var(--line2) 75%),
+  linear-gradient(45deg,var(--line2) 25%,transparent 25%,transparent 75%,var(--line2) 75%);
+  background-size:8px 8px;background-position:0 0,4px 4px}
+.cp-sv{position:relative;height:132px;border-radius:8px;cursor:crosshair;touch-action:none}
+.cp-dot{position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.35);transform:translate(-50%,-50%);pointer-events:none}
+.cp-rows{display:flex;align-items:center;gap:9px}
+.cp-eye{flex:none;width:26px;height:26px;display:grid;place-items:center;cursor:pointer;
+  border:1px solid var(--line2);background:var(--bg);border-radius:7px}
+.cp-eye svg{width:14px;height:14px}
+.cp-sliders{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.cp-hue,.cp-alpha{position:relative;height:11px;border-radius:99px;cursor:pointer;touch-action:none}
+.cp-hue{background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.cp-alpha{overflow:hidden}
+.cp-alpha-fill{position:absolute;inset:0;border-radius:99px}
+.cp-knob{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:#fff;
+  border:1px solid rgba(0,0,0,.28);box-shadow:0 1px 3px rgba(0,0,0,.3);
+  transform:translate(-50%,-50%);pointer-events:none}
+.cp-fields{display:flex;align-items:center;gap:6px}
+.cp-tag{font-size:11px;color:var(--mut)}
+.cp-hex{flex:1;min-width:0;text-transform:uppercase;font-size:12px}
+.cp-op{width:52px;font-size:12px}
+.cp-clear{font-size:11px;border:1px solid var(--line2);background:var(--bg);border-radius:6px;padding:2px 7px;cursor:pointer}
+.cp-swatches>label{display:block;font-size:11px;color:var(--mut);margin-bottom:5px}
+.cp-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+.cp-sw{aspect-ratio:1;border-radius:5px;border:1px solid var(--line2);cursor:pointer;padding:0;overflow:hidden}
+.cp-sw.on{outline:2px solid var(--accent);outline-offset:1px}
+.cp-sw>span{display:block;width:100%;height:100%}
 .vb-block-a svg{width:13px;height:13px}
 .vb-block-b{padding:11px;border-top:1px solid var(--line);background:var(--bg2)}
 .vb-add{margin-top:12px;padding:12px;border:1px dashed var(--line2);border-radius:11px}
