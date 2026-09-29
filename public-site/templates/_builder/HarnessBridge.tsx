@@ -13,6 +13,7 @@
 //                   webx:harness:selected  { top, height }               (where the active block sits, for the parent to scroll to)
 //                   webx:harness:component { index, key | null }         (a component picked inside the active block)
 //                   webx:harness:box       { index, key, device, box }   (a finished move/resize — the parent stores it)
+//                   webx:harness:navigate  { path }                      (a header/footer link — the parent opens that page)
 //
 // Selection highlight: each block renders inside its own `display: contents`
 // wrapper (no box of its own, so the template's layout/CSS is untouched —
@@ -201,6 +202,28 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     wantScroll.current = false;
     post({ type: "webx:harness:selected", top: boxes.sel.top, height: boxes.sel.height });
   }, [boxes, active, post]);
+
+  // The page chrome around the blocks (header nav, mobile menu, footer)
+  // must not navigate the harness away either — a real navigation would
+  // leave the Builder showing a live page its sidebar isn't editing. A
+  // same-site link is handed to the parent instead, which opens that page
+  // in the Builder (sidebar + preview together). Block-internal links are
+  // already swallowed by onClickCapture below.
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const a = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.closest("[data-vb-index]")) return;
+      e.preventDefault();
+      let url: URL;
+      try { url = new URL(a.getAttribute("href") || "", location.href); } catch { return; }
+      if (url.origin !== location.origin || url.pathname === location.pathname) return; // external, or an in-page #anchor
+      post({ type: "webx:harness:navigate", path: url.pathname.replace(/\/+$/, "") || "/" });
+    }
+    function onDocSubmit(e: SubmitEvent) { e.preventDefault(); } // e.g. the header search box
+    document.addEventListener("click", onDocClick, true);
+    document.addEventListener("submit", onDocSubmit, true);
+    return () => { document.removeEventListener("click", onDocClick, true); document.removeEventListener("submit", onDocSubmit, true); };
+  }, [post]);
 
   useEffect(() => {
     if (!parent) return;

@@ -515,6 +515,7 @@ export const DICT: Record<string, Entry> = {
   "vb.orst.joblisting": { en: "Job listings", th: "ประกาศรับสมัครงาน" },
   // Block components editor (components/builder/BlockComponents.tsx).
   "vb.comp.add": { en: "Add component", th: "เพิ่ม component" },
+  "vb.navmissing": { en: "{p} isn't a page you can edit here", th: "{p} ไม่ใช่หน้าที่แก้ไขใน Visual Builder ได้" },
   "vb.comp.layout.hint": { en: "Drag or resize components on the preview · {d}", th: "ลากหรือปรับขนาด component บนพรีวิวได้ · {d}" },
   "vb.comp.layout.moved": { en: "{n} component(s) moved on {d}", th: "ย้าย/ปรับขนาดแล้ว {n} ชิ้น บน {d}" },
   "vb.comp.layout.resetall": { en: "Reset", th: "รีเซ็ต" },

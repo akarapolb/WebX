@@ -95,7 +95,7 @@ const VIRTUAL_W: Record<string, number> = { desktop: 1280, tablet: 800, mobile: 
 
 export default function RealPreview({
   blocks, homeData, customTypes, customIcons, collectionData, tenant, harness, labels,
-  device, comp, onComponent, onBox,
+  device, comp, onComponent, onBox, onNavigate,
   active, onSelect, onFieldChange, onImagePick, onArrayAdd, onArrayRemove, onDeselect,
 }: {
   blocks: any[]; homeData?: any; customTypes?: Record<string, any>; customIcons?: Record<string, any>;
@@ -116,6 +116,8 @@ export default function RealPreview({
   onComponent?: (i: number, key: string | null) => void;
   /** A finished move/resize of component `key` in block `i`, for `device` (null box = reset). */
   onBox?: (i: number, key: string, device: string, box: any) => void;
+  /** A same-site link clicked in the harness's header/footer — its path, e.g. "/orst/about". */
+  onNavigate?: (path: string) => void;
   active?: number;
   onSelect?: (i: number) => void;
   onFieldChange?: (i: number, path: Path, value: any) => void;
@@ -158,6 +160,8 @@ export default function RealPreview({
   onComponentRef.current = onComponent;
   const onBoxRef = useRef(onBox);
   onBoxRef.current = onBox;
+  const onNavigateRef = useRef(onNavigate);
+  onNavigateRef.current = onNavigate;
   // Fit the real-width harness into the canvas (see VIRTUAL_W).
   const wrapRef = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(0);
@@ -184,6 +188,8 @@ export default function RealPreview({
       else if (d?.type === "webx:harness:select" && Number.isInteger(d.index)) {
         clickedInHarness.current = d.index;
         onSelectRef.current?.(d.index);
+      } else if (d?.type === "webx:harness:navigate" && typeof d.path === "string" && /^\/[\w\-/]*$/.test(d.path)) {
+        onNavigateRef.current?.(d.path);
       } else if (d?.type === "webx:harness:component" && Number.isInteger(d.index)) {
         onComponentRef.current?.(d.index, typeof d.key === "string" ? d.key : null);
       } else if (d?.type === "webx:harness:box" && Number.isInteger(d.index) && typeof d.key === "string"
