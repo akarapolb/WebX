@@ -106,11 +106,14 @@ add_action('rest_after_insert_page', function ($post, WP_REST_Request $request, 
         if ($id !== null && isset($synced_by_id[$id])) {
             $seen[$id] = true;
             $s = $synced_by_id[$id];
-            // `boxes` (the Visual Builder's free-form component moves/resizes,
-            // see public-site/templates/_builder/boxes.ts) has no Gutenberg
-            // representation at all — carry it over rather than let a
-            // wp-admin save silently throw the layout away.
-            if (isset($b['boxes']) && !isset($s['boxes'])) $s['boxes'] = $b['boxes'];
+            // Fields the Visual Builder owns that have no Gutenberg
+            // representation at all — component moves/resizes (boxes.ts),
+            // per-component colour/size/background (styles.ts) and the
+            // editor's own name for the block. Carry them over rather than
+            // let a wp-admin save silently throw them away.
+            foreach (['boxes', 'styles', '__label'] as $k) {
+                if (isset($b[$k]) && !isset($s[$k])) $s[$k] = $b[$k];
+            }
             return $s;
         }
         return $b;

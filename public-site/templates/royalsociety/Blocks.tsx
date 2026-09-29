@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { vc, boxesCss } from "@/templates/_builder/boxes";
+import { stylesCss } from "@/templates/_builder/styles";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import HeroSlider from "./HeroSlider";
 import { RsIcon, RS_ICON_IDS, type RsIconId } from "./icons";
@@ -1138,7 +1139,7 @@ export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Bl
         }
         const idx = indexOffset + index;
         try {
-          const css = boxesCss(block, idx);
+          const css = boxesCss(block, idx) + stylesCss(block, idx);
           return (
             <Fragment key={key}>
               {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "next build",
-    "start": "npx serve out -p 3100"
+    "start": "npx serve out -p 3100",
+    "test": "node --import tsx --test \"templates/**/*.test.ts\""
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -25,6 +26,7 @@
     "@types/sanitize-html": "^2.16.1",
     "@types/utif": "^3.0.6",
     "sharp": "^0.35.4",
+    "tsx": "^4.23.15",
     "typescript": "5.7.3"
   }
 }

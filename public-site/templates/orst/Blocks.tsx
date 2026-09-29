@@ -11,6 +11,7 @@ import Picture from "@/components/Picture";
 import JobApplicationForm from "@/components/JobApplicationForm";
 import type { JobPosting } from "@/lib/cms";
 import { vc, boxesCss } from "@/templates/_builder/boxes";
+import { stylesCss } from "@/templates/_builder/styles";
 
 /* =============================================================================
    Blocks.tsx — React port of the ORST static site's block renderer
@@ -1282,7 +1283,7 @@ export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Bl
           // (see templates/_builder/boxes.ts) — keys and numbers are
           // whitelisted/clamped there, so this string is safe to inline.
           const idx = indexOffset + index;
-          const css = boxesCss(block, idx);
+          const css = boxesCss(block, idx) + stylesCss(block, idx);
           return (
             <Fragment key={key}>
               {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
