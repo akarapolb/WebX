@@ -18,6 +18,7 @@ import { useTenant } from "./TenantProvider";
 import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
+import { pickLandingPage } from "@/lib/homePage";
 import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
 import { TYPES, ORST_TYPES, ROYALSOCIETY_TYPES, GENERIC_TYPES, BLOCK_CATEGORIES, ALL_TYPES, metaOf } from "@/lib/blockCatalog";
 import { useAgentOptional, useAgent } from "./agent/AgentProvider";
@@ -29,7 +30,9 @@ type Block = Record<string, any> & { __component: string };
 // normalizePost() derives it from the wtenant taxonomy term on every read)
 // — is what lets open() resolve the RIGHT per-page dialect for a session
 // with no single home tenant of its own (see open()'s own comment).
-type Page = { docId: string; locale?: string; title: string; tenantKey?: string };
+// `slug` — WordPress pages only (e.g. "orst-about"); lets a nav-link click
+// inside the harness preview open the matching page (see navigateTo).
+type Page = { docId: string; locale?: string; title: string; tenantKey?: string; slug?: string };
 type Device = "desktop" | "tablet" | "mobile";
 
 const LANDING_UID = "api::landing.landing";
@@ -363,14 +366,20 @@ export default function VisualBuilder() {
         page: 1, pageSize: 50, sort: "updatedAt:DESC",
         ...(tenantKey ? { filter: [{ field: "tenant.key", op: "eq" as const, value: tenantKey }] } : {}),
       });
-      const list = data.map((e: any) => ({ docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "#" + (e.documentId ?? e.id), tenantKey: e.tenantKey || undefined }));
+      const list = data.map((e: any) => ({ docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "#" + (e.documentId ?? e.id), tenantKey: e.tenantKey || undefined, slug: e.slug || undefined }));
       setPages(list);
       // Only auto-select a default page the FIRST time — a re-run of this
       // callback (e.g. open()'s own per-page template resolution below
       // changing `template`, which this callback depends on) must refresh
       // the list without yanking the user back to page 1 if they've already
       // opened something else. See selRef's own comment.
-      if (list[0] && !selRef.current) open(list[0]);
+      //
+      // Prefer the tenant's home page over list[0] — see lib/homePage.ts for
+      // why the updatedAt:DESC order alone picks the wrong page here.
+      if (!selRef.current) {
+        const first = pickLandingPage(list, tenantKey);
+        if (first) open(first);
+      }
     } catch { setPages([]); }
     // `template` is a real dependency, not just an exhaustive-deps nag:
     // `open` is a plain (non-memoized) function redefined every render, so
@@ -864,6 +873,21 @@ export default function VisualBuilder() {
   // new page, navigate away) — a no-op confirm when there's nothing unsaved.
   function confirmDiscardIfDirty(): boolean {
     return !isDirty || window.confirm(t("vb.unsavedwarn"));
+  }
+  // A link clicked in the harness preview's own header/footer/menu (the
+  // harness never lets the iframe itself navigate). Public routes map to
+  // WordPress slugs as `/<tenant>/<page>` → "<tenant>-<page>" and
+  // `/<tenant>` → "<tenant>-home" (public-site/lib/cms.ts's getWpPage /
+  // listWpPageSlugs); an `/en` prefix is the same page's other locale.
+  function navigateTo(path: string) {
+    const parts = path.split("/").filter(Boolean);
+    if (parts[0] === "en") parts.shift();
+    if (!parts.length) return;
+    const slug = parts[0] + "-" + (parts[1] || "home");
+    const p = pages.find((x) => x.slug === slug);
+    if (!p) { setMsg({ t: t("vb.navmissing").replace("{p}", path), ok: false }); return; }
+    if (p.docId === sel?.docId) return;
+    if (confirmDiscardIfDirty()) open(p);
   }
   /** Switches which page-shaped content type this canvas edits. The two live
    * in separate tables, so the current selection can't survive the switch —
@@ -2021,7 +2045,7 @@ export default function VisualBuilder() {
                   blockDialect.ts. */}
               <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template}
                 labels={blockLabels} active={active} onSelect={setActive}
-                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} />
+                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} onNavigate={navigateTo} />
             </div>
           ) : previewMode ? (
             <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.previewunsupported")}</div>
