@@ -63,9 +63,29 @@ function isPresent(e: Entry, b: any) {
   return has(v);
 }
 
+/**
+ * The value a newly added component starts with.
+ *
+ * Seeded with something visible rather than "". Every template renders a
+ * field conditionally (`{b.eyebrow ? <span>…</span> : null}`), so an empty
+ * string adds the field to this editor and changes nothing at all on the
+ * preview — which reads as "Add component did nothing". A list has always
+ * started with one item for exactly this reason; fields and objects now do
+ * the same. The placeholder is the field's own key, so it says what it is and
+ * is immediately typed over.
+ */
+export function seedField(f: ItemField): any {
+  if (f.select) return f.select[0];
+  // A real symbol id: an empty one renders an invisible <use href="#">.
+  if (f.icon) return "i-check";
+  // A link with no target is a dead anchor; "#" keeps it inert but visible.
+  if (/^(href|url|link)$/i.test(f.k) || /Href$/.test(f.k)) return "#";
+  return f.k;
+}
+
 function emptyOf(e: Entry, b: any): any {
-  if (e.kind === "field") return e.f.select ? e.f.select[0] : "";
-  if (e.kind === "object") return Object.fromEntries(e.o.fields.map((f) => [f.k, ""]));
+  if (e.kind === "field") return seedField(e.f);
+  if (e.kind === "object") return Object.fromEntries(e.o.fields.map((f) => [f.k, seedField(f)]));
   // A new list starts with one item so the change is visible in the preview
   // straight away — except a table's rows, which need columns to exist first.
   if (e.l.matrix) return [];
