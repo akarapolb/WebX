@@ -19,6 +19,7 @@ import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { pickLandingPage } from "@/lib/homePage";
+import { wpPageSlug } from "@/lib/pageSlug";
 import ComponentStyle from "./ComponentStyle";
 import { pageColors } from "@/lib/color";
 import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
@@ -405,10 +406,22 @@ export default function VisualBuilder() {
   useEffect(() => { if (templateReady) loadPages(); }, [loadPages, templateReady]);
 
   async function createPage() {
+    // A WordPress page is created WITH its slug, prefixed by the workspace key:
+    // the public site only routes "<tenant>-…" slugs, so a page left on
+    // WordPress's own default (its title, percent-encoded for Thai, or nothing
+    // while it is a draft) saves fine and never gets a URL. See lib/pageSlug.ts.
+    let data: Record<string, any> = isLanding ? { title: "Untitled page", active: true } : { title: "Untitled page" };
+    if (isWpPage) {
+      if (!tenantKey) { setMsg({ t: t("vb.newpage.needws"), ok: false }); return; }
+      const name = window.prompt(t("vb.newpage.prompt"), "");
+      if (name === null) return; // cancelled
+      const title = name.trim() || t("vb.newpage.default");
+      data = { title, slug: wpPageSlug(tenantKey, title) };
+    }
     setSaving(true); setMsg(null);
     try {
-      const e: any = await cms.entries.create(uid, isLanding ? { title: "Untitled page", active: true } : { title: "Untitled page" });
-      const np = { docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "Untitled page" };
+      const e: any = await cms.entries.create(uid, data);
+      const np = { docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "Untitled page", tenantKey: e.tenantKey || undefined, slug: e.slug || undefined };
       await loadPages();
       setPages((ps) => (ps.some((p) => p.docId === np.docId) ? ps : [np, ...ps])); // ensure selector shows it
       open(np); // open the new (empty) page directly
@@ -1436,7 +1449,7 @@ export default function VisualBuilder() {
               Builder-created wp:page today would be an orphan with no
               route. Creation unlocks once that route enumerates WordPress
               pages too (see the plan's later phases). */}
-          {!isWpPage && <button className="btn btn--g" onClick={() => confirmDiscardIfDirty() && createPage()} disabled={saving} title={t("vb.newpage")}><Icon name="plus" />{t("vb.newpage")}</button>}
+          {(!isWpPage || !!tenantKey) && <button className="btn btn--g" onClick={() => confirmDiscardIfDirty() && createPage()} disabled={saving} title={t("vb.newpage")}><Icon name="plus" />{t("vb.newpage")}</button>}
           {/* Icon-only, grouped like the device/undo toggles next to it —
               this row already carries 10 controls, and a labelled button
               here pushed Publish off the right edge. */}
@@ -2142,7 +2155,7 @@ export default function VisualBuilder() {
                   internal `__component` one blocks is stored in here. Same
                   toWire() translation pageBody() applies before saving; see
                   blockDialect.ts. */}
-              <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template}
+              <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))}
                 labels={blockLabels} active={active} onSelect={setActive}
                 device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} onNavigate={navigateTo} />
             </div>

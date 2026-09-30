@@ -1322,3 +1322,23 @@ textarea.agj-in{resize:vertical;line-height:1.5}
 .as-level b{font-size:13px}
 .as-level small{color:var(--mut);font-size:11.5px}
 .as-level--off{opacity:.55;cursor:not-allowed}
+
+/* ---- hidden scrollbars on the app's main scroll areas ------------------- */
+/* The browser's default bar is a bright white track, which on the dark theme
+   is the loudest thing on screen. These panels still scroll exactly as before
+   — wheel, trackpad, touch, keyboard and programmatic scrollTo all ignore the
+   bar entirely — only the bar itself is not drawn.
+   Two spellings because the standards one (`scrollbar-width`, Firefox and
+   recent Chromium) and the WebKit pseudo-element (older Chromium, Safari)
+   are not honoured by the same engines. Deliberately limited to the big
+   structural containers: small popup lists keep their bar, since a short list
+   with no sign that it continues reads as if it were complete. */
+.nav, .page, .vb-insp, .tbx-scroll, .ovbody, .bt-list, .vb-full {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.nav::-webkit-scrollbar, .page::-webkit-scrollbar, .vb-insp::-webkit-scrollbar,
+.tbx-scroll::-webkit-scrollbar, .ovbody::-webkit-scrollbar, .bt-list::-webkit-scrollbar,
+.vb-full::-webkit-scrollbar {
+  display: none;
+}

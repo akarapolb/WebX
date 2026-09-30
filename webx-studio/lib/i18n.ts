@@ -570,6 +570,9 @@ export const DICT: Record<string, Entry> = {
   "vb.loading": { en: "Loading…", th: "กำลังโหลด…" },
   "vb.blocks": { en: "Blocks", th: "บล็อก" },
   "vb.addbelow": { en: "Add a block below", th: "เพิ่มบล็อกถัดจากนี้" },
+  "vb.newpage.prompt": { en: "Name of the new page:", th: "ชื่อหน้าใหม่:" },
+  "vb.newpage.default": { en: "New page", th: "หน้าใหม่" },
+  "vb.newpage.needws": { en: "Pick a workspace first — a page needs to belong to one.", th: "เลือกหน่วยงานก่อน — หน้าต้องสังกัดหน่วยงานใดหน่วยงานหนึ่ง" },
   "vb.rename": { en: "Rename block", th: "เปลี่ยนชื่อบล็อก" },
   "vb.renamehint": { en: "Double-click to rename", th: "ดับเบิลคลิกเพื่อเปลี่ยนชื่อ" },
   // Per-component styling (components/ComponentStyle.tsx).
