@@ -153,6 +153,7 @@ const TENANT_UID = "api::tenant.tenant";
 const FIELD_POLICY_UID = "api::field-policy.field-policy";
 const AUDIT_UID = "api::audit-log.audit-log";
 const RELEASE_UID = "api::release.release";
+const ICON_UID = "api::icon.icon";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
 const SSO_CREDENTIAL_UID = "api::sso-credential.sso-credential";
 const CUSTOM_ROLE_UID = "api::custom-role.custom-role";
@@ -232,7 +233,7 @@ const CONSENT_LOG_UID = "api::consent-log.consent-log";
 // BREAKING_NEWS_UID deliberately NOT included here anymore (Phase 7) — see
 // its own comment above. It stays a plain SCOPED-only Strapi uid now,
 // exactly like complaint/application/contact-message always were.
-const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID, AGENT_JOB_UID, AGENT_SCHEDULE_UID]);
+const BOOKKEEPING_UIDS = new Set([TENANT_UID, FIELD_POLICY_UID, AUDIT_UID, RELEASE_UID, CUSTOM_ROLE_UID, MENU_ITEM_UID, PAGE_VERSION_UID, PAGE_TEMPLATE_UID, CONSENT_LOG_UID, REVIEW_UID, AGENT_THREAD_UID, AGENT_JOB_UID, AGENT_SCHEDULE_UID, ICON_UID]);
 /** The three BOOKKEEPING_UIDS blocked outright from the generic entries
  * route's WRITE side (assertBookkeepingWriteAllowed, below) — each needs a
  * dedicated writer with its own ownership/ordering logic the generic path
@@ -272,7 +273,7 @@ const GENERIC_ROUTE_WRITE_BLOCKED_UIDS = new Set([CUSTOM_ROLE_UID, AUDIT_UID, AG
  * assertBookkeepingWriteAllowed's own "unscoped super admin — allowed, same
  * exemption as everywhere else in this file" convention for these same
  * uids' writes. */
-const RELATION_SCOPED_BOOKKEEPING_UIDS = new Set([RELEASE_UID, CONSENT_LOG_UID, MENU_ITEM_UID]);
+const RELATION_SCOPED_BOOKKEEPING_UIDS = new Set([RELEASE_UID, CONSENT_LOG_UID, MENU_ITEM_UID, ICON_UID]);
 
 /** Appends a fail-closed tenant condition to a query's own filter array —
  * but ONLY after stripping any client-supplied condition on that exact same
@@ -1590,6 +1591,18 @@ async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff
   if (uid === MENU_ITEM_UID && id) {
     const owner = await trueOwnerOf(uid, id);
     if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  }
+  if (uid === ICON_UID && id) {
+    // Stricter than the release/menu checks above, deliberately. Those wave a
+    // null owner through (`owner && …`), which for an icon would mean any
+    // scoped caller could edit or delete an icon with NO tenant — and an icon
+    // with no tenant is a shared one. This write path runs on the scheduler's
+    // service credential, so Strapi's own tenant hook cannot catch it; this
+    // check is the only thing standing between one workspace's editor and the
+    // shared library. A scoped caller may only touch an icon they own
+    // outright, and a lookup that fails (null) is a refusal, not a pass.
+    const owner = await trueOwnerOf(uid, id);
+    if (owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
   }
   if (uid === BREAKING_NEWS_UID && id) {
     const owner = await trueOwnerOf(uid, id);

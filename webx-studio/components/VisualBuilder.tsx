@@ -468,14 +468,22 @@ export default function VisualBuilder() {
   }, [tenantKey]);
   useEffect(() => { loadTypes(); }, [loadTypes]);
 
+  // Through cms.entries, not a raw /api/strapi/... fetch: that route needs a
+  // Strapi bearer token, which a WordPress session does not have, so this
+  // used to 401 and the picker showed no custom icons for ORST/RoyalSociety
+  // at all. api::icon.icon is a BOOKKEEPING uid in governance.ts, so this
+  // resolves to Strapi under the service credential whichever engine the
+  // session logged in against — and governance scopes the rows to the
+  // caller's own workspace, so no tenant filter is needed (or possible:
+  // EntryQuery cannot express the old "mine or shared" OR).
   const loadIcons = useCallback(async () => {
     try {
-      let qs = "?pageSize=100&populate=image";
-      if (tenantKey) qs += "&filters[$or][0][tenant][key][$eq]=" + encodeURIComponent(tenantKey) + "&filters[$or][1][tenant][id][$null]=true";
-      const r = await fetch("/api/strapi/content-manager/collection-types/api::icon.icon" + qs);
-      if (!r.ok) return;
-      const j = await r.json();
-      setCustomIcons((j.results ?? j.data ?? []).map((e: any) => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, imageUrl: e.image?.url, tenantKey: e.tenant?.key })));
+      const { data } = await cms.entries.list<any>("api::icon.icon", { pageSize: 100, sort: "updatedAt:DESC" });
+      setCustomIcons(data.map((e: any) => ({
+        docId: String(e.documentId ?? e.id), key: e.key, name: e.name,
+        imageUrl: e.image?.url, svg: e.svg || undefined, viewBox: e.viewBox || undefined,
+        tenantKey: e.tenant?.key,
+      })));
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantKey]);

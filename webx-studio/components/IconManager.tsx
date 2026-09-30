@@ -32,14 +32,14 @@ export default function IconManager({ tenantKey, onClose, onSaved }: { tenantKey
 
   const mapIcon = (e: any): CustomIcon => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, imageUrl: e.image?.url, svg: e.svg || undefined, viewBox: e.viewBox || undefined, tenantKey: e.tenant?.key });
 
+  // Through cms.entries rather than a raw /api/strapi/... fetch, which needs a
+  // Strapi bearer token a WordPress session does not have — it 401ed, so the
+  // list was always empty for ORST/RoyalSociety. Governance scopes the rows
+  // to the caller's own workspace, so there is no tenant filter to build.
   const load = async () => {
     try {
-      let qs = "?pageSize=100&sort=updatedAt:DESC&populate=image&populate=tenant";
-      if (tenantKey) qs += "&filters[$or][0][tenant][key][$eq]=" + encodeURIComponent(tenantKey) + "&filters[$or][1][tenant][id][$null]=true";
-      const r = await fetch("/api/strapi/content-manager/collection-types/" + ICON_UID + qs);
-      if (!r.ok) return;
-      const j = await r.json();
-      setList((j.results ?? j.data ?? []).map(mapIcon));
+      const { data } = await cms.entries.list<any>(ICON_UID, { pageSize: 100, sort: "updatedAt:DESC" });
+      setList(data.map(mapIcon));
     } catch {}
   };
   useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
