@@ -5,7 +5,12 @@
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon
+# macOS folder-icon resource file. Its real name ends in a carriage return,
+# and written bare this pattern matched ANY path segment called icon — which
+# is why src/api/icon/ (the Icon content type) was silently never committed,
+# leaving the Visual Builder calling api::icon.icon against a type that did
+# not exist. Bracketed form matches only the macOS file.
+Icon[]
 .Spotlight-V100
 .Trashes
 ._*

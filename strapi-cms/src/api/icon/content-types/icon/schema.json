@@ -1,0 +1,45 @@
+{
+  "kind": "collectionType",
+  "collectionName": "icons",
+  "info": {
+    "singularName": "icon",
+    "pluralName": "icons",
+    "displayName": "Icon",
+    "description": "ไอคอนที่ผู้ใช้เพิ่มเอง สำหรับ Visual Builder — เก็บได้ทั้งแบบ inline SVG (นำเข้าไฟล์ .svg หรือเลือกจากชุด Material) และแบบรูปภาพที่อัปโหลด"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "key": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "description": "ค่าที่เก็บในฟิลด์ icon ของบล็อก เช่น \"mui-search\" — ต้องไม่ชนกับ id ของ sprite (ขึ้นต้นด้วย i-)"
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "svg": {
+      "type": "text",
+      "description": "เนื้อในของ <svg> (เช่น <path d=\"...\"/>) เก็บเฉพาะไอคอนที่ถูกใช้จริง จึงไม่ทำให้ sprite ของทุกหน้าใหญ่ขึ้น — ผ่านการกรองแท็ก/แอตทริบิวต์ก่อนบันทึกเสมอ"
+    },
+    "viewBox": {
+      "type": "string",
+      "description": "viewBox ของ svg ต้นทาง ปกติคือ \"0 0 24 24\" ซึ่งเป็นค่าที่ Material ใช้"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"],
+      "description": "ทางเลือกเดิม: ไอคอนแบบรูปภาพ ใช้เมื่อไม่มี svg"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "description": "ว่างไว้ = ใช้ได้ทุกหน่วยงาน"
+    }
+  }
+}
