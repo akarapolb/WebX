@@ -70,7 +70,7 @@ function SafeRsIcon({ id, className }: { id?: IconValue; className?: string }) {
     const safe = sanitizeIconSvg(id.svg);
     if (safe) {
       return (
-        <svg className={className} viewBox={safeViewBox(id.viewBox)} aria-hidden="true"
+        <svg className={className} viewBox={safeViewBox(id.viewBox)} aria-hidden="true" style={{ fill: "currentColor", stroke: "none" }}
           dangerouslySetInnerHTML={{ __html: safe }} />
       );
     }

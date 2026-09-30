@@ -35,7 +35,7 @@ function AnyIcon({ id, customIcons, size, builtinPrefix }: { id: string; customI
   // not a guarantee this markup is still safe to inline.
   if (ic?.svg) {
     const safe = sanitizeIconSvg(ic.svg);
-    if (safe) return <svg className={"icon icon--custom" + (size ? " icon--" + size : "")} viewBox={safeViewBox(ic.viewBox)} aria-hidden="true" dangerouslySetInnerHTML={{ __html: safe }} />;
+    if (safe) return <svg className={"icon icon--custom" + (size ? " icon--" + size : "")} viewBox={safeViewBox(ic.viewBox)} aria-hidden="true" style={{ fill: "currentColor", stroke: "none" }} dangerouslySetInnerHTML={{ __html: safe }} />;
   }
   if (ic?.imageUrl) return <img src={mediaUrl({ url: ic.imageUrl })} alt="" className={"icon" + (size ? " icon--" + size : "")} style={{ objectFit: "contain" }} />;
   return <Icon id={(builtinPrefix || "") + id} size={size} />;

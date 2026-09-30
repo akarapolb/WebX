@@ -59,6 +59,37 @@ function safeAttrValue(name: string, raw: string): string | null {
   return v;
 }
 
+/**
+ * Only these may survive on the OUTER <svg>, and they survive on a wrapping
+ * <g>, not on the svg itself. Line-icon sets (Feather, Lucide, Heroicons
+ * outline) put fill="none" stroke="currentColor" on the root and nowhere else;
+ * dropping the root without carrying these would turn every such icon into a
+ * solid blob. Geometry and everything else on the root is discarded — the
+ * renderer supplies its own size, viewBox and namespace.
+ */
+const ROOT_ATTRS = new Set([
+  "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit",
+  "fill-rule", "clip-rule", "fill-opacity", "stroke-opacity", "opacity",
+]);
+
+/** One tag's attributes, rebuilt from the allow-list with every value re-escaped. */
+function cleanAttrs(rawAttrs: string, allowed: Set<string>): string {
+  let attrs = "";
+  const ATTR_RE = /([A-Za-z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
+  let a: RegExpExecArray | null;
+  while ((a = ATTR_RE.exec(rawAttrs))) {
+    const rawKey = a[1].toLowerCase();
+    // Every on* handler, plus anything namespaced (xlink:href, xml:base).
+    if (rawKey.startsWith("on") || rawKey.includes(":")) continue;
+    const key = ATTR_ALIASES[rawKey] || rawKey;
+    if (!allowed.has(key)) continue;
+    const value = safeAttrValue(key, a[3] ?? a[4] ?? a[5] ?? "");
+    if (value == null) continue;
+    attrs += ` ${key}="${escAttr(value)}"`;
+  }
+  return attrs;
+}
+
 const MAX_LEN = 20000;
 const MAX_ELEMENTS = 200;
 
@@ -78,10 +109,16 @@ export function sanitizeIconSvg(input: unknown): string {
   let src = input.replace(/<!--[\s\S]*?-->/g, "").replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "");
   // Drop everything before/after the outer <svg> wrapper when there is one.
   const open = src.search(/<svg[\s>]/i);
+  let rootAttrs = "";
   if (open >= 0) {
     const gt = src.indexOf(">", open);
     const close = src.toLowerCase().lastIndexOf("</svg>");
-    if (gt >= 0) src = close > gt ? src.slice(gt + 1, close) : src.slice(gt + 1);
+    if (gt >= 0) {
+      // Kept on a wrapping <g> — see ROOT_ATTRS for why dropping them outright
+      // would turn every line icon into a solid blob.
+      rootAttrs = cleanAttrs(src.slice(open + 4, gt), ROOT_ATTRS);
+      src = close > gt ? src.slice(gt + 1, close) : src.slice(gt + 1);
+    }
   }
 
   let out = "";
@@ -111,19 +148,7 @@ export function sanitizeIconSvg(input: unknown): string {
 
     if (++elements > MAX_ELEMENTS) break;
 
-    let attrs = "";
-    const ATTR_RE = /([A-Za-z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
-    let a: RegExpExecArray | null;
-    while ((a = ATTR_RE.exec(rawAttrs))) {
-      const rawKey = a[1].toLowerCase();
-      // Every on* handler, plus anything namespaced (xlink:href, xml:base).
-      if (rawKey.startsWith("on") || rawKey.includes(":")) continue;
-      const key = ATTR_ALIASES[rawKey] || rawKey;
-      if (!ALLOWED_ATTRS.has(key)) continue;
-      const value = safeAttrValue(key, a[3] ?? a[4] ?? a[5] ?? "");
-      if (value == null) continue;
-      attrs += ` ${key}="${escAttr(value)}"`;
-    }
+    const attrs = cleanAttrs(rawAttrs, ALLOWED_ATTRS);
 
     // Self-closed in the source, or an element that never has children.
     const selfClosing = /\/\s*>$/.test(full) || name === "path" || name === "line" || name === "polyline" || name === "polygon" || name === "circle" || name === "ellipse" || name === "rect";
@@ -135,7 +160,8 @@ export function sanitizeIconSvg(input: unknown): string {
   // Close anything the source left open, innermost first, so the fragment can
   // never swallow the markup that follows it.
   while (openTags.length) out += `</${openTags.pop()}>`;
-  return out;
+  if (!out) return "";
+  return rootAttrs ? `<g${rootAttrs}>${out}</g>` : out;
 }
 
 /** A viewBox is four numbers and nothing else. */

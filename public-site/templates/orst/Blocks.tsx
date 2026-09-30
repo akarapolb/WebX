@@ -68,7 +68,7 @@ function BlockIcon({ id, className = "icon" }: { id?: IconValue; className?: str
     const safe = sanitizeIconSvg(id.svg);
     if (safe) {
       return (
-        <svg className={className} viewBox={safeViewBox(id.viewBox)} aria-hidden="true"
+        <svg className={className} viewBox={safeViewBox(id.viewBox)} aria-hidden="true" style={{ fill: "currentColor", stroke: "none" }}
           dangerouslySetInnerHTML={{ __html: safe }} />
       );
     }

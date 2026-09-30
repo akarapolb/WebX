@@ -43,6 +43,43 @@ describe("sanitizeIconSvg — what survives", () => {
   });
 });
 
+describe("sanitizeIconSvg — root presentation attributes", () => {
+  // Line-icon sets (Feather, Lucide, Heroicons outline) declare fill/stroke on
+  // the OUTER <svg> only. Dropping the root outright turns every one of them
+  // into a solid blob, so they are carried onto a wrapping <g> instead.
+  test("carries a line icon's root fill/stroke onto a wrapping group", () => {
+    const out = clean('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 2"/></svg>');
+    assert.equal(out, '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 2"/></g>');
+  });
+
+  test("a filled icon with nothing presentational on the root gets no wrapper", () => {
+    assert.equal(clean('<svg viewBox="0 0 24 24"><path d="M1 2"/></svg>'), '<path d="M1 2"/>');
+  });
+
+  test("root geometry is discarded — the renderer supplies its own size", () => {
+    const out = clean('<svg width="500" height="500" x="9" y="9" viewBox="0 0 24 24" fill="none"><path d="M1 2"/></svg>');
+    assert.equal(out, '<g fill="none"><path d="M1 2"/></g>');
+  });
+
+  test("hostile root attributes are dropped exactly as on any other element", () => {
+    const out = clean('<svg onload="alert(1)" style="background:url(//evil)" href="//evil" fill="javascript:x" stroke="currentColor"><path d="M1 2"/></svg>');
+    assert.equal(out, '<g stroke="currentColor"><path d="M1 2"/></g>');
+  });
+
+  test("a root that is given but yields no content gives nothing, not an empty group", () => {
+    assert.equal(clean('<svg fill="none"></svg>'), "");
+    assert.equal(clean('<svg fill="none"><script>alert(1)</script></svg>'), "");
+  });
+
+  test("an attribute value on the root is escaped like any other", () => {
+    const out = clean(`<svg stroke='a" onload="alert(1)'><path d="M1 2"/></svg>`);
+    // The quote is escaped, so "onload" stays inside the stroke value rather
+    // than becoming an attribute: the wrapper carries exactly one, stroke.
+    assert.equal(out, '<g stroke="a&quot; onload=&quot;alert(1)"><path d="M1 2"/></g>');
+    assert.equal((out.match(/<g[^>]*>/)![0].match(/\s[a-z-]+="/g) || []).length, 1, out);
+  });
+});
+
 describe("sanitizeIconSvg — what must not survive", () => {
   test("drops script, however it is wrapped", () => {
     for (const s of [
