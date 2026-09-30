@@ -2,7 +2,7 @@ import Header from "@/templates/orst/Header";
 import Footer from "@/templates/orst/Footer";
 import Blocks from "@/templates/orst/Blocks";
 import homeData from "@/templates/orst/content/home.json";
-import { getWpPage, getTenant, getNavItems } from "@/lib/cms";
+import { getWpPage, getTenant, getNavItems, getCustomIcons } from "@/lib/cms";
 import { resolveSources } from "@/lib/blockSource";
 import { pageMetadata } from "@/lib/seo";
 
@@ -35,13 +35,14 @@ export default async function Page() {
   blocks = await resolveSources(blocks, "orst");
 
   const [tenant, navItems] = await Promise.all([getTenant("orst"), getNavItems("orst")]);
+  const customIcons = await getCustomIcons("orst");
   return (
     <>
       <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
       <Header active="home" navItems={navItems} />
       <main id="main-content">
         <div id="app-content">
-          <Blocks blocks={blocks} />
+          <Blocks blocks={blocks} customIcons={customIcons} />
         </div>
       </main>
       <Footer tenant={tenant} />

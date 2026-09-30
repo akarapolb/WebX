@@ -9,7 +9,7 @@ import publicationsData from "@/templates/royalsociety/content/publications.json
 import servicesData from "@/templates/royalsociety/content/services.json";
 import contactData from "@/templates/royalsociety/content/contact.json";
 import careersData from "@/templates/royalsociety/content/careers.json";
-import { getWpPage, getWpTimeline, getWpOrgUnits, getJobs, getTenant, getNavItems, listWpPageSlugs } from "@/lib/cms";
+import { getWpPage, getWpTimeline, getWpOrgUnits, getJobs, getTenant, getNavItems, listWpPageSlugs, getCustomIcons } from "@/lib/cms";
 import { resolveSources } from "@/lib/blockSource";
 import { pageMetadata } from "@/lib/seo";
 
@@ -137,12 +137,13 @@ export default async function Page({ params }: { params: Promise<{ page: string 
     });
   }
 
+  const customIcons = await getCustomIcons("royalsociety");
   return (
     <>
       <Header active={data?.navKey ?? page} navItems={navItems} />
       <main id="main-content">
         <div id="app-content">
-          <Blocks blocks={blocks} />
+          <Blocks blocks={blocks} customIcons={customIcons} />
         </div>
       </main>
       <Footer tenant={tenant} />

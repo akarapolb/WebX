@@ -2,7 +2,7 @@ import Header from "@/templates/royalsociety/Header";
 import Footer from "@/templates/royalsociety/Footer";
 import Blocks from "@/templates/royalsociety/Blocks";
 import homeDataEn from "@/templates/royalsociety/content/en/home.json";
-import { getWpPage, getTenant, getNavItems } from "@/lib/cms";
+import { getWpPage, getTenant, getNavItems, getCustomIcons } from "@/lib/cms";
 import { resolveSources } from "@/lib/blockSource";
 import { pageMetadata } from "@/lib/seo";
 
@@ -23,12 +23,13 @@ export default async function Page() {
   blocks = await resolveSources(blocks, "royalsociety", "en");
 
   const [tenant, navItems] = await Promise.all([getTenant("royalsociety"), getNavItems("royalsociety", "en")]);
+  const customIcons = await getCustomIcons("royalsociety");
   return (
     <>
       <Header active="home" navItems={navItems} locale="en" />
       <main id="main-content">
         <div id="app-content">
-          <Blocks blocks={blocks} locale="en" />
+          <Blocks blocks={blocks} locale="en" customIcons={customIcons} />
         </div>
       </main>
       <Footer tenant={tenant} locale="en" />

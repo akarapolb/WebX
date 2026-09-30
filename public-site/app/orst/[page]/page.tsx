@@ -17,7 +17,7 @@ import careersData from "@/templates/orst/content/careers.json";
 // "structure" block's own items — a small, build-time-only duplication
 // (this route runs once per static export, not per request) traded for not
 // threading a shared cache between two independent mechanisms.
-import { getWpPage, getWpTimeline, getWpOrgUnits, getWpMembers, getJobs, getTenant, getNavItems, listWpPageSlugs } from "@/lib/cms";
+import { getWpPage, getWpTimeline, getWpOrgUnits, getWpMembers, getJobs, getTenant, getNavItems, listWpPageSlugs, getCustomIcons } from "@/lib/cms";
 import { resolveSources } from "@/lib/blockSource";
 import { pageMetadata } from "@/lib/seo";
 
@@ -163,13 +163,14 @@ export default async function Page({ params }: { params: Promise<{ page: string 
 
   const [tenant, navItems] = await Promise.all([getTenant("orst"), getNavItems("orst")]);
 
+  const customIcons = await getCustomIcons("orst");
   return (
     <>
       <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
       <Header active={data?.navKey ?? page} navItems={navItems} />
       <main id="main-content">
         <div id="app-content">
-          <Blocks blocks={blocks} />
+          <Blocks blocks={blocks} customIcons={customIcons} />
         </div>
       </main>
       <Footer tenant={tenant} />

@@ -622,3 +622,41 @@ export async function getNavItems(tenant: string, locale: Locale = "th"): Promis
       megaMenu: r.megaMenu && Array.isArray(r.megaMenu.groups) ? (r.megaMenu as NavMegaMenu) : undefined,
     }));
 }
+
+/**
+ * The icons a tenant has added of its own, keyed by the value blocks store in
+ * their `icon` fields. Passed to a template's Blocks as `customIcons`, which
+ * swaps matching keys for these definitions before rendering.
+ *
+ * Scoped with `?tenant`, not with a filter on the relation: the public role
+ * cannot see `tenant`, so filtering on it is rejected with "Invalid key
+ * tenant", and without the parameter Strapi's own middleware falls back to the
+ * dga tenant. Both were silent — one 400 swallowed by a catch, the other an
+ * empty list — which is why a custom icon has never appeared on a public page.
+ *
+ * Fails soft: an icon that cannot be loaded leaves the block showing its
+ * sprite fallback, which is a far better outcome at build time than failing
+ * the whole page.
+ */
+export async function getCustomIcons(tenant: string): Promise<Record<string, { svg?: string; viewBox?: string; imageUrl?: string }>> {
+  try {
+    const qs = "?tenant=" + encodeURIComponent(tenant) + "&pagination[pageSize]=100&populate=image";
+    const r = await fetch(STRAPI + "/api/icons" + qs, { headers: { Accept: "application/json" } });
+    if (!r.ok) return {};
+    const j = await r.json();
+    const out: Record<string, { svg?: string; viewBox?: string; imageUrl?: string }> = {};
+    for (const e of j.data || []) {
+      const a = e.attributes || e;
+      if (!a?.key) continue;
+      const imageUrl = a.image?.url || a.image?.data?.attributes?.url;
+      out[a.key] = {
+        svg: a.svg || undefined,
+        viewBox: a.viewBox || undefined,
+        imageUrl: imageUrl ? (String(imageUrl).startsWith("http") ? imageUrl : STRAPI + imageUrl) : undefined,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}

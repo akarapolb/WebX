@@ -77,7 +77,18 @@ async function loadCustomTypes(tenant: string): Promise<Record<string, BlockType
 
 async function loadCustomIcons(tenant: string): Promise<Record<string, CustomIconDef>> {
   try {
-    const qs = "?pagination[pageSize]=100&populate=image&filters[$or][0][tenant][key][$eq]=" + encodeURIComponent(tenant) + "&filters[$or][1][tenant][id][$null]=true";
+    // Scoped with ?tenant, not with a filter on the relation. Strapi's own
+    // tenant middleware turns that parameter into the request's tenant
+    // context, which its SCOPED hook then applies as the real per-tenant
+    // filter server-side.
+    //
+    // Filtering on `tenant` from here is rejected outright — the public role
+    // cannot see the relation, so the request 400s with "Invalid key tenant"
+    // and this function has been silently returning {} ever since, meaning no
+    // custom icon has ever rendered on a public page. And without ?tenant the
+    // middleware falls back to the dga tenant, so every other tenant would
+    // come back empty even once the filter was gone.
+    const qs = "?tenant=" + encodeURIComponent(tenant) + "&pagination[pageSize]=100&populate=image";
     const r = await fetch(STRAPI + "/api/icons" + qs, { headers: { Accept: "application/json" } });
     if (!r.ok) return {};
     const j = await r.json();

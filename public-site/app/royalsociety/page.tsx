@@ -2,7 +2,7 @@ import Header from "@/templates/royalsociety/Header";
 import Footer from "@/templates/royalsociety/Footer";
 import Blocks from "@/templates/royalsociety/Blocks";
 import homeData from "@/templates/royalsociety/content/home.json";
-import { getWpPage, getTenant, getNavItems } from "@/lib/cms";
+import { getWpPage, getTenant, getNavItems, getCustomIcons } from "@/lib/cms";
 import { resolveSources } from "@/lib/blockSource";
 import { pageMetadata } from "@/lib/seo";
 
@@ -30,6 +30,7 @@ export default async function Page() {
   blocks = await resolveSources(blocks, "royalsociety");
 
   const [tenant, navItems] = await Promise.all([getTenant("royalsociety"), getNavItems("royalsociety")]);
+  const customIcons = await getCustomIcons("royalsociety");
   return (
     <>
       {/* Real Lighthouse run (TOR gap audit — PageSpeed/Core Web Vitals)
@@ -43,7 +44,7 @@ export default async function Page() {
       <Header active="home" navItems={navItems} />
       <main id="main-content">
         <div id="app-content">
-          <Blocks blocks={blocks} />
+          <Blocks blocks={blocks} customIcons={customIcons} />
         </div>
       </main>
       <Footer tenant={tenant} />

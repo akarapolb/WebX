@@ -1,6 +1,8 @@
 import { Fragment, type ReactNode } from "react";
 import { vc, boxesCss } from "@/templates/_builder/boxes";
 import { stylesCss } from "@/templates/_builder/styles";
+import { resolveIcons, type IconLibrary } from "@/templates/_builder/resolveIcons";
+import { sanitizeIconSvg, safeViewBox } from "@/lib/iconSvg";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import HeroSlider from "./HeroSlider";
 import { RsIcon, RS_ICON_IDS, type RsIconId } from "./icons";
@@ -54,7 +56,27 @@ export type Block = {
 
 /* ---------- shared helpers ---------- */
 
-function SafeRsIcon({ id, className }: { id?: string; className?: string }) {
+// An icon is either one of this template's own sprite ids or, once
+// resolveIcons() has matched it against the tenant's icon library, the
+// resolved definition for a custom one. Call sites pass their value straight
+// through and never need to know which they have.
+type IconValue = string | { svg?: string; viewBox?: string; imageUrl?: string };
+
+function SafeRsIcon({ id, className }: { id?: IconValue; className?: string }) {
+  if (id && typeof id === "object") {
+    // Re-sanitised here rather than trusted from storage: an Icon record can
+    // be edited through Strapi directly, so what the editor saved proves
+    // nothing about what is in the database now.
+    const safe = sanitizeIconSvg(id.svg);
+    if (safe) {
+      return (
+        <svg className={className} viewBox={safeViewBox(id.viewBox)} aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: safe }} />
+      );
+    }
+    if (id.imageUrl) return <img className={className} src={id.imageUrl} alt="" style={{ objectFit: "contain" }} />;
+    return null;
+  }
   const iconId = (RS_ICON_IDS as readonly string[]).includes(id || "") ? (id as RsIconId) : "i-book";
   return <RsIcon id={iconId} className={className} />;
 }
@@ -1124,7 +1146,7 @@ function UnknownBlock({ label, detail }: { label: string; detail: string }) {
   );
 }
 
-export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Block[]; locale?: "th" | "en"; indexOffset?: number }) {
+export default function Blocks({ blocks, locale, indexOffset = 0, customIcons }: { blocks: Block[]; locale?: "th" | "en"; indexOffset?: number; customIcons?: IconLibrary }) {
   return (
     <>
       {(blocks || []).map((block, index) => {
@@ -1143,7 +1165,7 @@ export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Bl
           return (
             <Fragment key={key}>
               {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
-              {render({ ...block, __vbi: idx }, locale)}
+              {render(resolveIcons({ ...block, __vbi: idx }, customIcons), locale)}
             </Fragment>
           );
         } catch (error: any) {

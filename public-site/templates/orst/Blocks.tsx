@@ -12,6 +12,8 @@ import JobApplicationForm from "@/components/JobApplicationForm";
 import type { JobPosting } from "@/lib/cms";
 import { vc, boxesCss } from "@/templates/_builder/boxes";
 import { stylesCss } from "@/templates/_builder/styles";
+import { resolveIcons, type IconLibrary } from "@/templates/_builder/resolveIcons";
+import { sanitizeIconSvg, safeViewBox } from "@/lib/iconSvg";
 
 /* =============================================================================
    Blocks.tsx — React port of the ORST static site's block renderer
@@ -51,8 +53,28 @@ export type Block = {
     i-map, i-phone, i-dictionary, i-journal, i-database, i-video, i-puzzle,
     i-megaphone, i-service, i-people, i-chevron, ...) mostly don't exist yet
     in IconSprite.tsx's sprite — a separate task adds the missing <symbol>s. */
-function BlockIcon({ id, className = "icon" }: { id?: string; className?: string }) {
+// An icon is either a sprite symbol id ("i-shield") or, once resolveIcons()
+// below has matched it against the tenant's own icon library, the resolved
+// definition for a custom one. Call sites pass `it.icon` straight through and
+// never need to know which they have.
+type IconValue = string | { svg?: string; viewBox?: string; imageUrl?: string };
+
+function BlockIcon({ id, className = "icon" }: { id?: IconValue; className?: string }) {
   if (!id) return null;
+  if (typeof id === "object") {
+    // Re-sanitised here rather than trusted from storage: an Icon record can
+    // be edited through Strapi directly, so whatever the editor saved proves
+    // nothing about what is in the database now.
+    const safe = sanitizeIconSvg(id.svg);
+    if (safe) {
+      return (
+        <svg className={className} viewBox={safeViewBox(id.viewBox)} aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: safe }} />
+      );
+    }
+    if (id.imageUrl) return <img className={className} src={id.imageUrl} alt="" style={{ objectFit: "contain" }} />;
+    return null;
+  }
   return (
     <svg className={className} aria-hidden="true">
       <use href={`#${id}`} />
@@ -1260,7 +1282,7 @@ function UnknownBlock({ label, detail }: { label: string; detail: string }) {
 // `indexOffset` — the Builder's preview harness renders one block per call
 // (each in its own wrapper), so it passes the block's real page index to keep
 // the `data-vb-s` scope (and the per-block CSS below) unique across the page.
-export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Block[]; locale?: "th" | "en"; indexOffset?: number }) {
+export default function Blocks({ blocks, locale, indexOffset = 0, customIcons }: { blocks: Block[]; locale?: "th" | "en"; indexOffset?: number; customIcons?: IconLibrary }) {
   return (
     <>
       {(blocks || []).map((block, index) => {
@@ -1287,7 +1309,10 @@ export default function Blocks({ blocks, locale, indexOffset = 0 }: { blocks: Bl
           return (
             <Fragment key={key}>
               {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
-              {render({ ...block, __vbi: idx }, locale)}
+              {/* Icon keys are swapped for the tenant's own definitions once,
+                  here, rather than threaded through every block component —
+                  see templates/_builder/resolveIcons.ts. */}
+              {render(resolveIcons({ ...block, __vbi: idx }, customIcons), locale)}
             </Fragment>
           );
         } catch (error: any) {
