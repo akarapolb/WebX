@@ -4,6 +4,7 @@
 // real Strapi-authored content instead of static repo JSON. Pilot scope only
 // actually feeds this `block.hero`/`block.feature-grid`, but all 6 are
 // implemented so this is a genuine renderer, not a two-case special case.
+import { sanitizeIconSvg, safeViewBox } from "@/lib/iconSvg";
 import { Icon } from "../IconSprite";
 import { mediaUrl, fmtDateTh, fmtViewsTh, getCollectionEntries, SLUGGED_PLURALS } from "@/lib/cms";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
@@ -17,7 +18,10 @@ import TabsAccordionBlock from "./TabsAccordionBlock";
 const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
 
 type BlockTypeDef = { key: string; name?: string; icon?: string; fieldsSchema?: { key: string; type: string; label?: string }[]; template?: string };
-type CustomIconDef = { key: string; name?: string; imageUrl?: string };
+// `svg` is inline markup (an imported .svg, or a pick from the Material
+// set); it beats an uploaded image because it inherits the surrounding
+// colour and stays sharp at any size.
+type CustomIconDef = { key: string; name?: string; imageUrl?: string; svg?: string; viewBox?: string };
 
 // Feature-grid items store the full built-in sprite id ("i-grid"); stat-row
 // items store the short form ("grid", prefixed with "i-" at render time) —
@@ -26,6 +30,13 @@ type CustomIconDef = { key: string; name?: string; imageUrl?: string };
 // copy of this same resolver (same duplication convention as interpolate()).
 function AnyIcon({ id, customIcons, size, builtinPrefix }: { id: string; customIcons?: Record<string, CustomIconDef>; size?: "lg" | ""; builtinPrefix?: string }) {
   const ic = customIcons?.[id];
+  // Re-sanitised at render, not trusted from storage: the record can be
+  // edited straight through Strapi, so the editor having checked it once is
+  // not a guarantee this markup is still safe to inline.
+  if (ic?.svg) {
+    const safe = sanitizeIconSvg(ic.svg);
+    if (safe) return <svg className={"icon icon--custom" + (size ? " icon--" + size : "")} viewBox={safeViewBox(ic.viewBox)} aria-hidden="true" dangerouslySetInnerHTML={{ __html: safe }} />;
+  }
   if (ic?.imageUrl) return <img src={mediaUrl({ url: ic.imageUrl })} alt="" className={"icon" + (size ? " icon--" + size : "")} style={{ objectFit: "contain" }} />;
   return <Icon id={(builtinPrefix || "") + id} size={size} />;
 }
@@ -73,7 +84,7 @@ async function loadCustomIcons(tenant: string): Promise<Record<string, CustomIco
     const out: Record<string, CustomIconDef> = {};
     for (const e of j.data || []) {
       const a = e.attributes || e;
-      out[a.key] = { key: a.key, name: a.name, imageUrl: a.image?.url };
+      out[a.key] = { key: a.key, name: a.name, imageUrl: a.image?.url, svg: a.svg || undefined, viewBox: a.viewBox || undefined };
     }
     return out;
   } catch { return {}; }
