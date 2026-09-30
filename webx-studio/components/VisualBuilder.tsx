@@ -20,6 +20,7 @@ import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { pickLandingPage } from "@/lib/homePage";
 import { wpPageSlug } from "@/lib/pageSlug";
+import { coalesce } from "@/lib/undoCoalesce";
 import ComponentStyle from "./ComponentStyle";
 import { pageColors } from "@/lib/color";
 import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
@@ -628,10 +629,22 @@ export default function VisualBuilder() {
   // render (the agent's applyAgentProposal, registered once per page, and
   // the window keydown handlers) can no longer hand this a stale array and
   // corrupt the stack with the wrong "previous" state.
-  const pushUndo = useCallback(() => {
-    const now = Date.now();
-    if (now - lastPushRef.current < 600) return;
-    lastPushRef.current = now;
+  // Two kinds of change, coalesced differently.
+  //
+  // "edit" — a value changing, often continuously: typing, or dragging a colour
+  // picker. The undo step is taken at the START of a burst and the burst ends
+  // after 600ms of quiet, so the whole drag is one step. This used to measure
+  // 600ms from the last step instead, which sliced any drag longer than that
+  // into several steps: one Ctrl+Z reverted only the final slice, which looked
+  // like undo doing almost nothing.
+  //
+  // "step" — a discrete action (add, delete, move, duplicate, apply template).
+  // Always its own step, and it ends any burst in progress so the next edit
+  // starts a fresh one rather than being folded into the action before it.
+  const pushUndo = useCallback((kind: "edit" | "step" = "step") => {
+    const r = coalesce(kind, Date.now(), lastPushRef.current);
+    lastPushRef.current = r.lastEdit;
+    if (!r.push) return;
     const step: Step = { blocks: blocksRef.current, active: activeRef.current };
     setUndoStack((s) => [...s.slice(-49), step]); // cap at 50 steps
     setRedoStack([]);
@@ -669,7 +682,7 @@ export default function VisualBuilder() {
   // so the sidebar and the inline-editable canvas can never drift out of
   // sync: both ultimately call setBlocks the same way.
   const updateBlock = useCallback((i: number, patcher: (b: Block) => Block) => {
-    pushUndo();
+    pushUndo("edit");
     setBlocks((bs) => bs.map((b, j) => (j === i ? patcher(b) : b)));
   }, [pushUndo]);
   const updateBlockField = useCallback((i: number, path: Path, value: any) => {

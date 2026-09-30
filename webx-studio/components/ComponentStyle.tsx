@@ -40,11 +40,14 @@ const ALIGNS = [
 ] as const;
 
 /** A colour row: swatch button that opens the picker, plus a clear control. */
-function ColorRow({ label, value, onChange, onClear, swatches, t }: {
+// Controlled: `open` and `setOpen` come from the panel, which is the only thing
+// that knows how many colour rows there are. Each row keeping its own flag let
+// the text, icon and background pickers all stay open at once, stacked on top
+// of each other — opening one now closes the others.
+function ColorRow({ label, value, onChange, onClear, swatches, t, open, setOpen }: {
   label: string; value?: string; onChange: (hex: string) => void; onClear: () => void;
-  swatches: string[]; t: Props["t"];
+  swatches: string[]; t: Props["t"]; open: boolean; setOpen: (o: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
     <div className="cs-row">
       <label>{label}</label>
@@ -82,6 +85,16 @@ function NumRow({ label, value, min, max, unit, onChange }: {
 export default function ComponentStyle({ style, set, reset, upload, swatches, t }: Props) {
   const s = style || {};
   const fileRef = useRef<HTMLInputElement>(null);
+  // Which colour picker is showing, if any. One value for all three rows is what
+  // makes them mutually exclusive.
+  const [openPicker, setOpenPicker] = useState<"color" | "iconColor" | "bg" | null>(null);
+  type PickerKey = "color" | "iconColor" | "bg";
+  const rowProps = (k: PickerKey) => ({
+    open: openPicker === k,
+    // Opening switches to this row (closing whichever was open); closing only
+    // clears it if it is still the one showing.
+    setOpen: (o: boolean) => setOpenPicker((cur) => (o ? k : cur === k ? null : cur)),
+  });
   const [busy, setBusy] = useState(false);
   const touched = Object.keys(s).some((k) => (s as any)[k] !== undefined && (s as any)[k] !== "");
 
@@ -98,11 +111,11 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, t 
         {touched && <button type="button" className="cs-reset" onClick={reset}>{t("cs.reset")}</button>}
       </div>
 
-      <ColorRow label={t("cs.color")} value={s.color} swatches={swatches} t={t}
+      <ColorRow label={t("cs.color")} value={s.color} swatches={swatches} t={t} {...rowProps("color")}
         onChange={(v) => set("color", v)} onClear={() => set("color", undefined)} />
-      <ColorRow label={t("cs.iconcolor")} value={s.iconColor} swatches={swatches} t={t}
+      <ColorRow label={t("cs.iconcolor")} value={s.iconColor} swatches={swatches} t={t} {...rowProps("iconColor")}
         onChange={(v) => set("iconColor", v)} onClear={() => set("iconColor", undefined)} />
-      <ColorRow label={t("cs.bg")} value={s.bg} swatches={swatches} t={t}
+      <ColorRow label={t("cs.bg")} value={s.bg} swatches={swatches} t={t} {...rowProps("bg")}
         onChange={(v) => set("bg", v)} onClear={() => set("bg", undefined)} />
 
       <NumRow label={t("cs.fontsize")} value={s.fontSize} min={STYLE_LIMITS.fontSize.min} max={STYLE_LIMITS.fontSize.max} unit="px"

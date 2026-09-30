@@ -156,7 +156,16 @@ export default function ColorPicker({ value, onChange, onClear, swatches = [], t
           aria-label={t("cp.hex")} spellCheck={false}
           onChange={(e) => setHexDraft(e.target.value)}
           onBlur={(e) => commitHex(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") commitHex(e.currentTarget.value); if (e.key === "Escape") setHexDraft(null); }} />
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commitHex(e.currentTarget.value);
+              // Leave the field once the colour is committed. While it keeps focus
+              // the Builder's Ctrl+Z treats the keystroke as "typing" and lets the
+              // browser undo the TEXT in the box, not the colour that was set.
+              e.currentTarget.blur();
+            }
+            if (e.key === "Escape") setHexDraft(null);
+          }} />
         <input className="cp-op" type="number" min={0} max={100} value={Math.round(hsv.a * 100)}
           aria-label={t("cp.opacity")}
           onChange={(e) => emit({ ...hsv, a: Math.min(1, Math.max(0, Number(e.target.value) / 100)) })} />
