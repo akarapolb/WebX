@@ -25,6 +25,7 @@ import { FEATURE_ICONS } from "./blockPreview/iconChoices";
 import type { Path } from "./blockPreview/editing";
 import { useLang } from "./LangProvider";
 import { applies, freshDef, listsOf, type BlockTypeMeta, type ItemField, type ListDesc, type ObjDesc } from "@/lib/blockCatalog";
+import { isBlankStyle } from "@/lib/componentStyle";
 
 type Ops = {
   update: (path: Path, value: any) => void;
@@ -35,6 +36,10 @@ type Ctx = Ops & {
   block: any; template?: string; customIcons: CustomIcon[]; t: (k: string) => string;
   /** Reload the icon library after the picker saves a Material icon into it. */
   onIconsChanged?: () => void | Promise<void>;
+  /** The style panel for one component (colour, size, background…), rendered
+   * inline under an item. A slot rather than built here because the writes,
+   * undo and uploads belong to the Builder that owns the block. */
+  styleSlot?: (compKey: string) => ReactNode;
   moved: Record<string, any>; selectedComp: string | null;
   onPickComp?: (key: string | null) => void; onResetBox?: (key: string) => void;
 };
@@ -100,11 +105,12 @@ function newItem(l: ListDesc, b: any): any {
 }
 
 export default function BlockComponents({
-  block, meta, template, customIcons, onIconsChanged, update, arrayAdd, arrayRemove, hidePrimary, sourceSlot,
+  block, meta, template, customIcons, onIconsChanged, styleSlot, update, arrayAdd, arrayRemove, hidePrimary, sourceSlot,
   device = "desktop", selectedComp, onPickComp, onResetBox, onResetAllBoxes,
 }: Ops & {
   block: any; meta: BlockTypeMeta; template?: string; customIcons: CustomIcon[];
   onIconsChanged?: () => void | Promise<void>;
+  styleSlot?: (compKey: string) => ReactNode;
   /** Hide the primary `items` list (a live `source` feed overwrites it). */
   hidePrimary?: boolean;
   /** Rendered just before the lists (the live-data binding control). */
@@ -120,7 +126,7 @@ export default function BlockComponents({
 }) {
   const { t } = useLang();
   const moved: Record<string, any> = (block?.boxes?.[device] && typeof block.boxes[device] === "object") ? block.boxes[device] : {};
-  const ctx: Ctx = { block, template, customIcons, onIconsChanged, t, update, arrayAdd, arrayRemove, moved, selectedComp: selectedComp ?? null, onPickComp, onResetBox };
+  const ctx: Ctx = { block, template, customIcons, onIconsChanged, styleSlot, t, update, arrayAdd, arrayRemove, moved, selectedComp: selectedComp ?? null, onPickComp, onResetBox };
   const rootRef = useRef<HTMLDivElement>(null);
   // Picked on the preview → bring its field into view in the sidebar.
   useEffect(() => {
@@ -272,6 +278,9 @@ function ListEditor({ l, path, value, ctx, onRemove }: { l: ListDesc; path: Path
   const nested = !!(l.lists?.length || l.objects?.length);
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const isOpen = (k: number) => open[k] ?? !nested;
+  // Which items have their style panel showing. Kept apart from `open`: an item
+  // can be collapsed (its fields hidden) and still be mid-restyle.
+  const [styleOpen, setStyleOpen] = useState<Record<number, boolean>>({});
   const cols: any[] = l.matrix ? (getAt(ctx.block, [...path.slice(0, -1), l.matrix]) || []) : [];
 
   function move(k: number, d: number) {
@@ -289,7 +298,12 @@ function ListEditor({ l, path, value, ctx, onRemove }: { l: ListDesc; path: Path
   const itemKey = (k: number) => (compKey ? compKey + "." + k : null);
   // An item picked on the preview opens in the sidebar.
   const selItem = compKey && ctx.selectedComp?.startsWith(compKey + ".") ? Number(ctx.selectedComp.slice(compKey.length + 1)) : -1;
-  useEffect(() => { if (selItem >= 0) setOpen((o) => (o[selItem] ? o : { ...o, [selItem]: true })); }, [selItem]);
+  useEffect(() => {
+    if (selItem < 0) return;
+    setOpen((o) => (o[selItem] ? o : { ...o, [selItem]: true }));
+    // Picking a card on the preview is usually the first step of restyling it.
+    setStyleOpen((o) => (o[selItem] ? o : { ...o, [selItem]: true }));
+  }, [selItem]);
 
   return (
     <div className={"fld bc-list" + (compKey && ctx.selectedComp === compKey ? " bc-sel" : "")} data-comp={compKey ?? undefined}>
@@ -310,10 +324,18 @@ function ListEditor({ l, path, value, ctx, onRemove }: { l: ListDesc; path: Path
               <span className="bc-sum">{summaryOf(it, l)}</span>
             </button>
             {itemKey(k) && <MovedChip k={itemKey(k)!} ctx={ctx} />}
+            {itemKey(k) && ctx.styleSlot && (
+              <button type="button" className={"bc-mini bc-paint" + (styleOpen[k] ? " on" : "") + (isBlankStyle(ctx.block?.styles?.[itemKey(k)!]) ? "" : " has")}
+                aria-label={ctx.t("vb.comp.style")} title={ctx.t("vb.comp.style")} aria-expanded={!!styleOpen[k]}
+                onClick={() => setStyleOpen((o) => ({ ...o, [k]: !o[k] }))}><Icon name="palette" /></button>
+            )}
             <button type="button" className="bc-mini" aria-label={ctx.t("a11y.moveup")} title={ctx.t("a11y.moveup")} disabled={k === 0} onClick={() => move(k, -1)}>↑</button>
             <button type="button" className="bc-mini" aria-label={ctx.t("a11y.movedown")} title={ctx.t("a11y.movedown")} disabled={k === items.length - 1} onClick={() => move(k, 1)}>↓</button>
             <button type="button" className="bc-mini" aria-label={ctx.t("a11y.delete")} title={ctx.t("a11y.delete")} onClick={() => ctx.arrayRemove(path, k)}><Icon name="trash" /></button>
           </div>
+          {styleOpen[k] && itemKey(k) && ctx.styleSlot && (
+            <div className="bc-item-style">{ctx.styleSlot(itemKey(k)!)}</div>
+          )}
           {isOpen(k) && (
             <div className="bc-item-b">
               {l.scalar ? (

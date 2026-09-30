@@ -1591,6 +1591,12 @@ export default function VisualBuilder() {
                         silently vanish on the next publish, which is worse
                         than not offering the control at all. */}
                     {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
+                      styleSlot={(key) => (
+                        <ComponentStyle style={b.styles?.[key]} swatches={pageSwatches} t={t}
+                          set={(k2, v) => updateBlockField(i, ["styles", key, k2], v === "" ? undefined : v)}
+                          reset={() => updateBlockField(i, ["styles", key], undefined)}
+                          upload={(f) => uploadFieldImage(i, ["styles", key, "bgImage"], f)} />
+                      )}
                       device={device} selectedComp={activeComp}
                       onPickComp={(k) => setSelComp(k ? { i, key: k } : null)}
                       onResetBox={(k) => setBox(i, k, device, null)}
@@ -1628,7 +1634,7 @@ export default function VisualBuilder() {
                         b.styles turns into. Nothing shows until a component is
                         actually selected — a block-wide style control would be
                         ambiguous about which of its parts it meant. */}
-                    {wpMeta && isA && activeComp && (
+                    {wpMeta && isA && activeComp && !/\.\d+$/.test(activeComp) && (
                       <ComponentStyle
                         style={b.styles?.[activeComp]}
                         swatches={pageSwatches}
