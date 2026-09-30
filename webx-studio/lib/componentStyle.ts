@@ -11,8 +11,10 @@
 // Not per-device, unlike b.boxes — see that module's own note on why.
 
 export type ComponentStyle = {
-  /** Text colour, #rrggbb or #rrggbbaa. */
+  /** Text colour, #rrggbb or #rrggbbaa. Reaches the text inside the component too. */
   color?: string;
+  /** Icon colour. Wins over `color` for the SVG icons inside the component. */
+  iconColor?: string;
   /** Background colour, #rrggbb or #rrggbbaa. */
   bg?: string;
   /** Background image URL — a same-site path or an absolute http(s) URL. */

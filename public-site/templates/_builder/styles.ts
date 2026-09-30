@@ -28,8 +28,10 @@
 import { isComponentKey } from "./boxes";
 
 export type Style = {
-  /** Text colour. */
+  /** Text colour — applied to the component AND the text inside it. */
   color?: string;
+  /** Icon colour. Overrides `color` for the SVG icons inside the component. */
+  iconColor?: string;
   /** Background colour. */
   bg?: string;
   /** Background image URL (same-site path or http(s)). */
@@ -49,7 +51,7 @@ export type Style = {
 };
 
 /** The style keys this module knows how to render, for the editor's own use. */
-export const STYLE_KEYS = ["color", "bg", "bgImage", "bgFit", "fontSize", "fontWeight", "align", "radius", "padding"] as const;
+export const STYLE_KEYS = ["color", "iconColor", "bg", "bgImage", "bgFit", "fontSize", "fontWeight", "align", "radius", "padding"] as const;
 
 // #rgb / #rgba / #rrggbb / #rrggbbaa — the only colour syntax accepted. The
 // Builder's picker normalises everything it produces to one of these, so
@@ -119,7 +121,7 @@ export function styleDecls(s: Style | null | undefined): string {
 }
 
 /** True when this style would render nothing — used to drop empty entries. */
-export const isEmptyStyle = (s: Style | null | undefined): boolean => !styleDecls(s);
+export const isEmptyStyle = (s: Style | null | undefined): boolean => !styleDecls(s) && !isSafeColor((s as any)?.iconColor);
 
 /**
  * The block's per-component style overrides as one CSS string ("" when none).
@@ -132,10 +134,40 @@ export function stylesCss(b: any, scope: number): string {
   const all = b?.styles;
   if (!all || typeof all !== "object") return "";
   let css = "";
-  for (const k of Object.keys(all)) {
-    if (!isComponentKey(k)) continue;
-    const decls = styleDecls(all[k]);
-    if (decls) css += `[data-vb-s="${scope}"][data-vb-c="${k}"]{${decls}}`;
+  // Shorter keys first. A component that contains another ("items" holds
+  // "items.0"; "panel" holds "panelHeading") is almost always the shorter
+  // name, and where two rules tie on specificity the later one wins — so the
+  // inner component's own colour beats the outer one's.
+  const keys = Object.keys(all).filter(isComponentKey).sort((a, b) => a.length - b.length || a.localeCompare(b));
+  for (const k of keys) {
+    const st = all[k];
+    const sel = `[data-vb-s="${scope}"][data-vb-c="${k}"]`;
+    const decls = styleDecls(st);
+    if (decls) css += `${sel}{${decls}}`;
+
+    // Colour has to reach the text INSIDE a component, not just the element
+    // that carries the tag. A card is tagged as one unit ("items.0") but its
+    // title, body and icon are children with colour rules of their own, and a
+    // rule on a child beats a value inherited from its parent — so setting
+    // the card's colour used to change nothing at all. Text tagged directly
+    // (a heading) always worked, which is why only some components failed.
+    //
+    // Elements that carry their own tag are skipped so they keep whatever was
+    // set on them specifically, and SVGs are skipped so the icon colour below
+    // can own them.
+    if (isSafeColor(st?.color)) {
+      css += `${sel} :not([data-vb-c]):not(svg):not(svg *){color:${st.color}!important}`;
+      // An icon follows the text colour unless it has been given its own.
+      css += `${sel} svg,${sel} svg *{color:${st.color}!important}`;
+    }
+
+    // The selector repeats itself on purpose: two attribute pairs put this
+    // above the text-colour rules, so an icon colour wins over the colour of
+    // the text it sits in regardless of which rule is emitted first.
+    if (isSafeColor(st?.iconColor)) {
+      const twice = sel + sel;
+      css += `${twice} svg,${twice} svg *{color:${st.iconColor}!important}`;
+    }
   }
   return css;
 }

@@ -100,6 +100,8 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, t 
 
       <ColorRow label={t("cs.color")} value={s.color} swatches={swatches} t={t}
         onChange={(v) => set("color", v)} onClear={() => set("color", undefined)} />
+      <ColorRow label={t("cs.iconcolor")} value={s.iconColor} swatches={swatches} t={t}
+        onChange={(v) => set("iconColor", v)} onClear={() => set("iconColor", undefined)} />
       <ColorRow label={t("cs.bg")} value={s.bg} swatches={swatches} t={t}
         onChange={(v) => set("bg", v)} onClear={() => set("bg", undefined)} />
 

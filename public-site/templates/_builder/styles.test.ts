@@ -141,9 +141,57 @@ describe("styleDecls", () => {
 });
 
 describe("stylesCss", () => {
-  test("scopes each rule to the block's own index", () => {
+  test("scopes every rule to the block's own index", () => {
     const css = stylesCss({ styles: { heading: { color: "#000" } } }, 3);
-    assert.equal(css, '[data-vb-s="3"][data-vb-c="heading"]{color:#000!important}');
+    assert.ok(css.startsWith('[data-vb-s="3"][data-vb-c="heading"]{color:#000!important}'), css);
+    // Every selector in the output starts from that scope — none can leak onto
+    // another block that happens to share the component key.
+    for (const rule of css.match(/[^{}]+(?={)/g) || []) {
+      for (const sel of rule.split(",")) assert.ok(sel.trim().startsWith('[data-vb-s="3"]'), sel);
+    }
+  });
+
+  test("colour reaches the text INSIDE a component, not only the tagged element", () => {
+    // A card is tagged as one unit but its title/body are children with colour
+    // rules of their own; a value on the parent alone would change nothing.
+    const css = stylesCss({ styles: { "items.0": { color: "#f00" } } }, 1);
+    const sel = '[data-vb-s="1"][data-vb-c="items.0"]';
+    assert.ok(css.includes(sel + " :not([data-vb-c]):not(svg):not(svg *){color:#f00!important}"), css);
+  });
+
+  test("an icon follows the text colour by default", () => {
+    const css = stylesCss({ styles: { "items.0": { color: "#f00" } } }, 1);
+    const sel = '[data-vb-s="1"][data-vb-c="items.0"]';
+    assert.ok(css.includes(sel + " svg," + sel + " svg *{color:#f00!important}"), css);
+  });
+
+  test("an icon colour is emitted on its own, and leaves the text alone", () => {
+    const css = stylesCss({ styles: { "items.1": { iconColor: "#00f" } } }, 1);
+    assert.ok(css.includes(" svg *{color:#00f!important}"), css);
+    // No text-colour rule at all — only the icon is touched.
+    assert.equal(css.includes(":not([data-vb-c])"), false, css);
+  });
+
+  test("the icon-colour selector is more specific than the text-colour one, so it wins whatever the order", () => {
+    const css = stylesCss({ styles: { c: { color: "#f00", iconColor: "#00f" } } }, 1);
+    const sel = '[data-vb-s="1"][data-vb-c="c"]';
+    assert.ok(css.includes(sel + sel + " svg"), css); // the doubled selector
+  });
+
+  test("a nested component is emitted after the one that contains it, so its own colour wins a tie", () => {
+    const css = stylesCss({ styles: { "items.0": { color: "#0f0" }, items: { color: "#f00" } } }, 1);
+    assert.ok(css.indexOf('[data-vb-c="items"]') < css.indexOf('[data-vb-c="items.0"]'), css);
+  });
+
+  test("a hostile icon colour is dropped exactly like a hostile text colour", () => {
+    for (const bad of ["red", "url(//evil)", "#fff;}body{display:none", "javascript:x"]) {
+      assert.equal(stylesCss({ styles: { c: { iconColor: bad } } }, 0), "", bad);
+    }
+  });
+
+  test("an icon colour alone counts as a style, so it is not thrown away as empty", () => {
+    assert.equal(isEmptyStyle({ iconColor: "#00f" }), false);
+    assert.equal(isEmptyStyle({ iconColor: "nope" } as any), true);
   });
 
   test("renders an item component key", () => {

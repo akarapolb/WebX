@@ -580,6 +580,7 @@ export const DICT: Record<string, Entry> = {
   "cs.reset": { en: "Reset", th: "ล้างค่า" },
   "cs.notset": { en: "Not set", th: "ยังไม่กำหนด" },
   "cs.color": { en: "Text colour", th: "สีตัวอักษร" },
+  "cs.iconcolor": { en: "Icon colour", th: "สีไอคอน" },
   "cs.bg": { en: "Background", th: "สีพื้นหลัง" },
   "cs.fontsize": { en: "Font size", th: "ขนาดตัวอักษร" },
   "cs.weight": { en: "Weight", th: "น้ำหนักตัวอักษร" },
