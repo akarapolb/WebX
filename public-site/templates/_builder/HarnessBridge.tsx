@@ -36,6 +36,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import { deviceForWidth, type Box as SavedBox, type Device } from "./boxes";
+import type { IconLibrary } from "./resolveIcons";
 
 // Same-origin in dev (both on localhost); in production this must be the
 // real webx-studio origin(s). Comma-separated so a staging + prod studio
@@ -43,7 +44,10 @@ import { deviceForWidth, type Box as SavedBox, type Device } from "./boxes";
 // same as every other public-site env var (see lib/cms.ts's own).
 const ALLOWED_PARENT_ORIGINS = (process.env.NEXT_PUBLIC_STUDIO_ORIGIN || "http://localhost:3000").split(",").map((s) => s.trim());
 
-export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null };
+// `icons` — the workspace's saved icon library, keyed by the value a block stores
+// in its `icon` field. The harness has no backend of its own, so without it a
+// custom icon's key would reach BlockIcon as a bare string and draw nothing.
+export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null; icons?: IconLibrary };
 
 type Rect = { top: number; left: number; width: number; height: number };
 type Dir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -112,7 +116,7 @@ function clearLive(root: ParentNode) {
   });
 }
 
-export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ blocks: any[]; indexOffset?: number }> }) {
+export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ blocks: any[]; indexOffset?: number; customIcons?: IconLibrary }> }) {
   // Opt this route out of the scroll-reveal animation entirely.
   //
   // app/layout.tsx adds `js-reveal` to <html> before paint, which is what
@@ -134,6 +138,7 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     document.documentElement.classList.remove("js-reveal");
   }, []);
   const [blocks, setBlocks] = useState<any[]>([]);
+  const [icons, setIcons] = useState<IconLibrary | undefined>(undefined);
   const [active, setActive] = useState(-1);
   const [labels, setLabels] = useState<string[]>([]);
   const [hover, setHover] = useState(-1);
@@ -161,6 +166,10 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
       // in-flight inline styles (unless a gesture is still running).
       if (!gesture.current && rootRef.current) clearLive(rootRef.current);
       setBlocks(Array.isArray(data.blocks) ? data.blocks : []);
+      // Only a plain object is a library; anything else clears it rather than
+      // being trusted. Each definition is re-sanitised at render (BlockIcon),
+      // so what arrives here is never injected as-is.
+      setIcons(data.icons && typeof data.icons === "object" && !Array.isArray(data.icons) ? data.icons : undefined);
       setActive(typeof data.active === "number" ? data.active : -1);
       setLabels(Array.isArray(data.labels) ? data.labels : []);
       if ("comp" in data && data.comp !== lastComp.current) { lastComp.current = data.comp; setComp(data.comp ?? null); }
@@ -385,7 +394,7 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
         onMouseOver={onMouseOver} onMouseLeave={() => { setHover(-1); setHoverComp(null); }}>
         {blocks.map((b, i) => (
           <div key={b?.id ? b.id + ":" + i : i} data-vb-index={i} className={i === active ? "vbh-active" : undefined} style={{ display: "contents" }}>
-            <Blocks blocks={[b]} indexOffset={i} />
+            <Blocks blocks={[b]} indexOffset={i} customIcons={icons} />
           </div>
         ))}
       </div>

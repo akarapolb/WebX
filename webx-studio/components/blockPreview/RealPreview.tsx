@@ -10,7 +10,7 @@
 // branch. Every edit-callback prop below is optional: passing none of them
 // (previewMode on, or a non-gov-portal tenant that never reaches this
 // component) reproduces the old fully read-only render exactly.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import IconSpriteDefs from "./IconSpriteDefs";
 import PreviewBlocks from "./blocks";
@@ -137,6 +137,18 @@ export default function RealPreview({
   // The last `active` this side told the harness about — a change that did
   // NOT come from a click inside the harness (i.e. a sidebar click) asks it
   // to report the block's position so it can be scrolled into view.
+  // What the harness iframe needs to draw a custom icon: just the markup and
+  // its viewBox, keyed by the value a block stores. Deliberately not the whole
+  // Icon record — the iframe is another origin and has no use for ids, tenant
+  // or timestamps. Memoised so an unrelated re-render does not look like a
+  // changed library and re-post every block.
+  const harnessIcons = useMemo(() => {
+    const out: Record<string, { svg?: string; viewBox?: string }> = {};
+    for (const [k, v] of Object.entries(customIcons || {})) {
+      if (v && typeof v === "object" && (v as any).svg) out[k] = { svg: (v as any).svg, viewBox: (v as any).viewBox };
+    }
+    return out;
+  }, [customIcons]);
   const sentActive = useRef<number | undefined>(undefined);
   const clickedInHarness = useRef<number | null>(null);
   // Re-sends on every blocks/selection change AND once harnessReady flips
@@ -151,8 +163,8 @@ export default function RealPreview({
     const scroll = changed && (active ?? -1) >= 0 && clickedInHarness.current !== active;
     sentActive.current = active;
     clickedInHarness.current = null;
-    win.postMessage({ type: "webx:builder:render", blocks, active: active ?? -1, labels: labels || [], scroll, comp: comp ?? null }, PUBLIC_SITE);
-  }, [harnessPath, harnessReady, blocks, active, labels, comp]);
+    win.postMessage({ type: "webx:builder:render", blocks, active: active ?? -1, labels: labels || [], scroll, comp: comp ?? null, icons: harnessIcons }, PUBLIC_SITE);
+  }, [harnessPath, harnessReady, blocks, active, labels, comp, harnessIcons]);
   // Latest callbacks without re-subscribing the listener on every render.
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
