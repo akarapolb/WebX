@@ -3,11 +3,19 @@ import { useEffect, useState, useCallback } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 import { cms, CmsError } from "@/lib/cms";
+import { publicPagePath, publicPageUrl } from "@/lib/publicUrl";
 
-type Item = { contentType: string; documentRef: string; title?: string };
+// `path` — where this entry lives on the public site, recorded when the
+// release publishes (see resolvePath). Absent for a non-page content type,
+// and for anything published before this was added.
+type Item = { contentType: string; documentRef: string; title?: string; path?: string };
 type Release = { id: number; documentId?: string; name: string; state: string; scheduledAt?: string; publishedAt?: string; items?: Item[]; updatedAt?: string };
 const RL_UID = "api::release.release";
 const shortType = (c?: string) => (c || "").replace(/^api::/, "").replace(/\.[^.]+$/, "");
+// The same env var BlockTypeEditor already reads, with the same dev default —
+// the public site is a separate origin, so a stored path has to be joined
+// onto it rather than linked relative to the admin.
+const PUBLIC_SITE = (process.env.NEXT_PUBLIC_PUBLIC_SITE_URL || "http://localhost:3100").replace(/\/$/, "");
 
 export default function Releases() {
   const { t, lang } = useLang();
@@ -44,6 +52,22 @@ export default function Releases() {
       setNewName(""); await load();
     } catch {}
   }
+  /**
+   * Where this item can be read on the public site, resolved at publish time
+   * because that's the only moment we know it's actually live — and because
+   * looking it up here means releases created before this existed still get
+   * links the next time they publish, with no backfill.
+   *
+   * A lookup failure is never allowed to fail the publish: the item has
+   * already gone out by this point, and a missing link is a far smaller
+   * problem than a release wrongly marked failed.
+   */
+  async function resolvePath(it: Item): Promise<string | null> {
+    try {
+      const entry = await cms.entries.get<any>(it.contentType, it.documentRef);
+      return publicPagePath(it.contentType, entry);
+    } catch { return null; }
+  }
   async function publishNow(r: Release) {
     setBusy(r.id); setActionMsg("");
     try {
@@ -52,16 +76,24 @@ export default function Releases() {
       // looked identical in this UI to one that fully succeeded. Now
       // tracked per item, same fix as the scheduler's own processDueReleases.
       const failedItems: string[] = [];
+      // Rebuilt rather than mutated so a failed publish leaves the stored
+      // items exactly as they were.
+      const publishedItems: Item[] = [];
       for (const it of r.items || []) {
-        if (!it.contentType || !it.documentRef) continue;
-        try { await cms.publish.publish(it.contentType, it.documentRef); }
-        catch (e: any) { failedItems.push((it.title || it.documentRef) + (e instanceof CmsError ? `: ${e.message}` : "")); }
+        if (!it.contentType || !it.documentRef) { publishedItems.push(it); continue; }
+        try {
+          await cms.publish.publish(it.contentType, it.documentRef);
+          publishedItems.push({ ...it, path: (await resolvePath(it)) ?? it.path });
+        } catch (e: any) {
+          publishedItems.push(it);
+          failedItems.push((it.title || it.documentRef) + (e instanceof CmsError ? `: ${e.message}` : ""));
+        }
       }
       if (failedItems.length) {
         await put(r, { state: "failed", note: `${failedItems.length} item(s) failed to publish:\n${failedItems.join("\n")}` });
         setActionMsg(`${failedItems.length} of ${(r.items || []).length} item(s) failed to publish — see the release's note.`);
       } else {
-        await put(r, { state: "done", publishedAt: new Date().toISOString() });
+        await put(r, { state: "done", publishedAt: new Date().toISOString(), items: publishedItems });
       }
       await load();
     } catch {} finally { setBusy(null); }
@@ -109,6 +141,17 @@ export default function Releases() {
                   <div className="rl-item" key={i}>
                     <span className="rl-itype mono">{shortType(it.contentType)}</span>
                     <span className="rl-ititle">{it.title || it.documentRef}</span>
+                    {/* Only once it has actually published — a link shown on a
+                        draft release would point at content no visitor can see
+                        yet. Recorded per item, so a release mixing a page with
+                        a collection entry links the page and stays quiet about
+                        the rest. */}
+                    {r.state === "done" && it.path && (
+                      <a className="rl-link" href={publicPageUrl(PUBLIC_SITE, it.path)} target="_blank" rel="noopener noreferrer"
+                        title={publicPageUrl(PUBLIC_SITE, it.path)}>
+                        <Icon name="eye" />{it.path}
+                      </a>
+                    )}
                     {r.state !== "done" && <button className="rl-x" onClick={() => removeItem(r, i)} aria-label="remove">×</button>}
                   </div>
                 ))}

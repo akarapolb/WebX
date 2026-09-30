@@ -31,6 +31,7 @@ import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./wordpress";
 import { CmsError } from "./types";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
+import { publicPagePath } from "@/lib/publicUrl";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
 import { parseCheckpoint } from "@/lib/agent/engine/checkpoint";
 import { evaluateJobOwner } from "@/lib/agent/jobs/owner";
@@ -3369,6 +3370,19 @@ function assertCanActOnTenant(eff: Tenant | null, tenantKey: string): void {
  * `curl -sf ... || echo tick failed` never caught it: nothing failed as far
  * as curl was concerned, so a broken scheduler credential silently stopped
  * all scheduled publishing with nothing observable anywhere. */
+/**
+ * Where a just-published release item can be read on the public site, or null
+ * when it has no page of its own. Never throws: the item has already gone out
+ * by the time this runs, so a lookup failure must not turn a successful
+ * publish into a failed release — it just costs the link.
+ */
+async function publicPathOf(it: { contentType: string; documentRef: string }, adapter: CmsAdapter): Promise<string | null> {
+  try {
+    const entry = await adapter.entries.get<any>(it.contentType, it.documentRef);
+    return publicPagePath(it.contentType, entry);
+  } catch { return null; }
+}
+
 export async function processDueReleases(): Promise<{ processed: number; failed: number }> {
   const strapiToken = await schedulerStrapiToken();
   if (!strapiToken) throw new CmsError("Strapi service credential unavailable", 503);
@@ -3384,18 +3398,26 @@ export async function processDueReleases(): Promise<{ processed: number; failed:
       if (!rel.scheduledAt || new Date(rel.scheduledAt).getTime() > now) continue;
       const items = Array.isArray(rel.items) ? rel.items : [];
       const failedItems: string[] = [];
+      // Rebuilt alongside the publish loop so each item can record where it
+      // landed on the public site — the same link the Releases screen shows
+      // after a manual "publish now". Without it a scheduled release would be
+      // the one kind that never got links.
+      const publishedItems: any[] = [];
       for (const it of items) {
-        if (!it?.contentType || !it?.documentRef) continue;
+        if (!it?.contentType || !it?.documentRef) { publishedItems.push(it); continue; }
         const adapter = adapterFor(it.contentType);
         try {
           if (adapter === wordpressAdapter) {
             const wpToken = await schedulerWpToken();
             if (!wpToken) throw new Error("WordPress service credential unavailable");
             await withServiceToken(wpToken, () => doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter));
+            publishedItems.push({ ...it, path: (await withServiceToken(wpToken, () => publicPathOf(it, adapter))) ?? it.path });
           } else {
             await doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter);
+            publishedItems.push({ ...it, path: (await publicPathOf(it, adapter)) ?? it.path });
           }
         } catch (e: any) {
+          publishedItems.push(it);
           failedItems.push(`${it.contentType}/${it.documentRef}: ${e?.message || "publish failed"}`);
         }
       }
@@ -3407,7 +3429,7 @@ export async function processDueReleases(): Promise<{ processed: number; failed:
           });
           failed++;
         } else {
-          await strapiAdapter.entries.update(RELEASE_UID, rel.documentId ?? rel.id, { state: "done", publishedAt: new Date().toISOString() });
+          await strapiAdapter.entries.update(RELEASE_UID, rel.documentId ?? rel.id, { state: "done", publishedAt: new Date().toISOString(), items: publishedItems });
           processed++;
         }
       } catch { /* the release row itself failed to update — nothing more this loop can do about it */ }

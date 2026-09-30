@@ -801,6 +801,14 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .rl-item{display:flex;align-items:center;gap:9px;font-size:12.5px;padding:6px 9px;background:var(--sunk);border-radius:8px}
 .rl-itype{font-size:10.5px;color:var(--accent);background:var(--accent-soft);padding:2px 7px;border-radius:5px;flex:none}
 .rl-ititle{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The live link on a published item — `flex:none` so a long path shortens
+   the title beside it rather than pushing the row wider. */
+.rl-link{flex:none;max-width:46%;display:inline-flex;align-items:center;gap:5px;
+  font-size:12px;color:var(--accent);text-decoration:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border:1px solid var(--line2);border-radius:6px;padding:2px 7px;background:var(--bg)}
+.rl-link:hover{border-color:var(--accent);text-decoration:underline}
+.rl-link svg{width:12px;height:12px;flex:none}
 .rl-x{flex:none;width:20px;height:20px;border-radius:5px;border:none;background:none;color:var(--mut);font-size:16px;line-height:1;cursor:pointer}
 .rl-x:hover{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
 .rl-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
