@@ -8,8 +8,13 @@ import { useEffect, useState } from "react";
 import Icon from "./Icon";
 import { useLang } from "./LangProvider";
 import { cms, CmsError } from "@/lib/cms";
+import { sanitizeIconSvg, safeViewBox } from "@/lib/iconSvg";
+import MuiIconBrowser from "./MuiIconBrowser";
 
-export type CustomIcon = { docId: string; key: string; name: string; imageUrl?: string; tenantKey?: string };
+// `svg` is the inner markup of an icon stored inline (imported .svg, or a
+// pick from the Material set) — preferred over `imageUrl` when both exist,
+// because it inherits the template's own colour and scales cleanly.
+export type CustomIcon = { docId: string; key: string; name: string; imageUrl?: string; svg?: string; viewBox?: string; tenantKey?: string };
 
 const ICON_UID = "api::icon.icon";
 const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -18,13 +23,14 @@ const mediaSrc = (url: string) => (url.startsWith("http") ? url : "/api/strapi" 
 export default function IconManager({ tenantKey, onClose, onSaved }: { tenantKey?: string; onClose: () => void; onSaved: () => void }) {
   const { t } = useLang();
   const [list, setList] = useState<CustomIcon[]>([]);
-  const [cur, setCur] = useState<{ docId?: string; key: string; name: string; imageUrl?: string; newId?: number } | null>(null);
+  const [cur, setCur] = useState<{ docId?: string; key: string; name: string; imageUrl?: string; svg?: string; viewBox?: string; newId?: number } | null>(null);
+  const [browsing, setBrowsing] = useState(false);
   const [tenantDoc, setTenantDoc] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
 
-  const mapIcon = (e: any): CustomIcon => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, imageUrl: e.image?.url, tenantKey: e.tenant?.key });
+  const mapIcon = (e: any): CustomIcon => ({ docId: String(e.documentId ?? e.id), key: e.key, name: e.name, imageUrl: e.image?.url, svg: e.svg || undefined, viewBox: e.viewBox || undefined, tenantKey: e.tenant?.key });
 
   const load = async () => {
     try {
@@ -53,17 +59,42 @@ export default function IconManager({ tenantKey, onClose, onSaved }: { tenantKey
     finally { setUploading(false); }
   }
 
+  /**
+   * Import a .svg file as an inline icon. Sanitised here as well as on the
+   * render side — this copy is what stops unusable markup being stored at all,
+   * and gives the editor an error now rather than a blank icon later.
+   */
+  async function importSvg(file: File) {
+    setUploading(true); setMsg(null);
+    try {
+      if (file.size > 256 * 1024) { setMsg({ t: t("ic.svgbig"), ok: false }); return; }
+      const text = await file.text();
+      const svg = sanitizeIconSvg(text);
+      if (!svg) { setMsg({ t: t("ic.svgbad"), ok: false }); return; }
+      // The source file's own viewBox decides how the paths are scaled;
+      // without it a 48-unit icon would be cropped to a 24-unit box.
+      const vb = safeViewBox(text.match(/viewBox\s*=\s*["']([^"']+)["']/i)?.[1]);
+      const base = file.name.replace(/\.svg$/i, "");
+      setCur((c) => ({ ...(c as any), svg, viewBox: vb, imageUrl: undefined, newId: undefined, name: (c?.name || base) }));
+    } catch { setMsg({ t: t("ic.svgbad"), ok: false }); }
+    finally { setUploading(false); }
+  }
+
   async function save() {
     if (!cur) return;
     const key = cur.key || slug(cur.name) || "icon-" + Math.random().toString(36).slice(2, 8);
     const body: any = { name: cur.name || key, key };
     if (cur.newId) body.image = cur.newId;
+    // Sent even when empty so switching an existing icon from inline SVG back
+    // to an uploaded image actually clears the old markup.
+    body.svg = cur.svg || null;
+    body.viewBox = cur.svg ? (cur.viewBox || "0 0 24 24") : null;
     if (tenantDoc && !cur.docId) body.tenant = tenantDoc;
     setSaving(true); setMsg(null);
     try {
       if (cur.docId) await cms.entries.update(ICON_UID, cur.docId, body);
       else {
-        if (!cur.newId) { setMsg({ t: "Upload an image first", ok: false }); setSaving(false); return; }
+        if (!cur.newId && !cur.svg) { setMsg({ t: t("ic.needart"), ok: false }); setSaving(false); return; }
         await cms.entries.create(ICON_UID, body);
       }
       setMsg({ t: t("bt.saved"), ok: true }); await load(); onSaved(); setCur(null);
@@ -88,8 +119,8 @@ export default function IconManager({ tenantKey, onClose, onSaved }: { tenantKey
             <button className="vb-add-btn" style={{ width: "100%", justifyContent: "center", marginBottom: 8 }} onClick={() => setCur({ key: "", name: "" })}><Icon name="plus" />{t("ic.new")}</button>
             {list.length === 0 && <div className="muted" style={{ fontSize: 11.5, padding: 8 }}>{t("ic.empty")}</div>}
             {list.map((ic) => (
-              <button key={ic.docId} className={"ctype" + (cur?.docId === ic.docId ? " on" : "")} onClick={() => setCur({ docId: ic.docId, key: ic.key, name: ic.name, imageUrl: ic.imageUrl })}>
-                {ic.imageUrl ? <img src={mediaSrc(ic.imageUrl)} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> : <Icon name="img" />}
+              <button key={ic.docId} className={"ctype" + (cur?.docId === ic.docId ? " on" : "")} onClick={() => setCur({ docId: ic.docId, key: ic.key, name: ic.name, imageUrl: ic.imageUrl, svg: ic.svg, viewBox: ic.viewBox })}>
+                {ic.svg ? <svg className="ic-svg" style={{ width: 16, height: 16 }} viewBox={ic.viewBox || "0 0 24 24"} aria-hidden="true" dangerouslySetInnerHTML={{ __html: ic.svg }} /> : ic.imageUrl ? <img src={mediaSrc(ic.imageUrl)} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> : <Icon name="img" />}
                 <span>{ic.name}</span>
               </button>
             ))}
@@ -100,14 +131,44 @@ export default function IconManager({ tenantKey, onClose, onSaved }: { tenantKey
               <>
                 <div className="fld"><label>{t("bt.name")}</label><input value={cur.name} onChange={(e) => setCur((c) => ({ ...(c as any), name: e.target.value }))} placeholder="Handshake, Ambulance…" /></div>
                 <div className="fld">
-                  <label>{t("ic.image")}</label>
+                  <label>{t("ic.artwork")}</label>
                   <div className="ed-media">
-                    {cur.imageUrl ? <img className="ed-img" src={mediaSrc(cur.imageUrl)} alt="" /> : <div className="ed-img ed-img--none">{t("m.none")}</div>}
-                    <label className="btn btn--g" style={{ cursor: "pointer" }}>
-                      <Icon name="img" />{uploading ? t("m.uploading") : t("m.change")}
-                      <input type="file" accept="image/*" hidden disabled={uploading} onChange={(ev) => ev.target.files?.[0] && uploadImage(ev.target.files[0])} />
-                    </label>
+                    {/* Inline SVG wins over an uploaded image when both are
+                        set: it takes the template's own colour and stays sharp
+                        at any size, which an <img> cannot. */}
+                    {cur.svg
+                      ? <svg className="ed-img ic-svg" viewBox={cur.viewBox || "0 0 24 24"} aria-hidden="true" dangerouslySetInnerHTML={{ __html: cur.svg }} />
+                      : cur.imageUrl ? <img className="ed-img" src={mediaSrc(cur.imageUrl)} alt="" />
+                      : <div className="ed-img ed-img--none">{t("m.none")}</div>}
+                    <div className="ic-src">
+                      <button className="btn btn--g" onClick={() => setBrowsing(true)}><Icon name="grid" />{t("ic.frommui")}</button>
+                      <label className="btn btn--g" style={{ cursor: "pointer" }}>
+                        <Icon name="plus" />{uploading ? t("m.uploading") : t("ic.importsvg")}
+                        <input type="file" accept=".svg,image/svg+xml" hidden disabled={uploading}
+                          onChange={(ev) => { const f = ev.target.files?.[0]; ev.target.value = ""; if (f) importSvg(f); }} />
+                      </label>
+                      <label className="btn btn--g" style={{ cursor: "pointer" }}>
+                        <Icon name="img" />{t("ic.uploadimg")}
+                        <input type="file" accept="image/*" hidden disabled={uploading}
+                          onChange={(ev) => { const f = ev.target.files?.[0]; ev.target.value = ""; if (f) uploadImage(f); }} />
+                      </label>
+                      {cur.svg && <button className="btn btn--g" onClick={() => setCur((c) => ({ ...(c as any), svg: undefined, viewBox: undefined }))}><Icon name="trash" />{t("ic.clearsvg")}</button>}
+                    </div>
                   </div>
+                  {browsing && (
+                    <MuiIconBrowser onClose={() => setBrowsing(false)}
+                      onPick={(p) => {
+                        setBrowsing(false);
+                        setCur((c) => ({
+                          ...(c as any),
+                          svg: p.svg, viewBox: p.viewBox,
+                          imageUrl: undefined, newId: undefined,
+                          // Only names the icon when the editor hasn't; renaming
+                          // their own icon out from under them would be rude.
+                          name: c?.name?.trim() ? c.name : p.name,
+                        }));
+                      }} />
+                  )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                   <button className="btn btn--p" onClick={save} disabled={saving || !cur.name.trim()}>{saving ? t("bt.saving") : t("bt.save")}</button>

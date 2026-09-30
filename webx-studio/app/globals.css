@@ -417,6 +417,25 @@ svg{display:block;width:18px;height:18px;flex:none}
 .cp-sw{aspect-ratio:1;border-radius:5px;border:1px solid var(--line2);cursor:pointer;padding:0;overflow:hidden}
 .cp-sw.on{outline:2px solid var(--accent);outline-offset:1px}
 .cp-sw>span{display:block;width:100%;height:100%}
+
+/* ---- icon manager: Material browser + svg import ------------------------ */
+/* `currentColor` is the whole reason inline SVG is preferred over an uploaded
+   image — the icon takes the surrounding text colour instead of baking one in. */
+.ic-svg{fill:currentColor}
+.ic-src{display:flex;flex-wrap:wrap;gap:6px}
+.mib{margin-top:9px;border:1px solid var(--line2);border-radius:11px;background:var(--bg);overflow:hidden}
+.mib-head{display:flex;align-items:center;gap:6px;padding:8px;border-bottom:1px solid var(--line)}
+.mib-q{flex:1;min-width:0}
+.mib-note{font-size:11.5px;padding:10px}
+/* A fixed height with its own scroll: the grid sits inside a modal that is
+   already scrolling, and letting 120 results grow it would push the Save
+   button off-screen. */
+.mib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:4px;padding:8px;max-height:270px;overflow:auto}
+.mib-i{display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 3px;cursor:pointer;
+  border:1px solid transparent;border-radius:8px;background:none;color:var(--ink)}
+.mib-i:hover{border-color:var(--accent);background:var(--accent-soft)}
+.mib-i svg{width:22px;height:22px;fill:currentColor}
+.mib-i span{font-size:9.5px;color:var(--mut);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vb-block-a svg{width:13px;height:13px}
 .vb-block-b{padding:11px;border-top:1px solid var(--line);background:var(--bg2)}
 .vb-add{margin-top:12px;padding:12px;border:1px dashed var(--line2);border-radius:11px}
