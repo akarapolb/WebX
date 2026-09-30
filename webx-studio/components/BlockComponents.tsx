@@ -33,6 +33,8 @@ type Ops = {
 };
 type Ctx = Ops & {
   block: any; template?: string; customIcons: CustomIcon[]; t: (k: string) => string;
+  /** Reload the icon library after the picker saves a Material icon into it. */
+  onIconsChanged?: () => void | Promise<void>;
   moved: Record<string, any>; selectedComp: string | null;
   onPickComp?: (key: string | null) => void; onResetBox?: (key: string) => void;
 };
@@ -98,10 +100,11 @@ function newItem(l: ListDesc, b: any): any {
 }
 
 export default function BlockComponents({
-  block, meta, template, customIcons, update, arrayAdd, arrayRemove, hidePrimary, sourceSlot,
+  block, meta, template, customIcons, onIconsChanged, update, arrayAdd, arrayRemove, hidePrimary, sourceSlot,
   device = "desktop", selectedComp, onPickComp, onResetBox, onResetAllBoxes,
 }: Ops & {
   block: any; meta: BlockTypeMeta; template?: string; customIcons: CustomIcon[];
+  onIconsChanged?: () => void | Promise<void>;
   /** Hide the primary `items` list (a live `source` feed overwrites it). */
   hidePrimary?: boolean;
   /** Rendered just before the lists (the live-data binding control). */
@@ -117,7 +120,7 @@ export default function BlockComponents({
 }) {
   const { t } = useLang();
   const moved: Record<string, any> = (block?.boxes?.[device] && typeof block.boxes[device] === "object") ? block.boxes[device] : {};
-  const ctx: Ctx = { block, template, customIcons, t, update, arrayAdd, arrayRemove, moved, selectedComp: selectedComp ?? null, onPickComp, onResetBox };
+  const ctx: Ctx = { block, template, customIcons, onIconsChanged, t, update, arrayAdd, arrayRemove, moved, selectedComp: selectedComp ?? null, onPickComp, onResetBox };
   const rootRef = useRef<HTMLDivElement>(null);
   // Picked on the preview → bring its field into view in the sidebar.
   useEffect(() => {
@@ -232,7 +235,7 @@ function RemoveBtn({ onClick, title }: { onClick: () => void; title: string }) {
 
 function FieldInput({ f, value, onChange, ctx, placeholder }: { f: ItemField; value: any; onChange: (v: any) => void; ctx: Ctx; placeholder?: string }) {
   const v = value ?? "";
-  if (f.icon) return <IconPicker value={v || "i-check"} builtIn={FEATURE_ICONS} customIcons={ctx.customIcons} title="icon" onChange={onChange} />;
+  if (f.icon) return <IconPicker value={v || "i-check"} builtIn={FEATURE_ICONS} customIcons={ctx.customIcons} onLibraryChanged={ctx.onIconsChanged} title="icon" onChange={onChange} />;
   if (f.select) {
     return (
       <select value={String(v)} onChange={(e) => onChange(e.target.value)}>

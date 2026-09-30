@@ -1577,7 +1577,7 @@ export default function VisualBuilder() {
                         — hand-editing items on a source-bound block would
                         silently vanish on the next publish, which is worse
                         than not offering the control at all. */}
-                    {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons}
+                    {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
                       device={device} selectedComp={activeComp}
                       onPickComp={(k) => setSelComp(k ? { i, key: k } : null)}
                       onResetBox={(k) => setBox(i, k, device, null)}
@@ -1652,7 +1652,7 @@ export default function VisualBuilder() {
                                   // IconPicker already uses (see its own comment) — every WP-
                                   // dialect (ORST/RoyalSociety) type with an icon item field
                                   // stores it the same way, so the same built-in set applies.
-                                  <IconPicker key={f.k} value={it?.[f.k] || "i-check"} builtIn={FEATURE_ICONS} customIcons={customIcons} title="icon"
+                                  <IconPicker key={f.k} value={it?.[f.k] || "i-check"} builtIn={FEATURE_ICONS} customIcons={customIcons} onLibraryChanged={loadIcons} title="icon"
                                     onChange={(v) => updateBlockField(i, [bm.items!.key, k, f.k], v)} />
                                 ) : f.select ? (
                                   <select key={f.k} value={it?.[f.k] || ""} onChange={(e) => updateBlockField(i, [bm.items!.key, k, f.k], e.target.value)}>
@@ -1690,7 +1690,7 @@ export default function VisualBuilder() {
                         <label style={{ fontSize: 11 }}>items</label>
                         {(b.items || []).map((it: any, k: number) => (
                           <div className="vb-item" key={k}>
-                            <IconPicker value={it.icon || "i-check"} builtIn={FEATURE_ICONS} customIcons={customIcons} title="icon"
+                            <IconPicker value={it.icon || "i-check"} builtIn={FEATURE_ICONS} customIcons={customIcons} onLibraryChanged={loadIcons} title="icon"
                               onChange={(v) => setItem(i, k, "icon", v)} />
                             <input value={it.title || ""} placeholder="title" onChange={(e) => setItem(i, k, "title", e.target.value)} />
                             <input value={it.text || ""} placeholder="text" onChange={(e) => setItem(i, k, "text", e.target.value)} />
@@ -1716,7 +1716,7 @@ export default function VisualBuilder() {
                                 look them up in the sprite, so the "i-" prefix
                                 is added going in and stripped coming back out,
                                 right here, without touching what's stored. */}
-                            <IconPicker value={"i-" + (it.icon || "users")} builtIn={STAT_ICONS.map((ic) => "i-" + ic)} customIcons={customIcons} title="icon"
+                            <IconPicker value={"i-" + (it.icon || "users")} builtIn={STAT_ICONS.map((ic) => "i-" + ic)} customIcons={customIcons} onLibraryChanged={loadIcons} title="icon"
                               // Only unprefix a value that's actually one of
                               // the built-ins passed in above — a custom
                               // icon's own key (which IconPicker returns

@@ -613,6 +613,8 @@ export const DICT: Record<string, Entry> = {
   "ic.muierr": { en: "Could not load the icon list.", th: "โหลดรายการไอคอนไม่สำเร็จ" },
   "ic.svgbad": { en: "That file has nothing this can draw — an .svg made of paths works best.", th: "ไฟล์นี้ไม่มีส่วนที่วาดได้ — ควรเป็น .svg ที่ประกอบด้วย path" },
   "ic.svgbig": { en: "That .svg is too large (limit 256 KB).", th: "ไฟล์ .svg ใหญ่เกินไป (จำกัด 256 KB)" },
+  "ic.saving": { en: "Saving icon…", th: "กำลังบันทึกไอคอน…" },
+  "ic.saveerr": { en: "Could not save that icon. Try again.", th: "บันทึกไอคอนไม่สำเร็จ ลองอีกครั้ง" },
   "ic.needart": { en: "Pick a Material icon, import an .svg, or upload an image first.", th: "เลือกไอคอน Material นำเข้า .svg หรืออัปโหลดรูปก่อน" },
   "vb.surface": { en: "Which pages to edit", th: "เลือกชุดหน้าที่จะแก้ไข" },
   "vb.surfacePages": { en: "Pages", th: "หน้าเว็บ" },

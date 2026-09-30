@@ -120,7 +120,7 @@ export default function IconManager({ tenantKey, onClose, onSaved }: { tenantKey
             {list.length === 0 && <div className="muted" style={{ fontSize: 11.5, padding: 8 }}>{t("ic.empty")}</div>}
             {list.map((ic) => (
               <button key={ic.docId} className={"ctype" + (cur?.docId === ic.docId ? " on" : "")} onClick={() => setCur({ docId: ic.docId, key: ic.key, name: ic.name, imageUrl: ic.imageUrl, svg: ic.svg, viewBox: ic.viewBox })}>
-                {ic.svg ? <svg className="ic-svg" style={{ width: 16, height: 16 }} viewBox={ic.viewBox || "0 0 24 24"} aria-hidden="true" dangerouslySetInnerHTML={{ __html: ic.svg }} /> : ic.imageUrl ? <img src={mediaSrc(ic.imageUrl)} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> : <Icon name="img" />}
+                {ic.svg ? <svg className="ic-svg" viewBox={safeViewBox(ic.viewBox)} aria-hidden="true" style={{ width: 16, height: 16, fill: "currentColor", stroke: "none" }} dangerouslySetInnerHTML={{ __html: sanitizeIconSvg(ic.svg) }} /> : ic.imageUrl ? <img src={mediaSrc(ic.imageUrl)} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> : <Icon name="img" />}
                 <span>{ic.name}</span>
               </button>
             ))}
@@ -137,7 +137,7 @@ export default function IconManager({ tenantKey, onClose, onSaved }: { tenantKey
                         set: it takes the template's own colour and stays sharp
                         at any size, which an <img> cannot. */}
                     {cur.svg
-                      ? <svg className="ed-img ic-svg" viewBox={cur.viewBox || "0 0 24 24"} aria-hidden="true" dangerouslySetInnerHTML={{ __html: cur.svg }} />
+                      ? <svg className="ed-img ic-svg" viewBox={safeViewBox(cur.viewBox)} aria-hidden="true" dangerouslySetInnerHTML={{ __html: sanitizeIconSvg(cur.svg) }} />
                       : cur.imageUrl ? <img className="ed-img" src={mediaSrc(cur.imageUrl)} alt="" />
                       : <div className="ed-img ed-img--none">{t("m.none")}</div>}
                     <div className="ic-src">
