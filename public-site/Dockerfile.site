@@ -1,0 +1,23 @@
+# Builder for the static public site (see docker/builder.mjs).
+#
+# This is NOT the thing that serves the site — it produces the static export
+# (`next build` with output:"export") into a shared volume and the `site`
+# service (Caddy) serves it. It has to be a long-running container rather than
+# a one-off image build because the export fetches every page's content from
+# Strapi/WordPress at BUILD time, and those only exist on the compose network
+# at run time — and because Studio needs something to call to rebuild after a
+# Publish (the webx container has no copy of this project to build).
+FROM node:20-slim
+
+ENV NEXT_TELEMETRY_DISABLED=1
+WORKDIR /app
+
+# Dependencies first so a source-only change doesn't reinstall them.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+# Only reachable from other services on the compose network — never published.
+EXPOSE 8099
+CMD ["node", "docker/builder.mjs"]

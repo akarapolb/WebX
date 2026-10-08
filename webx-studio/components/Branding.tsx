@@ -6,6 +6,7 @@ import { useTenant } from "./TenantProvider";
 import NavManager from "./NavManager";
 import FooterEditor from "./FooterEditor";
 import BreakingNewsManager from "./BreakingNewsManager";
+import ThemeSettings from "./ThemeSettings";
 
 const SWATCHES = ["#2F54EB", "#8B5CF6", "#14B8A6", "#EE5020", "#F59E0B", "#10B981"];
 const TMPLS = [{ key: "classic", en: "Classic", th: "คลาสสิก" }, { key: "split", en: "Split", th: "สปลิต" }, { key: "editorial", en: "Editorial", th: "เอดิทอเรียล" }];
@@ -13,7 +14,7 @@ const TMPLS = [{ key: "classic", en: "Classic", th: "คลาสสิก" }, {
 export default function Branding() {
   const { t, lang } = useLang();
   const { currentKey, current } = useTenant();
-  const [tab, setTab] = useState<"appearance" | "nav" | "footer" | "breaking">("appearance");
+  const [tab, setTab] = useState<"appearance" | "theme" | "nav" | "footer" | "breaking">("appearance");
   const [color, setColor] = useState("#2F54EB");
   const [tmpl, setTmpl] = useState("classic");
   const [wm, setWm] = useState(false);
@@ -70,6 +71,7 @@ export default function Branding() {
 
       <div className="seg" style={{ marginBottom: 16 }}>
         <button className={tab === "appearance" ? "on" : ""} onClick={() => setTab("appearance")}>{t("br.tab_appearance")}</button>
+        <button className={tab === "theme" ? "on" : ""} onClick={() => setTab("theme")}>{t("br.tab_theme")}</button>
         <button className={tab === "nav" ? "on" : ""} onClick={() => setTab("nav")}>{t("br.tab_nav")}</button>
         <button className={tab === "footer" ? "on" : ""} onClick={() => setTab("footer")}>{t("br.tab_footer")}</button>
         <button className={tab === "breaking" ? "on" : ""} onClick={() => setTab("breaking")}>{t("br.tab_breaking")}</button>
@@ -129,6 +131,7 @@ export default function Branding() {
         </div>
       )}
 
+      {tab === "theme" && <ThemeSettings tenantKey={tenant} />}
       {tab === "nav" && <NavManager tenantKey={tenant} />}
       {tab === "footer" && <FooterEditor tenantKey={tenant} />}
       {tab === "breaking" && <BreakingNewsManager tenantKey={tenant} />}

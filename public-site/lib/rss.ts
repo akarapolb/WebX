@@ -2,7 +2,7 @@
 // Shared by app/orst/feed.xml/route.ts and app/royalsociety/feed.xml/
 // route.ts. Server-only (Route Handlers only run server-side).
 import type { WpEntry } from "./cms";
-import { siteUrlFor } from "./seo";
+import { siteUrlFor, publicPath } from "./seo";
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
@@ -21,8 +21,8 @@ export function buildRss(opts: {
   entries: WpEntry[];
 }): string {
   const base = siteUrlFor(opts.tenant);
-  const channelLink = `${base}${opts.listingPath}`;
-  const feedUrl = `${base}/${opts.tenant}/feed.xml`;
+  const channelLink = `${base}${publicPath(opts.tenant, opts.listingPath)}`;
+  const feedUrl = `${base}${publicPath(opts.tenant, `/${opts.tenant}/feed.xml`)}`;
   const items = opts.entries
     .map((e) => {
       const pubDate = e.date ? new Date(e.date).toUTCString() : "";

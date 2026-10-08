@@ -1,5 +1,6 @@
 import OrstIconSprite from "@/templates/orst/OrstIconSprite";
 import BreakingNewsBanner from "@/components/BreakingNewsBanner";
+import { getThemeCss } from "@/lib/cms";
 
 // ORST's own design (Phase 11 full visual redesign) — separate stylesheet +
 // icon sprite from the gov-portal template, scoped to this segment only
@@ -17,7 +18,11 @@ import BreakingNewsBanner from "@/components/BreakingNewsBanner";
 // redesigning: HomePage/ContactPage/KnowledgePage's own file comments claim
 // their classes come straight from these stylesheets, but nothing linked
 // them, so none of that page-specific CSS was ever applied. See task report.)
-export default function OrstLayout({ children }: { children: React.ReactNode }) {
+export default async function OrstLayout({ children }: { children: React.ReactNode }) {
+  // Site-wide theme from WebX Studio's Branding → Theme tab (lib/theme.ts).
+  // Emitted after every stylesheet <link> below; it's unlayered, so it beats
+  // tokens.css's `@layer tokens` values whatever the order.
+  const themeCss = await getThemeCss("orst");
   return (
     <>
       {/* Self-hosted fonts (TOR gap audit — PageSpeed/Core Web Vitals; see
@@ -35,6 +40,7 @@ export default function OrstLayout({ children }: { children: React.ReactNode }) 
       <link rel="stylesheet" href="/assets/orst/css/pages/home.css" />
       <link rel="stylesheet" href="/assets/orst/css/pages/contact.css" />
       <link rel="stylesheet" href="/assets/orst/css/pages/knowledge.css" />
+      {themeCss && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       <OrstIconSprite />
       <BreakingNewsBanner tenant="orst" />
       {children}

@@ -163,6 +163,13 @@ services:
       # WordPress-backed item; leave blank if this deployment has no
       # WordPress engine tenant.
       WEBX_SCHEDULER_SECRET: ${WEBX_SCHEDULER_SECRET:?set WEBX_SCHEDULER_SECRET}
+      # After a Publish, ask the `site-builder` service (profile "site") to
+      # rebuild the public website — this container has no copy of
+      # public-site to build it itself. Harmless when that profile isn't
+      # running: the request just fails and is logged. Same secret the
+      # builder checks (it defaults to STRAPI_INTERNAL_SECRET too).
+      PUBLIC_SITE_REBUILD_URL: ${PUBLIC_SITE_REBUILD_URL:-http://site-builder:8099}
+      PUBLIC_SITE_REBUILD_SECRET: ${PUBLIC_SITE_REBUILD_SECRET:-${STRAPI_INTERNAL_SECRET}}
       STRAPI_SCHEDULER_EMAIL: scheduler@webx.local
       STRAPI_SCHEDULER_PASSWORD: ${STRAPI_SCHEDULER_PASSWORD:?set STRAPI_SCHEDULER_PASSWORD}
       WORDPRESS_SCHEDULER_USERNAME: ${WORDPRESS_SCHEDULER_USERNAME:-}
@@ -519,7 +526,68 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
 
+  # ---- Public website (profile "site") -----------------------------------
+  # The visitor-facing site for the WordPress-engine tenants, served from its
+  # own domain. Two services: `site-builder` produces the static export (it
+  # must run inside this network — the export fetches every page from Strapi
+  # and WordPress at build time) and `site` (Caddy) serves it, mapping the
+  # domain root onto the tenant's /orst/... files. See public-site/docker/.
+  #
+  #   docker compose --profile ai --profile wordpress --profile site up -d --build
+  #
+  # Local trial: http://orst.localhost:8090 (browsers resolve *.localhost to
+  # this machine, no DNS needed). Real domain: set SITE_ADDRESS=www.orst.go.th,
+  # SITE_PUBLIC_URL=https://www.orst.go.th, SITE_HTTP_PORT=80, SITE_HTTPS_PORT=443
+  # and Caddy obtains the TLS certificate itself.
+  site-builder:
+    build:
+      context: ./public-site
+      dockerfile: Dockerfile.site
+    restart: unless-stopped
+    profiles: ["site"]
+    depends_on:
+      strapi:
+        condition: service_healthy
+      wordpress:
+        condition: service_started
+    environment:
+      # Build-time reads, from inside this network.
+      STRAPI_URL: http://strapi:1337
+      WORDPRESS_URL: http://wordpress:80/wp-json
+      # Baked into the pages and called by VISITORS' browsers (poll votes,
+      # captcha, search) — so it must be a URL a browser can reach, never a
+      # compose-internal hostname. Default matches the published WordPress port.
+      NEXT_PUBLIC_WORDPRESS_URL: ${SITE_WORDPRESS_PUBLIC_URL:-http://localhost:8081/wp-json}
+      NEXT_PUBLIC_STUDIO_ORIGIN: ${SITE_STUDIO_ORIGIN:-http://localhost:3000}
+      # Absolute URLs in canonical/OG/RSS. ORST is served from its domain
+      # root, so its internal /orst prefix is dropped from every published URL.
+      PUBLIC_SITE_URL: ${SITE_PUBLIC_URL:-http://orst.localhost:8090}
+      PUBLIC_SITE_URL_ORST: ${SITE_PUBLIC_URL:-http://orst.localhost:8090}
+      PUBLIC_SITE_ROOT_TENANTS: ${SITE_ROOT_TENANTS:-orst}
+      # Studio calls POST /rebuild with this after a Publish.
+      PUBLIC_SITE_REBUILD_SECRET: ${PUBLIC_SITE_REBUILD_SECRET:-${STRAPI_INTERNAL_SECRET}}
+    volumes:
+      - site-out:/site
+
+  site:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["site"]
+    depends_on:
+      - site-builder
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-http://orst.localhost}
+    ports:
+      - "${SITE_HTTP_PORT:-8090}:80"
+      - "${SITE_HTTPS_PORT:-8453}:443"
+    volumes:
+      - ./public-site/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - site-out:/srv:ro
+      - caddy-data:/data
+
 volumes:
+  site-out:
+  caddy-data:
   db-data:
   strapi-uploads:
   db-backups:

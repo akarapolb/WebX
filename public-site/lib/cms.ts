@@ -3,6 +3,8 @@
 // boot(), just called at build time (generateStaticParams / the page's async
 // component) instead of from the browser after load. Thai locale only for
 // this proof — see the Phase 4 plan for what's deliberately out of scope.
+import { themeToCss } from "./theme";
+
 const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
 const WORDPRESS = (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
 
@@ -50,7 +52,7 @@ export type PublicTemplate = "gov-portal" | "orst" | "royalsociety";
 export type Tenant = {
   key: string;
   name: string;
-  brand?: { orgName?: { th?: string; en?: string }; primaryColor?: string; logoUrl?: string };
+  brand?: { orgName?: { th?: string; en?: string }; primaryColor?: string; logoUrl?: string; /** Site-wide theme (lib/theme.ts) — untrusted until sanitizeTheme(). */ theme?: unknown };
   contact?: { phone?: string; email?: string; address?: { th?: string; en?: string } };
   footerColumns?: { heading: { th?: string; en?: string }; links: { label: { th?: string; en?: string }; url?: string }[] }[];
   social?: { label?: string; url?: string }[];
@@ -131,6 +133,20 @@ export async function getTenant(key: string): Promise<Tenant> {
   if (!r.ok) throw new Error("[cms] getTenant(" + key + "): Strapi returned HTTP " + r.status);
   const j = await r.json();
   return j.data as Tenant;
+}
+
+/** The override <style> text for one tenant's site-wide theme (lib/theme.ts),
+ * or "" when it has none. Never throws: unlike getTenant() — which fails the
+ * build rather than render a real agency under another's branding — an
+ * unreachable Strapi here just means "no overrides", and the tenant's own
+ * tokens.css defaults are still its own correct look. */
+export async function getThemeCss(tenant: string): Promise<string> {
+  try {
+    const t = await getTenant(tenant);
+    return themeToCss(tenant, t?.brand?.theme);
+  } catch {
+    return "";
+  }
 }
 
 /** Job/application e-forms (TOR gap audit — orst/royalsociety had no job

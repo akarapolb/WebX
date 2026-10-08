@@ -1,4 +1,5 @@
 import BreakingNewsBanner from "@/components/BreakingNewsBanner";
+import { getThemeCss } from "@/lib/cms";
 
 // RoyalSociety's own design (Phase 8) — separate stylesheet from both the
 // gov-portal template and ORST's, scoped to this segment only (see
@@ -25,7 +26,10 @@ import BreakingNewsBanner from "@/components/BreakingNewsBanner";
 // trust-strip/recommended-carousel/... or about-hero/intro-feature/timeline/
 // mission-grid/org-structure/...) can in principle appear on any route, so
 // both load globally here instead of per-page.
-export default function RoyalSocietyLayout({ children }: { children: React.ReactNode }) {
+export default async function RoyalSocietyLayout({ children }: { children: React.ReactNode }) {
+  // Site-wide theme from WebX Studio's Branding → Theme tab (lib/theme.ts) —
+  // see app/orst/layout.tsx for why it is unlayered and emitted last.
+  const themeCss = await getThemeCss("royalsociety");
   return (
     <>
       {/* Self-hosted fonts (TOR gap audit — PageSpeed/Core Web Vitals) — see
@@ -39,6 +43,7 @@ export default function RoyalSocietyLayout({ children }: { children: React.React
       <link rel="stylesheet" href="/assets/royalsociety/css/05-accessibility.css" />
       <link rel="stylesheet" href="/assets/royalsociety/css/pages/home.css" />
       <link rel="stylesheet" href="/assets/royalsociety/css/pages/about.css" />
+      {themeCss && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       <BreakingNewsBanner tenant="royalsociety" />
       {children}
     </>

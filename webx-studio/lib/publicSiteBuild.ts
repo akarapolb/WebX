@@ -21,6 +21,27 @@ const AUTO_REBUILD = process.env.PUBLIC_SITE_AUTO_REBUILD !== "off";
 const DEBOUNCE_MS = Number(process.env.PUBLIC_SITE_REBUILD_DEBOUNCE_MS || 20_000);
 const BUILD_TIMEOUT_MS = 5 * 60_000; // guards against a hung build wedging the state machine forever
 
+// Docker deployments: the webx container has no copy of public-site, so it
+// cannot build anything itself. When PUBLIC_SITE_REBUILD_URL points at the
+// `site-builder` service (public-site/docker/builder.mjs) a rebuild is a
+// POST to it instead — it debounces, single-flights and publishes atomically
+// on its own, so none of the local state machine below applies.
+const REMOTE_URL = (process.env.PUBLIC_SITE_REBUILD_URL || "").replace(/\/$/, "");
+const REMOTE_SECRET = process.env.PUBLIC_SITE_REBUILD_SECRET || process.env.STRAPI_INTERNAL_SECRET || "";
+
+async function remoteRebuild(): Promise<{ started: boolean; reason?: string }> {
+  try {
+    const r = await fetch(REMOTE_URL + "/rebuild", { method: "POST", headers: { "x-rebuild-secret": REMOTE_SECRET }, signal: AbortSignal.timeout(10_000) });
+    if (r.ok) return { started: true };
+    return { started: false, reason: "site-builder refused the rebuild (HTTP " + r.status + ")" };
+  } catch (e: any) {
+    // Same stance as the local path: a publish must never fail because the
+    // rebuild side-effect could not be reached. Logged, surfaced on request.
+    console.error("[public-site] remote rebuild request failed:", e?.message || e);
+    return { started: false, reason: "cannot reach site-builder" };
+  }
+}
+
 type BuildStatus = {
   building: boolean;
   lastBuiltAt: string | null;
@@ -40,7 +61,9 @@ let lastError: string | null = null;
  * same reasoning as writeAudit in governance.ts: a side-effect must never
  * roll back or surface as an error on the content action that triggered it. */
 export function requestPublicSiteRebuild(): void {
-  if (!AUTO_REBUILD || !existsSync(PUBLIC_SITE_DIR)) return;
+  if (!AUTO_REBUILD) return;
+  if (REMOTE_URL) { void remoteRebuild(); return; }
+  if (!existsSync(PUBLIC_SITE_DIR)) return;
   if (building) { pendingRebuild = true; return; }
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => { debounceTimer = null; void runBuild(); }, DEBOUNCE_MS);
@@ -104,7 +127,17 @@ async function execBuild(): Promise<void> {
   });
 }
 
-export function getPublicSiteBuildStatus(): BuildStatus {
+export async function getPublicSiteBuildStatus(): Promise<BuildStatus> {
+  if (REMOTE_URL) {
+    try {
+      const r = await fetch(REMOTE_URL + "/status", { signal: AbortSignal.timeout(5_000) });
+      if (r.ok) {
+        const j = await r.json();
+        return { building: !!j.building, lastBuiltAt: j.lastBuiltAt ?? null, lastError: j.lastError ?? null };
+      }
+    } catch {}
+    return { building: false, lastBuiltAt: null, lastError: "cannot reach site-builder" };
+  }
   return { building, lastBuiltAt, lastError };
 }
 
@@ -116,6 +149,9 @@ export function getPublicSiteBuildStatus(): BuildStatus {
  * Still respects the single-flight guard: a build already running just gets
  * queued, same as a second automatic trigger would. */
 export function forceRebuildNow(): { started: boolean; reason?: string } {
+  // The remote builder debounces/queues itself; "started" here means the
+  // request was accepted for sending, which is all this sync signature can know.
+  if (REMOTE_URL) { void remoteRebuild(); return { started: true }; }
   if (!existsSync(PUBLIC_SITE_DIR)) return { started: false, reason: "public-site directory not found" };
   if (building) { pendingRebuild = true; return { started: false, reason: "a build is already running — queued to run again after" }; }
   if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }

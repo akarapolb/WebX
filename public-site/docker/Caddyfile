@@ -1,0 +1,105 @@
+# Serves the ORST static export from the DOMAIN ROOT.
+#
+# The export is one tree for several tenants, so ORST's pages live under
+# /orst — `/orst.html` (home), `/orst/about.html`, `/en/orst/about.html` — and
+# the shared assets sit at the top (`/_next`, `/assets`, `/fonts`). Visitors
+# should see www.orst.go.th/about, not www.orst.go.th/orst/about, so:
+#
+#   /about            →  served from  /orst/about.html          (rewrite, URL unchanged)
+#   /en/about         →  served from  /en/orst/about.html
+#   /orst/about       →  301 to       /about                    (old/internal links)
+#   /en/orst/about    →  301 to       /en/about
+#
+# Every link inside the pages still reads /orst/...; they are plain <a> tags
+# (no client-side router), so each click is a normal request that gets
+# redirected to the clean URL. Published URLs (canonical, RSS, hreflang) are
+# already written without the prefix — see publicPath() in lib/seo.ts.
+#
+# SITE_ADDRESS:
+#   http://orst.localhost   local trial (browsers resolve *.localhost to this machine)
+#   www.orst.go.th          a real domain — Caddy obtains and renews the TLS certificate
+{
+	admin off
+}
+
+{$SITE_ADDRESS:http://orst.localhost} {
+	root * {$SITE_ROOT:/srv/current}
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Build output under /_next/static is content-hashed, so it can be cached forever.
+	@hashed path /_next/static/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	# Everything below is ONE ordered `route`: Caddy would otherwise run the
+	# catch-all `handle` blocks before the redirects, whatever order they are
+	# written in (handle sorts ahead of route).
+	route {
+		# --- legacy prefixed URLs → clean URL (query string is kept) -----------
+		@enPrefixed path_regexp ^/en/orst(/|$)
+		route @enPrefixed {
+			uri path_regexp ^/en/orst/?(.*)$ /en/$1
+			uri path_regexp ^(.+)/$ $1
+			redir {http.request.uri} 301
+		}
+		@orstPrefixed path_regexp ^/orst(/|$)
+		route @orstPrefixed {
+			uri path_regexp ^/orst/?(.*)$ /$1
+			redir {http.request.uri} 301
+		}
+
+		# /about/ → /about  (but not "/" itself)
+		@trailing path_regexp ^/.+/$
+		route @trailing {
+			uri path_regexp ^(.+)/$ $1
+			redir {http.request.uri} 301
+		}
+
+		# --- shared assets, served as they are ---------------------------------
+		@assets path /_next/* /assets/* /fonts/* /favicon.ico /llms.txt
+		handle @assets {
+			file_server
+		}
+
+		# --- English -------------------------------------------------------------
+		handle /en {
+			rewrite * /en/orst.html
+			file_server
+		}
+
+		@en path /en/*
+		handle @en {
+			route {
+				uri strip_prefix /en
+				rewrite * /en/orst{path}
+				try_files {path}.html {path}
+				file_server
+			}
+		}
+
+		# --- home --------------------------------------------------------------
+		handle / {
+			rewrite * /orst.html
+			file_server
+		}
+
+		# --- everything else is an ORST page or file (feed.xml, events.ics) ----
+		handle {
+			route {
+				rewrite * /orst{path}
+				try_files {path}.html {path}
+				file_server
+			}
+		}
+	}
+
+	handle_errors {
+		rewrite * /404.html
+		file_server
+	}
+}

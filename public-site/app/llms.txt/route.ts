@@ -1,5 +1,5 @@
 import { listTenants, getTenant, getNavItems, listPageSlugs } from "@/lib/cms";
-import { siteUrlFor } from "@/lib/seo";
+import { siteUrlFor, publicPath } from "@/lib/seo";
 
 // llms.txt (https://llmstxt.org) — a plain-text site map written for AI
 // assistants, generated at build time from the same tenant/nav data the
@@ -19,11 +19,11 @@ export async function GET() {
     const orgName = tenant.brand?.orgName?.th || tenant.name;
     const orgNameEn = tenant.brand?.orgName?.en;
     const nav = await getNavItems(t.key);
-    const homePath = t.key === "dga" ? "/" : `/${t.key}`;
+    const homePath = t.key === "dga" ? "/" : publicPath(t.key, `/${t.key}`);
     const lines = [`## ${orgName}${orgNameEn ? ` (${orgNameEn})` : ""}`, ``, `- [หน้าแรก / Home](${base}${homePath})`];
     for (const n of nav) {
       if (!n.url || n.url === "#") continue;
-      const url = /^https?:\/\//.test(n.url) ? n.url : `${base}${n.url.startsWith("/") ? "" : "/"}${n.url}`;
+      const url = /^https?:\/\//.test(n.url) ? n.url : `${base}${n.url.startsWith("/") ? "" : "/"}${n.url.startsWith("/") ? publicPath(t.key, n.url) : n.url}`;
       lines.push(`- [${n.label}](${url})`);
     }
     // Strapi-engine tenants also expose builder pages the nav may not link.
@@ -31,10 +31,10 @@ export async function GET() {
       const slugs = await listPageSlugs(t.key);
       for (const slug of slugs) {
         if (slug === "home-blocks") continue;
-        lines.push(`- [${slug}](${base}${t.key === "dga" ? "" : `/${t.key}`}/${slug})`);
+        lines.push(`- [${slug}](${base}${t.key === "dga" ? "" : publicPath(t.key, `/${t.key}`).replace(/\/$/, "")}/${slug})`);
       }
     }
-    lines.push(`- [RSS](${base}/${t.key}/feed.xml)`);
+    lines.push(`- [RSS](${base}${publicPath(t.key, `/${t.key}/feed.xml`)})`);
     sections.push(lines.join("\n"));
   }
 
