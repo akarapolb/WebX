@@ -1,8 +1,10 @@
 import MobileMenuToggle from "./MobileMenuToggle";
+import MegaNavClick from "./MegaNavClick";
 import AccessibilityTools from "./AccessibilityTools";
 import ThemeToggle from "./ThemeToggle";
 import Picture from "@/components/Picture";
-import type { NavItem, NavMegaLink } from "@/lib/cms";
+import { getCustomIcons, type NavItem, type NavMegaGroup, type NavMegaLink } from "@/lib/cms";
+import { sanitizeIconSvg, safeViewBox } from "@/lib/iconSvg";
 
 // Ported from ORST Website/assets/js/components.js — renderHeader(),
 // renderDesktopNav(), renderMobileNav(), renderMegaMenu(), and the
@@ -135,6 +137,12 @@ function Icon({ id, className = "icon" }: { id: string; className?: string }) {
   );
 }
 
+// A group with more than a heading and links (icon / eyebrow / description /
+// featured link) is drawn like the dropdown's own featured box — larger title.
+function isRichGroup(g: NavMegaGroup): boolean {
+  return !!(g.icon || g.eyebrow || g.description || g.featuredUrl);
+}
+
 // Unlimited-depth mega-menu links (TOR gap — the previous shape was
 // hardcoded to exactly group→links, 2 levels). A link with no `children`
 // renders exactly as before; one with children becomes a native
@@ -187,8 +195,27 @@ function MobileMegaLinkNode({ link, nodeKey }: { link: NavMegaLink; nodeKey: str
   );
 }
 
-export default function Header({ active, navItems, locale = "th" }: { active?: string; navItems?: NavItem[]; locale?: "th" | "en" }) {
+// A dropdown's icon is either a sprite symbol id ("i-book") or the key of an icon
+// the workspace saved (the Visual Builder's picker, incl. the Material set). A
+// saved one is drawn from its stored definition, re-sanitised here rather than
+// trusted from storage — same as the page blocks do.
+type SavedIcon = { svg?: string; viewBox?: string; imageUrl?: string };
+function NavIcon({ id, library, className = "icon" }: { id?: string; library: Record<string, SavedIcon>; className?: string }) {
+  const def = id ? library[id] : undefined;
+  if (def) {
+    const safe = sanitizeIconSvg(def.svg);
+    if (safe) {
+      return <svg className={className} viewBox={safeViewBox(def.viewBox)} aria-hidden="true" style={{ fill: "currentColor", stroke: "none" }} dangerouslySetInnerHTML={{ __html: safe }} />;
+    }
+    if (def.imageUrl) return <img className={className} src={def.imageUrl} alt="" style={{ objectFit: "contain" }} />;
+    return null;
+  }
+  return <Icon id={id || ""} className={className} />;
+}
+
+export default async function Header({ active, navItems, locale = "th" }: { active?: string; navItems?: NavItem[]; locale?: "th" | "en" }) {
   const nav = navItems && navItems.length ? navItems : FALLBACK_NAV;
+  const savedIcons = await getCustomIcons("orst");
   const activeHref = active ? hrefForActiveKey(active) : "";
   const s = STR[locale];
   return (
@@ -255,6 +282,7 @@ export default function Header({ active, navItems, locale = "th" }: { active?: s
                     href={href}
                     data-mega={i}
                     aria-haspopup="true"
+                    aria-expanded="false"
                     {...linkProps}
                   >
                     {n.label}
@@ -268,21 +296,37 @@ export default function Header({ active, navItems, locale = "th" }: { active?: s
                     <div className="mega-inner" role="region" aria-label={`เมนูย่อย ${data.title || n.label}`}>
                       <div className="mega-feature">
                         <span className="mega-feature-icon">
-                          <Icon id={data.icon || ""} className="icon-lg" />
+                          <NavIcon id={data.icon} library={savedIcons} className="icon-lg" />
                         </span>
                         <span className="section-kicker">{data.eyebrow}</span>
                         <h3>{data.title}</h3>
                         <p>{data.description}</p>
                         {data.featuredUrl && (
                           <a href={data.featuredUrl}>
-                            {data.featuredLabel} <span aria-hidden="true">→</span>
+                            {data.featuredLabel || n.label} <span aria-hidden="true">→</span>
                           </a>
                         )}
                       </div>
                       <div className="mega-groups">
                         {data.groups.map((group, gi) => (
-                          <div className="mega-group" key={gi}>
-                            <h4>{group.heading}</h4>
+                          <div className={"mega-group" + (isRichGroup(group) ? " is-rich" : "")} key={gi}>
+                            {isRichGroup(group) && (
+                              <>
+                                {/* Same icon tile and eyebrow rule as the featured box beside it —
+                                    shown even when still empty, so the boxes line up. */}
+                                <span className="mega-feature-icon">
+                                  <NavIcon id={group.icon} library={savedIcons} className="icon-lg" />
+                                </span>
+                                <span className="section-kicker">{group.eyebrow}</span>
+                              </>
+                            )}
+                            {group.heading && <h4>{group.heading}</h4>}
+                            {group.description && <p className="mega-group-desc">{group.description}</p>}
+                            {group.featuredUrl && (
+                              <a className="mega-group-cta" href={group.featuredUrl}>
+                                {group.featuredLabel || group.heading || group.featuredUrl} <span aria-hidden="true">→</span>
+                              </a>
+                            )}
                             {group.links.map((l, li) => (
                               <MegaLinkNode key={li} link={l} nodeKey={`${i}-${gi}-${li}`} />
                             ))}
@@ -302,6 +346,7 @@ export default function Header({ active, navItems, locale = "th" }: { active?: s
             </a>
             <a className="round-btn primary" href={localizeHref("/orst/services", locale)}>{s.services}</a>
             <MobileMenuToggle />
+            <MegaNavClick />
           </div>
         </div>
 
@@ -326,10 +371,12 @@ export default function Header({ active, navItems, locale = "th" }: { active?: s
                   <span>{n.label}</span><span aria-hidden="true">+</span>
                 </summary>
                 <div className="mobile-submenu">
-                  {data.featuredUrl && <a href={data.featuredUrl}><strong>{data.featuredLabel}</strong></a>}
+                  {data.featuredUrl && <a href={data.featuredUrl}><strong>{data.featuredLabel || n.label}</strong></a>}
                   {data.groups.map((group, gi) => (
                     <div className="mobile-submenu-group" key={gi}>
-                      <strong>{group.heading}</strong>
+                      {group.heading && <strong>{group.heading}</strong>}
+                      {group.description && <small>{group.description}</small>}
+                      {group.featuredUrl && <a href={group.featuredUrl}><strong>{group.featuredLabel || group.heading || group.featuredUrl}</strong></a>}
                       {group.links.map((l, li) => (
                         <MobileMegaLinkNode key={li} link={l} nodeKey={`m-${i}-${gi}-${li}`} />
                       ))}

@@ -22,19 +22,33 @@
 // menu-item/schema.json), this needed no Strapi schema change at all, only
 // this editor and the two renderers understanding the extra field. A link
 // with no `children` (or an empty array) renders exactly as before.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
+import IconPicker from "./IconPicker";
+import IconSpriteDefs from "./blockPreview/IconSpriteDefs";
+import type { CustomIcon } from "./IconManager";
 import { useLang } from "./LangProvider";
 import { cms, CmsError } from "@/lib/cms";
 
 const UID = "api::menu-item.menu-item";
 
 type MegaLink = { text: string; url: string; desc: string; children?: MegaLink[] };
-type MegaGroup = { heading: string; links: MegaLink[] };
-type MegaMenu = { icon: string; eyebrow: string; title: string; description: string; featuredLabel: string; featuredUrl: string; groups: MegaGroup[] };
+// A group is a box of its own in the dropdown. `heading` is its title; the
+// rest mirrors the dropdown's featured box (icon / eyebrow / description /
+// featured link) and is optional, so groups saved before these existed — just
+// a heading and links — render exactly as they did.
+type MegaGroup = { heading: string; links: MegaLink[]; icon?: string; eyebrow?: string; description?: string; featuredLabel?: string; featuredUrl?: string };
+// A stack navigator always opens and closes by click (toggle), so the editor has no
+// "opens on" choice. `trigger` is still stored (always "click") because older
+// items were saved with "hover" and the public site ignores it either way.
+type MegaTrigger = "click";
+type MegaMenu = { icon: string; eyebrow: string; title: string; description: string; featuredLabel: string; featuredUrl: string; groups: MegaGroup[]; trigger: MegaTrigger };
+// What an item is: a plain link, or a dropdown that opens on hover (also on
+// keyboard focus) or toggles on click. Derived from megaMenu, stored inside it.
+type NavKind = "normal" | "stack";
 type NavItem = { docId: string; label: string; labelEn: string; url: string; openNewTab: boolean; order: number; megaMenu: MegaMenu | null };
 
-const EMPTY_MEGA: MegaMenu = { icon: "", eyebrow: "", title: "", description: "", featuredLabel: "", featuredUrl: "", groups: [] };
+const EMPTY_MEGA: MegaMenu = { icon: "", eyebrow: "", title: "", description: "", featuredLabel: "", featuredUrl: "", groups: [], trigger: "click" };
 const EMPTY_GROUP: MegaGroup = { heading: "", links: [] };
 const EMPTY_LINK: MegaLink = { text: "", url: "", desc: "" };
 
@@ -49,9 +63,12 @@ function normalizeMega(raw: any): MegaMenu | null {
   return {
     icon: raw.icon || "", eyebrow: raw.eyebrow || "", title: raw.title || "", description: raw.description || "",
     featuredLabel: raw.featuredLabel || "", featuredUrl: raw.featuredUrl || "",
+    trigger: "click",
     groups: Array.isArray(raw.groups)
       ? raw.groups.map((g: any) => ({
           heading: g?.heading || "",
+          icon: g?.icon || undefined, eyebrow: g?.eyebrow || undefined, description: g?.description || undefined,
+          featuredLabel: g?.featuredLabel || undefined, featuredUrl: g?.featuredUrl || undefined,
           links: Array.isArray(g?.links) ? g.links.map(normalizeLink) : [],
         }))
       : [],
@@ -92,6 +109,30 @@ function addLinkAt(links: MegaLink[], path: number[]): MegaLink[] {
 // which otherwise refuses to shrink an <input> below its intrinsic
 // content width — without it, 3 flex:1 fields in one narrow row (found
 // live at 375px) just balloon the row to ~840px instead of sharing it.
+// Built-in glyphs offered first in the picker: the ones that exist both in the
+// picker's own sprite (so they can be drawn here) and in the ORST public sprite
+// (so they show on the site). Anything else comes from the Material set, which
+// is saved as one of the workspace's own icons and works on both.
+const NAV_ICONS = ["i-book", "i-shield", "i-user", "i-grid", "i-list", "i-check", "i-clock", "i-eye"];
+
+// The same picker the Visual Builder uses (built-in + the workspace's saved
+// icons + Material), with a clear button because an empty icon is allowed here.
+function NavIconField({ value, onChange, customIcons, onLibraryChanged, t }: {
+  value: string; onChange: (v: string) => void; customIcons: CustomIcon[]; onLibraryChanged: () => void | Promise<void>; t: (k: string) => string;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <IconPicker value={value} builtIn={NAV_ICONS} customIcons={customIcons} onLibraryChanged={onLibraryChanged} title={t("nv.mega.icon")} onChange={onChange} />
+      <span className="muted" style={{ fontSize: 12.5 }}>{value || t("nv.mega.noicon")}</span>
+      {value && (
+        <button type="button" className="ic-btn" title={t("nv.mega.clearicon")} onClick={() => onChange("")}>
+          <Icon name="close" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 const fieldStyle = { flex: 1, minWidth: 0, background: "var(--panel)", border: "1px solid var(--line2)", borderRadius: 9, padding: "9px 11px", fontSize: 13, color: "var(--ink)" } as const;
 
 // Recursively renders one link plus its own children (unlimited depth) —
@@ -142,19 +183,59 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [customIcons, setCustomIcons] = useState<CustomIcon[]>([]);
+  // The workspace's saved icons (what the Visual Builder's picker lists).
+  const loadIcons = useCallback(async () => {
+    try {
+      const { data } = await cms.entries.list<any>("api::icon.icon", { pageSize: 100, sort: "updatedAt:DESC" });
+      setCustomIcons(data.map((e: any) => ({
+        docId: String(e.documentId ?? e.id), key: e.key, name: e.name,
+        imageUrl: e.image?.url, svg: e.svg || undefined, viewBox: e.viewBox || undefined, tenantKey: e.tenant?.key,
+      })));
+    } catch {}
+  }, []);
+  useEffect(() => { loadIcons(); }, [loadIcons]);
+
+  // Every edit goes through applyItems so the latest list is also in a ref that
+  // is updated synchronously. Saving reads that ref when it runs, never a
+  // render-time closure, so it always sends the newest values.
+  const itemsRef = useRef<NavItem[]>([]);
+  function applyItems(fn: (list: NavItem[]) => NavItem[]) {
+    const next = fn(itemsRef.current);
+    itemsRef.current = next;
+    setItems(next);
+  }
+  // One save at a time per item, in order. Blurring several fields in a row
+  // used to fire overlapping PUTs; whichever reached the server last won, so a
+  // field typed earlier (the featured link label, the description) could land
+  // after — and wipe out — a later one. Queued, each save sends the item as it
+  // is when its turn comes, so the last write is always the newest.
+  const saveChains = useRef<Record<string, Promise<void>>>({});
+  function queueSave(docId: string) {
+    const run = async () => {
+      const it = itemsRef.current.find((x) => x.docId === docId);
+      if (!it) return;
+      try {
+        await cms.entries.update(UID, docId, { label: it.label, labelEn: it.labelEn, url: it.url, openNewTab: it.openNewTab, order: it.order, megaMenu: it.megaMenu });
+        await publish(docId);
+      } catch {}
+    };
+    saveChains.current[docId] = (saveChains.current[docId] || Promise.resolve()).then(run);
+  }
 
   const load = useCallback(async () => {
-    if (!tenantKey) { setItems([]); return; }
+    if (!tenantKey) { applyItems(() => []); return; }
     try {
       const { data } = await cms.entries.list<any>(UID, {
         filter: [{ field: "tenant.key", op: "eq", value: tenantKey }],
         sort: "order:asc", pageSize: 100,
       });
       const flat = (data || []).filter((r: any) => !r.column);
-      setItems(flat.map((r: any) => ({
+      const loaded: NavItem[] = flat.map((r: any) => ({
         docId: String(r.documentId ?? r.id), label: r.label || "", labelEn: r.labelEn || "", url: r.url || "#",
         openNewTab: !!r.openNewTab, order: r.order ?? 0, megaMenu: normalizeMega(r.megaMenu),
-      })));
+      }));
+      applyItems(() => loaded);
     } catch {}
   }, [tenantKey]);
   useEffect(() => { load(); }, [load]);
@@ -163,26 +244,23 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
     try { await cms.publish.publish(UID, docId); } catch {}
   }
 
-  async function add() {
+  async function add(kind: NavKind = "normal") {
     setBusy(true); setMsg(null);
     try {
-      const result: any = await cms.entries.create(UID, { label: t("nv.add"), labelEn: "", url: "#", order: items.length + 1, openNewTab: false, megaMenu: null });
+      const result: any = await cms.entries.create(UID, { label: t("nv.add"), labelEn: "", url: "#", order: items.length + 1, openNewTab: false, megaMenu: kind === "normal" ? null : { ...EMPTY_MEGA } });
       const docId = String(result?.documentId ?? result?.id);
       await publish(docId);
       await load();
+      if (kind !== "normal") setExpanded(docId);
       setMsg({ t: t("nv.saved"), ok: true });
     } catch (e) {
       setMsg({ t: e instanceof CmsError ? "Save failed (HTTP " + e.status + ")" : "Cannot reach the backend.", ok: false });
     } finally { setBusy(false); }
   }
 
-  async function save(it: NavItem, patch: Partial<NavItem>) {
-    const next = { ...it, ...patch };
-    setItems((list) => list.map((x) => (x.docId === it.docId ? next : x)));
-    try {
-      await cms.entries.update(UID, it.docId, { label: next.label, labelEn: next.labelEn, url: next.url, openNewTab: next.openNewTab, order: next.order, megaMenu: next.megaMenu });
-      await publish(it.docId);
-    } catch {}
+  function save(it: NavItem, patch: Partial<NavItem>) {
+    applyItems((list) => list.map((x) => (x.docId === it.docId ? { ...x, ...patch } : x)));
+    queueSave(it.docId);
   }
 
   async function remove(it: NavItem) {
@@ -197,7 +275,7 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
     const [moved] = list.splice(from, 1);
     list.splice(to, 0, moved);
     const renumbered = list.map((x, i) => ({ ...x, order: i + 1 }));
-    setItems(renumbered);
+    applyItems(() => renumbered);
     setBusy(true);
     try {
       await Promise.all(renumbered.map((x) => cms.entries.update(UID, x.docId, { order: x.order })));
@@ -210,30 +288,27 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
   // typing), save on blur — same rhythm as the label/url fields above, just
   // reaching one level (or two) deeper into `megaMenu`.
   function setMegaLocal(docId: string, mutator: (m: MegaMenu) => MegaMenu) {
-    setItems((list) => list.map((x) => (x.docId === docId ? { ...x, megaMenu: mutator(x.megaMenu || { ...EMPTY_MEGA }) } : x)));
+    applyItems((list) => list.map((x) => (x.docId === docId ? { ...x, megaMenu: mutator(x.megaMenu || { ...EMPTY_MEGA }) } : x)));
   }
-  // Reads the CURRENT state (not a stale closure) at commit time, so it's
-  // safe to call right after a setMegaLocal in the same handler.
+  // Saves the item as it is when its turn in the queue comes (see queueSave), so
+  // it's safe to call right after a setMegaLocal in the same handler.
   function commitMega(docId: string) {
-    setItems((list) => {
-      const it = list.find((x) => x.docId === docId);
-      if (it) { cms.entries.update(UID, docId, { megaMenu: it.megaMenu }).then(() => publish(docId)).catch(() => {}); }
-      return list;
-    });
+    queueSave(docId);
   }
   // Structural edits (toggle/add/remove) have no natural blur event, so they
   // mutate and save together, using the freshly-computed value.
   function mutateMegaAndSave(docId: string, mutator: (m: MegaMenu | null) => MegaMenu | null) {
-    setItems((list) => {
-      const next = list.map((x) => (x.docId === docId ? { ...x, megaMenu: mutator(x.megaMenu) } : x));
-      const it = next.find((x) => x.docId === docId);
-      if (it) { cms.entries.update(UID, docId, { megaMenu: it.megaMenu }).then(() => publish(docId)).catch(() => {}); }
-      return next;
-    });
+    applyItems((list) => list.map((x) => (x.docId === docId ? { ...x, megaMenu: mutator(x.megaMenu) } : x)));
+    queueSave(docId);
   }
 
-  function toggleMega(it: NavItem) {
-    mutateMegaAndSave(it.docId, (m) => (m ? null : { ...EMPTY_MEGA }));
+  // Switch an item between a plain link and a dropdown (hover / click). Keeps
+  // everything already typed into the dropdown when moving between the two
+  // dropdown kinds; going back to "normal" drops it, same as unticking the
+  // old checkbox did.
+  function setKind(it: NavItem, kind: NavKind) {
+    mutateMegaAndSave(it.docId, (m) => (kind === "normal" ? null : { ...(m || EMPTY_MEGA), trigger: "click" }));
+    setExpanded(kind === "normal" ? null : it.docId);
   }
   function addGroup(docId: string) {
     mutateMegaAndSave(docId, (m) => (m ? { ...m, groups: [...m.groups, { ...EMPTY_GROUP, links: [] }] } : m));
@@ -250,15 +325,22 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
   function removeLink(docId: string, gi: number, path: number[]) {
     mutateMegaAndSave(docId, (m) => (m ? { ...m, groups: m.groups.map((g, i) => (i === gi ? { ...g, links: removeLinkAt(g.links, path) } : g)) } : m));
   }
+  function setGroupLocal(docId: string, gi: number, patch: Partial<MegaGroup>) {
+    setMegaLocal(docId, (m) => ({ ...m, groups: m.groups.map((x, i) => (i === gi ? { ...x, ...patch } : x)) }));
+  }
   function editLinkLocal(docId: string, gi: number, path: number[], patch: Partial<MegaLink>) {
     setMegaLocal(docId, (m) => ({ ...m, groups: m.groups.map((g, i) => (i === gi ? { ...g, links: updateLinkAt(g.links, path, patch) } : g)) }));
   }
 
   return (
     <div className="panel">
+      <IconSpriteDefs />
       <div className="panel-h">
         <div><h3>{t("br.tab_nav")}</h3><span className="sub">{t("nv.sub")}</span></div>
-        <button className="btn btn--p" onClick={add} disabled={busy || !tenantKey}><Icon name="plus" />{t("nv.add")}</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={() => add("normal")} disabled={busy || !tenantKey}><Icon name="plus" />{t("nv.add")}</button>
+          <button className="btn btn--p" onClick={() => add("stack")} disabled={busy || !tenantKey}><Icon name="plus" />{t("nv.addstack")}</button>
+        </div>
       </div>
       {msg && <div style={{ marginBottom: 10 }}><span className={"toast-in " + (msg.ok ? "ok" : "bad")}>{msg.t}</span></div>}
 
@@ -271,37 +353,40 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
             onDragOver={(e) => e.preventDefault()} onDrop={() => { reorder(dragI, i); setDragI(-1); }}>
             <div className="vb-grip" title="drag to reorder"><Icon name="drag" /></div>
             <input style={fieldStyle}
-              value={it.label} onChange={(e) => setItems((l) => l.map((x) => (x.docId === it.docId ? { ...x, label: e.target.value } : x)))}
+              value={it.label} onChange={(e) => applyItems((l) => l.map((x) => (x.docId === it.docId ? { ...x, label: e.target.value } : x)))}
               onBlur={() => save(it, {})} placeholder={t("nv.label")} />
             <input style={fieldStyle}
-              value={it.labelEn} onChange={(e) => setItems((l) => l.map((x) => (x.docId === it.docId ? { ...x, labelEn: e.target.value } : x)))}
+              value={it.labelEn} onChange={(e) => applyItems((l) => l.map((x) => (x.docId === it.docId ? { ...x, labelEn: e.target.value } : x)))}
               onBlur={() => save(it, {})} placeholder={t("nv.labelEn")} />
             <input style={fieldStyle}
-              value={it.url} onChange={(e) => setItems((l) => l.map((x) => (x.docId === it.docId ? { ...x, url: e.target.value } : x)))}
+              value={it.url} onChange={(e) => applyItems((l) => l.map((x) => (x.docId === it.docId ? { ...x, url: e.target.value } : x)))}
               onBlur={() => save(it, {})} placeholder={t("nv.url")} />
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink2)", whiteSpace: "nowrap" }}>
               <input type="checkbox" checked={it.openNewTab} onChange={(e) => save(it, { openNewTab: e.target.checked })} /> {t("nv.newtab")}
             </label>
-            <button className="ic-btn" title={t("nv.mega.expand")} onClick={() => setExpanded(expanded === it.docId ? null : it.docId)}>
-              <Icon name={expanded === it.docId ? "chevron-up" : "chevron-down"} />
-            </button>
+            <select style={{ ...fieldStyle, flex: "none", width: "auto", cursor: "pointer" }} aria-label={t("nv.type")} title={t("nv.type")}
+              value={it.megaMenu ? "stack" : "bar"} onChange={(e) => setKind(it, e.target.value === "stack" ? "stack" : "normal")}>
+              <option value="bar">{t("nv.type.bar")}</option>
+              <option value="stack">{t("nv.type.stack")}</option>
+            </select>
+            {it.megaMenu && (
+              <button className="ic-btn" title={t("nv.mega.expand")} onClick={() => setExpanded(expanded === it.docId ? null : it.docId)}>
+                <Icon name={expanded === it.docId ? "chevron-up" : "chevron-down"} />
+              </button>
+            )}
             <button className="ic-btn" style={{ color: "var(--bad)" }} onClick={() => remove(it)}><Icon name="trash" /></button>
           </div>
 
           {expanded === it.docId && (
             <div className="panel" style={{ background: "var(--panel)", border: "1px solid var(--line2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: 14 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: it.megaMenu ? 14 : 0 }}>
-                <input type="checkbox" checked={!!it.megaMenu} onChange={() => toggleMega(it)} /> {t("nv.mega.toggle")}
-              </label>
 
               {it.megaMenu && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div style={{ display: "flex", gap: 10 }}>
                     <div style={{ flex: 1 }}>
                       <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.icon")}</div>
-                      <input style={{ ...fieldStyle, width: "100%" }} placeholder={t("nv.mega.iconhint")}
-                        value={it.megaMenu.icon} onChange={(e) => setMegaLocal(it.docId, (m) => ({ ...m, icon: e.target.value }))}
-                        onBlur={() => commitMega(it.docId)} />
+                      <NavIconField value={it.megaMenu.icon} customIcons={customIcons} onLibraryChanged={loadIcons} t={t}
+                        onChange={(v) => { setMegaLocal(it.docId, (m) => ({ ...m, icon: v })); commitMega(it.docId); }} />
                     </div>
                     <div style={{ flex: 1 }}>
                       <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.eyebrow")}</div>
@@ -350,15 +435,52 @@ export default function NavManager({ tenantKey }: { tenantKey?: string }) {
 
                     {it.megaMenu.groups.map((g, gi) => (
                       <div key={gi} style={{ background: "var(--sunk)", borderRadius: 10, padding: 10, marginBottom: 8 }}>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                          <input style={{ ...fieldStyle, width: "100%" }} placeholder={t("nv.mega.heading")}
-                            value={g.heading}
-                            onChange={(e) => setMegaLocal(it.docId, (m) => ({ ...m, groups: m.groups.map((x, i) => (i === gi ? { ...x, heading: e.target.value } : x)) }))}
-                            onBlur={() => commitMega(it.docId)} />
+                        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
+                          <div style={{ flex: 1 }}>
+                            <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.title")}</div>
+                            <input style={{ ...fieldStyle, width: "100%" }} placeholder={t("nv.mega.heading")}
+                              value={g.heading}
+                              onChange={(e) => setGroupLocal(it.docId, gi, { heading: e.target.value })}
+                              onBlur={() => commitMega(it.docId)} />
+                          </div>
                           <button className="ic-btn" style={{ color: "var(--bad)" }} title={t("nv.mega.removegroup")} onClick={() => removeGroup(it.docId, gi)}>
                             <Icon name="close" />
                           </button>
                         </div>
+                        <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                          <div style={{ flex: 1 }}>
+                            <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.icon")}</div>
+                            <NavIconField value={g.icon || ""} customIcons={customIcons} onLibraryChanged={loadIcons} t={t}
+                              onChange={(v) => { setGroupLocal(it.docId, gi, { icon: v }); commitMega(it.docId); }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.eyebrow")}</div>
+                            <input style={{ ...fieldStyle, width: "100%" }}
+                              value={g.eyebrow || ""} onChange={(e) => setGroupLocal(it.docId, gi, { eyebrow: e.target.value })}
+                              onBlur={() => commitMega(it.docId)} />
+                          </div>
+                        </div>
+                        <div style={{ marginBottom: 10 }}>
+                          <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.description")}</div>
+                          <textarea rows={2} style={{ ...fieldStyle, width: "100%", resize: "vertical", fontFamily: "inherit" }}
+                            value={g.description || ""} onChange={(e) => setGroupLocal(it.docId, gi, { description: e.target.value })}
+                            onBlur={() => commitMega(it.docId)} />
+                        </div>
+                        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                          <div style={{ flex: 1 }}>
+                            <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.featuredlabel")}</div>
+                            <input style={{ ...fieldStyle, width: "100%" }}
+                              value={g.featuredLabel || ""} onChange={(e) => setGroupLocal(it.docId, gi, { featuredLabel: e.target.value })}
+                              onBlur={() => commitMega(it.docId)} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div className="sub" style={{ marginBottom: 4 }}>{t("nv.mega.featuredurl")}</div>
+                            <input style={{ ...fieldStyle, width: "100%" }}
+                              value={g.featuredUrl || ""} onChange={(e) => setGroupLocal(it.docId, gi, { featuredUrl: e.target.value })}
+                              onBlur={() => commitMega(it.docId)} />
+                          </div>
+                        </div>
+                        <div className="sub" style={{ marginBottom: 6 }}>{t("nv.mega.links")}</div>
 
                         {g.links.map((l, li) => (
                           <LinkEditor key={li} link={l} path={[li]} depth={0} t={t}

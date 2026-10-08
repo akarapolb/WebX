@@ -20,8 +20,8 @@
 }
 .page-hero h1 { color: var(--orst-ink-inverse); max-width: 20ch; }
 .page-hero p { color: var(--orst-ink-inverse-soft); max-width: 60ch; margin-top: var(--orst-space-3); font-size: 1.06rem; }
-.page-hero .block-eyebrow { color: var(--orst-gold-faint); margin-bottom: var(--orst-space-3); }
-.page-hero .block-eyebrow::before { background: var(--orst-gold-faint); }
+.page-hero .block-eyebrow { color: var(--orst-gold-on-dark); margin-bottom: var(--orst-space-3); }
+.page-hero .block-eyebrow::before { background: var(--orst-gold-on-dark); }
 .page-hero .block-actions { margin-top: var(--orst-space-5); }
 /* The primary (solid gold) block-btn already contrasts fine against this
    section's dark gradient, but the ghost/outline variant falls back to
@@ -43,7 +43,7 @@
 }
 .block-breadcrumb a { color: var(--orst-ink-inverse-soft); }
 .block-breadcrumb a:hover { color: var(--orst-ink-inverse); }
-.block-breadcrumb [aria-current="page"] { color: var(--orst-gold-faint); font-weight: 600; }
+.block-breadcrumb [aria-current="page"] { color: var(--orst-gold-on-dark); font-weight: 600; }
 
 /* ---------- rich-text ---------- */
 

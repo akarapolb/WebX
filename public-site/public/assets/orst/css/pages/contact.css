@@ -28,8 +28,8 @@
 @media (min-width: 1024px) {
   .contact-hero-inner { grid-template-columns: 1.2fr 1fr; }
 }
-.contact-hero .eyebrow { color: var(--orst-gold-faint); margin-bottom: var(--orst-space-3); }
-.contact-hero .eyebrow::before { background: var(--orst-gold-faint); }
+.contact-hero .eyebrow { color: var(--orst-gold-on-dark); margin-bottom: var(--orst-space-3); }
+.contact-hero .eyebrow::before { background: var(--orst-gold-on-dark); }
 .contact-hero h1 { color: var(--orst-ink-inverse); }
 /* `.contact-hero > div > p` never matched: the lead sits one level deeper
    than that (section.contact-hero > div.container.contact-hero-inner > div >

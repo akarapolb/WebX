@@ -138,7 +138,11 @@ services:
       # WordPress-backed feature failed with "Cannot reach WordPress" on any
       # deployment of this compose file that also runs the wordpress
       # profile — found while checking whether WordPress login works at all.
-      WORDPRESS_URL: http://wordpress:80/wp-json
+      # Studio signs in to WordPress with Application Passwords, which WordPress
+      # refuses over plain HTTP. In production point this at the public HTTPS
+      # URL (WEBX_WORDPRESS_URL=https://cms.example.gov/wp-json) — see
+      # docs/ORST-PUBLIC-SITE-DEPLOYMENT.md §5.4.
+      WORDPRESS_URL: ${WEBX_WORDPRESS_URL:-http://wordpress:80/wp-json}
       # middleware.ts's own auth-endpoint rate limit cap (default 10/10min if
       # unset) — raise only for local dev/testing sessions doing many logins
       # in a row; never for a real deployment.
@@ -196,7 +200,7 @@ services:
     # its lease expires.
     stop_grace_period: 30s
     ports:
-      - "${WEBX_PORT:-3000}:3000"
+      - "${WEBX_BIND:-127.0.0.1}:${WEBX_PORT:-3000}:3000"
 
   # Ticks POST /api/internal/releases/process-due on an interval so scheduled
   # Releases (Releases.tsx's "Schedule" button) actually fire — nothing else
@@ -351,10 +355,15 @@ services:
       # docker-compose.wordpress.yml's dedicated dev instance already does),
       # never for anything reachable over the network as this plain HTTP.
       WP_ALLOW_HTTP_APP_PASSWORDS: ${WP_ALLOW_HTTP_APP_PASSWORDS:-}
+      # Set to 1 when a reverse proxy (the `site` Caddy) terminates TLS in front
+      # of this container: WordPress then treats X-Forwarded-Proto: https as
+      # HTTPS (mu-plugins/proxy-https.php). Only safe while this container is
+      # reachable through that proxy alone — see WORDPRESS_BIND.
+      WP_TRUST_PROXY_HTTPS: ${WP_TRUST_PROXY_HTTPS:-}
     volumes:
       - wp-content-data:/var/www/html
     ports:
-      - "${WORDPRESS_PORT:-8081}:80"
+      - "${WORDPRESS_BIND:-127.0.0.1}:${WORDPRESS_PORT:-8081}:80"
 
   # Runs once against the wordpress service above (installs core, activates
   # ACF, sets pretty permalinks — see wordpress/bootstrap.sh), then idles so
@@ -577,6 +586,9 @@ services:
       - site-builder
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-http://orst.localhost}
+      SITE_ALIAS: ${SITE_ALIAS:-http://alias.invalid}
+      # Public hostname for WordPress (/wp-json + uploads only) — see Caddyfile.
+      CMS_ADDRESS: ${CMS_ADDRESS:-http://cms.localhost}
     ports:
       - "${SITE_HTTP_PORT:-8090}:80"
       - "${SITE_HTTPS_PORT:-8453}:443"

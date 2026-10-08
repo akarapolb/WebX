@@ -20,8 +20,8 @@
 .hero-inner { display: grid; grid-template-columns: 1fr; gap: var(--orst-space-7); align-items: start; }
 @media (min-width: 1024px) { .hero-inner { grid-template-columns: 1.3fr 1fr; } }
 
-.hero-copy .eyebrow { color: var(--orst-gold-faint); margin-bottom: var(--orst-space-3); }
-.hero-copy .eyebrow::before { background: var(--orst-gold-faint); }
+.hero-copy .eyebrow { color: var(--orst-gold-on-dark); margin-bottom: var(--orst-space-3); }
+.hero-copy .eyebrow::before { background: var(--orst-gold-on-dark); }
 .hero-copy h1 { color: var(--orst-ink-inverse); }
 .hero-copy > p { color: var(--orst-ink-inverse-soft); margin-top: var(--orst-space-3); max-width: 58ch; font-size: 1.02rem; }
 
@@ -43,7 +43,7 @@
 
 .quick-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--orst-space-4); }
 .quick-chips .chip { background: rgba(253, 250, 243, 0.1); border-color: rgba(253, 250, 243, 0.22); color: var(--orst-ink-inverse-soft); }
-.quick-chips .chip:hover { background: rgba(253, 250, 243, 0.18); border-color: var(--orst-gold-faint); color: var(--orst-ink-inverse); }
+.quick-chips .chip:hover { background: rgba(253, 250, 243, 0.18); border-color: var(--orst-gold-on-dark); color: var(--orst-ink-inverse); }
 
 .hero-panel {
   background: var(--orst-surface);

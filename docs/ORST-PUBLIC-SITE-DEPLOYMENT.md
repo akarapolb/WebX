@@ -166,6 +166,35 @@ The public pages call WordPress directly from the browser: `GET /wp/v2/poll`,
 - Remove `WP_ALLOW_HTTP_APP_PASSWORDS=1` from the production `.env` — it exists
   only to allow Application Passwords over plain HTTP in development.
 
+**Implemented and tested locally (2026-10-08)** — the `site` Caddy now has a
+second block for the WordPress hostname (`CMS_ADDRESS`, default
+`http://cms.localhost`): it proxies only `/wp-json/*` and `/wp-content/uploads/*`
+to `wordpress:80` and answers 404 for everything else (`/wp-admin`,
+`/wp-login.php`, `xmlrpc.php`, `/`). Verified through `localhost:8090` with a
+`Host: cms.localhost` header: `/wp-json/` 200, the four blocked paths 404, and
+CORS for `Origin: http://orst.localhost:8090` on both a GET and a preflight
+OPTIONS (core echoes the origin; `Allow-Methods` includes POST). Still to re-verify
+with the two real domains.
+
+Two non-obvious findings from testing with `WP_ALLOW_HTTP_APP_PASSWORDS` unset
+(i.e. production behaviour):
+
+1. **Behind Caddy, WordPress sees plain HTTP**, so Application Passwords are
+   refused (401). `mu-plugins/proxy-https.php` (opt-in, `WP_TRUST_PROXY_HTTPS=1`)
+   treats `X-Forwarded-Proto: https` as HTTPS — confirmed: 401 without the
+   header, 200 with it. It is only safe while the wordpress container is not
+   directly reachable, hence `WORDPRESS_BIND` defaults to `127.0.0.1`.
+2. **Studio's own login to WordPress breaks too.** Studio calls
+   `http://wordpress:80/wp-json` inside Docker; with the bypass off that returns
+   401 ("Invalid username or application password"). Fix applied in config, not
+   yet exercised on a real domain: set `WEBX_WORDPRESS_URL=https://cms.<domain>/wp-json`
+   so Studio goes through the public HTTPS name (the `webx` container must be
+   able to resolve and reach it).
+
+Also: on an existing WordPress database `WORDPRESS_SITE_URL` is **not** applied
+(`bootstrap.sh` skips `core install`) — update `home`/`siteurl` with `wp option
+update` (commands in `.env.production.example`).
+
 ### 5.5 Network exposure
 
 Publish only 80/443 (site) and 443 for WordPress `/wp-json`. Do **not** expose:

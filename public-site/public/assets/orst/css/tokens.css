@@ -91,6 +91,8 @@
   --orst-primary-faint: #eef4f2;
   --orst-primary-line: rgba(7, 59, 52, 0.14);
   --orst-gold-faint: #fbf3e2;
+  /* Gold used as TEXT/RULES on dark surfaces (hero, footer, mega-menu). Not --orst-gold-faint: in dark mode that is a 10% tint made for backgrounds. */
+  --orst-gold-on-dark: #fbf3e2;
   --orst-ink-inverse: #fdfaf3;
   --orst-ink-inverse-soft: rgba(253, 250, 243, 0.76);
   --orst-ink-inverse-faint: rgba(253, 250, 243, 0.5);
@@ -240,6 +242,7 @@
   --orst-gold-strong: #e8c384;
   --orst-gold-soft: rgba(216, 172, 94, 0.14);
   --orst-gold-faint: rgba(216, 172, 94, 0.1);
+  --orst-gold-on-dark: #e8c384;
   --orst-archival: #c9ab86;
 
   --orst-primary-faint: rgba(143, 217, 196, 0.08);

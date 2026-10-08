@@ -22,7 +22,7 @@
 	admin off
 }
 
-{$SITE_ADDRESS:http://orst.localhost} {
+(orst_site) {
 	root * {$SITE_ROOT:/srv/current}
 	encode zstd gzip
 
@@ -101,5 +101,47 @@
 	handle_errors {
 		rewrite * /404.html
 		file_server
+	}
+}
+# The ORST site. SITE_ALIAS is an optional second address for the SAME site —
+# `:80` makes it the catch-all for any Host header (a LAN IP, `localhost`), which
+# is what sharing a local trial by IP needs. Leave it unset in production: an
+# unmatched Host then gets nothing, instead of the site over plain HTTP.
+{$SITE_ADDRESS:http://orst.localhost}, {$SITE_ALIAS:http://alias.invalid} {
+	import orst_site
+}
+
+# ---------------------------------------------------------------------------
+# WordPress, public hostname — ONLY what visitors' browsers need.
+#
+# The public pages call WordPress straight from the browser (poll votes,
+# captcha, search, breaking-news → /wp-json) and may show uploaded media
+# (/wp-content/uploads). Everything else — /wp-admin, /wp-login.php,
+# xmlrpc.php, theme/plugin files — answers 404 here, so editors work through
+# WebX Studio and an administrator reaches wp-admin only on the host itself
+# (127.0.0.1:WORDPRESS_PORT, e.g. over an SSH tunnel).
+#
+# CMS_ADDRESS:
+#   http://cms.localhost   local trial (browsers resolve *.localhost to this machine)
+#   cms.orst.go.th         a real domain — Caddy obtains and renews the TLS certificate
+# Caddy sets X-Forwarded-Proto/-For itself; WordPress is told to trust them by
+# WP_TRUST_PROXY_HTTPS=1 (mu-plugins/proxy-https.php).
+# ---------------------------------------------------------------------------
+{$CMS_ADDRESS:http://cms.localhost} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	@visitorFacing path /wp-json /wp-json/* /wp-content/uploads/*
+	handle @visitorFacing {
+		reverse_proxy wordpress:80
+	}
+
+	handle {
+		respond "Not found" 404
 	}
 }

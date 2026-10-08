@@ -65,7 +65,7 @@
 
 .header-inner {
   /* Intentionally wider than .container's 1400px cap — see file header. */
-  max-width: 1680px;
+  max-width: 1920px;
   display: flex;
   align-items: center;
   gap: var(--orst-space-4);
@@ -86,6 +86,14 @@
   width: auto;
   max-width: 46vw;
   object-fit: contain;
+}
+/* The logo is a transparent PNG with dark lettering, which disappears on the
+   dark header — same light plate the footer logo already sits on. */
+:root[data-theme="dark"] .brand-logo {
+  box-sizing: content-box;
+  background: var(--orst-ink-inverse);
+  padding: 4px 10px;
+  border-radius: var(--orst-radius-sm);
 }
 
 /* ---------- main nav (desktop, >=1600px only — see file header) ---------- */
@@ -121,15 +129,16 @@
 
 .nav-caret { display: inline-flex; width: 12px; height: 12px; }
 .nav-caret svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; transition: transform var(--orst-duration) var(--orst-ease); }
-.nav-mega-item:hover .nav-caret svg,
-.nav-mega-item:focus-within .nav-caret svg { transform: rotate(180deg); }
+.nav-mega-item.is-open .nav-caret svg { transform: rotate(180deg); }
 
 /* ---------- mega menu ---------- */
 
 .nav-mega-item { position: static; }
 .nav-mega-item .mega-menu { display: none; }
-.nav-mega-item:hover .mega-menu,
-.nav-mega-item:focus-within .mega-menu { display: block; }
+/* Opened by hover and toggled by click (MegaNavClick.tsx adds .is-open) — never
+   by CSS :hover, so it stays open when the mouse leaves and you can use what is
+   inside it. */
+.nav-mega-item.is-open .mega-menu { display: block; }
 
 .mega-menu {
   position: absolute;
@@ -140,6 +149,10 @@
   background: var(--orst-surface);
   box-shadow: var(--orst-shadow-lift);
   z-index: var(--orst-z-mega);
+  /* Many groups can make the panel taller than the screen — scroll it instead
+     of cutting the bottom off. */
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
 }
 
 .mega-inner {
@@ -147,8 +160,13 @@
   margin-inline: auto;
   padding: var(--orst-space-7) var(--orst-container-pad);
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: var(--orst-space-7);
+  /* The featured box and every group are cells of ONE grid, so they are all the
+     same width (a fixed 280px featured box next to stretchy groups made them
+     uneven) and a row of boxes shares one height. Each column is at least 260px
+     and at most 340px; more boxes than fit simply wrap to a new row. */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 340px));
+  justify-content: start;
+  gap: var(--orst-space-6);
 }
 
 .mega-feature {
@@ -166,11 +184,11 @@
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--orst-radius-sm);
   background: rgba(253, 250, 243, 0.14);
-  color: var(--orst-gold-faint);
+  color: var(--orst-gold-on-dark);
   margin-bottom: var(--orst-space-2);
 }
-.mega-feature .section-kicker { color: var(--orst-gold-faint); }
-.mega-feature .section-kicker::before { background: var(--orst-gold-faint); }
+.mega-feature .section-kicker { color: var(--orst-gold-on-dark); }
+.mega-feature .section-kicker::before { background: var(--orst-gold-on-dark); }
 .mega-feature h3 { color: var(--orst-ink-inverse); margin-top: 2px; }
 .mega-feature p { color: var(--orst-ink-inverse-soft); font-size: .92rem; }
 .mega-feature > a {
@@ -179,15 +197,60 @@
   align-items: center;
   gap: 6px;
   font-weight: 700;
-  color: var(--orst-gold-faint);
+  color: var(--orst-gold-on-dark);
   padding-top: var(--orst-space-3);
 }
 
-.mega-groups {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--orst-space-6);
+/* Not a box of its own: its groups take part in .mega-inner's grid directly. */
+.mega-groups { display: contents; }
+/* Each group is a box of its own and looks like the featured box beside it —
+   same brand-green fill (so a custom Theme colour and dark mode apply to both
+   at once), with the text flipped to the light inks. */
+.mega-group {
+  background: var(--orst-primary);
+  background-image: var(--orst-gradient-primary);
+  color: var(--orst-ink-inverse);
+  border-radius: var(--orst-radius-card);
+  padding: var(--orst-space-5);
 }
+.mega-groups .mega-group h4 { color: var(--orst-gold-on-dark); }
+/* A group with an icon / eyebrow / description / featured link is built from the
+   same parts as the featured box beside it (.mega-feature-icon, .section-kicker,
+   a larger title) and stacks the same way. */
+.mega-group.is-rich { display: flex; flex-direction: column; gap: var(--orst-space-2); padding: var(--orst-space-6); }
+.mega-group .section-kicker { color: var(--orst-gold-on-dark); }
+.mega-group .section-kicker::before { background: var(--orst-gold-on-dark); }
+.mega-group.is-rich h4 {
+  font-family: var(--orst-font-display);
+  font-size: 1.25rem; letter-spacing: 0; text-transform: none;
+  color: var(--orst-ink-inverse);
+  margin: 2px 0 0;
+}
+.mega-group-desc { color: var(--orst-ink-inverse-soft); font-size: .9rem; margin: 0 0 var(--orst-space-3); }
+/* The dropdown lives inside .main-nav, whose `.main-nav a` rule (pill padding,
+   nowrap, inline-flex, soft ink) outranks a bare `.mega-link` / `.mega-group-cta`
+   — so links inside a box used to sit side by side in that pill style. These
+   two carry one more class to win, restoring block links that stack. */
+.mega-menu .mega-link {
+  display: flex;
+  padding: 10px 12px;
+  border-radius: var(--orst-radius-sm);
+  font-size: inherit;
+  white-space: normal;
+}
+.mega-menu .mega-group-cta {
+  display: flex; gap: 6px; width: fit-content;
+  margin-bottom: var(--orst-space-3); padding: 0; border-radius: 0;
+  background: none;
+  color: var(--orst-gold-on-dark); font-weight: 700; font-size: .9rem; white-space: normal;
+}
+.mega-menu .mega-group-cta:hover { background: none; color: var(--orst-gold-on-dark); text-decoration: underline; }
+.mega-group .mega-link strong { color: var(--orst-ink-inverse); }
+.mega-group .mega-link small,
+.mega-group .mega-link em { color: var(--orst-ink-inverse-soft); }
+.mega-group .mega-link:hover { background: rgba(255, 255, 255, 0.1); }
+.mega-group .mega-link:hover em { color: var(--orst-ink-inverse); }
+.mega-group .mega-submenu { border-left-color: rgba(255, 255, 255, 0.22); }
 .mega-group h4 {
   font-family: var(--orst-font-body);
   font-size: .78rem;
@@ -291,6 +354,45 @@
 @media (min-width: 1600px) {
   .mobile-menu { display: none !important; }
 }
+
+/* ---------- fit-to-width (set by MobileMenuToggle.tsx) ----------
+   The >=1600px rules above are the no-JS default. With JS the header measures
+   whether the nav items actually fit, whatever the viewport and however many
+   items an editor has added, and picks the roomiest layout that works:
+     nav-inline    -> items in the header row beside the logo and actions
+     + nav-compact -> same row, tighter items and an icon-only search button
+     nav-wrap      -> items on a row of their own under the logo
+     nav-collapsed -> hamburger + drawer, for widths too narrow for either */
+.site-header.nav-inline .main-nav,
+.site-header.nav-wrap .main-nav { display: flex; }
+.site-header.nav-inline .mobile-menu-btn,
+.site-header.nav-wrap .mobile-menu-btn { display: none; }
+.site-header.nav-inline .mobile-menu,
+.site-header.nav-wrap .mobile-menu { display: none !important; }
+.site-header.nav-inline .header-actions .round-btn,
+.site-header.nav-wrap .header-actions .round-btn { display: inline-flex; }
+.site-header.nav-inline .header-actions .round-btn span:not(.sr-only),
+.site-header.nav-wrap .header-actions .round-btn span:not(.sr-only) { display: inline; }
+
+.site-header.nav-compact .main-nav a,
+.site-header.nav-compact .main-nav button { padding: 10px 8px; font-size: .85rem; }
+.site-header.nav-compact .header-actions .round-btn:not(.primary) span:not(.sr-only) { display: none; }
+
+.site-header.nav-wrap .header-inner { flex-wrap: wrap; row-gap: 0; padding-bottom: 0; }
+.site-header.nav-wrap .main-nav {
+  order: 3;
+  flex: 1 0 100%;
+  margin-top: var(--orst-space-3);
+  padding-block: var(--orst-space-2);
+  border-top: 1px solid var(--orst-line);
+}
+
+.site-header.nav-collapsed .main-nav { display: none; }
+.site-header.nav-collapsed .mobile-menu-btn { display: inline-flex; }
+.site-header.nav-collapsed .mobile-menu.is-open { display: flex !important; }
+
+/* The hamburger bars are the brand green, which vanishes on the dark header. */
+:root[data-theme="dark"] .mobile-menu-btn span:not(.sr-only) { background: var(--orst-ink-inverse); }
 
 .mobile-link {
   display: flex;
@@ -409,7 +511,7 @@
    .block-eyebrow in base.css, so the footer reads as part of the editorial
    system rather than a separate utility zone. */
 .orst-footer-col h3 {
-  color: var(--orst-gold-faint);
+  color: var(--orst-gold-on-dark);
   font-family: var(--orst-font-body);
   font-size: .76rem;
   font-weight: 700;
@@ -421,7 +523,7 @@
 }
 .orst-footer-col ul { display: flex; flex-direction: column; gap: 12px; }
 .orst-footer-col a { color: var(--orst-ink-inverse-soft); font-size: .92rem; }
-.orst-footer-col a:hover { color: var(--orst-gold-faint); }
+.orst-footer-col a:hover { color: var(--orst-gold-on-dark); }
 .orst-footer-contact p { color: var(--orst-ink-inverse-soft); font-size: .9rem; line-height: 1.7; margin-bottom: var(--orst-space-3); }
 
 .orst-footer-bottom {

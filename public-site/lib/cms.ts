@@ -620,10 +620,18 @@ export async function getCollectionPageConfig(tenant: string, pluralName: string
 // renderers understanding the extra field. A link with no children (or an
 // empty array) renders exactly as it always has.
 export type NavMegaLink = { text: string; url: string; desc?: string; children?: NavMegaLink[] };
-export type NavMegaGroup = { heading: string; links: NavMegaLink[] };
+// A group is a box in the dropdown. Everything but heading/links is optional and
+// mirrors the dropdown's own featured box; groups saved without them render as
+// the plain heading + links they always were.
+export type NavMegaGroup = {
+  heading: string; links: NavMegaLink[];
+  icon?: string; eyebrow?: string; description?: string; featuredLabel?: string; featuredUrl?: string;
+};
 export type NavMegaMenu = {
   icon?: string; eyebrow?: string; title?: string; description?: string;
   featuredLabel?: string; featuredUrl?: string; groups: NavMegaGroup[];
+  /** How the dropdown opens on desktop: "hover" (default — also on keyboard focus) or "click" (toggle). */
+  trigger?: "hover" | "click";
 };
 export type NavItem = { label: string; url: string; openNewTab: boolean; order: number; megaMenu?: NavMegaMenu | null };
 export async function getNavItems(tenant: string, locale: Locale = "th"): Promise<NavItem[]> {
