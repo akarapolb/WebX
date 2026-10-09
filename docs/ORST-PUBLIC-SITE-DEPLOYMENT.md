@@ -195,6 +195,26 @@ Also: on an existing WordPress database `WORDPRESS_SITE_URL` is **not** applied
 (`bootstrap.sh` skips `core install`) — update `home`/`siteurl` with `wp option
 update` (commands in `.env.production.example`).
 
+**Option B — one host for the site and WordPress (chosen 2026-10-09).** The
+website does not get a domain of its own: the WordPress host (e.g.
+`cms.centerapp.io`) serves the ORST site at its root and proxies only
+`/wp-json/*` and `/wp-content/uploads/*` to WordPress. One Caddy block now
+covers `SITE_ADDRESS`, `CMS_ADDRESS` and `SITE_ALIAS` (see the Caddyfile
+header). Consequences, all verified locally on 2026-10-09:
+
+- The pages call WordPress through the **relative** base `/wp-json` (the
+  `NEXT_PUBLIC_WORDPRESS_URL` default), so polls, captcha, search and the
+  breaking-news banner are same-origin on any host — a real domain, a LAN IP or
+  `localhost` — with one build and **no CORS**. Do not set
+  `SITE_WORDPRESS_PUBLIC_URL` unless WordPress lives on another origin.
+- `/wp-admin`, `/wp-login.php`, `xmlrpc.php`, `wp-config.php`, plugin and
+  `wp-includes` paths end in the site's 404 (followed through redirects), never
+  in WordPress. Admins reach wp-admin on the host itself or over an SSH tunnel.
+- Studio is **not** behind this Caddy. Expose `webx.centerapp.io` through the
+  platform (on OpenShift: a Route to the `webx` service) and restrict it.
+- Not yet verified: an uploaded file served through `/wp-content/uploads` (the
+  dev database has no uploads), and everything on the real domain.
+
 ### 5.5 Network exposure
 
 Publish only 80/443 (site) and 443 for WordPress `/wp-json`. Do **not** expose:

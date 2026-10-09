@@ -1,9 +1,22 @@
-# Serves the ORST static export from the DOMAIN ROOT.
+# One public hostname serves BOTH the ORST website and the bits of WordPress its
+# pages need ("option B"): no separate domain for the site, no cross-origin calls.
+#
+#   /wp-json/*, /wp-content/uploads/*   →  WordPress (reverse proxy)
+#   everything else                     →  the ORST static export, from the DOMAIN ROOT
+#
+# The browser code calls WordPress through the relative base "/wp-json"
+# (SITE_WORDPRESS_PUBLIC_URL, see docker-compose.yml), so polls, captcha, search
+# and the breaking-news banner are same-origin on whatever host served the page
+# — a real domain, a LAN IP or localhost alike. /wp-admin, /wp-login.php,
+# xmlrpc.php and the theme/plugin files fall through to the static site and
+# answer its 404, so editors work through WebX Studio, and an administrator
+# reaches wp-admin only on the host itself (127.0.0.1:WORDPRESS_PORT, e.g. over
+# an SSH tunnel).
 #
 # The export is one tree for several tenants, so ORST's pages live under
 # /orst — `/orst.html` (home), `/orst/about.html`, `/en/orst/about.html` — and
 # the shared assets sit at the top (`/_next`, `/assets`, `/fonts`). Visitors
-# should see www.orst.go.th/about, not www.orst.go.th/orst/about, so:
+# should see cms.example.gov/about, not cms.example.gov/orst/about, so:
 #
 #   /about            →  served from  /orst/about.html          (rewrite, URL unchanged)
 #   /en/about         →  served from  /en/orst/about.html
@@ -15,15 +28,22 @@
 # redirected to the clean URL. Published URLs (canonical, RSS, hreflang) are
 # already written without the prefix — see publicPath() in lib/seo.ts.
 #
-# SITE_ADDRESS:
-#   http://orst.localhost   local trial (browsers resolve *.localhost to this machine)
-#   www.orst.go.th          a real domain — Caddy obtains and renews the TLS certificate
+# Addresses (all three serve the same thing; set only what you need):
+#   SITE_ADDRESS   the production host, e.g. cms.centerapp.io — a bare domain
+#                  means Caddy obtains and renews the TLS certificate itself
+#   CMS_ADDRESS    a second host name for the same content (local trial default
+#                  http://cms.localhost; leave it alone in production)
+#   SITE_ALIAS     `:80` makes the block the catch-all for any Host header (a LAN
+#                  IP, `localhost`) — for sharing a local trial only. Leave it
+#                  UNSET in production: an unmatched Host then gets nothing,
+#                  instead of the site over plain HTTP.
+# Caddy sets X-Forwarded-Proto/-For itself; WordPress is told to trust them by
+# WP_TRUST_PROXY_HTTPS=1 (mu-plugins/proxy-https.php).
 {
 	admin off
 }
 
-(orst_site) {
-	root * {$SITE_ROOT:/srv/current}
+{$SITE_ADDRESS:http://orst.localhost}, {$SITE_ALIAS:http://alias.invalid}, {$CMS_ADDRESS:http://cms.localhost} {
 	encode zstd gzip
 
 	header {
@@ -36,112 +56,82 @@
 	@hashed path /_next/static/*
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
 
-	# Everything below is ONE ordered `route`: Caddy would otherwise run the
-	# catch-all `handle` blocks before the redirects, whatever order they are
-	# written in (handle sorts ahead of route).
-	route {
-		# --- legacy prefixed URLs → clean URL (query string is kept) -----------
-		@enPrefixed path_regexp ^/en/orst(/|$)
-		route @enPrefixed {
-			uri path_regexp ^/en/orst/?(.*)$ /en/$1
-			uri path_regexp ^(.+)/$ $1
-			redir {http.request.uri} 301
-		}
-		@orstPrefixed path_regexp ^/orst(/|$)
-		route @orstPrefixed {
-			uri path_regexp ^/orst/?(.*)$ /$1
-			redir {http.request.uri} 301
-		}
+	# --- WordPress: only what visitors' browsers need ------------------------------
+	@wordpress path /wp-json /wp-json/* /wp-content/uploads/*
+	handle @wordpress {
+		reverse_proxy wordpress:80
+	}
 
-		# /about/ → /about  (but not "/" itself)
-		@trailing path_regexp ^/.+/$
-		route @trailing {
-			uri path_regexp ^(.+)/$ $1
-			redir {http.request.uri} 301
-		}
+	# --- everything else: the ORST static site ---------------------------------------
+	handle {
+		root * {$SITE_ROOT:/srv/current}
 
-		# --- shared assets, served as they are ---------------------------------
-		@assets path /_next/* /assets/* /fonts/* /favicon.ico /llms.txt
-		handle @assets {
-			file_server
-		}
+		# One ordered `route`: Caddy would otherwise run the catch-all `handle`
+		# blocks before the redirects, whatever order they are written in (handle
+		# sorts ahead of route).
+		route {
+			# --- legacy prefixed URLs → clean URL (query string is kept) -----------
+			@enPrefixed path_regexp ^/en/orst(/|$)
+			route @enPrefixed {
+				uri path_regexp ^/en/orst/?(.*)$ /en/$1
+				uri path_regexp ^(.+)/$ $1
+				redir {http.request.uri} 301
+			}
+			@orstPrefixed path_regexp ^/orst(/|$)
+			route @orstPrefixed {
+				uri path_regexp ^/orst/?(.*)$ /$1
+				redir {http.request.uri} 301
+			}
 
-		# --- English -------------------------------------------------------------
-		handle /en {
-			rewrite * /en/orst.html
-			file_server
-		}
+			# /about/ → /about  (but not "/" itself)
+			@trailing path_regexp ^/.+/$
+			route @trailing {
+				uri path_regexp ^(.+)/$ $1
+				redir {http.request.uri} 301
+			}
 
-		@en path /en/*
-		handle @en {
-			route {
-				uri strip_prefix /en
-				rewrite * /en/orst{path}
-				try_files {path}.html {path}
+			# --- shared assets, served as they are ---------------------------------
+			@assets path /_next/* /assets/* /fonts/* /favicon.ico /llms.txt
+			handle @assets {
 				file_server
 			}
-		}
 
-		# --- home --------------------------------------------------------------
-		handle / {
-			rewrite * /orst.html
-			file_server
-		}
-
-		# --- everything else is an ORST page or file (feed.xml, events.ics) ----
-		handle {
-			route {
-				rewrite * /orst{path}
-				try_files {path}.html {path}
+			# --- English -------------------------------------------------------------
+			handle /en {
+				rewrite * /en/orst.html
 				file_server
+			}
+
+			@en path /en/*
+			handle @en {
+				route {
+					uri strip_prefix /en
+					rewrite * /en/orst{path}
+					try_files {path}.html {path}
+					file_server
+				}
+			}
+
+			# --- home --------------------------------------------------------------
+			handle / {
+				rewrite * /orst.html
+				file_server
+			}
+
+			# --- everything else is an ORST page or file (feed.xml, events.ics) ----
+			handle {
+				route {
+					rewrite * /orst{path}
+					try_files {path}.html {path}
+					file_server
+				}
 			}
 		}
 	}
 
 	handle_errors {
+		root * {$SITE_ROOT:/srv/current}
 		rewrite * /404.html
 		file_server
-	}
-}
-# The ORST site. SITE_ALIAS is an optional second address for the SAME site —
-# `:80` makes it the catch-all for any Host header (a LAN IP, `localhost`), which
-# is what sharing a local trial by IP needs. Leave it unset in production: an
-# unmatched Host then gets nothing, instead of the site over plain HTTP.
-{$SITE_ADDRESS:http://orst.localhost}, {$SITE_ALIAS:http://alias.invalid} {
-	import orst_site
-}
-
-# ---------------------------------------------------------------------------
-# WordPress, public hostname — ONLY what visitors' browsers need.
-#
-# The public pages call WordPress straight from the browser (poll votes,
-# captcha, search, breaking-news → /wp-json) and may show uploaded media
-# (/wp-content/uploads). Everything else — /wp-admin, /wp-login.php,
-# xmlrpc.php, theme/plugin files — answers 404 here, so editors work through
-# WebX Studio and an administrator reaches wp-admin only on the host itself
-# (127.0.0.1:WORDPRESS_PORT, e.g. over an SSH tunnel).
-#
-# CMS_ADDRESS:
-#   http://cms.localhost   local trial (browsers resolve *.localhost to this machine)
-#   cms.orst.go.th         a real domain — Caddy obtains and renews the TLS certificate
-# Caddy sets X-Forwarded-Proto/-For itself; WordPress is told to trust them by
-# WP_TRUST_PROXY_HTTPS=1 (mu-plugins/proxy-https.php).
-# ---------------------------------------------------------------------------
-{$CMS_ADDRESS:http://cms.localhost} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	@visitorFacing path /wp-json /wp-json/* /wp-content/uploads/*
-	handle @visitorFacing {
-		reverse_proxy wordpress:80
-	}
-
-	handle {
-		respond "Not found" 404
 	}
 }

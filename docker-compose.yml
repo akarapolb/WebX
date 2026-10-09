@@ -564,9 +564,11 @@ services:
       STRAPI_URL: http://strapi:1337
       WORDPRESS_URL: http://wordpress:80/wp-json
       # Baked into the pages and called by VISITORS' browsers (poll votes,
-      # captcha, search) — so it must be a URL a browser can reach, never a
-      # compose-internal hostname. Default matches the published WordPress port.
-      NEXT_PUBLIC_WORDPRESS_URL: ${SITE_WORDPRESS_PUBLIC_URL:-http://localhost:8081/wp-json}
+      # captcha, search). The default is the RELATIVE path /wp-json: the `site`
+      # Caddy proxies it to WordPress on whatever host served the page, so it
+      # works on a real domain, a LAN IP and localhost with one build and no CORS.
+      # Set a full https://… URL only if WordPress lives on another origin.
+      NEXT_PUBLIC_WORDPRESS_URL: ${SITE_WORDPRESS_PUBLIC_URL:-/wp-json}
       NEXT_PUBLIC_STUDIO_ORIGIN: ${SITE_STUDIO_ORIGIN:-http://localhost:3000}
       # Absolute URLs in canonical/OG/RSS. ORST is served from its domain
       # root, so its internal /orst prefix is dropped from every published URL.
@@ -587,7 +589,8 @@ services:
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-http://orst.localhost}
       SITE_ALIAS: ${SITE_ALIAS:-http://alias.invalid}
-      # Public hostname for WordPress (/wp-json + uploads only) — see Caddyfile.
+      # A second host name for the same content (the site + /wp-json + uploads) —
+      # see the Caddyfile. Leave the default in production.
       CMS_ADDRESS: ${CMS_ADDRESS:-http://cms.localhost}
     ports:
       - "${SITE_HTTP_PORT:-8090}:80"
