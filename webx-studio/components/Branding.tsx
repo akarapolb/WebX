@@ -7,7 +7,9 @@ import NavManager from "./NavManager";
 import FooterEditor from "./FooterEditor";
 import BreakingNewsManager from "./BreakingNewsManager";
 import ThemeSettings from "./ThemeSettings";
+import { cms, CmsError } from "@/lib/cms";
 
+const TENANT_UID = "api::tenant.tenant";
 const SWATCHES = ["#2F54EB", "#8B5CF6", "#14B8A6", "#EE5020", "#F59E0B", "#10B981"];
 const TMPLS = [{ key: "classic", en: "Classic", th: "คลาสสิก" }, { key: "split", en: "Split", th: "สปลิต" }, { key: "editorial", en: "Editorial", th: "เอดิทอเรียล" }];
 
@@ -26,13 +28,27 @@ export default function Branding() {
     try { await fetch("/api/cms/public-site/rebuild", { method: "POST" }); } catch {}
   }
 
+  // The tenant's own row through the governed cms layer. A WordPress-engine
+  // session is refused (403) by Strapi's /console/* routes below, but this path
+  // is the one Theme / Nav / Footer already use for those tenants.
+  async function tenantRow(key: string): Promise<any | null> {
+    const { data } = await cms.entries.list<any>(TENANT_UID, { pageSize: 50 });
+    return data.find((x: any) => x.key === key) ?? null;
+  }
+
   // load full brand/template/watermark for the current tenant
   useEffect(() => {
     (async () => {
       try {
-        const j = await fetch("/api/strapi/api/console/context").then((r) => (r.ok ? r.json() : null));
-        const list = j?.tenants ?? j?.data?.tenants ?? [];
-        const tn = list.find((x: any) => x.key === currentKey) ?? list[0];
+        const res = await fetch("/api/strapi/api/console/context");
+        let tn: any;
+        if (res.ok) {
+          const j = await res.json();
+          const list = j?.tenants ?? j?.data?.tenants ?? [];
+          tn = list.find((x: any) => x.key === currentKey) ?? list[0];
+        } else if (currentKey && currentKey !== "workspace") {
+          tn = await tenantRow(currentKey);
+        }
         const c = tn?.brand?.primaryColor || tn?.brand?.color || "#2F54EB";
         setColor(c);
         setTmpl(tn?.template?.key || "classic");
@@ -50,8 +66,27 @@ export default function Branding() {
       const r = await fetch("/api/strapi/api/console/branding" + (tenant ? "?tenant=" + encodeURIComponent(tenant) : ""), {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
-      setMsg(r.ok ? { t: t("br.saved"), ok: true } : { t: "Save failed (HTTP " + r.status + ")", ok: false });
-      if (r.ok) rebuild(); // fire-and-forget, see requestPublicSiteRebuild's own reasoning
+      let ok = r.ok;
+      let status = r.status;
+      // 403 = a WordPress-engine session, which Strapi's /console/* routes reject.
+      // Save the same three fields (merged into what is already there, as the
+      // Strapi handler does) through the governed tenant route instead.
+      if (r.status === 403 && tenant) {
+        try {
+          const row = await tenantRow(tenant);
+          if (!row) throw new CmsError("Tenant not found", 404);
+          await cms.entries.update(TENANT_UID, String(row.documentId ?? row.id), {
+            brand: { ...(row.brand || {}), ...body.brand },
+            template: { ...(row.template || {}), ...body.template },
+            watermark: { ...(row.watermark || {}), ...body.watermark },
+          });
+          ok = true;
+        } catch (e) {
+          status = e instanceof CmsError ? (e.status ?? status) : status;
+        }
+      }
+      setMsg(ok ? { t: t("br.saved"), ok: true } : { t: "Save failed (HTTP " + status + ")", ok: false });
+      if (ok) rebuild(); // fire-and-forget, see requestPublicSiteRebuild's own reasoning
     } catch { setMsg({ t: "Cannot reach the backend.", ok: false }); }
     finally { setSaving(false); }
   }
