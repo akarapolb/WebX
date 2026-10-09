@@ -91,6 +91,9 @@ export function pageColors(blocks: any[], limit = 24): string[] {
       for (const k of Object.keys(styles)) {
         push(styles[k]?.color);
         push(styles[k]?.bg);
+        push(styles[k]?.iconColor);
+        push(styles[k]?.borderColor);
+        push(styles[k]?.bgOverlay);
       }
     }
   }

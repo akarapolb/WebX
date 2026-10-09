@@ -43,6 +43,12 @@
   --orst-ground: #fbf7ef;
   --orst-surface: #ffffff;
   --orst-ink: #1c211f;
+  /* Theme colour tokens: what Visual Builder components point at when an editor picks a "theme colour"
+     instead of a hex. They follow the values above, so a theme change (and dark mode) recolours them. */
+  --wx-c-primary: var(--orst-primary);
+  --wx-c-accent: var(--orst-gold);
+  --wx-c-ground: var(--orst-ground);
+  --wx-c-ink: var(--orst-ink);
   --orst-ink-soft: #4d5652;
   /* TOR gap audit (accessibility/WCAG) — a real Lighthouse audit found this
      against its own real backgrounds (white, #eef4f2) at 3.26-3.63:1,

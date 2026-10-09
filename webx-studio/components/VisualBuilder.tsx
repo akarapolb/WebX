@@ -20,6 +20,7 @@ import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { pickLandingPage } from "@/lib/homePage";
 import { wpPageSlug } from "@/lib/pageSlug";
+import { useThemeTokens } from "@/lib/useThemeTokens";
 import { coalesce } from "@/lib/undoCoalesce";
 import ComponentStyle from "./ComponentStyle";
 import { pageColors } from "@/lib/color";
@@ -836,6 +837,9 @@ export default function VisualBuilder() {
   // are already styled with, so a second heading can be matched to the first
   // without anyone copying a hex code by eye.
   const pageSwatches = useMemo(() => pageColors(blocks), [blocks]);
+  // Theme colours a colour field can point at (see lib/themeTokens.ts); empty for a
+  // workspace whose public template has no theme.
+  const themeTokenList = useThemeTokens(tenantKey);
   const setBox = useCallback((i: number, key: string, dev: string, box: any) => {
     updateBlockField(i, ["boxes", dev, key], box && Object.keys(box).length ? box : undefined);
   }, [updateBlockField]);
@@ -1605,7 +1609,7 @@ export default function VisualBuilder() {
                         than not offering the control at all. */}
                     {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
                       styleSlot={(key) => (
-                        <ComponentStyle style={b.styles?.[key]} swatches={pageSwatches} t={t}
+                        <ComponentStyle style={b.styles?.[key]} swatches={pageSwatches} tokens={themeTokenList} t={t}
                           set={(k2, v) => updateBlockField(i, ["styles", key, k2], v === "" ? undefined : v)}
                           reset={() => updateBlockField(i, ["styles", key], undefined)}
                           upload={(f) => uploadFieldImage(i, ["styles", key, "bgImage"], f)} />
@@ -1651,6 +1655,7 @@ export default function VisualBuilder() {
                       <ComponentStyle
                         style={b.styles?.[activeComp]}
                         swatches={pageSwatches}
+                        tokens={themeTokenList}
                         t={t}
                         set={(k, v) => updateBlockField(i, ["styles", activeComp, k], v === "" ? undefined : v)}
                         reset={() => updateBlockField(i, ["styles", activeComp], undefined)}

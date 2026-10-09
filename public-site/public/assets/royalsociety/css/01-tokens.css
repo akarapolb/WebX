@@ -47,6 +47,11 @@
   --rs-ground: #fbf7ef;
   --rs-surface: #ffffff;
   --rs-ink: #16201d;
+  /* Theme colour tokens — see the matching block in orst/css/tokens.css. */
+  --wx-c-primary: var(--rs-primary);
+  --wx-c-accent: var(--rs-gold);
+  --wx-c-ground: var(--rs-ground);
+  --wx-c-ink: var(--rs-ink);
   --rs-ink-soft: #47534e;
   /* Darkened from #79847f during the premium pass: a real Lighthouse audit
      measured it at 3.87:1 on white (.wx-dir-division on the member
