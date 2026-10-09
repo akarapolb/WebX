@@ -562,7 +562,7 @@
 }
 .wx-cal-nav:hover { border-color: var(--orst-heading); }
 .wx-cal-subscribe {
-  margin-left: auto; font-size: .84rem; color: var(--orst-primary-soft); text-decoration: underline;
+  margin-left: auto; font-size: .84rem; color: var(--orst-heading); text-decoration: underline;
   text-underline-offset: 3px;
 }
 .wx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }

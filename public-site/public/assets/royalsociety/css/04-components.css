@@ -592,7 +592,7 @@
   color: var(--rs-heading); font-size: 1.1rem; cursor: pointer;
 }
 .wx-cal-nav:hover { border-color: var(--rs-heading); }
-.wx-cal-subscribe { margin-left: auto; font-size: .84rem; color: var(--rs-primary-soft); text-decoration: underline; text-underline-offset: 3px; }
+.wx-cal-subscribe { margin-left: auto; font-size: .84rem; color: var(--rs-heading); text-decoration: underline; text-underline-offset: 3px; }
 .wx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .wx-cal-weekday { text-align: center; font-size: .8rem; color: var(--rs-ink-faint); padding-bottom: var(--rs-space-2); }
 .wx-cal-cell {
