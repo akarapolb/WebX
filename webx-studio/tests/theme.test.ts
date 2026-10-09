@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { contrastRatio, compactTheme, themeSupported, THEME_DEFAULTS, FONT_OPTIONS, AA } from "../lib/theme";
+import { contrastRatio, compactTheme, themeSupported, typeSupported, THEME_DEFAULTS, TYPE_DEFAULTS, FONT_OPTIONS, AA } from "../lib/theme";
 
 describe("contrastRatio", () => {
   test("black on white is 21:1, same colour is 1:1", () => {
@@ -59,4 +59,31 @@ test("every default font is an offered option", () => {
   for (const d of Object.values(THEME_DEFAULTS)) {
     assert.ok(keys.has(d.fonts.display) && keys.has(d.fonts.body));
   }
+});
+
+describe("typography settings", () => {
+  test("only ORST has type controls — RoyalSociety's stylesheet has no such tokens", () => {
+    assert.equal(typeSupported("orst"), true);
+    assert.equal(typeSupported("royalsociety"), false);
+    assert.equal(typeSupported("dga"), false);
+  });
+
+  test("values left at the defaults are dropped, so nothing is frozen into the tenant", () => {
+    assert.equal(compactTheme("orst", { type: { ...TYPE_DEFAULTS } }).type, undefined);
+  });
+
+  test("only the changed type values are kept", () => {
+    const t = compactTheme("orst", { type: { ...TYPE_DEFAULTS, size: 110, headingWeight: 700 } });
+    assert.deepEqual(t.type, { size: 110, headingWeight: 700 });
+  });
+
+  test("a tenant without type support never saves type values", () => {
+    assert.equal(compactTheme("royalsociety", { type: { size: 120 } }).type, undefined);
+  });
+
+  test("the defaults match what ORST's stylesheet ships with (body 1.65, h1-h3 600)", () => {
+    assert.equal(TYPE_DEFAULTS.leading, 1.65);
+    assert.equal(TYPE_DEFAULTS.headingWeight, 600);
+    assert.equal(THEME_DEFAULTS.orst.type, TYPE_DEFAULTS);
+  });
 });

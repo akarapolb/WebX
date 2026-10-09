@@ -1,6 +1,6 @@
 import OrstIconSprite from "@/templates/orst/OrstIconSprite";
 import BreakingNewsBanner from "@/components/BreakingNewsBanner";
-import { getThemeCss } from "@/lib/cms";
+import { getThemeCss, getThemeGoogleFamilies } from "@/lib/cms";
 
 // ORST's own design (Phase 11 full visual redesign) — separate stylesheet +
 // icon sprite from the gov-portal template, scoped to this segment only
@@ -23,6 +23,9 @@ export default async function OrstLayout({ children }: { children: React.ReactNo
   // Emitted after every stylesheet <link> below; it's unlayered, so it beats
   // tokens.css's `@layer tokens` values whatever the order.
   const themeCss = await getThemeCss("orst");
+  // Google fonts picked in the theme are downloaded at BUILD time and served from
+  // this origin (scripts/prepare-theme-fonts.mjs); visitors never contact Google.
+  const hasGoogleFonts = (await getThemeGoogleFamilies("orst")).length > 0;
   return (
     <>
       {/* Self-hosted fonts (TOR gap audit — PageSpeed/Core Web Vitals; see
@@ -33,6 +36,7 @@ export default async function OrstLayout({ children }: { children: React.ReactNo
           a flash of invisible/fallback text on first paint. */}
       <link rel="preload" href="/fonts/ibm+plex+sans+thai-400-thai.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       <link rel="stylesheet" href="/fonts/fonts.css" />
+      {hasGoogleFonts && <link rel="stylesheet" href="/fonts/google/fonts.css" />}
       <link rel="stylesheet" href="/assets/orst/css/tokens.css" />
       <link rel="stylesheet" href="/assets/orst/css/base.css" />
       <link rel="stylesheet" href="/assets/orst/css/blocks.css" />

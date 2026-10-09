@@ -1353,3 +1353,83 @@ textarea.agj-in{resize:vertical;line-height:1.5}
 .bc-paint.has::after{content:"";position:absolute;top:-2px;right:-2px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
 .bc-item-style{padding:0 9px 9px}
 .bc-item-style .cs{border-top:none;margin-top:0;padding-top:4px}
+
+/* ==========================================================================
+   Branding page polish — scoped to .br so nothing else in Studio changes.
+   Native form controls (white <select>, default sliders) clashed with the dark
+   UI; the tab bar was a thin text strip. Colours come from the app's own
+   variables, so light and dark both follow.
+   ========================================================================== */
+.br-tabs{display:flex;gap:4px;margin:0 0 20px;padding:4px;width:max-content;max-width:100%;overflow-x:auto;scrollbar-width:none;
+  background:var(--sunk);border:1px solid var(--line);border-radius:12px}
+.br-tabs::-webkit-scrollbar{display:none}
+.br-tabs button{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border:0;border-radius:9px;background:none;
+  font-size:13px;font-weight:600;color:var(--mut);white-space:nowrap;cursor:pointer;
+  transition:background var(--t),color var(--t),box-shadow var(--t)}
+.br-tabs button svg{width:15px;height:15px;opacity:.8}
+.br-tabs button:hover{color:var(--ink)}
+.br-tabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.22),0 0 0 1px var(--line2)}
+.br-tabs button.on svg{color:var(--accent);opacity:1}
+
+.br .panel{border-radius:16px;padding:20px 22px}
+.br .panel-h{padding-bottom:12px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+.br .panel-h h3{font-size:14.5px;letter-spacing:.01em}
+
+/* Selects: no white native box; a quiet field with its own chevron. */
+.br select{-webkit-appearance:none;appearance:none;cursor:pointer;
+  padding:9px 34px 9px 12px;border:1px solid var(--line2);border-radius:10px;
+  background-color:var(--sunk);color:var(--ink);font-family:inherit;font-size:13px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%237E869B' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;background-size:12px;
+  transition:border-color var(--t),box-shadow var(--t)}
+.br select:hover{border-color:var(--mut)}
+.br select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.br select option{background:var(--panel);color:var(--ink)}
+
+/* Sliders use the accent colour (the filled part shows how far along). */
+.br input[type=range]{accent-color:var(--accent);height:6px;cursor:pointer}
+
+/* Text/number fields. :where() keeps this at zero specificity, so every more
+   specific rule that already styles a field (hex boxes, inline styles) still wins. */
+.br :where(input[type=text],input[type=number],input:not([type]),textarea){
+  background:var(--sunk);border:1px solid var(--line2);border-radius:10px;padding:9px 12px;
+  font-family:inherit;font-size:13px;color:var(--ink);transition:border-color var(--t),box-shadow var(--t)}
+.br :where(input[type=text],input[type=number],input:not([type]),textarea):focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+/* Colour palette (Theme tab) */
+.pal-core{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.pal-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;font-size:12px;
+  border:1px solid var(--line2);border-radius:999px;background:var(--sunk)}
+.pal-chip i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(128,128,128,.45)}
+.pal-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.pal-row input[type=color]{flex:none;width:38px;height:34px;padding:2px;border:1px solid var(--line2);border-radius:8px;background:none;cursor:pointer}
+.pal-hex{flex:none;width:92px;font-family:var(--mono)}
+.pal-name{flex:1;min-width:0}
+
+/* Visual Builder component style panel: sections, per-side spacing, positions, theme chips */
+.cs-sec{border-top:1px solid var(--line);margin-top:6px}
+.cs-sec>summary{display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;padding:9px 0;
+  font-size:12px;font-weight:700;letter-spacing:.02em}
+.cs-sec>summary::-webkit-details-marker{display:none}
+.cs-sec>summary::after{content:"›";font-size:15px;color:var(--mut);transition:transform var(--t)}
+.cs-sec[open]>summary::after{transform:rotate(90deg)}
+.cs-sec-body{padding:2px 0 8px}
+.cs-sides-row{align-items:flex-start}
+.cs-sides{flex:1;min-width:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.cs-side{display:flex;flex-direction:column;gap:2px;font-size:10px;color:var(--mut)}
+.cs-side input{width:100%;min-width:0;padding:4px 5px;font-size:11px;color:var(--ink);
+  background:var(--sunk);border:1px solid var(--line2);border-radius:6px}
+.cs-range{flex:1;min-width:0;accent-color:var(--accent);height:6px}
+.cs-pct{min-width:36px;text-align:right}
+.cs-pos{display:grid;grid-template-columns:repeat(3,22px);gap:3px}
+.cs-pos button{display:grid;place-items:center;width:22px;height:22px;padding:0;cursor:pointer;
+  border:1px solid var(--line2);border-radius:5px;background:var(--bg)}
+.cs-pos button i{width:6px;height:6px;border-radius:50%;background:var(--mut)}
+.cs-pos button.on{border-color:var(--accent);background:var(--accent-soft)}
+.cs-pos button.on i{background:var(--accent)}
+.cs-tokens{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:2px 2px 10px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.cs-tokens-h{flex:0 0 100%;font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.cs-tok{display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 4px;font-size:11px;cursor:pointer;
+  border:1px solid var(--line2);border-radius:999px;background:var(--bg)}
+.cs-tok i{width:12px;height:12px;border-radius:50%;border:1px solid rgba(128,128,128,.45)}
+.cs-tok.on{border-color:var(--accent);background:var(--accent-soft)}

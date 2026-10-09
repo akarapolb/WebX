@@ -2,3 +2,7 @@
 
 # Output of scripts/package-standalone.mjs
 /bundle/
+
+# Written by scripts/prepare-theme-fonts.mjs at build time (picked Google fonts, self-hosted)
+/public/fonts/google/
+/.theme-fonts-status.json

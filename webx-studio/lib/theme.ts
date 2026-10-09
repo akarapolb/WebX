@@ -5,10 +5,35 @@
 // font keys and limits are mirrored; keep them in sync with that file.
 import { parseHex } from "./color";
 
+/** Typography beyond the font families (ORST only for now). */
+export type ThemeType = {
+  /** Page text size, percent of the browser's own size. */
+  size?: number;
+  /** Line-height of body text. */
+  leading?: number;
+  /** Weight of body text. */
+  weight?: number;
+  /** Weight of h1–h3. */
+  headingWeight?: number;
+  /** Multiplier on the h1/h2/h3 sizes. */
+  headingScale?: number;
+};
+
+/** A named colour in the site palette. Components can point at it ("@c1") instead
+ * of a hex, so changing it here recolours all of them. Ids are fixed (c1–c8) and
+ * never renumbered. */
+export type PaletteEntry = { id: string; name: string; value: string };
+export const PALETTE_MAX = 8;
+export const PALETTE_IDS = ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"] as const;
+/** The first id not already in use, or null when all eight are taken. */
+export const nextPaletteId = (palette: PaletteEntry[]): string | null => PALETTE_IDS.find((id) => !palette.some((e) => e.id === id)) ?? null;
+
 export type Theme = {
   colors?: { primary?: string; accent?: string; ground?: string; ink?: string };
   fonts?: { display?: string; body?: string };
   radius?: number;
+  type?: ThemeType;
+  palette?: PaletteEntry[];
 };
 
 export const COLOR_KEYS = ["primary", "accent", "ground", "ink"] as const;
@@ -23,13 +48,26 @@ export const FONT_OPTIONS: { key: string; label: string; stack: string }[] = [
 
 export const RADIUS_LIMITS = { min: 0, max: 40 };
 
+// Mirrored from public-site/lib/theme.ts, which clamps and re-validates every
+// value; these only keep the sliders inside the same range.
+export const TYPE_LIMITS = {
+  size: { min: 90, max: 125, step: 5 },
+  leading: { min: 1.4, max: 2.0, step: 0.05 },
+  headingScale: { min: 0.85, max: 1.25, step: 0.05 },
+};
+export const BODY_WEIGHTS = [300, 400, 500];
+export const HEADING_WEIGHTS = [500, 600, 700];
+export const TYPE_DEFAULTS: Required<ThemeType> = { size: 100, leading: 1.65, weight: 400, headingWeight: 600, headingScale: 1 };
+
 /** What each tenant's own tokens.css ships with — the "reset" target and the
  * value shown for a field the admin has not overridden. */
-export const THEME_DEFAULTS: Record<string, Required<{ colors: Required<NonNullable<Theme["colors"]>>; fonts: Required<NonNullable<Theme["fonts"]>>; radius: number }>> = {
+type ThemeDefaults = { colors: Required<NonNullable<Theme["colors"]>>; fonts: Required<NonNullable<Theme["fonts"]>>; radius: number; type?: Required<ThemeType> };
+export const THEME_DEFAULTS: Record<string, ThemeDefaults> = {
   orst: {
     colors: { primary: "#073b34", accent: "#b98d3e", ground: "#fbf7ef", ink: "#1c211f" },
     fonts: { display: "noto-serif", body: "plex-sans" },
     radius: 22,
+    type: TYPE_DEFAULTS,
   },
   royalsociety: {
     colors: { primary: "#06473f", accent: "#b99143", ground: "#fbf7ef", ink: "#16201d" },
@@ -40,6 +78,8 @@ export const THEME_DEFAULTS: Record<string, Required<{ colors: Required<NonNulla
 
 /** Tenants whose public template reads brand.theme. Any other workspace's
  * site ignores it, so the tab says so instead of saving a no-op. */
+/** Only ORST's stylesheet has the tokens the type controls drive. */
+export const typeSupported = (tenantKey: string) => !!THEME_DEFAULTS[tenantKey]?.type;
 export const themeSupported = (tenantKey: string) => Object.prototype.hasOwnProperty.call(THEME_DEFAULTS, tenantKey);
 
 function luminance(hex: string): number | null {
@@ -79,5 +119,21 @@ export function compactTheme(tenantKey: string, t: Theme): Theme {
   }
   if (Object.keys(fonts).length) out.fonts = fonts;
   if (typeof t.radius === "number" && (!d || t.radius !== d.radius)) out.radius = t.radius;
+  if (d?.type) {
+    const type: ThemeType = {};
+    for (const k of ["size", "leading", "weight", "headingWeight", "headingScale"] as const) {
+      const v = t.type?.[k];
+      if (typeof v === "number" && v !== d.type[k]) type[k] = v;
+    }
+    if (Object.keys(type).length) out.type = type;
+  }
+  // The palette has no default: whatever is there is the admin's own.
+  if (d && t.palette?.length) {
+    out.palette = t.palette
+      .filter((e) => PALETTE_IDS.includes(e.id as any) && parseHex(e.value))
+      .slice(0, PALETTE_MAX)
+      .map((e) => ({ id: e.id, name: (e.name || "").trim().slice(0, 24) || e.id.toUpperCase(), value: e.value.toLowerCase() }));
+    if (!out.palette.length) delete out.palette;
+  }
   return out;
 }

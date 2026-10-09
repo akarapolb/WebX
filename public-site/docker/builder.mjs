@@ -38,12 +38,23 @@ let lastRelease = null;
 
 function log(...a) { console.log(new Date().toISOString(), "[site-builder]", ...a); }
 
+// Self-host the Google fonts the theme picked (scripts/prepare-theme-fonts.mjs).
+// It exits 0 whatever happens — a font problem must never block a publish.
+function prepareFonts() {
+  return new Promise((resolve) => {
+    const child = spawn("node", ["scripts/prepare-theme-fonts.mjs"], { cwd: "/app", env: process.env, stdio: "inherit" });
+    child.on("error", (e) => { log("font step could not start:", String(e?.message || e)); resolve(); });
+    child.on("exit", () => resolve());
+  });
+}
+
 async function runNextBuild() {
   // Next keeps fetched data in .next/cache and reuses it ACROSS builds, so
   // without clearing it a rebuild can republish the previous build's stale
   // content (found live: an edited tenant name kept its old value). The cache
   // is only needed within one build, to dedupe repeated fetches.
   await rm("/app/.next", { recursive: true, force: true });
+  await prepareFonts();
   return new Promise((resolve, reject) => {
     const child = spawn("npx", ["next", "build"], { cwd: "/app", env: process.env, stdio: ["ignore", "pipe", "pipe"] });
     let tail = "";

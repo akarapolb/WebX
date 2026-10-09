@@ -94,7 +94,8 @@ export default function Branding() {
   const brandName = current?.name || "WebX";
 
   return (
-    <>
+    // `br` scopes the form-control and tab-bar styling in globals.css to this page.
+    <div className="br">
       <div className="vh">
         <div><h1>{t("nav.branding")}</h1><p>{t("br.sub")}</p></div>
         {tab === "appearance" && (
@@ -104,12 +105,18 @@ export default function Branding() {
         )}
       </div>
 
-      <div className="seg" style={{ marginBottom: 16 }}>
-        <button className={tab === "appearance" ? "on" : ""} onClick={() => setTab("appearance")}>{t("br.tab_appearance")}</button>
-        <button className={tab === "theme" ? "on" : ""} onClick={() => setTab("theme")}>{t("br.tab_theme")}</button>
-        <button className={tab === "nav" ? "on" : ""} onClick={() => setTab("nav")}>{t("br.tab_nav")}</button>
-        <button className={tab === "footer" ? "on" : ""} onClick={() => setTab("footer")}>{t("br.tab_footer")}</button>
-        <button className={tab === "breaking" ? "on" : ""} onClick={() => setTab("breaking")}>{t("br.tab_breaking")}</button>
+      <div className="br-tabs" role="tablist" aria-label={t("nav.branding")}>
+        {([
+          ["appearance", "palette", t("br.tab_appearance")],
+          ["theme", "spark", t("br.tab_theme")],
+          ["nav", "menu", t("br.tab_nav")],
+          ["footer", "layout", t("br.tab_footer")],
+          ["breaking", "bell", t("br.tab_breaking")],
+        ] as const).map(([key, icon, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? "on" : ""} onClick={() => setTab(key)}>
+            <Icon name={icon} />{label}
+          </button>
+        ))}
       </div>
 
       {tab === "appearance" && msg && <div className="panel" style={{ marginBottom: 14 }}><span className={"badge " + (msg.ok ? "b-ok" : "b-warn")}><span className="dot" />{msg.ok ? "OK" : "!"}</span><span style={{ marginLeft: 10, color: msg.ok ? "var(--ok)" : "var(--bad)", fontWeight: 600 }}>{msg.t}</span></div>}
@@ -170,6 +177,6 @@ export default function Branding() {
       {tab === "nav" && <NavManager tenantKey={tenant} />}
       {tab === "footer" && <FooterEditor tenantKey={tenant} />}
       {tab === "breaking" && <BreakingNewsManager tenantKey={tenant} />}
-    </>
+    </div>
   );
 }

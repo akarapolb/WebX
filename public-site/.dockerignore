@@ -8,3 +8,5 @@ tsconfig.tsbuildinfo
 Dockerfile*
 .dockerignore
 bundle
+public/fonts/google
+.theme-fonts-status.json

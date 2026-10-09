@@ -3,7 +3,7 @@
 // boot(), just called at build time (generateStaticParams / the page's async
 // component) instead of from the browser after load. Thai locale only for
 // this proof — see the Phase 4 plan for what's deliberately out of scope.
-import { themeToCss } from "./theme";
+import { themeToCss, themeGoogleFamilies } from "./theme";
 
 const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
 const WORDPRESS = (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
@@ -146,6 +146,18 @@ export async function getThemeCss(tenant: string): Promise<string> {
     return themeToCss(tenant, t?.brand?.theme);
   } catch {
     return "";
+  }
+}
+
+/** The Google font families a tenant's theme picked — the layout links the
+ * self-hosted stylesheet (/fonts/google/fonts.css, written by the build) only
+ * when there are some. Fails soft like getThemeCss. */
+export async function getThemeGoogleFamilies(tenant: string): Promise<string[]> {
+  try {
+    const t = await getTenant(tenant);
+    return themeGoogleFamilies(t?.brand?.theme);
+  } catch {
+    return [];
   }
 }
 
