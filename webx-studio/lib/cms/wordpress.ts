@@ -24,6 +24,7 @@ import { CmsError } from "./types";
 import { sessionToken } from "../strapi";
 import { WORDPRESS_URL, WEBX_WP_PII_KEY } from "../config";
 import { genTempPassword } from "./genPassword";
+import { wpSlash } from "./wpSlash";
 
 const BASE = WORDPRESS_URL;
 
@@ -154,7 +155,8 @@ function splitAcfFields(uid: string, data: Record<string, any>): Record<string, 
   const acf: Record<string, any> = {};
   const rest: Record<string, any> = {};
   for (const [k, v] of Object.entries(data)) {
-    if (acfKeys.includes(k)) acf[k] = v;
+    // ACF values go through WordPress's REST layer, which unslashes them — see wpSlash.ts.
+    if (acfKeys.includes(k)) acf[k] = wpSlash(v);
     else rest[k] = v;
   }
   return Object.keys(acf).length ? { ...rest, acf } : rest;
