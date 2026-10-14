@@ -1442,3 +1442,4 @@ textarea.agj-in{resize:vertical;line-height:1.5}
 .cs-states button.has::after{content:"";position:absolute;top:4px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
 .cs-state-body{display:grid;gap:2px}
 .cs-hint{margin:0 0 6px;font-size:11.5px;line-height:1.5;color:var(--ink3,var(--ink2))}
+.cs-device{margin:8px 0 10px;padding:8px 10px;font-size:11.5px;line-height:1.5;color:var(--ink2);background:var(--sunk);border-left:3px solid var(--accent);border-radius:6px}

@@ -840,6 +840,21 @@ export default function VisualBuilder() {
   // Theme colours a colour field can point at (see lib/themeTokens.ts); empty for a
   // workspace whose public template has no theme.
   const themeTokenList = useThemeTokens(tenantKey);
+  // Everything the style panel needs for one component. On desktop it edits the
+  // style itself (which applies at every width); on tablet or phone it edits that
+  // device's overrides, which only change what they set — see styles.ts.
+  const styleProps = (i: number, b: any, key: string) => {
+    const at: (string | number)[] = device === "desktop" ? ["styles", key] : ["styles", key, device];
+    return {
+      device,
+      full: b.styles?.[key],
+      style: device === "desktop" ? b.styles?.[key] : b.styles?.[key]?.[device],
+      set: (k: string, v: any) => updateBlockField(i, [...at, ...String(k).split(".")], v === "" ? undefined : v),
+      reset: () => updateBlockField(i, at, undefined),
+      upload: (f: File) => uploadFieldImage(i, [...at, "bgImage"], f),
+      swatches: pageSwatches, tokens: themeTokenList, t,
+    };
+  };
   const setBox = useCallback((i: number, key: string, dev: string, box: any) => {
     updateBlockField(i, ["boxes", dev, key], box && Object.keys(box).length ? box : undefined);
   }, [updateBlockField]);
@@ -1609,10 +1624,7 @@ export default function VisualBuilder() {
                         than not offering the control at all. */}
                     {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
                       styleSlot={(key) => (
-                        <ComponentStyle style={b.styles?.[key]} swatches={pageSwatches} tokens={themeTokenList} t={t}
-                          set={(k2, v) => updateBlockField(i, ["styles", key, ...String(k2).split(".")], v === "" ? undefined : v)}
-                          reset={() => updateBlockField(i, ["styles", key], undefined)}
-                          upload={(f) => uploadFieldImage(i, ["styles", key, "bgImage"], f)} />
+                        <ComponentStyle {...styleProps(i, b, key)} />
                       )}
                       device={device} selectedComp={activeComp}
                       onPickComp={(k) => setSelComp(k ? { i, key: k } : null)}
@@ -1652,14 +1664,7 @@ export default function VisualBuilder() {
                         actually selected — a block-wide style control would be
                         ambiguous about which of its parts it meant. */}
                     {wpMeta && isA && activeComp && !/\.\d+$/.test(activeComp) && (
-                      <ComponentStyle
-                        style={b.styles?.[activeComp]}
-                        swatches={pageSwatches}
-                        tokens={themeTokenList}
-                        t={t}
-                        set={(k, v) => updateBlockField(i, ["styles", activeComp, ...String(k).split(".")], v === "" ? undefined : v)}
-                        reset={() => updateBlockField(i, ["styles", activeComp], undefined)}
-                        upload={(f) => uploadFieldImage(i, ["styles", activeComp, "bgImage"], f)} />
+                      <ComponentStyle {...styleProps(i, b, activeComp)} />
                     )}
                     {/* Generic repeatable-list editor — one `items` descriptor per
                         block type (see ORST_TYPES above) drives add/edit/remove

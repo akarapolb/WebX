@@ -7,12 +7,11 @@
 // Storage, on the block itself:
 //   b.styles = { [componentKey]: Style }
 //
-// Deliberately NOT per-device, unlike b.boxes. A move is a layout decision
-// that genuinely differs between a 1280px and a 390px canvas; a brand colour
-// is not, and making editors set one three times would mostly produce pages
-// whose phone version silently kept the old colour. Sizes are the one real
-// casualty — a heading sized for desktop is sized for mobile too — which the
-// templates' own responsive CSS still handles for anything left unstyled.
+// Per-device, as overrides that cascade down. The style itself applies at every
+// width; `tablet` overrides it from 1023px down and `mobile` from 639px down
+// (so a phone keeps the tablet's change unless it sets its own). Only what is
+// set on a device changes — a heading sized for desktop stays a brand colour on
+// the phone without being set a second time.
 //
 // Components are the elements a renderer tags with `vc(b, key)` (see
 // boxes.ts): top-level fields ("heading", "lead", "cta1Label"…) and
@@ -38,6 +37,11 @@ export type StateStyle = {
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
   opacity?: number;
 };
+/** The widths a style can be overridden at; each also applies to every narrower width. */
+export const DEVICES = ["tablet", "mobile"] as const;
+export type DeviceName = (typeof DEVICES)[number];
+const DEVICE_MAX_WIDTH: Record<DeviceName, string> = { tablet: "(max-width: 1023.98px)", mobile: "(max-width: 639.98px)" };
+
 /** The interaction states a style can carry, in the order they are emitted (later wins a tie). */
 export const STATES = ["hover", "focus", "active"] as const;
 export type StateName = (typeof STATES)[number];
@@ -89,7 +93,12 @@ export type Style = {
   focus?: StateStyle;
   /** While the component is being pressed. */
   active?: StateStyle;
+  /** Overrides from 1023px down. Same properties as above, minus states and further overrides. */
+  tablet?: DeviceStyle;
+  /** Overrides from 639px down. */
+  mobile?: DeviceStyle;
 };
+export type DeviceStyle = Omit<Style, "hover" | "focus" | "active" | "tablet" | "mobile">;
 
 /** The style keys this module knows how to render, for the editor's own use. */
 export const STYLE_KEYS = [
@@ -97,7 +106,7 @@ export const STYLE_KEYS = [
   "fontSize", "fontWeight", "align", "radius", "padding", "unit",
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
   "borderWidth", "borderStyle", "borderColor", "shadow", "opacity",
-  "hover", "focus", "active",
+  "hover", "focus", "active", "tablet", "mobile",
 ] as const;
 
 // #rgb / #rgba / #rrggbb / #rrggbbaa — the only colour syntax accepted. The
@@ -174,9 +183,16 @@ const clampSet = (v: unknown, lo: number, hi: number): number | undefined =>
   typeof v === "number" || (typeof v === "string" && v.trim() !== "") ? clamp(v, lo, hi) : undefined;
 const ALIGNS = ["left", "center", "right"] as const;
 
-/** The CSS declarations one component's style produces ("" when none survive). */
-export function styleDecls(s: Style | null | undefined): string {
-  if (!s || typeof s !== "object") return "";
+/**
+ * The CSS declarations one component's style produces ("" when none survive).
+ *
+ * `partial` is for a device override, which only carries what changes: a
+ * background position or a border colour set on its own still applies (to the
+ * image or border the base style already made), where the base style only emits
+ * those alongside the image or width they belong to.
+ */
+export function styleDecls(s: Style | null | undefined, partial = false): string {
+  if (!s || typeof s !== "object" || Array.isArray(s)) return "";
   const d: string[] = [];
 
   const col = colorCss(s.color);
@@ -197,6 +213,12 @@ export function styleDecls(s: Style | null | undefined): string {
     d.push(`background-position:${oneOf(s.bgPosition, POSITIONS) || "center"}!important`);
     d.push(`background-repeat:${oneOf(s.bgRepeat, REPEATS) || "no-repeat"}!important`);
     const att = oneOf(s.bgAttachment, ATTACHMENTS);
+    if (att) d.push(`background-attachment:${att}!important`);
+  } else if (partial) {
+    const fit = oneOf(s.bgFit, FITS), pos = oneOf(s.bgPosition, POSITIONS), rep = oneOf(s.bgRepeat, REPEATS), att = oneOf(s.bgAttachment, ATTACHMENTS);
+    if (fit) d.push(`background-size:${fit}!important`);
+    if (pos) d.push(`background-position:${pos}!important`);
+    if (rep) d.push(`background-repeat:${rep}!important`);
     if (att) d.push(`background-attachment:${att}!important`);
   }
 
@@ -236,6 +258,10 @@ export function styleDecls(s: Style | null | undefined): string {
     d.push(`border-width:${bw}px!important`);
     const bc = colorCss(s.borderColor);
     if (bc && bw > 0) d.push(`border-color:${bc}!important`);
+  } else if (partial) {
+    const bs = oneOf(s.borderStyle, BORDER_STYLES), bc = colorCss(s.borderColor);
+    if (bs) d.push(`border-style:${bs}!important`);
+    if (bc) d.push(`border-color:${bc}!important`);
   }
 
   const sh = oneOf(s.shadow, Object.keys(SHADOWS) as (keyof typeof SHADOWS)[]);
@@ -317,6 +343,16 @@ function styleCss(sel: string, st: Style | null | undefined): string {
   const decls = styleDecls(st);
   if (decls) css += `${sel}{${decls}}`;
   css += colourReach(sel, st.color, st.iconColor);
+
+  // Device overrides, after the base and in width order so the narrowest wins:
+  // tablet applies from 1023px down, then mobile from 639px down on top of it.
+  for (const dev of DEVICES) {
+    const o = (st as any)[dev];
+    if (!o || typeof o !== "object" || Array.isArray(o)) continue;
+    const dd = styleDecls(o, true);
+    const rules = (dd ? `${sel}{${dd}}` : "") + colourReach(sel, o.color, o.iconColor);
+    if (rules) css += `@media ${DEVICE_MAX_WIDTH[dev]}{${rules}}`;
+  }
 
   // Interaction states. They come after the base rules and add a pseudo-class
   // (more specific), so they win while they apply without any ordering tricks.

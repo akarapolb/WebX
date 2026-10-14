@@ -60,7 +60,15 @@ export type ComponentStyle = {
   hover?: StateStyle;
   focus?: StateStyle;
   active?: StateStyle;
+  /** Overrides from 1023px down; mobile follows them unless it sets its own. */
+  tablet?: DeviceStyle;
+  /** Overrides from 639px down. */
+  mobile?: DeviceStyle;
 };
+/** What a tablet or phone override can hold: the same properties, minus states and further overrides. */
+export type DeviceStyle = Omit<ComponentStyle, "hover" | "focus" | "active" | "tablet" | "mobile">;
+export const DEVICES = ["tablet", "mobile"] as const;
+export type DeviceName = (typeof DEVICES)[number];
 
 /** Input bounds, mirroring the clamps styles.ts applies when rendering. */
 export const STYLE_LIMITS = {

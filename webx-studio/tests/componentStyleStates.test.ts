@@ -24,3 +24,21 @@ describe("interaction states in the style model", () => {
     assert.deepEqual(pageColors(blocks), ["#111111", "#222222", "#333333"]);
   });
 });
+
+describe("per-device overrides in the style model", () => {
+  test("the device list matches the one the site renders", async () => {
+    const { DEVICES } = await import("../lib/componentStyle");
+    assert.deepEqual([...DEVICES], ["tablet", "mobile"]);
+  });
+
+  test("an override alone makes the style non-blank; an empty one does not", () => {
+    assert.equal(isBlankStyle({ mobile: { opacity: 50 } }), false);
+    assert.equal(isBlankStyle({ tablet: { paddingTop: 0 } }), false);
+    assert.equal(isBlankStyle({ tablet: {}, mobile: { bg: undefined } }), true);
+  });
+
+  test("page swatches include colours set only on a tablet or phone", () => {
+    const blocks = [{ styles: { a: { tablet: { bg: "#111111", color: "@primary" }, mobile: { borderColor: "#222222", bgOverlay: "#33333380" } } } }];
+    assert.deepEqual(pageColors(blocks), ["#111111", "#222222", "#33333380"]);
+  });
+});

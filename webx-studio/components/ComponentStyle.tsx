@@ -22,7 +22,12 @@ import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
 export type StyleKey = keyof Style | `${StateName}.${keyof StateStyle}`;
 
 type Props = {
+  /** What is being edited: the style itself (desktop), or that device's overrides. */
   style: Style | undefined;
+  /** Which width the editor is on. Tablet and phone edit overrides that only change what they set. */
+  device?: "desktop" | "tablet" | "mobile";
+  /** The whole style, so a tablet or phone field can show the value it inherits. */
+  full?: Style;
   /** Writes one property; `undefined` clears it back to the template's own. */
   set: (k: StyleKey, v: any) => void;
   /** Drops every property at once. */
@@ -90,13 +95,15 @@ function ColorRow({ label, value, onChange, onClear, swatches, tokens, t, open, 
 }
 
 /** A number row that stays "unset" until the editor actually types one. */
-function NumRow({ label, value, min, max, step, unit, onChange }: {
+function NumRow({ label, value, min, max, step, unit, onChange, inherited }: {
   label: string; value?: number; min: number; max: number; step?: number; unit: string; onChange: (v: number | undefined) => void;
+  /** What this field falls back to when empty (a tablet/phone field shows what it inherits). */
+  inherited?: number;
 }) {
   return (
     <div className="cs-row">
       <label>{label}</label>
-      <input type="number" className="cs-num" min={min} max={max} step={step} value={value ?? ""} placeholder="—"
+      <input type="number" className="cs-num" min={min} max={max} step={step} value={value ?? ""} placeholder={inherited !== undefined ? String(inherited) : "—"}
         onChange={(e) => {
           const raw = e.target.value.trim();
           onChange(raw === "" ? undefined : Math.min(max, Math.max(min, Number(raw))));
@@ -107,9 +114,10 @@ function NumRow({ label, value, min, max, step, unit, onChange }: {
 }
 
 /** The four sides of padding or margin in one compact box: top, right, bottom, left. */
-function SidesRow({ label, kind, unit, values, set, t }: {
+function SidesRow({ label, kind, unit, values, inherited, set, t }: {
   label: string; kind: "padding" | "margin"; unit: SpaceUnit;
   values: [number | undefined, number | undefined, number | undefined, number | undefined];
+  inherited?: [number | undefined, number | undefined, number | undefined, number | undefined];
   set: (side: 0 | 1 | 2 | 3, v: number | undefined) => void; t: Props["t"];
 }) {
   const lim = SPACE_LIMITS[kind][unit];
@@ -121,7 +129,7 @@ function SidesRow({ label, kind, unit, values, set, t }: {
         {values.map((v, i) => (
           <label key={i} className="cs-side">
             <span>{names[i]}</span>
-            <input type="number" min={lim.min} max={lim.max} step={lim.step} value={v ?? ""} placeholder="—" aria-label={label + " " + names[i]}
+            <input type="number" min={lim.min} max={lim.max} step={lim.step} value={v ?? ""} placeholder={inherited?.[i] !== undefined ? String(inherited[i]) : "—"} aria-label={label + " " + names[i]}
               onChange={(e) => {
                 const raw = e.target.value.trim();
                 set(i as 0 | 1 | 2 | 3, raw === "" ? undefined : Math.min(lim.max, Math.max(lim.min, Number(raw))));
@@ -143,8 +151,12 @@ function Section({ title, defaultOpen = false, children }: { title: string; defa
   );
 }
 
-export default function ComponentStyle({ style, set, reset, upload, swatches, tokens = [], t }: Props) {
+export default function ComponentStyle({ style, device = "desktop", full, set, reset, upload, swatches, tokens = [], t }: Props) {
   const s = style || {};
+  const onDevice = device !== "desktop";
+  // The value a tablet or phone field falls back to: the phone follows the tablet
+  // override when there is one, then the style itself.
+  const inh = (k: string): any => (!onDevice ? undefined : device === "mobile" ? ((full as any)?.tablet?.[k] ?? (full as any)?.[k]) : (full as any)?.[k]);
   const fileRef = useRef<HTMLInputElement>(null);
   // Which colour picker is showing, if any. One value for all rows is what makes
   // them mutually exclusive.
@@ -183,6 +195,8 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
         {touched && <button type="button" className="cs-reset" onClick={reset}>{t("cs.reset")}</button>}
       </div>
 
+      {onDevice && <p className="cs-device">{t("cs.device." + device)}</p>}
+      {!onDevice && (
       <div className="cs-states" role="tablist" aria-label={t("cs.states")}>
         {(["normal", ...STATES] as const).map((m) => (
           <button type="button" role="tab" key={m} aria-selected={mode === m}
@@ -190,8 +204,9 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
             onClick={() => { setMode(m); setOpenPicker(null); }}>{t("cs.state." + m)}</button>
         ))}
       </div>
+      )}
 
-      {mode !== "normal" ? (
+      {!onDevice && mode !== "normal" ? (
         <div className="cs-state-body">
           <p className="cs-hint">{t("cs.statehint." + mode)}</p>
           {color(mode + ".color", t("cs.color"))}
@@ -225,7 +240,7 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
       </Section>
 
       <Section title={t("cs.sec.text")} defaultOpen>
-        <NumRow label={t("cs.fontsize")} value={s.fontSize} min={STYLE_LIMITS.fontSize.min} max={STYLE_LIMITS.fontSize.max} unit="px"
+        <NumRow label={t("cs.fontsize")} value={s.fontSize} inherited={inh("fontSize")} min={STYLE_LIMITS.fontSize.min} max={STYLE_LIMITS.fontSize.max} unit="px"
           onChange={(v) => set("fontSize", v)} />
         <div className="cs-row">
           <label>{t("cs.weight")}</label>
@@ -259,9 +274,11 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
         </div>
         <SidesRow label={t("cs.padding")} kind="padding" unit={unit} t={t}
           values={[s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft]}
+          inherited={(inh("unit") ?? "px") === unit ? [inh("paddingTop"), inh("paddingRight"), inh("paddingBottom"), inh("paddingLeft")] : undefined}
           set={(i, v) => set(padKeys[i], v)} />
         <SidesRow label={t("cs.margin")} kind="margin" unit={unit} t={t}
           values={[s.marginTop, s.marginRight, s.marginBottom, s.marginLeft]}
+          inherited={(inh("unit") ?? "px") === unit ? [inh("marginTop"), inh("marginRight"), inh("marginBottom"), inh("marginLeft")] : undefined}
           set={(i, v) => set(marKeys[i], v)} />
         {s.padding !== undefined && (
           <NumRow label={t("cs.padall")} value={s.padding} min={STYLE_LIMITS.padding.min} max={STYLE_LIMITS.padding.max} unit="px" onChange={(v) => set("padding", v)} />
@@ -269,7 +286,7 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
       </Section>
 
       <Section title={t("cs.sec.border")} defaultOpen={s.borderWidth !== undefined || s.radius !== undefined}>
-        <NumRow label={t("cs.borderwidth")} value={s.borderWidth} min={STYLE_LIMITS.borderWidth.min} max={STYLE_LIMITS.borderWidth.max} unit="px"
+        <NumRow label={t("cs.borderwidth")} value={s.borderWidth} inherited={inh("borderWidth")} min={STYLE_LIMITS.borderWidth.min} max={STYLE_LIMITS.borderWidth.max} unit="px"
           onChange={(v) => set("borderWidth", v)} />
         <div className="cs-row">
           <label>{t("cs.borderstyle")}</label>
@@ -279,7 +296,7 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
           </select>
         </div>
         {color("borderColor", t("cs.bordercolor"))}
-        <NumRow label={t("cs.radius")} value={s.radius} min={STYLE_LIMITS.radius.min} max={STYLE_LIMITS.radius.max} unit="px" onChange={(v) => set("radius", v)} />
+        <NumRow label={t("cs.radius")} value={s.radius} inherited={inh("radius")} min={STYLE_LIMITS.radius.min} max={STYLE_LIMITS.radius.max} unit="px" onChange={(v) => set("radius", v)} />
       </Section>
 
       <Section title={t("cs.sec.effects")} defaultOpen={s.shadow !== undefined || s.opacity !== undefined}>
@@ -299,7 +316,8 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
         </div>
       </Section>
 
-      <Section title={t("cs.sec.bgimage")} defaultOpen={!!s.bgImage}>
+      <Section title={t("cs.sec.bgimage")} defaultOpen={!!s.bgImage || (onDevice && !!(full as any)?.bgImage)}>
+        {!onDevice && (
         <div className="cs-row cs-bgimg">
           <label>{t("cs.bgimage")}</label>
           <div className="cs-bgimg-c">
@@ -311,7 +329,8 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
           </div>
         </div>
-        {s.bgImage && (
+        )}
+        {(s.bgImage || (onDevice && (full as any)?.bgImage)) && (
           <>
             <div className="cs-row">
               <label>{t("cs.bgfit")}</label>
@@ -346,7 +365,7 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
                 ))}
               </div>
             </div>
-            {color("bgOverlay", t("cs.bgoverlay"))}
+            {!onDevice && color("bgOverlay", t("cs.bgoverlay"))}
           </>
         )}
       </Section>

@@ -94,6 +94,9 @@ export function pageColors(blocks: any[], limit = 24): string[] {
         push(styles[k]?.iconColor);
         push(styles[k]?.borderColor);
         push(styles[k]?.bgOverlay);
+        for (const dev of ["tablet", "mobile"]) {
+          for (const f of ["color", "iconColor", "bg", "borderColor", "bgOverlay"]) push(styles[k]?.[dev]?.[f]);
+        }
         for (const st of ["hover", "focus", "active"]) {
           for (const f of ["color", "iconColor", "bg", "borderColor"]) push(styles[k]?.[st]?.[f]);
         }

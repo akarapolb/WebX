@@ -663,6 +663,8 @@ export const DICT: Record<string, Entry> = {
   "cs.fit.contain": { en: "Fit", th: "พอดีภาพ" },
   "cs.fit.auto": { en: "Original", th: "ขนาดเดิม" },
   "cs.theme": { en: "Theme", th: "ธีม" },
+  "cs.device.tablet": { en: "Editing the tablet look — applies from 1023px down. Only what you set here changes; the phone follows it unless set separately.", th: "กำลังแก้ตอนแสดงบนแท็บเล็ต ใช้ที่ความกว้าง 1023px ลงมา เปลี่ยนเฉพาะค่าที่ตั้งตรงนี้ และมือถือจะรับค่าไปด้วยเว้นแต่ตั้งแยก" },
+  "cs.device.mobile": { en: "Editing the phone look — applies from 639px down. Only what you set here changes.", th: "กำลังแก้ตอนแสดงบนมือถือ ใช้ที่ความกว้าง 639px ลงมา เปลี่ยนเฉพาะค่าที่ตั้งตรงนี้" },
   "cs.states": { en: "Look to edit", th: "สถานะที่จะแก้" },
   "cs.state.normal": { en: "Normal", th: "ปกติ" },
   "cs.state.hover": { en: "Hover", th: "ชี้เมาส์" },
