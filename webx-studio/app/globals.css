@@ -1461,3 +1461,4 @@ input.cs-num:hover,.cs-side input:hover{border-color:var(--mut)}
 input.cs-num:focus,.cs-side input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .cs-dimunit{flex:0 0 auto;width:72px}
 .cs-sub{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line2)}.cs-sub>b{display:block;margin-bottom:6px;font-size:11.5px;color:var(--ink2)}
+.cs-sub0>b{display:block;margin-bottom:6px;font-size:11.5px;color:var(--ink2)}

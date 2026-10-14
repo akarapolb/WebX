@@ -39,6 +39,8 @@ export type StateStyle = {
   borderColor?: string;
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
   opacity?: number;
+  /** Transform for this state (a hover lift or zoom); a part left out keeps the main style's. */
+  scale?: number; rotate?: number; moveX?: number; moveY?: number;
 };
 /** The widths a style can be overridden at; each also applies to every narrower width. */
 export const DEVICES = ["tablet", "mobile"] as const;
@@ -128,6 +130,15 @@ export type Style = {
   shadowInset?: boolean;
   /** Opacity, percent (0 = invisible). */
   opacity?: number;
+  /** Scale, percent (25–300); rotation, degrees (-360–360); move, px (-400–400). Composed as move, rotate, scale. */
+  scale?: number; rotate?: number; moveX?: number; moveY?: number;
+  /** How long a hover/focus/pressed change fades, ms (0–2000, default 180), and its easing. */
+  transitionMs?: number;
+  easing?: "ease" | "linear" | "ease-in" | "ease-out" | "ease-in-out";
+  /** Entrance animation: plays as the component scrolls into view (where the browser supports it) or when the page loads. */
+  animation?: "fade" | "slide-up" | "slide-down" | "slide-left" | "slide-right" | "zoom";
+  /** Entrance length, ms (100–3000, default 600), and delay before it starts (0–3000). */
+  animMs?: number; animDelayMs?: number;
   /** While the pointer is over the component (mouse and trackpad only). */
   hover?: StateStyle;
   /** While the component, or something inside it, has keyboard focus. */
@@ -151,6 +162,7 @@ export const STYLE_KEYS = [
   "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
   "display", "flexDirection", "justifyContent", "alignItems", "flexWrap", "gap", "gridColumns", "position", "zIndex", "overflow",
   "borderWidth", "borderStyle", "borderColor", "shadow", "shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor", "shadowInset", "opacity",
+  "scale", "rotate", "moveX", "moveY", "transitionMs", "easing", "animation", "animMs", "animDelayMs",
   "hover", "focus", "active", "tablet", "mobile",
 ] as const;
 
@@ -305,6 +317,31 @@ function backgroundLayers(s: Style): string | undefined {
   return [ov ? `linear-gradient(${ov},${ov})` : undefined, grad, img].filter(Boolean).join(",");
 }
 
+const TRANSFORM_KEYS = ["scale", "rotate", "moveX", "moveY"] as const;
+const touchesTransform = (s: { scale?: unknown; rotate?: unknown; moveX?: unknown; moveY?: unknown }): boolean =>
+  TRANSFORM_KEYS.some((k) => clampSet((s as any)[k], -1e9, 1e9) !== undefined);
+/** `transform` for the parts that are set, composed move → rotate → scale; undefined when none is. */
+function transformCss(s: { scale?: unknown; rotate?: unknown; moveX?: unknown; moveY?: unknown }): string | undefined {
+  const mx = clampSet(s.moveX, -400, 400), my = clampSet(s.moveY, -400, 400);
+  const rot = clampSet(s.rotate, -360, 360), sc = clampSet(s.scale, 25, 300);
+  const parts: string[] = [];
+  if (mx !== undefined || my !== undefined) parts.push(`translate(${mx ?? 0}px,${my ?? 0}px)`);
+  if (rot !== undefined) parts.push(`rotate(${rot}deg)`);
+  if (sc !== undefined) parts.push(`scale(${sc / 100})`);
+  return parts.length ? parts.join(" ") : undefined;
+}
+const EASINGS = ["ease", "linear", "ease-in", "ease-out", "ease-in-out"] as const;
+// Entrance animations. Only the starting look is written: the end is whatever the
+// component already looks like, so an entrance never overwrites its own transform.
+const ANIMATIONS = {
+  fade: "opacity:0",
+  "slide-up": "opacity:0;transform:translateY(24px)",
+  "slide-down": "opacity:0;transform:translateY(-24px)",
+  "slide-left": "opacity:0;transform:translateX(24px)",
+  "slide-right": "opacity:0;transform:translateX(-24px)",
+  zoom: "opacity:0;transform:scale(.92)",
+} as const;
+type AnimationName = keyof typeof ANIMATIONS;
 const SHADOW_KEYS = ["shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor"] as const;
 // Only a part that is actually valid counts: a typo in a number must not conjure up a default shadow.
 const touchesShadow = (s: Style): boolean =>
@@ -464,6 +501,11 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   const op = clampSet(s.opacity, 0, 100);
   if (op !== undefined) d.push(`opacity:${op / 100}!important`);
 
+  // Moves, rotation and scale compose with the individual `translate` property a
+  // moved component already uses, so the two never fight.
+  const tf = !partial || touchesTransform(s) ? transformCss(eff) : undefined;
+  if (tf) d.push(`transform:${tf}!important`);
+
   return d.join(";");
 }
 
@@ -489,6 +531,14 @@ function stateDecls(s: StateStyle | null | undefined, base?: Style | null): stri
   if (sh) d.push(`box-shadow:${SHADOWS[sh]}!important`);
   const op = clampSet(s.opacity, 0, 100);
   if (op !== undefined) d.push(`opacity:${op / 100}!important`);
+  // A state's transform is the main style's with this state's parts laid over it.
+  if (touchesTransform(s)) {
+    const tf = transformCss({
+      scale: isSetValue(s.scale) ? s.scale : base?.scale, rotate: isSetValue(s.rotate) ? s.rotate : base?.rotate,
+      moveX: isSetValue(s.moveX) ? s.moveX : base?.moveX, moveY: isSetValue(s.moveY) ? s.moveY : base?.moveY,
+    });
+    if (tf) d.push(`transform:${tf}!important`);
+  }
   return d.join(";");
 }
 
@@ -536,12 +586,31 @@ const STATE_PSEUDO: Record<StateName, string[]> = {
   focus: [":focus-visible", ":focus-within"],
   active: [":active"],
 };
-const TRANSITION_PROPS = "color .18s ease,background-color .18s ease,border-color .18s ease,box-shadow .18s ease,opacity .18s ease";
+const TRANSITION_PROPS = ["color", "background-color", "border-color", "box-shadow", "opacity", "transform"];
+const transitionFor = (st: Style): string => {
+  const ms = clampSet(st.transitionMs, 0, 2000) ?? 180;
+  const ez = oneOf(st.easing, EASINGS) ?? "ease";
+  return TRANSITION_PROPS.map((p) => `${p} ${ms}ms ${ez}`).join(",");
+};
+/** The entrance animation for `sel`, and the name to define keyframes for. */
+function entrance(sel: string, st: Style): { css: string; name: AnimationName } | undefined {
+  const name = typeof st.animation === "string" && Object.prototype.hasOwnProperty.call(ANIMATIONS, st.animation) ? (st.animation as AnimationName) : undefined;
+  if (!name) return undefined;
+  const ms = clampSet(st.animMs, 100, 3000) ?? 600;
+  const delay = clampSet(st.animDelayMs, 0, 3000) ?? 0;
+  // Where the browser can tie it to scrolling, it plays as the component enters the
+  // view; elsewhere it plays once the page loads. Never for visitors who asked for less motion.
+  const css = `@media (prefers-reduced-motion:no-preference){${sel}{animation:wx-in-${name} ${ms}ms ease-out ${delay}ms both}` +
+    `@supports (animation-timeline:view()){${sel}{animation:wx-in-${name} auto linear both;animation-timeline:view();animation-range:entry 0% entry 60%}}}`;
+  return { css, name };
+}
 
 /** Every rule one component's style produces, for the selector `sel`. */
-function styleCss(sel: string, st: Style | null | undefined): string {
+function styleCss(sel: string, st: Style | null | undefined, usedAnimations?: Set<AnimationName>): string {
   if (!st || typeof st !== "object") return "";
   let css = "";
+  const enter = entrance(sel, st);
+  if (enter) { css += enter.css; usedAnimations?.add(enter.name); }
   const decls = styleDecls(st);
   if (decls) css += `${sel}{${decls}}`;
   css += colourReach(sel, st.color, st.iconColor);
@@ -580,9 +649,10 @@ function styleCss(sel: string, st: Style | null | undefined): string {
   }
   // Fade between states — but not for anyone who asked their system to cut motion.
   if (stated) {
-    let t = `${sel}{transition:${TRANSITION_PROPS}}`;
+    const trans = transitionFor(st);
+    let t = `${sel}{transition:${trans}}`;
     // Text inside the component is its own element, so it needs its own transition.
-    if (statedColour) t += `${sel} ${INNER_TEXT},${sel} svg,${sel} svg *{transition:color .18s ease}`;
+    if (statedColour) t += `${sel} ${INNER_TEXT},${sel} svg,${sel} svg *{transition:${trans.split(",")[0]}}`;
     css += `@media (prefers-reduced-motion:no-preference){${t}}`;
   }
   return css;
@@ -607,6 +677,8 @@ export function stylesCss(b: any, scope: number): string {
   // name, and where two rules tie on specificity the later one wins — so the
   // inner component's own colour beats the outer one's.
   const keys = Object.keys(all).filter(isComponentKey).sort((a, b) => a.length - b.length || a.localeCompare(b));
-  for (const k of keys) css += styleCss(`[data-vb-s="${scope}"][data-vb-c="${k}"]`, all[k]);
+  const used = new Set<AnimationName>();
+  for (const k of keys) css += styleCss(`[data-vb-s="${scope}"][data-vb-c="${k}"]`, all[k], used);
+  for (const name of used) css += `@keyframes wx-in-${name}{from{${ANIMATIONS[name]}}}`;
   return css;
 }

@@ -15,6 +15,8 @@ export type BgPosition = "left top" | "center top" | "right top" | "left center"
 
 /** What a component looks like while hovered, focused or pressed — colour, shadow and opacity only. */
 export type StateStyle = {
+  /** Transform for this state (a hover lift or zoom); a part left out keeps the main style's. */
+  scale?: number; rotate?: number; moveX?: number; moveY?: number;
   color?: string;
   iconColor?: string;
   bg?: string;
@@ -93,6 +95,14 @@ export type ComponentStyle = {
   shadowInset?: boolean;
   /** Percent. */
   opacity?: number;
+  /** Scale, percent; rotation, degrees; move, px. */
+  scale?: number; rotate?: number; moveX?: number; moveY?: number;
+  /** How long a hover/focus/pressed change fades, ms, and its easing. */
+  transitionMs?: number;
+  easing?: "ease" | "linear" | "ease-in" | "ease-out" | "ease-in-out";
+  /** Entrance animation, its length and delay (ms). */
+  animation?: "fade" | "slide-up" | "slide-down" | "slide-left" | "slide-right" | "zoom";
+  animMs?: number; animDelayMs?: number;
   hover?: StateStyle;
   focus?: StateStyle;
   active?: StateStyle;
@@ -115,6 +125,12 @@ export const STYLE_LIMITS = {
   padding: { min: 0, max: 400 },
   borderWidth: { min: 0, max: 20 },
   opacity: { min: 0, max: 100 },
+  scale: { min: 25, max: 300 },
+  rotate: { min: -360, max: 360 },
+  move: { min: -400, max: 400 },
+  transitionMs: { min: 0, max: 2000 },
+  animMs: { min: 100, max: 3000 },
+  animDelayMs: { min: 0, max: 3000 },
   shadowOffset: { min: -100, max: 100 },
   shadowBlur: { min: 0, max: 200 },
   shadowSpread: { min: -100, max: 100 },
@@ -160,6 +176,8 @@ export const JUSTIFY = ["start", "center", "end", "between", "around", "evenly"]
 export const ALIGN_ITEMS = ["start", "center", "end", "stretch", "baseline"] as const;
 export const OVERFLOWS = ["visible", "hidden", "auto"] as const;
 export const LAYOUT_LIMITS = { gridColumns: { min: 1, max: 12 }, zIndex: { min: -10, max: 100 } } as const;
+export const EASINGS = ["ease", "linear", "ease-in", "ease-out", "ease-in-out"] as const;
+export const ANIMATIONS = ["fade", "slide-up", "slide-down", "slide-left", "slide-right", "zoom"] as const;
 export const FONT_FAMILIES = ["heading", "body", "mono"] as const;
 export const TEXT_TRANSFORMS = ["none", "uppercase", "lowercase", "capitalize"] as const;
 export const GRAD_TYPES = ["linear", "radial"] as const;

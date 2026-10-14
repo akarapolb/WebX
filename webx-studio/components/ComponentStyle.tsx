@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
-  ALIGN_ITEMS, BG_FITS, BG_POSITIONS, DIM_LIMITS, SHADOW_FIELDS, DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, LAYOUT_LIMITS, OVERFLOWS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
+  ALIGN_ITEMS, ANIMATIONS, EASINGS, BG_FITS, BG_POSITIONS, DIM_LIMITS, SHADOW_FIELDS, DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, LAYOUT_LIMITS, OVERFLOWS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
@@ -254,6 +254,14 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
           {color(mode + ".gradFrom", t("cs.gradfrom"))}
           {color(mode + ".gradTo", t("cs.gradto"))}
           {color(mode + ".borderColor", t("cs.bordercolor"))}
+          <NumRow label={t("cs.scale")} value={get(mode + ".scale")} inherited={s.scale} min={STYLE_LIMITS.scale.min} max={STYLE_LIMITS.scale.max} unit="%"
+            onChange={(v) => set((mode + ".scale") as StyleKey, v)} />
+          <NumRow label={t("cs.rotate")} value={get(mode + ".rotate")} inherited={s.rotate} min={STYLE_LIMITS.rotate.min} max={STYLE_LIMITS.rotate.max} unit="°"
+            onChange={(v) => set((mode + ".rotate") as StyleKey, v)} />
+          <NumRow label={t("cs.movex")} value={get(mode + ".moveX")} inherited={s.moveX} min={STYLE_LIMITS.move.min} max={STYLE_LIMITS.move.max} unit="px"
+            onChange={(v) => set((mode + ".moveX") as StyleKey, v)} />
+          <NumRow label={t("cs.movey")} value={get(mode + ".moveY")} inherited={s.moveY} min={STYLE_LIMITS.move.min} max={STYLE_LIMITS.move.max} unit="px"
+            onChange={(v) => set((mode + ".moveY") as StyleKey, v)} />
           <div className="cs-row">
             <label>{t("cs.shadow")}</label>
             <select className="cs-sel" value={get(mode + ".shadow") ?? ""} onChange={(e) => set((mode + ".shadow") as StyleKey, e.target.value || undefined)}>
@@ -339,6 +347,49 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
           <DimRow key={f.key} label={t("cs.dim." + f.key)} value={(s as any)[f.key]} keyword={"keyword" in f ? f.keyword : undefined}
             inherited={inh(f.key)} onChange={(v) => set(f.key, v)} t={t} />
         ))}
+      </Section>
+
+      <Section title={t("cs.sec.motion")} defaultOpen={["scale", "rotate", "moveX", "moveY", "transitionMs", "easing", "animation"].some((k) => (s as any)[k] !== undefined)}>
+        <div className="cs-sub0">
+          <b>{t("cs.motion.transform")}</b>
+          <NumRow label={t("cs.scale")} value={s.scale} inherited={inh("scale")} min={STYLE_LIMITS.scale.min} max={STYLE_LIMITS.scale.max} unit="%" onChange={(v) => set("scale", v)} />
+          <NumRow label={t("cs.rotate")} value={s.rotate} inherited={inh("rotate")} min={STYLE_LIMITS.rotate.min} max={STYLE_LIMITS.rotate.max} unit="°" onChange={(v) => set("rotate", v)} />
+          <NumRow label={t("cs.movex")} value={s.moveX} inherited={inh("moveX")} min={STYLE_LIMITS.move.min} max={STYLE_LIMITS.move.max} unit="px" onChange={(v) => set("moveX", v)} />
+          <NumRow label={t("cs.movey")} value={s.moveY} inherited={inh("moveY")} min={STYLE_LIMITS.move.min} max={STYLE_LIMITS.move.max} unit="px" onChange={(v) => set("moveY", v)} />
+        </div>
+        {!onDevice && (
+          <>
+            <div className="cs-sub">
+              <b>{t("cs.motion.transition")}</b>
+              <p className="cs-hint">{t("cs.motion.transitionhint")}</p>
+              <NumRow label={t("cs.duration")} value={s.transitionMs} min={STYLE_LIMITS.transitionMs.min} max={STYLE_LIMITS.transitionMs.max} step={50} unit="ms" inherited={180} onChange={(v) => set("transitionMs", v)} />
+              <div className="cs-row">
+                <label>{t("cs.easing")}</label>
+                <select className="cs-sel" value={s.easing ?? ""} onChange={(e) => set("easing", e.target.value || undefined)}>
+                  <option value="">{t("cs.ez.ease")}</option>
+                  {EASINGS.filter((z) => z !== "ease").map((z) => <option key={z} value={z}>{t("cs.ez." + z)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="cs-sub">
+              <b>{t("cs.motion.entrance")}</b>
+              <div className="cs-row">
+                <label>{t("cs.animation")}</label>
+                <select className="cs-sel" value={s.animation ?? ""} onChange={(e) => set("animation", e.target.value || undefined)}>
+                  <option value="">—</option>
+                  {ANIMATIONS.map((a) => <option key={a} value={a}>{t("cs.an." + a)}</option>)}
+                </select>
+              </div>
+              {s.animation && (
+                <>
+                  <NumRow label={t("cs.duration")} value={s.animMs} min={STYLE_LIMITS.animMs.min} max={STYLE_LIMITS.animMs.max} step={100} unit="ms" inherited={600} onChange={(v) => set("animMs", v)} />
+                  <NumRow label={t("cs.delay")} value={s.animDelayMs} min={STYLE_LIMITS.animDelayMs.min} max={STYLE_LIMITS.animDelayMs.max} step={100} unit="ms" inherited={0} onChange={(v) => set("animDelayMs", v)} />
+                  <p className="cs-hint">{t("cs.motion.entrancehint")}</p>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </Section>
 
       <Section title={t("cs.sec.layout")} defaultOpen={["display", "flexDirection", "justifyContent", "alignItems", "flexWrap", "gap", "gridColumns", "position", "zIndex", "overflow"].some((k) => (s as any)[k] !== undefined)}>

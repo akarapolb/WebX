@@ -130,3 +130,19 @@ describe("custom shadow in the style model", () => {
     assert.deepEqual(pageColors([{ styles: { a: { shadowColor: "#11223344", mobile: { shadowColor: "#556677" } } } }]), ["#11223344", "#556677"]);
   });
 });
+
+describe("motion in the style model", () => {
+  test("ranges and choices match what the site accepts", async () => {
+    const { STYLE_LIMITS, EASINGS, ANIMATIONS } = await import("../lib/componentStyle");
+    assert.deepEqual([STYLE_LIMITS.scale.min, STYLE_LIMITS.scale.max, STYLE_LIMITS.rotate.min, STYLE_LIMITS.rotate.max, STYLE_LIMITS.move.min, STYLE_LIMITS.move.max], [25, 300, -360, 360, -400, 400]);
+    assert.deepEqual([STYLE_LIMITS.transitionMs.max, STYLE_LIMITS.animMs.min, STYLE_LIMITS.animMs.max, STYLE_LIMITS.animDelayMs.max], [2000, 100, 3000, 3000]);
+    assert.deepEqual([...EASINGS], ["ease", "linear", "ease-in", "ease-out", "ease-in-out"]);
+    assert.deepEqual([...ANIMATIONS], ["fade", "slide-up", "slide-down", "slide-left", "slide-right", "zoom"]);
+  });
+
+  test("a zero rotation, or a transform inside a state, is a real value", () => {
+    assert.equal(isBlankStyle({ rotate: 0 }), false);
+    assert.equal(isBlankStyle({ hover: { scale: 105 } }), false);
+    assert.equal(isBlankStyle({ animation: "fade" }), false);
+  });
+});
