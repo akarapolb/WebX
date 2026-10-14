@@ -21,6 +21,7 @@ import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { pickLandingPage } from "@/lib/homePage";
 import { wpPageSlug } from "@/lib/pageSlug";
 import { useThemeTokens } from "@/lib/useThemeTokens";
+import { useStylePresets } from "@/lib/useStylePresets";
 import { coalesce } from "@/lib/undoCoalesce";
 import ComponentStyle from "./ComponentStyle";
 import { pageColors } from "@/lib/color";
@@ -840,6 +841,7 @@ export default function VisualBuilder() {
   // Theme colours a colour field can point at (see lib/themeTokens.ts); empty for a
   // workspace whose public template has no theme.
   const themeTokenList = useThemeTokens(tenantKey);
+  const presetApi = useStylePresets(tenantKey);
   // Everything the style panel needs for one component. On desktop it edits the
   // style itself (which applies at every width); on tablet or phone it edits that
   // device's overrides, which only change what they set — see styles.ts.
@@ -851,6 +853,9 @@ export default function VisualBuilder() {
       style: device === "desktop" ? b.styles?.[key] : b.styles?.[key]?.[device],
       set: (k: string, v: any) => updateBlockField(i, [...at, ...String(k).split(".")], v === "" ? undefined : v),
       reset: () => updateBlockField(i, at, undefined),
+      // Paste and presets replace the component's whole style, so they only exist on the main (desktop) look.
+      replaceAll: device === "desktop" ? (st: any) => updateBlockField(i, ["styles", key], st) : undefined,
+      presets: presetApi,
       upload: (f: File) => uploadFieldImage(i, [...at, "bgImage"], f),
       swatches: pageSwatches, tokens: themeTokenList, t,
     };

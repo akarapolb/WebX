@@ -7,6 +7,8 @@ import {
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
+import { PRESET_MAX, PRESET_NAME_MAX, cleanStyle, presetStyle } from "@/lib/stylePresets";
+import type { PresetApi } from "@/lib/useStylePresets";
 
 // The style panel for one selected component inside a block — the colour /
 // spacing / background / border / effects half of the Figma-style editing that
@@ -19,6 +21,9 @@ import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
 // nothing rather than a default that would fight the template's own CSS.
 
 /** A property, or one inside an interaction state written as "hover.bg". */
+// Copy / paste between components lives for as long as the page does.
+let styleClipboard: Style | null = null;
+
 export type StyleKey = keyof Style | `${StateName}.${keyof StateStyle}`;
 
 type Props = {
@@ -39,6 +44,10 @@ type Props = {
    * path (and a Strapi page would store a media relation, not a string).
    */
   upload: (f: File) => Promise<void>;
+  /** Replaces the component's whole style (used by paste and by applying a preset). */
+  replaceAll?: (style: Style | undefined) => void;
+  /** The workspace's saved presets. */
+  presets?: PresetApi;
   swatches: string[];
   /** Theme colours a colour can point at instead of a hex. Empty for a workspace without a theme. */
   tokens?: ThemeToken[];
@@ -190,7 +199,9 @@ function gradPreview(s: Style, tokens: ThemeToken[]): string {
   return s.gradType === "radial" ? `radial-gradient(circle at center, ${a}, ${b})` : `linear-gradient(${s.gradAngle ?? GRAD_ANGLE.default}deg, ${a}, ${b})`;
 }
 
-export default function ComponentStyle({ style, device = "desktop", full, set: setRaw, reset, upload, swatches, tokens = [], t }: Props) {
+export default function ComponentStyle({ style, device = "desktop", full, set: setRaw, reset, upload, replaceAll, presets, swatches, tokens = [], t }: Props) {
+  const [presetName, setPresetName] = useState("");
+  const [, bumpClip] = useState(0);
   // Light or dark: dark mode has its own overrides (style.dark), only edited on the main (desktop) look.
   const [scheme, setScheme] = useState<"light" | "dark">("light");
   const darkMode = scheme === "dark" && device === "desktop";
@@ -236,7 +247,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
 
   return (
     <div className="cs">
-      <div className="cs-head">
+      <div className="cs-head" data-has-presets={presets ? "1" : undefined}>
         <b>{t("cs.title")}</b>
         {touched && <button type="button" className="cs-reset" onClick={darkMode ? () => setRaw("dark" as StyleKey, undefined) : reset}>{darkMode ? t("cs.dark.reset") : t("cs.reset")}</button>}
       </div>
@@ -299,6 +310,42 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         </div>
       ) : (
       <>
+      {!override && replaceAll && (
+        <Section title={t("cs.sec.presets")}>
+          <div className="cs-presetbtns">
+            <button type="button" disabled={!cleanStyle(style)} onClick={() => { styleClipboard = cleanStyle(style); bumpClip((n) => n + 1); }}>{t("cs.copy")}</button>
+            <button type="button" disabled={!styleClipboard} title={styleClipboard ? "" : t("cs.paste.empty")}
+              onClick={() => styleClipboard && replaceAll(JSON.parse(JSON.stringify(styleClipboard)))}>{t("cs.paste")}</button>
+          </div>
+          {presets && (
+            <>
+              <div className="cs-presetsave">
+                <input type="text" className="cs-name" value={presetName} maxLength={PRESET_NAME_MAX} placeholder={t("cs.preset.name")} aria-label={t("cs.preset.name")}
+                  onChange={(e) => setPresetName(e.target.value)} />
+                <button type="button" disabled={!presetName.trim() || !cleanStyle(style) || presets.busy || presets.presets.length >= PRESET_MAX}
+                  onClick={async () => { if (await presets.add(presetName, style)) setPresetName(""); }}>{t("cs.preset.save")}</button>
+              </div>
+              {presets.presets.length >= PRESET_MAX && <p className="cs-hint">{t("cs.preset.full", { n: PRESET_MAX })}</p>}
+              {presets.error && <p className="cs-hint cs-bad">{t("cs.preset.error")}</p>}
+              {presets.presets.length === 0 ? (
+                <p className="cs-hint">{t("cs.preset.none")}</p>
+              ) : (
+                <ul className="cs-presets">
+                  {presets.presets.map((p) => (
+                    <li key={p.id}>
+                      <span title={p.name}>{p.name}</span>
+                      <button type="button" onClick={() => replaceAll(presetStyle(p))}>{t("cs.preset.apply")}</button>
+                      <button type="button" className="rm" aria-label={t("cs.preset.delete") + " " + p.name} title={t("cs.preset.delete")} disabled={presets.busy} onClick={() => presets.remove(p.id)}><Icon name="trash" /></button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="cs-hint">{t("cs.preset.hint")}</p>
+            </>
+          )}
+        </Section>
+      )}
+
       <Section title={t("cs.sec.colour")} defaultOpen>
         {color("color", t("cs.color"))}
         {color("iconColor", t("cs.iconcolor"))}
