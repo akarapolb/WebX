@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
-  BG_FITS, BG_POSITIONS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
+  BG_FITS, BG_POSITIONS, GRAD_ANGLE, GRAD_TYPES, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
@@ -151,6 +151,13 @@ function Section({ title, defaultOpen = false, children }: { title: string; defa
   );
 }
 
+/** The gradient as the panel's own preview strip; theme tokens are looked up, a missing end is transparent. */
+function gradPreview(s: Style, tokens: ThemeToken[]): string {
+  const css = (v?: string) => (v ? tokenInfo(tokens, v)?.value || (v.startsWith("@") ? "transparent" : v) : "transparent");
+  const a = css(s.gradFrom), b = css(s.gradTo);
+  return s.gradType === "radial" ? `radial-gradient(circle at center, ${a}, ${b})` : `linear-gradient(${s.gradAngle ?? GRAD_ANGLE.default}deg, ${a}, ${b})`;
+}
+
 export default function ComponentStyle({ style, device = "desktop", full, set, reset, upload, swatches, tokens = [], t }: Props) {
   const s = style || {};
   const onDevice = device !== "desktop";
@@ -212,6 +219,8 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
           {color(mode + ".color", t("cs.color"))}
           {color(mode + ".iconColor", t("cs.iconcolor"))}
           {color(mode + ".bg", t("cs.bg"))}
+          {color(mode + ".gradFrom", t("cs.gradfrom"))}
+          {color(mode + ".gradTo", t("cs.gradto"))}
           {color(mode + ".borderColor", t("cs.bordercolor"))}
           <div className="cs-row">
             <label>{t("cs.shadow")}</label>
@@ -314,6 +323,35 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
             onChange={(e) => { const v = Number(e.target.value); set("opacity", v >= 100 ? undefined : v); }} />
           <span className="cs-unit cs-pct">{s.opacity ?? 100}%</span>
         </div>
+      </Section>
+
+      <Section title={t("cs.sec.gradient")} defaultOpen={!!(s.gradFrom || s.gradTo)}>
+        {onDevice && <p className="cs-hint">{t("cs.gradient.devicehint")}</p>}
+        <div className="cs-row">
+          <label>{t("cs.gradtype")}</label>
+          <div className="cs-seg">
+            {GRAD_TYPES.map((g) => (
+              <button type="button" key={g} className={(s.gradType ?? "linear") === g ? "on" : ""} onClick={() => set("gradType", g === "linear" ? undefined : g)}>{t("cs.gt." + g)}</button>
+            ))}
+          </div>
+        </div>
+        {color("gradFrom", t("cs.gradfrom"))}
+        {color("gradTo", t("cs.gradto"))}
+        {(s.gradType ?? "linear") === "linear" && (
+          <div className="cs-row">
+            <label>{t("cs.gradangle")}</label>
+            <input type="range" className="cs-range" min={GRAD_ANGLE.min} max={GRAD_ANGLE.max} step={GRAD_ANGLE.step}
+              value={s.gradAngle ?? inh("gradAngle") ?? GRAD_ANGLE.default} aria-label={t("cs.gradangle")}
+              onChange={(e) => { const v = Number(e.target.value); set("gradAngle", v === GRAD_ANGLE.default && !onDevice ? undefined : v); }} />
+            <span className="cs-unit cs-pct">{s.gradAngle ?? inh("gradAngle") ?? GRAD_ANGLE.default}°</span>
+          </div>
+        )}
+        {(s.gradFrom || s.gradTo) && (
+          <div className="cs-grad-preview" style={{ background: gradPreview(s, tokens) }} aria-hidden />
+        )}
+        {(s.gradFrom || s.gradTo || s.gradAngle !== undefined || s.gradType) && (
+          <button type="button" className="cs-reset" onClick={() => { set("gradFrom", undefined); set("gradTo", undefined); set("gradAngle", undefined); set("gradType", undefined); }}>{t("cs.gradclear")}</button>
+        )}
       </Section>
 
       <Section title={t("cs.sec.bgimage")} defaultOpen={!!s.bgImage || (onDevice && !!(full as any)?.bgImage)}>

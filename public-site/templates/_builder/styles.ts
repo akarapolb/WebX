@@ -33,6 +33,9 @@ export type StateStyle = {
   color?: string;
   iconColor?: string;
   bg?: string;
+  /** Gradient colours for this state; the type and angle come from the main style. */
+  gradFrom?: string;
+  gradTo?: string;
   borderColor?: string;
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
   opacity?: number;
@@ -65,6 +68,12 @@ export type Style = {
   bgAttachment?: "scroll" | "fixed";
   /** A colour laid over the background image (usually translucent) so text on it stays readable. */
   bgOverlay?: string;
+  /** Gradient background: its two colours (hex or theme token). With only one, the other end is transparent. */
+  gradFrom?: string;
+  gradTo?: string;
+  /** Direction of a linear gradient, degrees (0 = upwards, 90 = to the right, 180 = downwards). Default 180. */
+  gradAngle?: number;
+  gradType?: "linear" | "radial";
   /** Font size, px. */
   fontSize?: number;
   /** Font weight, 100–900. */
@@ -103,6 +112,7 @@ export type DeviceStyle = Omit<Style, "hover" | "focus" | "active" | "tablet" | 
 /** The style keys this module knows how to render, for the editor's own use. */
 export const STYLE_KEYS = [
   "color", "iconColor", "bg", "bgImage", "bgFit", "bgRepeat", "bgPosition", "bgAttachment", "bgOverlay",
+  "gradFrom", "gradTo", "gradAngle", "gradType",
   "fontSize", "fontWeight", "align", "radius", "padding", "unit",
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
   "borderWidth", "borderStyle", "borderColor", "shadow", "opacity",
@@ -183,6 +193,46 @@ const clampSet = (v: unknown, lo: number, hi: number): number | undefined =>
   typeof v === "number" || (typeof v === "string" && v.trim() !== "") ? clamp(v, lo, hi) : undefined;
 const ALIGNS = ["left", "center", "right"] as const;
 
+const GRAD_TYPES = ["linear", "radial"] as const;
+
+/** A two-colour gradient, or undefined when neither colour is set. A missing end is transparent, which makes a fade. */
+function gradientCss(s: { gradFrom?: unknown; gradTo?: unknown; gradAngle?: unknown; gradType?: unknown }): string | undefined {
+  const from = colorCss(s.gradFrom), to = colorCss(s.gradTo);
+  if (!from && !to) return undefined;
+  const a = from ?? "transparent", b = to ?? "transparent";
+  if (oneOf(s.gradType, GRAD_TYPES) === "radial") return `radial-gradient(circle at center,${a},${b})`;
+  return `linear-gradient(${clampSet(s.gradAngle, 0, 360) ?? 180}deg,${a},${b})`;
+}
+
+/**
+ * The stacked background layers, top to bottom: the colour overlay, the gradient,
+ * the image. A translucent gradient therefore tints a photo, and the overlay
+ * still sits above both so text stays readable. Undefined when there is neither
+ * an image nor a gradient (an overlay alone has nothing to cover).
+ */
+function backgroundLayers(s: Style): string | undefined {
+  const grad = gradientCss(s);
+  // Quoted so a URL containing a comma or a keyword can't be read as extra
+  // background layers; the denylist above already guarantees no quote of its
+  // own can appear inside.
+  const img = isSafeImageUrl(s.bgImage) ? `url("${s.bgImage}")` : undefined;
+  if (!grad && !img) return undefined;
+  const ov = colorCss(s.bgOverlay);
+  // An overlay is a one-colour gradient. The single size/position/repeat values
+  // emitted with the image repeat across every layer, so they need no pairing.
+  return [ov ? `linear-gradient(${ov},${ov})` : undefined, grad, img].filter(Boolean).join(",");
+}
+
+const LAYER_KEYS = ["bgImage", "bgOverlay", "gradFrom", "gradTo", "gradAngle", "gradType"] as const;
+const isSetValue = (v: unknown) => v !== undefined && v !== null && v !== "";
+const touchesLayers = (s: Style): boolean => LAYER_KEYS.some((k) => isSetValue((s as any)[k]));
+/** `base` with whichever background-layer fields `over` sets laid on top. */
+function withLayers(base: Style, over: Style): Style {
+  const out: any = { ...base };
+  for (const k of LAYER_KEYS) if (isSetValue((over as any)[k])) out[k] = (over as any)[k];
+  return out;
+}
+
 /**
  * The CSS declarations one component's style produces ("" when none survive).
  *
@@ -191,7 +241,7 @@ const ALIGNS = ["left", "center", "right"] as const;
  * image or border the base style already made), where the base style only emits
  * those alongside the image or width they belong to.
  */
-export function styleDecls(s: Style | null | undefined, partial = false): string {
+export function styleDecls(s: Style | null | undefined, partial = false, layerSource?: Style): string {
   if (!s || typeof s !== "object" || Array.isArray(s)) return "";
   const d: string[] = [];
 
@@ -199,16 +249,12 @@ export function styleDecls(s: Style | null | undefined, partial = false): string
   if (col) d.push(`color:${col}!important`);
   const bgc = colorCss(s.bg);
   if (bgc) d.push(`background-color:${bgc}!important`);
+  // A device override rebuilds the layers only when it changes one of them, from
+  // what it inherits (`layerSource`) plus its own change — not from itself alone,
+  // which would drop the base image just to turn a gradient round.
+  const layers = !partial || touchesLayers(s) ? backgroundLayers(layerSource ?? s) : undefined;
+  if (layers) d.push(`background-image:${layers}!important`);
   if (isSafeImageUrl(s.bgImage)) {
-    // Quoted so a URL containing a comma or a keyword can't be read as extra
-    // background layers; the denylist above already guarantees no quote of
-    // its own can appear inside.
-    const img = `url("${s.bgImage}")`;
-    // An overlay is a one-colour gradient stacked above the image. The single
-    // size/position/repeat values below repeat across both layers, so they need
-    // no pairing.
-    const ov = colorCss(s.bgOverlay);
-    d.push(`background-image:${ov ? `linear-gradient(${ov},${ov}),${img}` : img}!important`);
     d.push(`background-size:${oneOf(s.bgFit, FITS) || "cover"}!important`);
     d.push(`background-position:${oneOf(s.bgPosition, POSITIONS) || "center"}!important`);
     d.push(`background-repeat:${oneOf(s.bgRepeat, REPEATS) || "no-repeat"}!important`);
@@ -274,13 +320,21 @@ export function styleDecls(s: Style | null | undefined, partial = false): string
 }
 
 /** Declarations for one interaction state (empty when none survive). Colours, shadow and opacity only. */
-function stateDecls(s: StateStyle | null | undefined): string {
+function stateDecls(s: StateStyle | null | undefined, base?: Style | null): string {
   if (!s || typeof s !== "object" || Array.isArray(s)) return "";
   const d: string[] = [];
   const col = colorCss(s.color);
   if (col) d.push(`color:${col}!important`);
   const bgc = colorCss(s.bg);
   if (bgc) d.push(`background-color:${bgc}!important`);
+  // A state's gradient: its own colours over the main style's type, angle, image
+  // and overlay (a missing colour falls back to the main style's). A gradient
+  // can't fade between two looks the way a plain colour does; it switches.
+  if (colorCss(s.gradFrom) || colorCss(s.gradTo)) {
+    const merged: Style = { ...(base || {}), gradFrom: colorCss(s.gradFrom) ? s.gradFrom : base?.gradFrom, gradTo: colorCss(s.gradTo) ? s.gradTo : base?.gradTo };
+    const layers = backgroundLayers(merged);
+    if (layers) d.push(`background-image:${layers}!important`);
+  }
   const bc = colorCss(s.borderColor);
   if (bc) d.push(`border-color:${bc}!important`);
   const sh = oneOf(s.shadow, Object.keys(SHADOWS) as (keyof typeof SHADOWS)[]);
@@ -346,10 +400,14 @@ function styleCss(sel: string, st: Style | null | undefined): string {
 
   // Device overrides, after the base and in width order so the narrowest wins:
   // tablet applies from 1023px down, then mobile from 639px down on top of it.
+  // The background layers cascade too: each width starts from the image and
+  // gradient the wider one ended with.
+  let layers: Style = st;
   for (const dev of DEVICES) {
     const o = (st as any)[dev];
     if (!o || typeof o !== "object" || Array.isArray(o)) continue;
-    const dd = styleDecls(o, true);
+    layers = withLayers(layers, o);
+    const dd = styleDecls(o, true, layers);
     const rules = (dd ? `${sel}{${dd}}` : "") + colourReach(sel, o.color, o.iconColor);
     if (rules) css += `@media ${DEVICE_MAX_WIDTH[dev]}{${rules}}`;
   }
@@ -359,7 +417,7 @@ function styleCss(sel: string, st: Style | null | undefined): string {
   let stated = false, statedColour = false;
   for (const name of STATES) {
     const stateStyle = (st as any)[name];
-    const sd = stateDecls(stateStyle);
+    const sd = stateDecls(stateStyle, st);
     const reach = (sx: string) => colourReach(sx, stateStyle?.color, stateStyle?.iconColor);
     if (!sd && !reach(sel)) continue;
     stated = true;

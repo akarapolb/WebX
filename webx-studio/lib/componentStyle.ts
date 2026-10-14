@@ -18,6 +18,9 @@ export type StateStyle = {
   color?: string;
   iconColor?: string;
   bg?: string;
+  /** Gradient colours for this state; the type and angle come from the main style. */
+  gradFrom?: string;
+  gradTo?: string;
   borderColor?: string;
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
   opacity?: number;
@@ -41,6 +44,12 @@ export type ComponentStyle = {
   bgAttachment?: "scroll" | "fixed";
   /** A colour over the background image so text on it stays readable. */
   bgOverlay?: string;
+  /** Gradient background colours (hex or theme token); with only one, the other end fades to transparent. */
+  gradFrom?: string;
+  gradTo?: string;
+  /** Linear direction in degrees: 0 up, 90 right, 180 down (the default). */
+  gradAngle?: number;
+  gradType?: "linear" | "radial";
   fontSize?: number;
   fontWeight?: number;
   align?: "left" | "center" | "right";
@@ -92,6 +101,8 @@ export const BG_POSITIONS: readonly BgPosition[] = [
 export const BG_REPEATS = ["no-repeat", "repeat", "repeat-x", "repeat-y"] as const;
 export const BG_FITS = ["cover", "contain", "auto"] as const;
 export const BORDER_STYLES = ["solid", "dashed", "dotted", "double"] as const;
+export const GRAD_TYPES = ["linear", "radial"] as const;
+export const GRAD_ANGLE = { min: 0, max: 360, step: 5, default: 180 } as const;
 export const SHADOWS = ["none", "sm", "md", "lg", "xl"] as const;
 
 /** The nine real CSS weights, minus the ones no UI font ships. */

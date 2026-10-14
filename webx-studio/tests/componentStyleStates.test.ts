@@ -42,3 +42,22 @@ describe("per-device overrides in the style model", () => {
     assert.deepEqual(pageColors(blocks), ["#111111", "#222222", "#33333380"]);
   });
 });
+
+describe("gradients in the style model", () => {
+  test("a gradient colour makes the style non-blank, also inside a state or a device", () => {
+    assert.equal(isBlankStyle({ gradFrom: "#111111" }), false);
+    assert.equal(isBlankStyle({ hover: { gradTo: "#111111" } }), false);
+    assert.equal(isBlankStyle({ mobile: { gradFrom: "#111111" } }), false);
+  });
+
+  test("the angle range and types match what the site accepts", async () => {
+    const { GRAD_ANGLE, GRAD_TYPES } = await import("../lib/componentStyle");
+    assert.deepEqual([GRAD_ANGLE.min, GRAD_ANGLE.max, GRAD_ANGLE.default], [0, 360, 180]);
+    assert.deepEqual([...GRAD_TYPES], ["linear", "radial"]);
+  });
+
+  test("page swatches include gradient colours, in the style, its states and its devices", () => {
+    const blocks = [{ styles: { a: { gradFrom: "#111111", gradTo: "@primary", hover: { gradFrom: "#222222" }, tablet: { gradTo: "#333333" } } } }];
+    assert.deepEqual(pageColors(blocks), ["#111111", "#333333", "#222222"]);
+  });
+});
