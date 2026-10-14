@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
-  ALIGN_ITEMS, ANIMATIONS, EASINGS, BG_FITS, BG_POSITIONS, DIM_LIMITS, SHADOW_FIELDS, DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, LAYOUT_LIMITS, OVERFLOWS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
+  ALIGN_ITEMS, ANIMATIONS, EASINGS, BG_FITS, BG_POSITIONS, DIM_LIMITS, RADIUS_TOKENS, SPACE_TOKENS, isSpaceToken, type SpaceValue, SHADOW_FIELDS, DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, LAYOUT_LIMITS, OVERFLOWS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
@@ -156,19 +156,28 @@ function DimRow({ label, value, keyword, inherited, onChange, t }: {
 }
 
 /** The four sides of padding or margin in one compact box: top, right, bottom, left. */
-function SidesRow({ label, kind, unit, values, inherited, set, t }: {
+function SidesRow({ label, kind, unit, values, inherited, set, onScale, t }: {
   label: string; kind: "padding" | "margin"; unit: SpaceUnit;
-  values: [number | undefined, number | undefined, number | undefined, number | undefined];
-  inherited?: [number | undefined, number | undefined, number | undefined, number | undefined];
-  set: (side: 0 | 1 | 2 | 3, v: number | undefined) => void; t: Props["t"];
+  values: [SpaceValue | undefined, SpaceValue | undefined, SpaceValue | undefined, SpaceValue | undefined];
+  inherited?: [SpaceValue | undefined, SpaceValue | undefined, SpaceValue | undefined, SpaceValue | undefined];
+  set: (side: 0 | 1 | 2 | 3, v: SpaceValue | undefined) => void;
+  /** Points all four sides at one step of the theme's spacing scale. */
+  onScale: (token: (typeof SPACE_TOKENS)[number]) => void; t: Props["t"];
 }) {
   const lim = SPACE_LIMITS[kind][unit];
   const names = [t("cs.top"), t("cs.right"), t("cs.bottom"), t("cs.left")];
   return (
+    <>
     <div className="cs-row cs-sides-row">
       <label>{label}</label>
       <div className="cs-sides">
-        {values.map((v, i) => (
+        {values.map((v, i) => isSpaceToken(v) ? (
+          <label key={i} className="cs-side">
+            <span>{names[i]}</span>
+            <button type="button" className="cs-tokside" title={t("cs.scale.clear")} aria-label={label + " " + names[i] + " " + t("cs.scale.step") + " " + v.slice(1) + " — " + t("cs.scale.clear")}
+              onClick={() => set(i as 0 | 1 | 2 | 3, undefined)}>{v.slice(1)} ×</button>
+          </label>
+        ) : (
           <label key={i} className="cs-side">
             <span>{names[i]}</span>
             <input type="number" min={lim.min} max={lim.max} step={lim.step} value={v ?? ""} placeholder={inherited?.[i] !== undefined ? String(inherited[i]) : "—"} aria-label={label + " " + names[i]}
@@ -180,6 +189,11 @@ function SidesRow({ label, kind, unit, values, inherited, set, t }: {
         ))}
       </div>
     </div>
+      <div className="cs-scale" role="group" aria-label={t("cs.scale.label")}>
+        <span>{t("cs.scale.label")}</span>
+        {SPACE_TOKENS.map((tk) => <button type="button" key={tk} title={t("cs.scale.all") + " " + tk.slice(1)} onClick={() => onScale(tk)}>{tk.slice(1)}</button>)}
+      </div>
+    </>
   );
 }
 
@@ -550,11 +564,11 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         <SidesRow label={t("cs.padding")} kind="padding" unit={unit} t={t}
           values={[s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft]}
           inherited={(inh("unit") ?? "px") === unit ? [inh("paddingTop"), inh("paddingRight"), inh("paddingBottom"), inh("paddingLeft")] : undefined}
-          set={(i, v) => set(padKeys[i], v)} />
+          set={(i, v) => set(padKeys[i], v)} onScale={(tk) => padKeys.forEach((k) => set(k, tk))} />
         <SidesRow label={t("cs.margin")} kind="margin" unit={unit} t={t}
           values={[s.marginTop, s.marginRight, s.marginBottom, s.marginLeft]}
           inherited={(inh("unit") ?? "px") === unit ? [inh("marginTop"), inh("marginRight"), inh("marginBottom"), inh("marginLeft")] : undefined}
-          set={(i, v) => set(marKeys[i], v)} />
+          set={(i, v) => set(marKeys[i], v)} onScale={(tk) => marKeys.forEach((k) => set(k, tk))} />
         {s.padding !== undefined && (
           <NumRow label={t("cs.padall")} value={s.padding} min={STYLE_LIMITS.padding.min} max={STYLE_LIMITS.padding.max} unit="px" onChange={(v) => set("padding", v)} />
         )}
@@ -571,7 +585,18 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
           </select>
         </div>
         {color("borderColor", t("cs.bordercolor"))}
-        <NumRow label={t("cs.radius")} value={s.radius} inherited={inh("radius")} min={STYLE_LIMITS.radius.min} max={STYLE_LIMITS.radius.max} unit="px" onChange={(v) => set("radius", v)} />
+        <div className="cs-row">
+          <label>{t("cs.radius")}</label>
+          <select className="cs-sel" value={typeof s.radius === "string" ? s.radius : s.radius === undefined ? "" : "px"}
+            onChange={(e) => { const v = e.target.value; set("radius", v === "" ? undefined : v === "px" ? 0 : v); }}>
+            <option value="">{inh("radius") !== undefined ? (typeof inh("radius") === "string" ? t("cs.rad." + inh("radius")) : inh("radius") + " px") : "—"}</option>
+            <option value="px">{t("cs.rad.px")}</option>
+            {RADIUS_TOKENS.map((r) => <option key={r} value={r}>{t("cs.rad." + r)}</option>)}
+          </select>
+        </div>
+        {typeof s.radius === "number" && (
+          <NumRow label={t("cs.rad.px")} value={s.radius} min={STYLE_LIMITS.radius.min} max={STYLE_LIMITS.radius.max} unit="px" onChange={(v) => set("radius", v)} />
+        )}
       </Section>
 
       <Section title={t("cs.sec.effects")} defaultOpen={s.shadow !== undefined || s.opacity !== undefined || SHADOW_FIELDS.some((k) => (s as any)[k] !== undefined)}>

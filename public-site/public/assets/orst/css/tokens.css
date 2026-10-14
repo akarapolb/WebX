@@ -52,6 +52,17 @@
   /* Theme font tokens for a component's "font" setting: they follow the theme's heading and body fonts. */
   --wx-font-heading: var(--orst-font-display);
   --wx-font-body: var(--orst-font-body);
+  /* Spacing and corner-radius tokens for a component's "spacing scale" and "corner" settings: they follow the
+     tenant's own scale and the theme's corner radius, so a theme change reaches components that point at them. */
+  --wx-space-1: var(--orst-space-1);
+  --wx-space-2: var(--orst-space-2);
+  --wx-space-3: var(--orst-space-3);
+  --wx-space-4: var(--orst-space-4);
+  --wx-space-5: var(--orst-space-5);
+  --wx-space-6: var(--orst-space-6);
+  --wx-radius-card: var(--orst-radius-card);
+  --wx-radius-sm: var(--orst-radius-sm);
+  --wx-radius-pill: var(--orst-radius-pill);
   --orst-ink-soft: #4d5652;
   /* TOR gap audit (accessibility/WCAG) — a real Lighthouse audit found this
      against its own real backgrounds (white, #eef4f2) at 3.26-3.63:1,

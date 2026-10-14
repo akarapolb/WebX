@@ -158,3 +158,19 @@ describe("dark-mode overrides in the style model", () => {
     assert.deepEqual(pageColors([{ styles: { a: { dark: { bg: "#111111", color: "@ink", borderColor: "#222222" } } } }]), ["#111111", "#222222"]);
   });
 });
+
+describe("spacing and corner tokens in the style model", () => {
+  test("the scale and the corner tokens match what the site accepts", async () => {
+    const { SPACE_TOKENS, RADIUS_TOKENS, isSpaceToken } = await import("../lib/componentStyle");
+    assert.deepEqual([...SPACE_TOKENS], ["@1", "@2", "@3", "@4", "@5", "@6"]);
+    assert.deepEqual([...RADIUS_TOKENS], ["@card", "@sm", "@pill"]);
+    assert.equal(isSpaceToken("@3"), true);
+    for (const bad of ["@0", "@7", 3, null, undefined, "3", "@card"]) assert.equal(isSpaceToken(bad), false, String(bad));
+  });
+
+  test("a token alone makes the style non-blank", () => {
+    assert.equal(isBlankStyle({ paddingTop: "@2" }), false);
+    assert.equal(isBlankStyle({ radius: "@pill" }), false);
+    assert.equal(isBlankStyle({ mobile: { marginLeft: "@1" } }), false);
+  });
+});

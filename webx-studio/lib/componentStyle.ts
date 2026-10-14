@@ -10,6 +10,14 @@
 //
 // Not per-device, unlike b.boxes — see that module's own note on why.
 
+/** A step of the theme's spacing scale; written instead of a number, so the unit does not apply. */
+export const SPACE_TOKENS = ["@1", "@2", "@3", "@4", "@5", "@6"] as const;
+export type SpaceToken = (typeof SPACE_TOKENS)[number];
+export type SpaceValue = number | SpaceToken;
+export const RADIUS_TOKENS = ["@card", "@sm", "@pill"] as const;
+export type RadiusToken = (typeof RADIUS_TOKENS)[number];
+export const isSpaceToken = (v: unknown): v is SpaceToken => typeof v === "string" && (SPACE_TOKENS as readonly string[]).includes(v);
+
 export type SpaceUnit = "px" | "rem" | "em" | "%";
 export type BgPosition = "left top" | "center top" | "right top" | "left center" | "center" | "right center" | "left bottom" | "center bottom" | "right bottom";
 
@@ -64,13 +72,14 @@ export type ComponentStyle = {
   textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
   textDecoration?: "none" | "underline" | "line-through";
   fontStyle?: "normal" | "italic";
-  radius?: number;
+  /** px, or a theme token: "@card" (the theme's corner), "@sm" (its small corner), "@pill" (fully round). */
+  radius?: number | RadiusToken;
   /** Inner spacing on all sides, px (the original single value; the per-side ones below override it). */
   padding?: number;
   /** Unit of the per-side spacing values only. */
   unit?: SpaceUnit;
-  paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number;
-  marginTop?: number; marginRight?: number; marginBottom?: number; marginLeft?: number;
+  paddingTop?: SpaceValue; paddingRight?: SpaceValue; paddingBottom?: SpaceValue; paddingLeft?: SpaceValue;
+  marginTop?: SpaceValue; marginRight?: SpaceValue; marginBottom?: SpaceValue; marginLeft?: SpaceValue;
   /** A number and a unit written together ("50%", "320px"); width and height also take "auto", the maximums "none". */
   width?: string; height?: string;
   minWidth?: string; minHeight?: string;

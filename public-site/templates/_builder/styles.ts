@@ -27,6 +27,9 @@
 import { isComponentKey } from "./boxes";
 import { customDecls } from "./customCss";
 
+/** A spacing value: a number, or a step of the theme's spacing scale. */
+export type SpaceValue = number | "@1" | "@2" | "@3" | "@4" | "@5" | "@6";
+
 /** What a component looks like while the pointer is over it, it has focus, or it is being pressed.
  * Only the properties that make sense to change at that moment — a hover that moved the layout would make the
  * element jump out from under the pointer. */
@@ -92,14 +95,15 @@ export type Style = {
   textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
   textDecoration?: "none" | "underline" | "line-through";
   fontStyle?: "normal" | "italic";
-  /** Corner radius, px. */
-  radius?: number;
+  /** Corner radius: px, or a theme token — "@card" follows the theme's corner radius, "@sm" its small corner, "@pill" is fully round. */
+  radius?: number | "@card" | "@sm" | "@pill";
   /** Inner spacing, px. */
   padding?: number;
   /** Unit of the per-side spacing values below (and only those). Default px. */
   unit?: "px" | "rem" | "em" | "%";
-  paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number;
-  marginTop?: number; marginRight?: number; marginBottom?: number; marginLeft?: number;
+  /** Per-side spacing: a number in `unit`, or "@1"…"@6" from the theme's spacing scale (unit then does not apply). */
+  paddingTop?: SpaceValue; paddingRight?: SpaceValue; paddingBottom?: SpaceValue; paddingLeft?: SpaceValue;
+  marginTop?: SpaceValue; marginRight?: SpaceValue; marginBottom?: SpaceValue; marginLeft?: SpaceValue;
   /** Size, as a number and a unit written together ("50%", "320px", "60vh"). Width and height also take "auto"; the maximums "none". */
   width?: string; height?: string;
   minWidth?: string; minHeight?: string;
@@ -236,6 +240,8 @@ const SPACE_RANGE: Record<"padding" | "margin", Record<Unit, [number, number]>> 
 };
 /** One spacing value as CSS ("1.5rem"), or undefined when it is not a finite number. */
 function space(v: unknown, kind: "padding" | "margin", unit: Unit): string | undefined {
+  const token = typeof v === "string" && Object.prototype.hasOwnProperty.call(SPACE_TOKENS, v) ? SPACE_TOKENS[v as keyof typeof SPACE_TOKENS] : undefined;
+  if (token) return token;
   if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
   const [lo, hi] = SPACE_RANGE[kind][unit];
   return `${Math.round(Math.min(hi, Math.max(lo, v)) * 100) / 100}${unit}`;
@@ -266,6 +272,8 @@ const clampSet = (v: unknown, lo: number, hi: number): number | undefined =>
 const ALIGNS = ["left", "center", "right"] as const;
 
 const GRAD_TYPES = ["linear", "radial"] as const;
+const RADIUS_TOKENS = { "@card": "var(--wx-radius-card)", "@sm": "var(--wx-radius-sm)", "@pill": "var(--wx-radius-pill)" } as const;
+const SPACE_TOKENS = { "@1": "var(--wx-space-1)", "@2": "var(--wx-space-2)", "@3": "var(--wx-space-3)", "@4": "var(--wx-space-4)", "@5": "var(--wx-space-5)", "@6": "var(--wx-space-6)" } as const;
 const DISPLAYS = ["block", "flex", "grid", "inline-block", "none"] as const;
 const FLEX_DIRECTIONS = ["row", "column", "row-reverse", "column-reverse"] as const;
 const JUSTIFY = { start: "flex-start", center: "center", end: "flex-end", between: "space-between", around: "space-around", evenly: "space-evenly" } as const;
@@ -438,8 +446,10 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   const al = oneOf(s.align, ALIGNS);
   if (al) d.push(`text-align:${al}!important`);
 
-  const r = clamp(s.radius, 0, 999);
-  if (r !== undefined) d.push(`border-radius:${r}px!important`);
+  const rt = mapped(s.radius, RADIUS_TOKENS);
+  const r = rt ? undefined : clampSet(s.radius, 0, 999);
+  if (rt) d.push(`border-radius:${rt}!important`);
+  else if (r !== undefined) d.push(`border-radius:${r}px!important`);
 
   const p = clamp(s.padding, 0, 400);
   if (p !== undefined) d.push(`padding:${p}px!important`);
