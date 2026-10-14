@@ -117,13 +117,21 @@ function resolvePostType(uid: string): { restBase: string; name: string } {
 // in the acf-fields.php mu-plugin.
 const ACF_FIELDS: Record<string, string[]> = {
   "wp:timeline": ["year", "status_label", "order"],
-  "wp:mission": ["icon", "order"],
-  "wp:org-unit": ["order"],
+  // title_en / excerpt_en: acf-fields.php's group_i18n_en, on exactly these five
+  // types. Listed here, they save; left out, the form showed the fields but WP
+  // never received them.
+  "wp:mission": ["icon", "order", "title_en", "excerpt_en"],
+  "wp:org-unit": ["order", "title_en", "excerpt_en"],
   "wp:document": ["tag", "fiscal_year", "file_url", "order"],
-  "wp:service": ["icon"],
+  "wp:service": ["icon", "title_en", "excerpt_en"],
   "wp:publication": ["icon"],
   "wp:resource": ["icon"],
-  "wp:faq": ["icon"],
+  "wp:faq": ["icon", "title_en", "excerpt_en"],
+  // group_event / group_member. Missing, nothing typed in the Studio's Event or
+  // Member form (day, time, place, tier…) was ever saved, so no event could be
+  // given the date the calendar needs.
+  "wp:event": ["event_date", "event_time", "location", "category"],
+  "wp:member": ["tier", "division", "order", "title_en", "excerpt_en"],
   // "blocks_en" already existed as an orphaned ACF field (acf-fields.php's
   // group_page_layout) — public-site's getWpPage() has read it for a while,
   // but nothing here could write or even see it, so only a one-off seed
@@ -285,6 +293,12 @@ function normalizePost(p: any, terms?: typeof wtenantCache, uid?: string): any {
     // pick up e.g. `year`/`order`/`icon` as ordinary top-level fields. Without
     // this, ACF writes would round-trip invisibly — see the Phase 10 plan.
     ...(p.acf || {}),
+    // ACF returns null for a date picker nobody has filled in yet, and the
+    // editor only shows string fields — so a brand-new event had no Date field
+    // at all and could never be given the day the calendar needs. An empty
+    // string shows the field (the value is still typed as YYYYMMDD, ACF's own
+    // return format, e.g. 20261015).
+    ...(uid === "wp:event" && p.acf?.event_date == null ? { event_date: "" } : {}),
     id: p.id,
     documentId: String(p.id),
     title: richText(p.title),

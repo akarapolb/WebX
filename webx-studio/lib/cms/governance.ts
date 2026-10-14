@@ -141,6 +141,11 @@ const SCOPED = new Set([
 const WP_SCOPED = new Set([
   "wp:post", "wp:service", "wp:publication", "wp:faq", "wp:resource", "wp:page",
   "wp:timeline", "wp:mission", "wp:org-unit", "wp:document",
+  // Events and members are tenant-scoped in WordPress too (the wtenant taxonomy
+  // and the plugin's "tenant scope required on create" rule). Missing here, the
+  // Studio sent no tenant: creating one failed with 403, and an editor's list
+  // showed every tenant's events and members.
+  "wp:event", "wp:member",
   // Phase 7 — native WordPress polls/complaints/applications/breaking-news,
   // replacing the Strapi-backed shared-service layer for orst/royalsociety
   // (wordpress/mu-plugins/public-forms-*.php). wp:breaking-news specifically
