@@ -87,6 +87,10 @@ export type ComponentStyle = {
   borderStyle?: "solid" | "dashed" | "dotted" | "double";
   borderColor?: string;
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
+  /** A custom shadow; it wins over the preset above. Unset parts default to 0 / 4 / 12 / 0 / 25% black. */
+  shadowX?: number; shadowY?: number; shadowBlur?: number; shadowSpread?: number;
+  shadowColor?: string;
+  shadowInset?: boolean;
   /** Percent. */
   opacity?: number;
   hover?: StateStyle;
@@ -111,6 +115,9 @@ export const STYLE_LIMITS = {
   padding: { min: 0, max: 400 },
   borderWidth: { min: 0, max: 20 },
   opacity: { min: 0, max: 100 },
+  shadowOffset: { min: -100, max: 100 },
+  shadowBlur: { min: 0, max: 200 },
+  shadowSpread: { min: -100, max: 100 },
 } as const;
 
 export const SPACE_UNITS: readonly SpaceUnit[] = ["px", "rem", "em", "%"];
@@ -157,6 +164,8 @@ export const FONT_FAMILIES = ["heading", "body", "mono"] as const;
 export const TEXT_TRANSFORMS = ["none", "uppercase", "lowercase", "capitalize"] as const;
 export const GRAD_TYPES = ["linear", "radial"] as const;
 export const GRAD_ANGLE = { min: 0, max: 360, step: 5, default: 180 } as const;
+/** The parts of a custom shadow, in the order the panel lists them. */
+export const SHADOW_FIELDS = ["shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor", "shadowInset"] as const;
 export const SHADOWS = ["none", "sm", "md", "lg", "xl"] as const;
 
 /** The nine real CSS weights, minus the ones no UI font ships. */

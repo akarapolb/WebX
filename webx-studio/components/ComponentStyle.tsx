@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
-  ALIGN_ITEMS, BG_FITS, BG_POSITIONS, DIM_LIMITS, DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, LAYOUT_LIMITS, OVERFLOWS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
+  ALIGN_ITEMS, BG_FITS, BG_POSITIONS, DIM_LIMITS, SHADOW_FIELDS, DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, LAYOUT_LIMITS, OVERFLOWS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
@@ -432,13 +432,36 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
         <NumRow label={t("cs.radius")} value={s.radius} inherited={inh("radius")} min={STYLE_LIMITS.radius.min} max={STYLE_LIMITS.radius.max} unit="px" onChange={(v) => set("radius", v)} />
       </Section>
 
-      <Section title={t("cs.sec.effects")} defaultOpen={s.shadow !== undefined || s.opacity !== undefined}>
+      <Section title={t("cs.sec.effects")} defaultOpen={s.shadow !== undefined || s.opacity !== undefined || SHADOW_FIELDS.some((k) => (s as any)[k] !== undefined)}>
         <div className="cs-row">
           <label>{t("cs.shadow")}</label>
-          <select className="cs-sel" value={s.shadow ?? ""} onChange={(e) => set("shadow", e.target.value || undefined)}>
+          <select className="cs-sel" value={s.shadow ?? ""} onChange={(e) => {
+            // A preset and a custom shadow are alternatives: choosing one drops the other.
+            if (e.target.value) for (const k of SHADOW_FIELDS) if ((s as any)[k] !== undefined) set(k, undefined);
+            set("shadow", e.target.value || undefined);
+          }}>
             <option value="">—</option>
             {SHADOWS.map((sh) => <option key={sh} value={sh}>{t("cs.sh." + sh)}</option>)}
           </select>
+        </div>
+        <div className="cs-sub">
+          <b>{t("cs.shadow.custom")}</b>
+          <NumRow label={t("cs.shadow.x")} value={s.shadowX} inherited={inh("shadowX")} min={STYLE_LIMITS.shadowOffset.min} max={STYLE_LIMITS.shadowOffset.max} unit="px"
+            onChange={(v) => { if (v !== undefined && s.shadow) set("shadow", undefined); set("shadowX", v); }} />
+          <NumRow label={t("cs.shadow.y")} value={s.shadowY} inherited={inh("shadowY")} min={STYLE_LIMITS.shadowOffset.min} max={STYLE_LIMITS.shadowOffset.max} unit="px"
+            onChange={(v) => { if (v !== undefined && s.shadow) set("shadow", undefined); set("shadowY", v); }} />
+          <NumRow label={t("cs.shadow.blur")} value={s.shadowBlur} inherited={inh("shadowBlur")} min={STYLE_LIMITS.shadowBlur.min} max={STYLE_LIMITS.shadowBlur.max} unit="px"
+            onChange={(v) => { if (v !== undefined && s.shadow) set("shadow", undefined); set("shadowBlur", v); }} />
+          <NumRow label={t("cs.shadow.spread")} value={s.shadowSpread} inherited={inh("shadowSpread")} min={STYLE_LIMITS.shadowSpread.min} max={STYLE_LIMITS.shadowSpread.max} unit="px"
+            onChange={(v) => { if (v !== undefined && s.shadow) set("shadow", undefined); set("shadowSpread", v); }} />
+          {color("shadowColor", t("cs.shadow.color"))}
+          <div className="cs-row">
+            <label>{t("cs.shadow.inset")}</label>
+            <input type="checkbox" checked={s.shadowInset === true} onChange={(e) => set("shadowInset", e.target.checked ? true : undefined)} aria-label={t("cs.shadow.inset")} />
+          </div>
+          {SHADOW_FIELDS.some((k) => (s as any)[k] !== undefined) && (
+            <button type="button" className="cs-reset" onClick={() => SHADOW_FIELDS.forEach((k) => set(k, undefined))}>{t("cs.shadow.clear")}</button>
+          )}
         </div>
         <div className="cs-row">
           <label>{t("cs.opacity")}</label>

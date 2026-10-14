@@ -117,3 +117,16 @@ describe("layout in the style model", () => {
     assert.equal(isBlankStyle({ mobile: { display: "none" } }), false);
   });
 });
+
+describe("custom shadow in the style model", () => {
+  test("ranges and the field list match what the site accepts", async () => {
+    const { STYLE_LIMITS, SHADOW_FIELDS } = await import("../lib/componentStyle");
+    assert.deepEqual([STYLE_LIMITS.shadowOffset.min, STYLE_LIMITS.shadowOffset.max, STYLE_LIMITS.shadowBlur.max, STYLE_LIMITS.shadowSpread.min], [-100, 100, 200, -100]);
+    assert.deepEqual([...SHADOW_FIELDS], ["shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor", "shadowInset"]);
+  });
+
+  test("a zero offset is a real value, and the shadow colour shows up in the swatches", () => {
+    assert.equal(isBlankStyle({ shadowX: 0 }), false);
+    assert.deepEqual(pageColors([{ styles: { a: { shadowColor: "#11223344", mobile: { shadowColor: "#556677" } } } }]), ["#11223344", "#556677"]);
+  });
+});

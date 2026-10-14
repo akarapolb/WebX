@@ -120,8 +120,12 @@ export type Style = {
   borderWidth?: number;
   borderStyle?: "solid" | "dashed" | "dotted" | "double";
   borderColor?: string;
-  /** A fixed drop-shadow preset. */
+  /** A fixed drop-shadow preset. A custom shadow below wins over it. */
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
+  /** A custom shadow: offsets (px, -100–100), blur (0–200), spread (-100–100), colour (hex or theme token), and inset. Unset parts default to 0 / 4 / 12 / 0 / 25% black. */
+  shadowX?: number; shadowY?: number; shadowBlur?: number; shadowSpread?: number;
+  shadowColor?: string;
+  shadowInset?: boolean;
   /** Opacity, percent (0 = invisible). */
   opacity?: number;
   /** While the pointer is over the component (mouse and trackpad only). */
@@ -146,7 +150,7 @@ export const STYLE_KEYS = [
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
   "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
   "display", "flexDirection", "justifyContent", "alignItems", "flexWrap", "gap", "gridColumns", "position", "zIndex", "overflow",
-  "borderWidth", "borderStyle", "borderColor", "shadow", "opacity",
+  "borderWidth", "borderStyle", "borderColor", "shadow", "shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor", "shadowInset", "opacity",
   "hover", "focus", "active", "tablet", "mobile",
 ] as const;
 
@@ -301,6 +305,20 @@ function backgroundLayers(s: Style): string | undefined {
   return [ov ? `linear-gradient(${ov},${ov})` : undefined, grad, img].filter(Boolean).join(",");
 }
 
+const SHADOW_KEYS = ["shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor"] as const;
+// Only a part that is actually valid counts: a typo in a number must not conjure up a default shadow.
+const touchesShadow = (s: Style): boolean =>
+  SHADOW_KEYS.some((k) => (k === "shadowColor" ? colorCss(s.shadowColor) !== undefined : clampSet((s as any)[k], -1e9, 1e9) !== undefined));
+/** A custom shadow's CSS, or undefined when none of its parts is set. Unset parts take sensible defaults, so a lone colour or blur still shows. */
+function customShadow(s: Style): string | undefined {
+  if (!touchesShadow(s)) return undefined;
+  const x = clampSet(s.shadowX, -100, 100) ?? 0;
+  const y = clampSet(s.shadowY, -100, 100) ?? 4;
+  const blur = clampSet(s.shadowBlur, 0, 200) ?? 12;
+  const spread = clampSet(s.shadowSpread, -100, 100) ?? 0;
+  const color = colorCss(s.shadowColor) ?? "rgba(0,0,0,.25)";
+  return `${s.shadowInset === true ? "inset " : ""}${x}px ${y}px ${blur}px ${spread}px ${color}`;
+}
 const LAYER_KEYS = ["bgImage", "bgOverlay", "gradFrom", "gradTo", "gradAngle", "gradType"] as const;
 const isSetValue = (v: unknown) => v !== undefined && v !== null && v !== "";
 const touchesLayers = (s: Style): boolean => LAYER_KEYS.some((k) => isSetValue((s as any)[k]));
@@ -435,8 +453,13 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
     if (bc) d.push(`border-color:${bc}!important`);
   }
 
+  // A custom shadow wins over a preset. On a device override, whichever the
+  // override itself sets decides; custom parts it leaves out come from what it inherits.
   const sh = oneOf(s.shadow, Object.keys(SHADOWS) as (keyof typeof SHADOWS)[]);
-  if (sh) d.push(`box-shadow:${SHADOWS[sh]}!important`);
+  const customHere = touchesShadow(s) || (partial && typeof s.shadowInset === "boolean");
+  const custom = !partial || customHere ? customShadow(eff) : undefined;
+  if (custom && (customHere || !partial || !sh)) d.push(`box-shadow:${custom}!important`);
+  else if (sh) d.push(`box-shadow:${SHADOWS[sh]}!important`);
 
   const op = clampSet(s.opacity, 0, 100);
   if (op !== undefined) d.push(`opacity:${op / 100}!important`);
