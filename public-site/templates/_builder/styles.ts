@@ -97,6 +97,10 @@ export type Style = {
   unit?: "px" | "rem" | "em" | "%";
   paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number;
   marginTop?: number; marginRight?: number; marginBottom?: number; marginLeft?: number;
+  /** Size, as a number and a unit written together ("50%", "320px", "60vh"). Width and height also take "auto"; the maximums "none". */
+  width?: string; height?: string;
+  minWidth?: string; minHeight?: string;
+  maxWidth?: string; maxHeight?: string;
   /** Border width, px. 0 removes the border. */
   borderWidth?: number;
   borderStyle?: "solid" | "dashed" | "dotted" | "double";
@@ -125,6 +129,7 @@ export const STYLE_KEYS = [
   "fontSize", "fontWeight", "align", "fontFamily", "lineHeight", "letterSpacing", "textTransform", "textDecoration", "fontStyle",
   "radius", "padding", "unit",
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
+  "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
   "borderWidth", "borderStyle", "borderColor", "shadow", "opacity",
   "hover", "focus", "active", "tablet", "mobile",
 ] as const;
@@ -198,6 +203,26 @@ function space(v: unknown, kind: "padding" | "margin", unit: Unit): string | und
   const [lo, hi] = SPACE_RANGE[kind][unit];
   return `${Math.round(Math.min(hi, Math.max(lo, v)) * 100) / 100}${unit}`;
 }
+// A size such as "50%" or "320px": digits, an optional decimal, and one of a fixed
+// set of units — nothing else, so there is nothing to escape. The range depends
+// on the unit (a width of 4000% is a typo, not a design).
+const DIM_RE = /^(\d{1,4}(?:\.\d{1,2})?)(px|%|rem|em|vw|vh)$/;
+const DIM_RANGE: Record<string, [number, number]> = { px: [0, 4000], "%": [0, 100], rem: [0, 250], em: [0, 250], vw: [0, 100], vh: [0, 100] };
+function dimension(v: unknown, keyword?: "auto" | "none"): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  if (keyword && t === keyword) return keyword;
+  const m = DIM_RE.exec(t);
+  if (!m) return undefined;
+  const [lo, hi] = DIM_RANGE[m[2]];
+  return `${Math.min(hi, Math.max(lo, Number(m[1])))}${m[2]}`;
+}
+const DIM_PROPS: [keyof Style, string, "auto" | "none" | undefined][] = [
+  ["width", "width", "auto"], ["height", "height", "auto"],
+  ["minWidth", "min-width", undefined], ["minHeight", "min-height", undefined],
+  ["maxWidth", "max-width", "none"], ["maxHeight", "max-height", "none"],
+];
+
 /** Like clamp, but null, "" and non-numbers mean "not set" rather than 0. */
 const clampSet = (v: unknown, lo: number, hi: number): number | undefined =>
   typeof v === "number" || (typeof v === "string" && v.trim() !== "") ? clamp(v, lo, hi) : undefined;
@@ -344,6 +369,11 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   for (const [prop, v, kind] of sides) {
     const css = space(v, kind, unit);
     if (css !== undefined) d.push(`${prop}:${css}!important`);
+  }
+
+  for (const [key, prop, kw] of DIM_PROPS) {
+    const v = dimension((s as any)[key], kw);
+    if (v !== undefined) d.push(`${prop}:${v}!important`);
   }
 
   const bw = clampSet(s.borderWidth, 0, 20);

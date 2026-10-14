@@ -77,3 +77,26 @@ describe("typography in the style model", () => {
     assert.equal(isBlankStyle({ mobile: { textTransform: "uppercase" } }), false);
   });
 });
+
+describe("sizes in the style model", () => {
+  test("splitDimension reads a number and a unit, and nothing else", async () => {
+    const { splitDimension } = await import("../lib/componentStyle");
+    assert.deepEqual(splitDimension("50%"), { n: "50", unit: "%" });
+    assert.deepEqual(splitDimension("33.33vw"), { n: "33.33", unit: "vw" });
+    assert.deepEqual(splitDimension("320px"), { n: "320", unit: "px" });
+    for (const bad of ["auto", "", "px", "50", "50pt", "-5px", 5, null, undefined]) assert.equal(splitDimension(bad), null, String(bad));
+  });
+
+  test("units and ranges match what the site clamps to", async () => {
+    const { DIM_UNITS, DIM_LIMITS } = await import("../lib/componentStyle");
+    assert.deepEqual([...DIM_UNITS], ["px", "%", "rem", "em", "vw", "vh"]);
+    assert.equal(DIM_LIMITS.px.max, 4000);
+    assert.equal(DIM_LIMITS["%"].max, 100);
+    assert.equal(DIM_LIMITS.vh.max, 100);
+  });
+
+  test("a size alone makes the style non-blank", () => {
+    assert.equal(isBlankStyle({ width: "50%" }), false);
+    assert.equal(isBlankStyle({ mobile: { maxWidth: "none" } }), false);
+  });
+});

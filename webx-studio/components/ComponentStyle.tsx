@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
-  BG_FITS, BG_POSITIONS, FONT_FAMILIES, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
+  BG_FITS, BG_POSITIONS, DIM_LIMITS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
@@ -109,6 +109,38 @@ function NumRow({ label, value, min, max, step, unit, onChange, inherited }: {
           onChange(raw === "" ? undefined : Math.min(max, Math.max(min, Number(raw))));
         }} />
       <span className="cs-unit">{unit}</span>
+    </div>
+  );
+}
+
+/** A size: a number plus a unit, stored together as "50%". Empty = not set (the template's own size). */
+function DimRow({ label, value, keyword, inherited, onChange, t }: {
+  label: string; value?: string; keyword?: "auto" | "none"; inherited?: string; onChange: (v: string | undefined) => void; t: Props["t"];
+}) {
+  const parts = splitDimension(value);
+  const isKeyword = !!keyword && value === keyword;
+  const unit: string = isKeyword ? keyword! : parts?.unit ?? splitDimension(inherited)?.unit ?? "px";
+  const lim = DIM_LIMITS[(DIM_UNITS as readonly string[]).includes(unit) ? (unit as DimUnit) : "px"];
+  return (
+    <div className="cs-row">
+      <label>{label}</label>
+      <input type="number" className="cs-num" min={lim.min} max={lim.max} step={lim.step} disabled={isKeyword}
+        value={isKeyword ? "" : parts?.n ?? ""} placeholder={isKeyword ? keyword : splitDimension(inherited)?.n ?? "—"} aria-label={label}
+        onChange={(e) => {
+          const raw = e.target.value.trim();
+          if (raw === "") return onChange(undefined);
+          const n = Math.min(lim.max, Math.max(lim.min, Number(raw)));
+          onChange(Number.isFinite(n) ? n + unit : undefined);
+        }} />
+      <select className="cs-sel cs-dimunit" value={unit} aria-label={label + " " + t("cs.unit")}
+        onChange={(e) => {
+          const u = e.target.value;
+          if (keyword && u === keyword) return onChange(keyword);
+          onChange(parts ? parts.n + u : undefined);
+        }}>
+        {(DIM_UNITS as readonly string[]).map((u) => <option key={u} value={u}>{u}</option>)}
+        {keyword && <option value={keyword}>{keyword}</option>}
+      </select>
     </div>
   );
 }
@@ -300,6 +332,13 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
             ))}
           </div>
         </div>
+      </Section>
+
+      <Section title={t("cs.sec.size")} defaultOpen={SIZE_FIELDS.some((f) => (s as any)[f.key] !== undefined)}>
+        {SIZE_FIELDS.map((f) => (
+          <DimRow key={f.key} label={t("cs.dim." + f.key)} value={(s as any)[f.key]} keyword={"keyword" in f ? f.keyword : undefined}
+            inherited={inh(f.key)} onChange={(v) => set(f.key, v)} t={t} />
+        ))}
       </Section>
 
       <Section title={t("cs.sec.spacing")} defaultOpen={anySpacing || s.padding !== undefined}>

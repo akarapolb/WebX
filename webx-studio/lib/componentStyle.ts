@@ -69,6 +69,10 @@ export type ComponentStyle = {
   unit?: SpaceUnit;
   paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number;
   marginTop?: number; marginRight?: number; marginBottom?: number; marginLeft?: number;
+  /** A number and a unit written together ("50%", "320px"); width and height also take "auto", the maximums "none". */
+  width?: string; height?: string;
+  minWidth?: string; minHeight?: string;
+  maxWidth?: string; maxHeight?: string;
   borderWidth?: number;
   borderStyle?: "solid" | "dashed" | "dotted" | "double";
   borderColor?: string;
@@ -112,6 +116,27 @@ export const BG_POSITIONS: readonly BgPosition[] = [
 export const BG_REPEATS = ["no-repeat", "repeat", "repeat-x", "repeat-y"] as const;
 export const BG_FITS = ["cover", "contain", "auto"] as const;
 export const BORDER_STYLES = ["solid", "dashed", "dotted", "double"] as const;
+export const DIM_UNITS = ["px", "%", "rem", "em", "vw", "vh"] as const;
+export type DimUnit = (typeof DIM_UNITS)[number];
+/** Per-unit range a size is clamped to on the site. */
+export const DIM_LIMITS: Record<DimUnit, { min: number; max: number; step: number }> = {
+  px: { min: 0, max: 4000, step: 1 }, "%": { min: 0, max: 100, step: 1 }, rem: { min: 0, max: 250, step: 0.25 },
+  em: { min: 0, max: 250, step: 0.25 }, vw: { min: 0, max: 100, step: 1 }, vh: { min: 0, max: 100, step: 1 },
+};
+export const SIZE_FIELDS = [
+  { key: "width", keyword: "auto" }, { key: "height", keyword: "auto" },
+  { key: "minWidth" }, { key: "minHeight" },
+  { key: "maxWidth", keyword: "none" }, { key: "maxHeight", keyword: "none" },
+] as const;
+/** Splits "50%" into its number and unit; null when it is neither a size nor the field's keyword. */
+export function splitDimension(v: unknown): { n: string; unit: DimUnit } | null {
+  if (typeof v !== "string") return null;
+  let i = 0;
+  while (i < v.length && ((v[i] >= "0" && v[i] <= "9") || v[i] === ".")) i++;
+  const unit = v.slice(i);
+  if (!i || !(DIM_UNITS as readonly string[]).includes(unit)) return null;
+  return { n: v.slice(0, i), unit: unit as DimUnit };
+}
 export const FONT_FAMILIES = ["heading", "body", "mono"] as const;
 export const TEXT_TRANSFORMS = ["none", "uppercase", "lowercase", "capitalize"] as const;
 export const GRAD_TYPES = ["linear", "radial"] as const;

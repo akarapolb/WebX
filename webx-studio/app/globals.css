@@ -1459,3 +1459,4 @@ input.cs-num,.cs-side input{border:1px solid var(--line2);border-radius:9px;back
 input.cs-num::placeholder,.cs-side input::placeholder{color:var(--mut)}
 input.cs-num:hover,.cs-side input:hover{border-color:var(--mut)}
 input.cs-num:focus,.cs-side input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cs-dimunit{flex:0 0 auto;width:72px}
