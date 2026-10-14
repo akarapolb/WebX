@@ -25,6 +25,7 @@
 // string, and a dropped declaration only costs the author their styling.
 
 import { isComponentKey } from "./boxes";
+import { customDecls } from "./customCss";
 
 /** What a component looks like while the pointer is over it, it has focus, or it is being pressed.
  * Only the properties that make sense to change at that moment — a hover that moved the layout would make the
@@ -130,6 +131,8 @@ export type Style = {
   shadowInset?: boolean;
   /** Opacity, percent (0 = invisible). */
   opacity?: number;
+  /** Extra declarations, one `property: value` per line or ending in ";". Only an allowlist of safe properties and values is applied (see customCss.ts); the rest is ignored. */
+  customCss?: string;
   /** Scale, percent (25–300); rotation, degrees (-360–360); move, px (-400–400). Composed as move, rotate, scale. */
   scale?: number; rotate?: number; moveX?: number; moveY?: number;
   /** How long a hover/focus/pressed change fades, ms (0–2000, default 180), and its easing. */
@@ -164,7 +167,7 @@ export const STYLE_KEYS = [
   "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
   "display", "flexDirection", "justifyContent", "alignItems", "flexWrap", "gap", "gridColumns", "position", "zIndex", "overflow",
   "borderWidth", "borderStyle", "borderColor", "shadow", "shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor", "shadowInset", "opacity",
-  "scale", "rotate", "moveX", "moveY", "transitionMs", "easing", "animation", "animMs", "animDelayMs",
+  "scale", "rotate", "moveX", "moveY", "transitionMs", "easing", "animation", "animMs", "animDelayMs", "customCss",
   "hover", "focus", "active", "tablet", "mobile", "dark",
 ] as const;
 
@@ -507,6 +510,9 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   // moved component already uses, so the two never fight.
   const tf = !partial || touchesTransform(s) ? transformCss(eff) : undefined;
   if (tf) d.push(`transform:${tf}!important`);
+
+  // Custom CSS comes last so it wins over what the controls above produced.
+  for (const decl of customDecls(s.customCss)) d.push(decl);
 
   return d.join(";");
 }

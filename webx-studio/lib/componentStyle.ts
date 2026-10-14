@@ -95,6 +95,8 @@ export type ComponentStyle = {
   shadowInset?: boolean;
   /** Percent. */
   opacity?: number;
+  /** Extra declarations, one "property: value" per line. Only an allowlist is applied by the site (lib/customCss.ts). */
+  customCss?: string;
   /** Scale, percent; rotation, degrees; move, px. */
   scale?: number; rotate?: number; moveX?: number; moveY?: number;
   /** How long a hover/focus/pressed change fades, ms, and its easing. */

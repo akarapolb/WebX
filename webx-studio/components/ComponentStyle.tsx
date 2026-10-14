@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
@@ -9,6 +9,7 @@ import {
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
 import { PRESET_MAX, PRESET_NAME_MAX, cleanStyle, presetStyle } from "@/lib/stylePresets";
 import type { PresetApi } from "@/lib/useStylePresets";
+import { CUSTOM_CSS_MAX_CHARS, parseCustomCss } from "@/lib/customCss";
 
 // The style panel for one selected component inside a block — the colour /
 // spacing / background / border / effects half of the Figma-style editing that
@@ -182,6 +183,32 @@ function SidesRow({ label, kind, unit, values, inherited, set, t }: {
   );
 }
 
+/** The translator does not interpolate, so "{n}"-style placeholders are filled here. */
+const fill = (text: string, vars: Record<string, string | number>): string => text.replace(/\{(\w+)\}/g, (_m, k) => String(vars[k] ?? ""));
+
+/** The custom CSS box: typed freely, committed when the editor leaves it (so one edit is one undo step), with a count of what the site will ignore. */
+function CssBox({ value, onCommit, t }: { value?: string; onCommit: (v: string | undefined) => void; t: Props["t"] }) {
+  const [text, setText] = useState(value ?? "");
+  useEffect(() => setText(value ?? ""), [value]);
+  const parsed = parseCustomCss(text);
+  return (
+    <div className="cs-cssbox">
+      <textarea className="cs-css" rows={6} maxLength={CUSTOM_CSS_MAX_CHARS} spellCheck={false} value={text}
+        placeholder={"letter-spacing: .05em;\nfilter: blur(2px);\nbackdrop-filter: blur(8px);"} aria-label={t("cs.sec.css")}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => onCommit(text.trim() === "" ? undefined : text)} />
+      {text.trim() !== "" && <p className="cs-hint">{fill(t("cs.css.count"), { ok: parsed.accepted.length, n: parsed.ignored.length })}</p>}
+      {parsed.ignored.length > 0 && (
+        <ul className="cs-css-ignored">
+          {parsed.ignored.slice(0, 6).map((i, k) => <li key={k}><code>{i.text.slice(0, 48)}</code> — {t("cs.css.r." + i.reason)}</li>)}
+          {parsed.ignored.length > 6 && <li>…</li>}
+        </ul>
+      )}
+      <p className="cs-hint">{t("cs.css.hint")}</p>
+    </div>
+  );
+}
+
 /** A collapsible group so a panel with this many controls stays scannable. */
 function Section({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
   return (
@@ -325,7 +352,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
                 <button type="button" disabled={!presetName.trim() || !cleanStyle(style) || presets.busy || presets.presets.length >= PRESET_MAX}
                   onClick={async () => { if (await presets.add(presetName, style)) setPresetName(""); }}>{t("cs.preset.save")}</button>
               </div>
-              {presets.presets.length >= PRESET_MAX && <p className="cs-hint">{t("cs.preset.full", { n: PRESET_MAX })}</p>}
+              {presets.presets.length >= PRESET_MAX && <p className="cs-hint">{fill(t("cs.preset.full"), { n: PRESET_MAX })}</p>}
               {presets.error && <p className="cs-hint cs-bad">{t("cs.preset.error")}</p>}
               {presets.presets.length === 0 ? (
                 <p className="cs-hint">{t("cs.preset.none")}</p>
@@ -614,6 +641,10 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         {(s.gradFrom || s.gradTo || s.gradAngle !== undefined || s.gradType) && (
           <button type="button" className="cs-reset" onClick={() => { set("gradFrom", undefined); set("gradTo", undefined); set("gradAngle", undefined); set("gradType", undefined); }}>{t("cs.gradclear")}</button>
         )}
+      </Section>
+
+      <Section title={t("cs.sec.css")} defaultOpen={!!s.customCss}>
+        <CssBox value={s.customCss} onCommit={(v) => set("customCss", v)} t={t} />
       </Section>
 
       <Section title={t("cs.sec.bgimage")} defaultOpen={!!s.bgImage || (override && !!((full as any)?.bgImage || (style as any)?.bgImage))}>
