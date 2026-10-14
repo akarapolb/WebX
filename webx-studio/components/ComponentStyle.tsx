@@ -10,6 +10,7 @@ import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
 import { PRESET_MAX, PRESET_NAME_MAX, cleanStyle, presetStyle } from "@/lib/stylePresets";
 import type { PresetApi } from "@/lib/useStylePresets";
 import { CUSTOM_CSS_MAX_CHARS, parseCustomCss } from "@/lib/customCss";
+import { parseFinal, parseLive, writeDefault } from "@/lib/styleInput";
 
 // The style panel for one selected component inside a block — the colour /
 // spacing / background / border / effects half of the Figma-style editing that
@@ -104,6 +105,43 @@ function ColorRow({ label, value, onChange, onClear, swatches, tokens, t, open, 
   );
 }
 
+/**
+ * A number field that applies what is typed as soon as it is a valid number in range, but only
+ * clamps when the editor LEAVES the field — so "150" can be typed into a field whose minimum is 25
+ * instead of turning into 25 at the first digit.
+ */
+function NumInput({ value, min, max, step, placeholder, ariaLabel, className, disabled, onCommit }: {
+  value?: number; min: number; max: number; step?: number; placeholder?: string; ariaLabel?: string; className?: string; disabled?: boolean;
+  onCommit: (v: number | undefined) => void;
+}) {
+  const shown = (v: number | undefined) => (v === undefined ? "" : String(v));
+  const [text, setText] = useState(shown(value));
+  const focused = useRef(false);
+  // Follow the value from outside (another component selected, undo) — but never while typing.
+  useEffect(() => { if (!focused.current) setText(shown(value)); }, [value]);
+  return (
+    <input type="number" className={className} min={min} max={max} step={step} value={text} placeholder={placeholder} aria-label={ariaLabel} disabled={disabled}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => {
+        // A "-" or "." the browser cannot read yet reports an empty value. It is not an empty field, and
+        // writing "" back into a controlled input would wipe what was just typed — so leave it alone.
+        if (e.target.validity?.badInput) return;
+        const raw = e.target.value;
+        setText(raw);
+        const r = parseLive(raw, min, max);
+        if (r.action === "clear") onCommit(undefined);
+        else if (r.action === "set") onCommit(r.n);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        const f = parseFinal(text, min, max);
+        if (f === "invalid") { setText(shown(value)); return; }
+        setText(shown(f));
+        if (f !== value) onCommit(f);
+      }} />
+  );
+}
+
 /** A number row that stays "unset" until the editor actually types one. */
 function NumRow({ label, value, min, max, step, unit, onChange, inherited }: {
   label: string; value?: number; min: number; max: number; step?: number; unit: string; onChange: (v: number | undefined) => void;
@@ -113,11 +151,7 @@ function NumRow({ label, value, min, max, step, unit, onChange, inherited }: {
   return (
     <div className="cs-row">
       <label>{label}</label>
-      <input type="number" className="cs-num" min={min} max={max} step={step} value={value ?? ""} placeholder={inherited !== undefined ? String(inherited) : "—"}
-        onChange={(e) => {
-          const raw = e.target.value.trim();
-          onChange(raw === "" ? undefined : Math.min(max, Math.max(min, Number(raw))));
-        }} />
+      <NumInput className="cs-num" min={min} max={max} step={step} value={value} placeholder={inherited !== undefined ? String(inherited) : "—"} ariaLabel={label} onCommit={onChange} />
       <span className="cs-unit">{unit}</span>
     </div>
   );
@@ -134,14 +168,9 @@ function DimRow({ label, value, keyword, inherited, onChange, t }: {
   return (
     <div className="cs-row">
       <label>{label}</label>
-      <input type="number" className="cs-num" min={lim.min} max={lim.max} step={lim.step} disabled={isKeyword}
-        value={isKeyword ? "" : parts?.n ?? ""} placeholder={isKeyword ? keyword : splitDimension(inherited)?.n ?? "—"} aria-label={label}
-        onChange={(e) => {
-          const raw = e.target.value.trim();
-          if (raw === "") return onChange(undefined);
-          const n = Math.min(lim.max, Math.max(lim.min, Number(raw)));
-          onChange(Number.isFinite(n) ? n + unit : undefined);
-        }} />
+      <NumInput className="cs-num" min={lim.min} max={lim.max} step={lim.step} disabled={isKeyword}
+        value={isKeyword || !parts ? undefined : Number(parts.n)} placeholder={isKeyword ? keyword : splitDimension(inherited)?.n ?? "—"} ariaLabel={label}
+        onCommit={(n) => onChange(n === undefined ? undefined : n + unit)} />
       <select className="cs-sel cs-dimunit" value={unit} aria-label={label + " " + t("cs.unit")}
         onChange={(e) => {
           const u = e.target.value;
@@ -180,11 +209,8 @@ function SidesRow({ label, kind, unit, values, inherited, set, onScale, t }: {
         ) : (
           <label key={i} className="cs-side">
             <span>{names[i]}</span>
-            <input type="number" min={lim.min} max={lim.max} step={lim.step} value={v ?? ""} placeholder={inherited?.[i] !== undefined ? String(inherited[i]) : "—"} aria-label={label + " " + names[i]}
-              onChange={(e) => {
-                const raw = e.target.value.trim();
-                set(i as 0 | 1 | 2 | 3, raw === "" ? undefined : Math.min(lim.max, Math.max(lim.min, Number(raw))));
-              }} />
+            <NumInput min={lim.min} max={lim.max} step={lim.step} value={typeof v === "number" ? v : undefined} placeholder={inherited?.[i] !== undefined ? String(inherited[i]) : "—"}
+              ariaLabel={label + " " + names[i]} onCommit={(n) => set(i as 0 | 1 | 2 | 3, n)} />
           </label>
         ))}
       </div>
@@ -225,8 +251,11 @@ function CssBox({ value, onCommit, t }: { value?: string; onCommit: (v: string |
 
 /** A collapsible group so a panel with this many controls stays scannable. */
 function Section({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
+  // `defaultOpen` says how it starts. After that the editor decides: deriving it from the values on every
+  // render closed a section the moment its last field was emptied.
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <details className="cs-sec" open={defaultOpen}>
+    <details className="cs-sec" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary>{title}</summary>
       <div className="cs-sec-body">{children}</div>
     </details>
@@ -255,6 +284,10 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
   // The value a tablet or phone field falls back to: the phone follows the tablet
   // override when there is one, then the style itself.
   const inh = (k: string): any => (darkMode ? (style as any)?.[k] : !onDevice ? undefined : device === "mobile" ? ((full as any)?.tablet?.[k] ?? (full as any)?.[k]) : (full as any)?.[k]);
+  // A field's effective value here: its own, else what it inherits, else the default.
+  const eff = (k: string, def: any): any => (s as any)[k] ?? inh(k) ?? def;
+  // Picking a field's default clears it — unless something is inherited, when it must be written to undo it.
+  const setD = (k: StyleKey, v: any, def: any) => set(k, writeDefault(v, def, inh(k as string)));
   const fileRef = useRef<HTMLInputElement>(null);
   // Which colour picker is showing, if any. One value for all rows is what makes
   // them mutually exclusive.
@@ -274,7 +307,9 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
   );
   const [busy, setBusy] = useState(false);
   const touched = !isBlankStyle(s);
-  const unit: SpaceUnit = (SPACE_UNITS as readonly string[]).includes(s.unit as string) ? (s.unit as SpaceUnit) : "px";
+  const validUnit = (u: unknown): SpaceUnit | undefined => ((SPACE_UNITS as readonly string[]).includes(u as string) ? (u as SpaceUnit) : undefined);
+  // The unit a tablet or phone uses is the one it inherits, unless it sets its own — the site does the same.
+  const unit: SpaceUnit = validUnit(s.unit) ?? validUnit(inh("unit")) ?? "px";
   const anySpacing = ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft"].some((k) => (s as any)[k] !== undefined);
 
   async function onFile(f: File | undefined) {
@@ -340,10 +375,10 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
           </div>
           <div className="cs-row">
             <label>{t("cs.opacity")}</label>
-            <input type="range" className="cs-range" min={STYLE_LIMITS.opacity.min} max={STYLE_LIMITS.opacity.max} value={get(mode + ".opacity") ?? 100}
+            <input type="range" className="cs-range" min={STYLE_LIMITS.opacity.min} max={STYLE_LIMITS.opacity.max} value={get(mode + ".opacity") ?? s.opacity ?? 100}
               aria-label={t("cs.opacity")}
-              onChange={(e) => { const v = Number(e.target.value); set((mode + ".opacity") as StyleKey, v >= 100 ? undefined : v); }} />
-            <span className="cs-unit cs-pct">{get(mode + ".opacity") ?? 100}%</span>
+              onChange={(e) => { const v = Number(e.target.value); set((mode + ".opacity") as StyleKey, writeDefault(v, 100, s.opacity)); }} />
+            <span className="cs-unit cs-pct">{get(mode + ".opacity") ?? s.opacity ?? 100}%</span>
           </div>
           {!isBlankStyle((s as any)[mode]) && (
             <button type="button" className="cs-reset" onClick={() => set(mode, undefined)}>{t("cs.state.clear")}</button>
@@ -381,6 +416,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
                   ))}
                 </ul>
               )}
+              {!isBlankStyle(style) && !cleanStyle(style) && <p className="cs-hint cs-bad">{t("cs.preset.toobig")}</p>}
               <p className="cs-hint">{t("cs.preset.hint")}</p>
             </>
           )}
@@ -557,7 +593,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
           <label>{t("cs.unit")}</label>
           <div className="cs-seg">
             {SPACE_UNITS.map((u) => (
-              <button type="button" key={u} className={unit === u ? "on" : ""} onClick={() => set("unit", u === "px" ? undefined : u)}>{u}</button>
+              <button type="button" key={u} className={unit === u ? "on" : ""} onClick={() => setD("unit", u, "px")}>{u}</button>
             ))}
           </div>
         </div>
@@ -632,10 +668,10 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         </div>
         <div className="cs-row">
           <label>{t("cs.opacity")}</label>
-          <input type="range" className="cs-range" min={STYLE_LIMITS.opacity.min} max={STYLE_LIMITS.opacity.max} value={s.opacity ?? 100}
+          <input type="range" className="cs-range" min={STYLE_LIMITS.opacity.min} max={STYLE_LIMITS.opacity.max} value={eff("opacity", 100)}
             aria-label={t("cs.opacity")}
-            onChange={(e) => { const v = Number(e.target.value); set("opacity", v >= 100 ? undefined : v); }} />
-          <span className="cs-unit cs-pct">{s.opacity ?? 100}%</span>
+            onChange={(e) => { const v = Number(e.target.value); setD("opacity", v, 100); }} />
+          <span className="cs-unit cs-pct">{eff("opacity", 100)}%</span>
         </div>
       </Section>
 
@@ -645,18 +681,18 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
           <label>{t("cs.gradtype")}</label>
           <div className="cs-seg">
             {GRAD_TYPES.map((g) => (
-              <button type="button" key={g} className={(s.gradType ?? "linear") === g ? "on" : ""} onClick={() => set("gradType", g === "linear" ? undefined : g)}>{t("cs.gt." + g)}</button>
+              <button type="button" key={g} className={eff("gradType", "linear") === g ? "on" : ""} onClick={() => setD("gradType", g, "linear")}>{t("cs.gt." + g)}</button>
             ))}
           </div>
         </div>
         {color("gradFrom", t("cs.gradfrom"))}
         {color("gradTo", t("cs.gradto"))}
-        {(s.gradType ?? "linear") === "linear" && (
+        {eff("gradType", "linear") === "linear" && (
           <div className="cs-row">
             <label>{t("cs.gradangle")}</label>
             <input type="range" className="cs-range" min={GRAD_ANGLE.min} max={GRAD_ANGLE.max} step={GRAD_ANGLE.step}
               value={s.gradAngle ?? inh("gradAngle") ?? GRAD_ANGLE.default} aria-label={t("cs.gradangle")}
-              onChange={(e) => { const v = Number(e.target.value); set("gradAngle", v === GRAD_ANGLE.default && !onDevice ? undefined : v); }} />
+              onChange={(e) => { const v = Number(e.target.value); setD("gradAngle", v, GRAD_ANGLE.default); }} />
             <span className="cs-unit cs-pct">{s.gradAngle ?? inh("gradAngle") ?? GRAD_ANGLE.default}°</span>
           </div>
         )}
@@ -692,7 +728,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
               <label>{t("cs.bgfit")}</label>
               <div className="cs-seg">
                 {BG_FITS.map((f) => (
-                  <button type="button" key={f} className={(s.bgFit ?? "cover") === f ? "on" : ""} onClick={() => set("bgFit", f === "cover" ? undefined : f)}>{t("cs.fit." + f)}</button>
+                  <button type="button" key={f} className={eff("bgFit", "cover") === f ? "on" : ""} onClick={() => setD("bgFit", f, "cover")}>{t("cs.fit." + f)}</button>
                 ))}
               </div>
             </div>
@@ -700,24 +736,23 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
               <label>{t("cs.bgposition")}</label>
               <div className="cs-pos" role="group" aria-label={t("cs.bgposition")}>
                 {BG_POSITIONS.map((p) => (
-                  <button type="button" key={p} className={(s.bgPosition ?? "center") === p ? "on" : ""} title={p}
-                    aria-label={p} aria-pressed={(s.bgPosition ?? "center") === p}
-                    onClick={() => set("bgPosition", p === "center" ? undefined : p)}><i /></button>
+                  <button type="button" key={p} className={eff("bgPosition", "center") === p ? "on" : ""} title={p}
+                    aria-label={p} aria-pressed={eff("bgPosition", "center") === p}
+                    onClick={() => setD("bgPosition", p, "center")}><i /></button>
                 ))}
               </div>
             </div>
             <div className="cs-row">
               <label>{t("cs.bgrepeat")}</label>
-              <select className="cs-sel" value={s.bgRepeat ?? ""} onChange={(e) => set("bgRepeat", e.target.value || undefined)}>
-                <option value="">{t("cs.rp.no-repeat")}</option>
-                {BG_REPEATS.filter((r) => r !== "no-repeat").map((r) => <option key={r} value={r}>{t("cs.rp." + r)}</option>)}
+              <select className="cs-sel" value={eff("bgRepeat", "no-repeat")} onChange={(e) => setD("bgRepeat", e.target.value, "no-repeat")}>
+                {BG_REPEATS.map((r) => <option key={r} value={r}>{t("cs.rp." + r)}</option>)}
               </select>
             </div>
             <div className="cs-row">
               <label>{t("cs.bgattach")}</label>
               <div className="cs-seg">
                 {(["scroll", "fixed"] as const).map((a) => (
-                  <button type="button" key={a} className={(s.bgAttachment ?? "scroll") === a ? "on" : ""} onClick={() => set("bgAttachment", a === "scroll" ? undefined : a)}>{t("cs.at." + a)}</button>
+                  <button type="button" key={a} className={eff("bgAttachment", "scroll") === a ? "on" : ""} onClick={() => setD("bgAttachment", a, "scroll")}>{t("cs.at." + a)}</button>
                 ))}
               </div>
             </div>

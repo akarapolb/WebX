@@ -855,7 +855,7 @@ export default function VisualBuilder() {
       reset: () => updateBlockField(i, at, undefined),
       // Paste and presets replace the component's whole style, so they only exist on the main (desktop) look.
       replaceAll: device === "desktop" ? (st: any) => updateBlockField(i, ["styles", key], st) : undefined,
-      presets: presetApi,
+      presets: tenantKey ? presetApi : undefined,
       upload: (f: File) => uploadFieldImage(i, [...at, "bgImage"], f),
       swatches: pageSwatches, tokens: themeTokenList, t,
     };
@@ -1629,7 +1629,7 @@ export default function VisualBuilder() {
                         than not offering the control at all. */}
                     {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
                       styleSlot={(key) => (
-                        <ComponentStyle {...styleProps(i, b, key)} />
+                        <ComponentStyle key={`${i}:${key}`} {...styleProps(i, b, key)} />
                       )}
                       device={device} selectedComp={activeComp}
                       onPickComp={(k) => setSelComp(k ? { i, key: k } : null)}
@@ -1669,7 +1669,7 @@ export default function VisualBuilder() {
                         actually selected — a block-wide style control would be
                         ambiguous about which of its parts it meant. */}
                     {wpMeta && isA && activeComp && !/\.\d+$/.test(activeComp) && (
-                      <ComponentStyle {...styleProps(i, b, activeComp)} />
+                      <ComponentStyle key={`${i}:${activeComp}`} {...styleProps(i, b, activeComp)} />
                     )}
                     {/* Generic repeatable-list editor — one `items` descriptor per
                         block type (see ORST_TYPES above) drives add/edit/remove

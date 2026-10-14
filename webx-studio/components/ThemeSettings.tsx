@@ -131,9 +131,14 @@ export default function ThemeSettings({ tenantKey }: { tenantKey: string }) {
     const theme = compactTheme(tenantKey, { colors, fonts, radius, type: typo, palette });
     // Replace `theme` inside the existing brand blob — the update overwrites
     // the whole `brand` field, so everything else in it must be sent back.
-    const next = { ...brand };
-    if (Object.keys(theme).length) next.theme = theme; else delete next.theme;
     try {
+      // Merge into the brand as it is NOW, not as it was when this page opened: something else (the Visual
+      // Builder's saved style presets) may have written to it since, and the update replaces the whole field.
+      const { data } = await cms.entries.list<any>(TENANT_UID, { pageSize: 50 });
+      const fresh = data.find((x: any) => x.key === tenantKey);
+      const base = fresh?.brand && typeof fresh.brand === "object" ? fresh.brand : brand;
+      const next = { ...base };
+      if (Object.keys(theme).length) next.theme = theme; else delete next.theme;
       await cms.entries.update(TENANT_UID, docId, { brand: next });
       setBrand(next);
       invalidateThemeTokens(tenantKey);   // the Visual Builder's colour chips read this

@@ -800,6 +800,7 @@ export const DICT: Record<string, Entry> = {
   "cs.rad.@card": { en: "Theme corner", th: "มุมโค้งตามธีม" },
   "cs.rad.@sm": { en: "Theme small corner", th: "มุมเล็กตามธีม" },
   "cs.rad.@pill": { en: "Pill (fully round)", th: "แคปซูล (โค้งเต็ม)" },
+  "cs.preset.toobig": { en: "This style is too large to save as a preset or copy — trim the custom CSS or some overrides.", th: "สไตล์นี้ใหญ่เกินกว่าจะบันทึกเป็นพรีเซ็ตหรือคัดลอกได้ ลองลด CSS กำหนดเองหรือค่า override บางส่วน" },
   "cs.states": { en: "Look to edit", th: "สถานะที่จะแก้" },
   "cs.state.normal": { en: "Normal", th: "ปกติ" },
   "cs.state.hover": { en: "Hover", th: "ชี้เมาส์" },
