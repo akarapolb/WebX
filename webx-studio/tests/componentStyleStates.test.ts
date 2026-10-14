@@ -61,3 +61,19 @@ describe("gradients in the style model", () => {
     assert.deepEqual(pageColors(blocks), ["#111111", "#333333", "#222222"]);
   });
 });
+
+describe("typography in the style model", () => {
+  test("the ranges and choices match what the site accepts", async () => {
+    const { STYLE_LIMITS, FONT_FAMILIES, TEXT_TRANSFORMS } = await import("../lib/componentStyle");
+    assert.deepEqual([STYLE_LIMITS.lineHeight.min, STYLE_LIMITS.lineHeight.max], [0.8, 3]);
+    assert.deepEqual([STYLE_LIMITS.letterSpacing.min, STYLE_LIMITS.letterSpacing.max], [-0.1, 0.5]);
+    assert.deepEqual([...FONT_FAMILIES], ["heading", "body", "mono"]);
+    assert.deepEqual([...TEXT_TRANSFORMS], ["none", "uppercase", "lowercase", "capitalize"]);
+  });
+
+  test("a zero letter spacing is a real value, so the style is not blank", () => {
+    assert.equal(isBlankStyle({ letterSpacing: 0 }), false);
+    assert.equal(isBlankStyle({ fontFamily: "heading" }), false);
+    assert.equal(isBlankStyle({ mobile: { textTransform: "uppercase" } }), false);
+  });
+});

@@ -53,6 +53,15 @@ export type ComponentStyle = {
   fontSize?: number;
   fontWeight?: number;
   align?: "left" | "center" | "right";
+  /** The theme's heading font, its body font, or a monospace stack. */
+  fontFamily?: "heading" | "body" | "mono";
+  /** Multiple of the font size (0.8–3). */
+  lineHeight?: number;
+  /** In em (-0.1–0.5). */
+  letterSpacing?: number;
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
+  textDecoration?: "none" | "underline" | "line-through";
+  fontStyle?: "normal" | "italic";
   radius?: number;
   /** Inner spacing on all sides, px (the original single value; the per-side ones below override it). */
   padding?: number;
@@ -82,6 +91,8 @@ export type DeviceName = (typeof DEVICES)[number];
 /** Input bounds, mirroring the clamps styles.ts applies when rendering. */
 export const STYLE_LIMITS = {
   fontSize: { min: 8, max: 200 },
+  lineHeight: { min: 0.8, max: 3, step: 0.05 },
+  letterSpacing: { min: -0.1, max: 0.5, step: 0.01 },
   radius: { min: 0, max: 999 },
   padding: { min: 0, max: 400 },
   borderWidth: { min: 0, max: 20 },
@@ -101,6 +112,8 @@ export const BG_POSITIONS: readonly BgPosition[] = [
 export const BG_REPEATS = ["no-repeat", "repeat", "repeat-x", "repeat-y"] as const;
 export const BG_FITS = ["cover", "contain", "auto"] as const;
 export const BORDER_STYLES = ["solid", "dashed", "dotted", "double"] as const;
+export const FONT_FAMILIES = ["heading", "body", "mono"] as const;
+export const TEXT_TRANSFORMS = ["none", "uppercase", "lowercase", "capitalize"] as const;
 export const GRAD_TYPES = ["linear", "radial"] as const;
 export const GRAD_ANGLE = { min: 0, max: 360, step: 5, default: 180 } as const;
 export const SHADOWS = ["none", "sm", "md", "lg", "xl"] as const;

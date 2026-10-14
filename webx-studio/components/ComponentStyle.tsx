@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
-  BG_FITS, BG_POSITIONS, GRAD_ANGLE, GRAD_TYPES, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
+  BG_FITS, BG_POSITIONS, FONT_FAMILIES, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
@@ -249,6 +249,13 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
       </Section>
 
       <Section title={t("cs.sec.text")} defaultOpen>
+        <div className="cs-row">
+          <label>{t("cs.font")}</label>
+          <select className="cs-sel" value={s.fontFamily ?? ""} onChange={(e) => set("fontFamily", e.target.value || undefined)}>
+            <option value="">{inh("fontFamily") ? t("cs.ff." + inh("fontFamily")) : "—"}</option>
+            {FONT_FAMILIES.map((f) => <option key={f} value={f}>{t("cs.ff." + f)}</option>)}
+          </select>
+        </div>
         <NumRow label={t("cs.fontsize")} value={s.fontSize} inherited={inh("fontSize")} min={STYLE_LIMITS.fontSize.min} max={STYLE_LIMITS.fontSize.max} unit="px"
           onChange={(v) => set("fontSize", v)} />
         <div className="cs-row">
@@ -257,6 +264,29 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
             <option value="">—</option>
             {FONT_WEIGHTS.map((w) => <option key={w} value={w}>{w}</option>)}
           </select>
+        </div>
+        <NumRow label={t("cs.lineheight")} value={s.lineHeight} inherited={inh("lineHeight")} min={STYLE_LIMITS.lineHeight.min} max={STYLE_LIMITS.lineHeight.max} step={STYLE_LIMITS.lineHeight.step} unit="×"
+          onChange={(v) => set("lineHeight", v)} />
+        <NumRow label={t("cs.letterspacing")} value={s.letterSpacing} inherited={inh("letterSpacing")} min={STYLE_LIMITS.letterSpacing.min} max={STYLE_LIMITS.letterSpacing.max} step={STYLE_LIMITS.letterSpacing.step} unit="em"
+          onChange={(v) => set("letterSpacing", v)} />
+        {s.letterSpacing !== undefined && s.letterSpacing > 0.08 && <p className="cs-hint">{t("cs.letterhint")}</p>}
+        <div className="cs-row">
+          <label>{t("cs.case")}</label>
+          <select className="cs-sel" value={s.textTransform ?? ""} onChange={(e) => set("textTransform", e.target.value || undefined)}>
+            <option value="">{inh("textTransform") ? t("cs.tt." + inh("textTransform")) : "—"}</option>
+            {TEXT_TRANSFORMS.map((tt) => <option key={tt} value={tt}>{t("cs.tt." + tt)}</option>)}
+          </select>
+        </div>
+        <div className="cs-row">
+          <label>{t("cs.emphasis")}</label>
+          <div className="cs-seg">
+            <button type="button" className={s.fontStyle === "italic" ? "on" : ""} title={t("cs.italic")} aria-label={t("cs.italic")} aria-pressed={s.fontStyle === "italic"}
+              onClick={() => set("fontStyle", s.fontStyle === "italic" ? undefined : "italic")}><i>I</i></button>
+            <button type="button" className={s.textDecoration === "underline" ? "on" : ""} title={t("cs.underline")} aria-label={t("cs.underline")} aria-pressed={s.textDecoration === "underline"}
+              onClick={() => set("textDecoration", s.textDecoration === "underline" ? undefined : "underline")}><u>U</u></button>
+            <button type="button" className={s.textDecoration === "line-through" ? "on" : ""} title={t("cs.strike")} aria-label={t("cs.strike")} aria-pressed={s.textDecoration === "line-through"}
+              onClick={() => set("textDecoration", s.textDecoration === "line-through" ? undefined : "line-through")}><s>S</s></button>
+          </div>
         </div>
         <div className="cs-row">
           <label>{t("cs.align")}</label>

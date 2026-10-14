@@ -80,6 +80,15 @@ export type Style = {
   fontWeight?: number;
   /** Text alignment. */
   align?: "left" | "center" | "right";
+  /** The theme's heading font, its body font, or a monospace stack. */
+  fontFamily?: "heading" | "body" | "mono";
+  /** Line height as a multiple of the font size (0.8–3). Wins over the 1.25 a font size sets on its own. */
+  lineHeight?: number;
+  /** Space between letters, in em (-0.1–0.5). */
+  letterSpacing?: number;
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
+  textDecoration?: "none" | "underline" | "line-through";
+  fontStyle?: "normal" | "italic";
   /** Corner radius, px. */
   radius?: number;
   /** Inner spacing, px. */
@@ -113,7 +122,8 @@ export type DeviceStyle = Omit<Style, "hover" | "focus" | "active" | "tablet" | 
 export const STYLE_KEYS = [
   "color", "iconColor", "bg", "bgImage", "bgFit", "bgRepeat", "bgPosition", "bgAttachment", "bgOverlay",
   "gradFrom", "gradTo", "gradAngle", "gradType",
-  "fontSize", "fontWeight", "align", "radius", "padding", "unit",
+  "fontSize", "fontWeight", "align", "fontFamily", "lineHeight", "letterSpacing", "textTransform", "textDecoration", "fontStyle",
+  "radius", "padding", "unit",
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
   "borderWidth", "borderStyle", "borderColor", "shadow", "opacity",
   "hover", "focus", "active", "tablet", "mobile",
@@ -194,6 +204,23 @@ const clampSet = (v: unknown, lo: number, hi: number): number | undefined =>
 const ALIGNS = ["left", "center", "right"] as const;
 
 const GRAD_TYPES = ["linear", "radial"] as const;
+const FONT_FAMILIES = {
+  heading: "var(--wx-font-heading)",
+  body: "var(--wx-font-body)",
+  mono: "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
+} as const;
+const TEXT_TRANSFORMS = ["none", "uppercase", "lowercase", "capitalize"] as const;
+const TEXT_DECORATIONS = ["none", "underline", "line-through"] as const;
+const FONT_STYLES = ["normal", "italic"] as const;
+/** A decimal clamped to a range and rounded to `places`; null, "" and non-numbers mean "not set". */
+function decimal(v: unknown, lo: number, hi: number, places: number): number | undefined {
+  // Only a number or a non-empty string: Number([]) is 0 and Number(true) is 1, which would read as a real value.
+  if (typeof v !== "number" && !(typeof v === "string" && v.trim() !== "")) return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  const f = 10 ** places;
+  return Math.round(Math.min(hi, Math.max(lo, n)) * f) / f;
+}
 
 /** A two-colour gradient, or undefined when neither colour is set. A missing end is transparent, which makes a fade. */
 function gradientCss(s: { gradFrom?: unknown; gradTo?: unknown; gradAngle?: unknown; gradType?: unknown }): string | undefined {
@@ -226,10 +253,12 @@ function backgroundLayers(s: Style): string | undefined {
 const LAYER_KEYS = ["bgImage", "bgOverlay", "gradFrom", "gradTo", "gradAngle", "gradType"] as const;
 const isSetValue = (v: unknown) => v !== undefined && v !== null && v !== "";
 const touchesLayers = (s: Style): boolean => LAYER_KEYS.some((k) => isSetValue((s as any)[k]));
-/** `base` with whichever background-layer fields `over` sets laid on top. */
-function withLayers(base: Style, over: Style): Style {
-  const out: any = { ...base };
-  for (const k of LAYER_KEYS) if (isSetValue((over as any)[k])) out[k] = (over as any)[k];
+const NESTED = new Set(["hover", "focus", "active", "tablet", "mobile"]);
+/** `base` with every plain property `over` sets laid on top (states and overrides are not carried across). */
+function mergeStyle(base: Style, over: Style): Style {
+  const out: any = {};
+  for (const k of Object.keys(base)) if (!NESTED.has(k)) out[k] = (base as any)[k];
+  for (const k of Object.keys(over)) if (!NESTED.has(k) && isSetValue((over as any)[k])) out[k] = (over as any)[k];
   return out;
 }
 
@@ -241,7 +270,7 @@ function withLayers(base: Style, over: Style): Style {
  * image or border the base style already made), where the base style only emits
  * those alongside the image or width they belong to.
  */
-export function styleDecls(s: Style | null | undefined, partial = false, layerSource?: Style): string {
+export function styleDecls(s: Style | null | undefined, partial = false, effective?: Style): string {
   if (!s || typeof s !== "object" || Array.isArray(s)) return "";
   const d: string[] = [];
 
@@ -249,10 +278,13 @@ export function styleDecls(s: Style | null | undefined, partial = false, layerSo
   if (col) d.push(`color:${col}!important`);
   const bgc = colorCss(s.bg);
   if (bgc) d.push(`background-color:${bgc}!important`);
-  // A device override rebuilds the layers only when it changes one of them, from
-  // what it inherits (`layerSource`) plus its own change — not from itself alone,
-  // which would drop the base image just to turn a gradient round.
-  const layers = !partial || touchesLayers(s) ? backgroundLayers(layerSource ?? s) : undefined;
+  // `effective` is the style as it stands at this width: the base with every
+  // wider override laid on, then this one. A device override rebuilds the
+  // background layers only when it changes one of them, from what it inherits
+  // plus its own change — not from itself alone, which would drop the base image
+  // just to turn a gradient round.
+  const eff = effective ?? s;
+  const layers = !partial || touchesLayers(s) ? backgroundLayers(eff) : undefined;
   if (layers) d.push(`background-image:${layers}!important`);
   if (isSafeImageUrl(s.bgImage)) {
     d.push(`background-size:${oneOf(s.bgFit, FITS) || "cover"}!important`);
@@ -269,7 +301,23 @@ export function styleDecls(s: Style | null | undefined, partial = false, layerSo
   }
 
   const fs = clamp(s.fontSize, 8, 200);
-  if (fs !== undefined) d.push(`font-size:${fs}px!important`, "line-height:1.25!important");
+  if (fs !== undefined) d.push(`font-size:${fs}px!important`);
+  // A font size alone tightens the line to 1.25 (the original behaviour); an
+  // explicit line height — set here, or inherited by a device override — wins.
+  const lh = decimal(s.lineHeight, 0.8, 3, 2);
+  if (lh !== undefined) d.push(`line-height:${lh}!important`);
+  else if (fs !== undefined && decimal(eff.lineHeight, 0.8, 3, 2) === undefined) d.push("line-height:1.25!important");
+
+  const ff = typeof s.fontFamily === "string" && Object.prototype.hasOwnProperty.call(FONT_FAMILIES, s.fontFamily) ? (s.fontFamily as keyof typeof FONT_FAMILIES) : undefined;
+  if (ff) d.push(`font-family:${FONT_FAMILIES[ff]}!important`);
+  const ls = decimal(s.letterSpacing, -0.1, 0.5, 3);
+  if (ls !== undefined) d.push(`letter-spacing:${ls}em!important`);
+  const tt = oneOf(s.textTransform, TEXT_TRANSFORMS);
+  if (tt) d.push(`text-transform:${tt}!important`);
+  const td = oneOf(s.textDecoration, TEXT_DECORATIONS);
+  if (td) d.push(`text-decoration-line:${td}!important`);
+  const fst = oneOf(s.fontStyle, FONT_STYLES);
+  if (fst) d.push(`font-style:${fst}!important`);
 
   const fw = clamp(s.fontWeight, 100, 900);
   // Only the nine real CSS weights — an in-between number is a typo, not a
@@ -400,14 +448,15 @@ function styleCss(sel: string, st: Style | null | undefined): string {
 
   // Device overrides, after the base and in width order so the narrowest wins:
   // tablet applies from 1023px down, then mobile from 639px down on top of it.
-  // The background layers cascade too: each width starts from the image and
-  // gradient the wider one ended with.
-  let layers: Style = st;
+  // Everything cascades: each width starts from what the wider one ended with
+  // (so a font size change keeps an inherited line height, and a gradient turned
+  // round keeps its colours and image).
+  let eff: Style = st;
   for (const dev of DEVICES) {
     const o = (st as any)[dev];
     if (!o || typeof o !== "object" || Array.isArray(o)) continue;
-    layers = withLayers(layers, o);
-    const dd = styleDecls(o, true, layers);
+    eff = mergeStyle(eff, o);
+    const dd = styleDecls(o, true, eff);
     const rules = (dd ? `${sel}{${dd}}` : "") + colourReach(sel, o.color, o.iconColor);
     if (rules) css += `@media ${DEVICE_MAX_WIDTH[dev]}{${rules}}`;
   }

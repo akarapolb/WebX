@@ -52,6 +52,9 @@
   --wx-c-accent: var(--rs-gold);
   --wx-c-ground: var(--rs-ground);
   --wx-c-ink: var(--rs-ink);
+  /* Theme font tokens for a component's "font" setting: they follow the theme's heading and body fonts. */
+  --wx-font-heading: var(--rs-font-display);
+  --wx-font-body: var(--rs-font-body);
   --rs-ink-soft: #47534e;
   /* Darkened from #79847f during the premium pass: a real Lighthouse audit
      measured it at 3.87:1 on white (.wx-dir-division on the member
