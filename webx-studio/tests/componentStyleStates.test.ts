@@ -100,3 +100,20 @@ describe("sizes in the style model", () => {
     assert.equal(isBlankStyle({ mobile: { maxWidth: "none" } }), false);
   });
 });
+
+describe("layout in the style model", () => {
+  test("the choices and ranges match what the site accepts", async () => {
+    const { DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, ALIGN_ITEMS, OVERFLOWS, LAYOUT_LIMITS } = await import("../lib/componentStyle");
+    assert.deepEqual([...DISPLAYS], ["block", "flex", "grid", "inline-block", "none"]);
+    assert.deepEqual([...FLEX_DIRECTIONS], ["row", "column", "row-reverse", "column-reverse"]);
+    assert.deepEqual([...JUSTIFY], ["start", "center", "end", "between", "around", "evenly"]);
+    assert.deepEqual([...ALIGN_ITEMS], ["start", "center", "end", "stretch", "baseline"]);
+    assert.deepEqual([...OVERFLOWS], ["visible", "hidden", "auto"]);
+    assert.deepEqual([LAYOUT_LIMITS.gridColumns.min, LAYOUT_LIMITS.gridColumns.max, LAYOUT_LIMITS.zIndex.min, LAYOUT_LIMITS.zIndex.max], [1, 12, -10, 100]);
+  });
+
+  test("a zero stack order or a hidden display is a real value", () => {
+    assert.equal(isBlankStyle({ zIndex: 0 }), false);
+    assert.equal(isBlankStyle({ mobile: { display: "none" } }), false);
+  });
+});

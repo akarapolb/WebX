@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
-  BG_FITS, BG_POSITIONS, DIM_LIMITS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
+  ALIGN_ITEMS, BG_FITS, BG_POSITIONS, DIM_LIMITS, DISPLAYS, FLEX_DIRECTIONS, JUSTIFY, LAYOUT_LIMITS, OVERFLOWS, DIM_UNITS, FONT_FAMILIES, SIZE_FIELDS, splitDimension, type DimUnit, GRAD_ANGLE, GRAD_TYPES, TEXT_TRANSFORMS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
   STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
@@ -339,6 +339,61 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
           <DimRow key={f.key} label={t("cs.dim." + f.key)} value={(s as any)[f.key]} keyword={"keyword" in f ? f.keyword : undefined}
             inherited={inh(f.key)} onChange={(v) => set(f.key, v)} t={t} />
         ))}
+      </Section>
+
+      <Section title={t("cs.sec.layout")} defaultOpen={["display", "flexDirection", "justifyContent", "alignItems", "flexWrap", "gap", "gridColumns", "position", "zIndex", "overflow"].some((k) => (s as any)[k] !== undefined)}>
+        {(() => {
+          const eff = s.display ?? inh("display");
+          const pick = (k: StyleKey, label: string, opts: readonly string[], tkey: string) => (
+            <div className="cs-row">
+              <label>{label}</label>
+              <select className="cs-sel" value={(s as any)[k] ?? ""} onChange={(e) => set(k, e.target.value || undefined)}>
+                <option value="">{inh(k as string) ? t(tkey + inh(k as string)) : "—"}</option>
+                {opts.map((o) => <option key={o} value={o}>{t(tkey + o)}</option>)}
+              </select>
+            </div>
+          );
+          return (
+            <>
+              {pick("display", t("cs.lay.display"), DISPLAYS, "cs.disp.")}
+              {s.display === "none" && <p className="cs-hint">{t("cs.lay.hidehint")}</p>}
+              {(eff === "flex" || eff === "grid") && (
+                <>
+                  {eff === "flex" && pick("flexDirection", t("cs.lay.direction"), FLEX_DIRECTIONS, "cs.dir.")}
+                  {pick("justifyContent", t("cs.lay.justify"), JUSTIFY, "cs.jc.")}
+                  {pick("alignItems", t("cs.lay.align"), ALIGN_ITEMS, "cs.ai.")}
+                  {eff === "flex" && (
+                    <div className="cs-row">
+                      <label>{t("cs.lay.wrap")}</label>
+                      <div className="cs-seg">
+                        {(["nowrap", "wrap"] as const).map((w) => (
+                          <button type="button" key={w} className={(s.flexWrap ?? inh("flexWrap") ?? "nowrap") === w ? "on" : ""}
+                            onClick={() => set("flexWrap", s.flexWrap === w ? undefined : w)}>{t("cs.wrap." + w)}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {eff === "grid" && (
+                    <NumRow label={t("cs.lay.columns")} value={s.gridColumns} inherited={inh("gridColumns")} min={LAYOUT_LIMITS.gridColumns.min} max={LAYOUT_LIMITS.gridColumns.max} unit=""
+                      onChange={(v) => set("gridColumns", v)} />
+                  )}
+                  <DimRow label={t("cs.lay.gap")} value={s.gap} inherited={inh("gap")} onChange={(v) => set("gap", v)} t={t} />
+                </>
+              )}
+              <div className="cs-row">
+                <label>{t("cs.lay.position")}</label>
+                <div className="cs-seg">
+                  {(["static", "relative"] as const).map((p) => (
+                    <button type="button" key={p} className={(s.position ?? inh("position") ?? "static") === p ? "on" : ""}
+                      onClick={() => set("position", s.position === p ? undefined : p)}>{t("cs.pos." + p)}</button>
+                  ))}
+                </div>
+              </div>
+              <NumRow label={t("cs.lay.zindex")} value={s.zIndex} inherited={inh("zIndex")} min={LAYOUT_LIMITS.zIndex.min} max={LAYOUT_LIMITS.zIndex.max} unit="" onChange={(v) => set("zIndex", v)} />
+              {pick("overflow", t("cs.lay.overflow"), OVERFLOWS, "cs.ov.")}
+            </>
+          );
+        })()}
       </Section>
 
       <Section title={t("cs.sec.spacing")} defaultOpen={anySpacing || s.padding !== undefined}>

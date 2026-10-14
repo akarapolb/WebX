@@ -101,6 +101,21 @@ export type Style = {
   width?: string; height?: string;
   minWidth?: string; minHeight?: string;
   maxWidth?: string; maxHeight?: string;
+  /** How the component lays out its children. "none" hides it (use on a tablet or phone override to hide it at that width). */
+  display?: "block" | "flex" | "grid" | "inline-block" | "none";
+  flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
+  justifyContent?: "start" | "center" | "end" | "between" | "around" | "evenly";
+  alignItems?: "start" | "center" | "end" | "stretch" | "baseline";
+  flexWrap?: "nowrap" | "wrap";
+  /** Space between children, a size such as "16px" or "1rem". */
+  gap?: string;
+  /** Equal columns of a grid, 1–12. */
+  gridColumns?: number;
+  /** Only static and relative: nothing that could float over the rest of the page. */
+  position?: "static" | "relative";
+  /** Stacking order, -10 to 100 (it only has an effect on a positioned component). */
+  zIndex?: number;
+  overflow?: "visible" | "hidden" | "auto";
   /** Border width, px. 0 removes the border. */
   borderWidth?: number;
   borderStyle?: "solid" | "dashed" | "dotted" | "double";
@@ -130,6 +145,7 @@ export const STYLE_KEYS = [
   "radius", "padding", "unit",
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
   "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
+  "display", "flexDirection", "justifyContent", "alignItems", "flexWrap", "gap", "gridColumns", "position", "zIndex", "overflow",
   "borderWidth", "borderStyle", "borderColor", "shadow", "opacity",
   "hover", "focus", "active", "tablet", "mobile",
 ] as const;
@@ -229,6 +245,16 @@ const clampSet = (v: unknown, lo: number, hi: number): number | undefined =>
 const ALIGNS = ["left", "center", "right"] as const;
 
 const GRAD_TYPES = ["linear", "radial"] as const;
+const DISPLAYS = ["block", "flex", "grid", "inline-block", "none"] as const;
+const FLEX_DIRECTIONS = ["row", "column", "row-reverse", "column-reverse"] as const;
+const JUSTIFY = { start: "flex-start", center: "center", end: "flex-end", between: "space-between", around: "space-around", evenly: "space-evenly" } as const;
+const ALIGN_ITEMS = { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch", baseline: "baseline" } as const;
+const FLEX_WRAPS = ["nowrap", "wrap"] as const;
+const POSITIONS_LAYOUT = ["static", "relative"] as const;
+const OVERFLOWS = ["visible", "hidden", "auto"] as const;
+/** The CSS value for a name from a fixed map, or undefined — own keys only, so "constructor" and friends never match. */
+const mapped = <T extends Record<string, string>>(v: unknown, map: T): T[keyof T] | undefined =>
+  typeof v === "string" && Object.prototype.hasOwnProperty.call(map, v) ? (map[v] as T[keyof T]) : undefined;
 const FONT_FAMILIES = {
   heading: "var(--wx-font-heading)",
   body: "var(--wx-font-body)",
@@ -375,6 +401,27 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
     const v = dimension((s as any)[key], kw);
     if (v !== undefined) d.push(`${prop}:${v}!important`);
   }
+
+  const disp = oneOf(s.display, DISPLAYS);
+  if (disp) d.push(`display:${disp}!important`);
+  const fdir = oneOf(s.flexDirection, FLEX_DIRECTIONS);
+  if (fdir) d.push(`flex-direction:${fdir}!important`);
+  const jc = mapped(s.justifyContent, JUSTIFY);
+  if (jc) d.push(`justify-content:${jc}!important`);
+  const ai = mapped(s.alignItems, ALIGN_ITEMS);
+  if (ai) d.push(`align-items:${ai}!important`);
+  const fw2 = oneOf(s.flexWrap, FLEX_WRAPS);
+  if (fw2) d.push(`flex-wrap:${fw2}!important`);
+  const gp = dimension(s.gap);
+  if (gp !== undefined) d.push(`gap:${gp}!important`);
+  const gc = clampSet(s.gridColumns, 1, 12);
+  if (gc !== undefined) d.push(`grid-template-columns:repeat(${gc},minmax(0,1fr))!important`);
+  const pos = oneOf(s.position, POSITIONS_LAYOUT);
+  if (pos) d.push(`position:${pos}!important`);
+  const zi = clampSet(s.zIndex, -10, 100);
+  if (zi !== undefined) d.push(`z-index:${zi}!important`);
+  const ov = oneOf(s.overflow, OVERFLOWS);
+  if (ov) d.push(`overflow:${ov}!important`);
 
   const bw = clampSet(s.borderWidth, 0, 20);
   if (bw !== undefined) {

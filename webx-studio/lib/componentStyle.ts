@@ -73,6 +73,16 @@ export type ComponentStyle = {
   width?: string; height?: string;
   minWidth?: string; minHeight?: string;
   maxWidth?: string; maxHeight?: string;
+  display?: "block" | "flex" | "grid" | "inline-block" | "none";
+  flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
+  justifyContent?: "start" | "center" | "end" | "between" | "around" | "evenly";
+  alignItems?: "start" | "center" | "end" | "stretch" | "baseline";
+  flexWrap?: "nowrap" | "wrap";
+  gap?: string;
+  gridColumns?: number;
+  position?: "static" | "relative";
+  zIndex?: number;
+  overflow?: "visible" | "hidden" | "auto";
   borderWidth?: number;
   borderStyle?: "solid" | "dashed" | "dotted" | "double";
   borderColor?: string;
@@ -137,6 +147,12 @@ export function splitDimension(v: unknown): { n: string; unit: DimUnit } | null 
   if (!i || !(DIM_UNITS as readonly string[]).includes(unit)) return null;
   return { n: v.slice(0, i), unit: unit as DimUnit };
 }
+export const DISPLAYS = ["block", "flex", "grid", "inline-block", "none"] as const;
+export const FLEX_DIRECTIONS = ["row", "column", "row-reverse", "column-reverse"] as const;
+export const JUSTIFY = ["start", "center", "end", "between", "around", "evenly"] as const;
+export const ALIGN_ITEMS = ["start", "center", "end", "stretch", "baseline"] as const;
+export const OVERFLOWS = ["visible", "hidden", "auto"] as const;
+export const LAYOUT_LIMITS = { gridColumns: { min: 1, max: 12 }, zIndex: { min: -10, max: 100 } } as const;
 export const FONT_FAMILIES = ["heading", "body", "mono"] as const;
 export const TEXT_TRANSFORMS = ["none", "uppercase", "lowercase", "capitalize"] as const;
 export const GRAD_TYPES = ["linear", "radial"] as const;
