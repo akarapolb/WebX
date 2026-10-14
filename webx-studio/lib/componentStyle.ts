@@ -13,6 +13,18 @@
 export type SpaceUnit = "px" | "rem" | "em" | "%";
 export type BgPosition = "left top" | "center top" | "right top" | "left center" | "center" | "right center" | "left bottom" | "center bottom" | "right bottom";
 
+/** What a component looks like while hovered, focused or pressed — colour, shadow and opacity only. */
+export type StateStyle = {
+  color?: string;
+  iconColor?: string;
+  bg?: string;
+  borderColor?: string;
+  shadow?: "none" | "sm" | "md" | "lg" | "xl";
+  opacity?: number;
+};
+export const STATES = ["hover", "focus", "active"] as const;
+export type StateName = (typeof STATES)[number];
+
 export type ComponentStyle = {
   /** Text colour: #rrggbb(aa), or a theme token ("@primary", "@c1"). Reaches the text inside the component too. */
   color?: string;
@@ -45,6 +57,9 @@ export type ComponentStyle = {
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
   /** Percent. */
   opacity?: number;
+  hover?: StateStyle;
+  focus?: StateStyle;
+  active?: StateStyle;
 };
 
 /** Input bounds, mirroring the clamps styles.ts applies when rendering. */
@@ -75,10 +90,11 @@ export const SHADOWS = ["none", "sm", "md", "lg", "xl"] as const;
 export const FONT_WEIGHTS = [300, 400, 500, 600, 700, 800] as const;
 
 /** True when a style object would render nothing, so it can be dropped. */
-export function isBlankStyle(s: ComponentStyle | undefined | null): boolean {
+export function isBlankStyle(s: ComponentStyle | StateStyle | undefined | null): boolean {
   if (!s) return true;
   return !Object.keys(s).some((k) => {
     const v = (s as any)[k];
+    if (v && typeof v === "object") return !isBlankStyle(v); // a state with something set in it
     return v !== undefined && v !== null && v !== "";
   });
 }

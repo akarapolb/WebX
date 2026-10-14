@@ -4,7 +4,7 @@ import Icon from "./Icon";
 import ColorPicker from "./ColorPicker";
 import {
   BG_FITS, BG_POSITIONS, BG_REPEATS, BORDER_STYLES, FONT_WEIGHTS, SHADOWS, SPACE_LIMITS, SPACE_UNITS, STYLE_LIMITS,
-  isTokenValue, type ComponentStyle as Style, type SpaceUnit,
+  STATES, isBlankStyle, isTokenValue, type ComponentStyle as Style, type SpaceUnit, type StateName, type StateStyle,
 } from "@/lib/componentStyle";
 import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
 
@@ -18,7 +18,8 @@ import { tokenInfo, type ThemeToken } from "@/lib/themeTokens";
 // this panel is free to be a plain editor and an unset field simply renders
 // nothing rather than a default that would fight the template's own CSS.
 
-export type StyleKey = keyof Style;
+/** A property, or one inside an interaction state written as "hover.bg". */
+export type StyleKey = keyof Style | `${StateName}.${keyof StateStyle}`;
 
 type Props = {
   style: Style | undefined;
@@ -45,7 +46,8 @@ const ALIGNS = [
   { v: "right", icon: "≡" },
 ] as const;
 
-type ColorKey = "color" | "iconColor" | "bg" | "borderColor" | "bgOverlay";
+// A colour row is identified by its property path ("bg", "hover.bg"), so the pickers stay mutually exclusive across modes too.
+type ColorKey = string;
 
 /** A colour row: swatch button that opens the picker, plus a clear control. */
 // Controlled: `open` and `setOpen` come from the panel, which is the only thing
@@ -147,6 +149,9 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
   // Which colour picker is showing, if any. One value for all rows is what makes
   // them mutually exclusive.
   const [openPicker, setOpenPicker] = useState<ColorKey | null>(null);
+  // Which look is being edited: the normal one, or one of the interaction states.
+  const [mode, setMode] = useState<"normal" | StateName>("normal");
+  const get = (k: string) => k.split(".").reduce((o: any, p) => (o == null ? undefined : o[p]), s as any);
   const rowProps = (k: ColorKey) => ({
     open: openPicker === k,
     // Opening switches to this row (closing whichever was open); closing only
@@ -154,11 +159,11 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
     setOpen: (o: boolean) => setOpenPicker((cur) => (o ? k : cur === k ? null : cur)),
   });
   const color = (k: ColorKey, label: string) => (
-    <ColorRow label={label} value={s[k]} swatches={swatches} tokens={tokens} t={t} {...rowProps(k)}
-      onChange={(v) => set(k, v)} onClear={() => set(k, undefined)} />
+    <ColorRow label={label} value={get(k)} swatches={swatches} tokens={tokens} t={t} {...rowProps(k)}
+      onChange={(v) => set(k as StyleKey, v)} onClear={() => set(k as StyleKey, undefined)} />
   );
   const [busy, setBusy] = useState(false);
-  const touched = Object.keys(s).some((k) => (s as any)[k] !== undefined && (s as any)[k] !== "");
+  const touched = !isBlankStyle(s);
   const unit: SpaceUnit = (SPACE_UNITS as readonly string[]).includes(s.unit as string) ? (s.unit as SpaceUnit) : "px";
   const anySpacing = ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft"].some((k) => (s as any)[k] !== undefined);
 
@@ -178,6 +183,41 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
         {touched && <button type="button" className="cs-reset" onClick={reset}>{t("cs.reset")}</button>}
       </div>
 
+      <div className="cs-states" role="tablist" aria-label={t("cs.states")}>
+        {(["normal", ...STATES] as const).map((m) => (
+          <button type="button" role="tab" key={m} aria-selected={mode === m}
+            className={(mode === m ? "on" : "") + (m !== "normal" && !isBlankStyle((s as any)[m]) ? " has" : "")}
+            onClick={() => { setMode(m); setOpenPicker(null); }}>{t("cs.state." + m)}</button>
+        ))}
+      </div>
+
+      {mode !== "normal" ? (
+        <div className="cs-state-body">
+          <p className="cs-hint">{t("cs.statehint." + mode)}</p>
+          {color(mode + ".color", t("cs.color"))}
+          {color(mode + ".iconColor", t("cs.iconcolor"))}
+          {color(mode + ".bg", t("cs.bg"))}
+          {color(mode + ".borderColor", t("cs.bordercolor"))}
+          <div className="cs-row">
+            <label>{t("cs.shadow")}</label>
+            <select className="cs-sel" value={get(mode + ".shadow") ?? ""} onChange={(e) => set((mode + ".shadow") as StyleKey, e.target.value || undefined)}>
+              <option value="">—</option>
+              {SHADOWS.map((sh) => <option key={sh} value={sh}>{t("cs.sh." + sh)}</option>)}
+            </select>
+          </div>
+          <div className="cs-row">
+            <label>{t("cs.opacity")}</label>
+            <input type="range" className="cs-range" min={STYLE_LIMITS.opacity.min} max={STYLE_LIMITS.opacity.max} value={get(mode + ".opacity") ?? 100}
+              aria-label={t("cs.opacity")}
+              onChange={(e) => { const v = Number(e.target.value); set((mode + ".opacity") as StyleKey, v >= 100 ? undefined : v); }} />
+            <span className="cs-unit cs-pct">{get(mode + ".opacity") ?? 100}%</span>
+          </div>
+          {!isBlankStyle((s as any)[mode]) && (
+            <button type="button" className="cs-reset" onClick={() => set(mode, undefined)}>{t("cs.state.clear")}</button>
+          )}
+        </div>
+      ) : (
+      <>
       <Section title={t("cs.sec.colour")} defaultOpen>
         {color("color", t("cs.color"))}
         {color("iconColor", t("cs.iconcolor"))}
@@ -310,6 +350,8 @@ export default function ComponentStyle({ style, set, reset, upload, swatches, to
           </>
         )}
       </Section>
+      </>
+      )}
     </div>
   );
 }

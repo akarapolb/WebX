@@ -1610,7 +1610,7 @@ export default function VisualBuilder() {
                     {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
                       styleSlot={(key) => (
                         <ComponentStyle style={b.styles?.[key]} swatches={pageSwatches} tokens={themeTokenList} t={t}
-                          set={(k2, v) => updateBlockField(i, ["styles", key, k2], v === "" ? undefined : v)}
+                          set={(k2, v) => updateBlockField(i, ["styles", key, ...String(k2).split(".")], v === "" ? undefined : v)}
                           reset={() => updateBlockField(i, ["styles", key], undefined)}
                           upload={(f) => uploadFieldImage(i, ["styles", key, "bgImage"], f)} />
                       )}
@@ -1657,7 +1657,7 @@ export default function VisualBuilder() {
                         swatches={pageSwatches}
                         tokens={themeTokenList}
                         t={t}
-                        set={(k, v) => updateBlockField(i, ["styles", activeComp, k], v === "" ? undefined : v)}
+                        set={(k, v) => updateBlockField(i, ["styles", activeComp, ...String(k).split(".")], v === "" ? undefined : v)}
                         reset={() => updateBlockField(i, ["styles", activeComp], undefined)}
                         upload={(f) => uploadFieldImage(i, ["styles", activeComp, "bgImage"], f)} />
                     )}

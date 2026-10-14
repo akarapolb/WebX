@@ -1433,3 +1433,12 @@ textarea.agj-in{resize:vertical;line-height:1.5}
   border:1px solid var(--line2);border-radius:999px;background:var(--bg)}
 .cs-tok i{width:12px;height:12px;border-radius:50%;border:1px solid rgba(128,128,128,.45)}
 .cs-tok.on{border-color:var(--accent);background:var(--accent-soft)}
+
+/* Style panel — which look (normal / hover / focus / pressed) is being edited */
+.cs-states{display:flex;gap:4px;margin:8px 0 10px;padding:3px;background:var(--sunk);border-radius:10px}
+.cs-states button{flex:1;position:relative;padding:6px 4px;border:0;border-radius:8px;background:transparent;color:var(--ink2);font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
+.cs-states button:hover{color:var(--ink)}
+.cs-states button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.cs-states button.has::after{content:"";position:absolute;top:4px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.cs-state-body{display:grid;gap:2px}
+.cs-hint{margin:0 0 6px;font-size:11.5px;line-height:1.5;color:var(--ink3,var(--ink2))}

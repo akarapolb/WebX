@@ -27,6 +27,21 @@
 
 import { isComponentKey } from "./boxes";
 
+/** What a component looks like while the pointer is over it, it has focus, or it is being pressed.
+ * Only the properties that make sense to change at that moment — a hover that moved the layout would make the
+ * element jump out from under the pointer. */
+export type StateStyle = {
+  color?: string;
+  iconColor?: string;
+  bg?: string;
+  borderColor?: string;
+  shadow?: "none" | "sm" | "md" | "lg" | "xl";
+  opacity?: number;
+};
+/** The interaction states a style can carry, in the order they are emitted (later wins a tie). */
+export const STATES = ["hover", "focus", "active"] as const;
+export type StateName = (typeof STATES)[number];
+
 export type Style = {
   /** Text colour — applied to the component AND the text inside it. */
   color?: string;
@@ -68,6 +83,12 @@ export type Style = {
   shadow?: "none" | "sm" | "md" | "lg" | "xl";
   /** Opacity, percent (0 = invisible). */
   opacity?: number;
+  /** While the pointer is over the component (mouse and trackpad only). */
+  hover?: StateStyle;
+  /** While the component, or something inside it, has keyboard focus. */
+  focus?: StateStyle;
+  /** While the component is being pressed. */
+  active?: StateStyle;
 };
 
 /** The style keys this module knows how to render, for the editor's own use. */
@@ -76,6 +97,7 @@ export const STYLE_KEYS = [
   "fontSize", "fontWeight", "align", "radius", "padding", "unit",
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
   "borderWidth", "borderStyle", "borderColor", "shadow", "opacity",
+  "hover", "focus", "active",
 ] as const;
 
 // #rgb / #rgba / #rrggbb / #rrggbbaa — the only colour syntax accepted. The
@@ -225,8 +247,106 @@ export function styleDecls(s: Style | null | undefined): string {
   return d.join(";");
 }
 
+/** Declarations for one interaction state (empty when none survive). Colours, shadow and opacity only. */
+function stateDecls(s: StateStyle | null | undefined): string {
+  if (!s || typeof s !== "object" || Array.isArray(s)) return "";
+  const d: string[] = [];
+  const col = colorCss(s.color);
+  if (col) d.push(`color:${col}!important`);
+  const bgc = colorCss(s.bg);
+  if (bgc) d.push(`background-color:${bgc}!important`);
+  const bc = colorCss(s.borderColor);
+  if (bc) d.push(`border-color:${bc}!important`);
+  const sh = oneOf(s.shadow, Object.keys(SHADOWS) as (keyof typeof SHADOWS)[]);
+  if (sh) d.push(`box-shadow:${SHADOWS[sh]}!important`);
+  const op = clampSet(s.opacity, 0, 100);
+  if (op !== undefined) d.push(`opacity:${op / 100}!important`);
+  return d.join(";");
+}
+
+// Elements inside a component that carry no tag of their own, and not icons.
+const INNER_TEXT = ":not([data-vb-c]):not(svg):not(svg *)";
+
+/**
+ * The rules that carry a colour into a component's text and icons, for any
+ * selector `sel` (a plain component or one of its states).
+ *
+ * Colour has to reach the text INSIDE a component, not just the element that
+ * carries the tag. A card is tagged as one unit ("items.0") but its title, body
+ * and icon are children with colour rules of their own, and a rule on a child
+ * beats a value inherited from its parent — so setting the card's colour used
+ * to change nothing at all. Text tagged directly (a heading) always worked,
+ * which is why only some components failed.
+ *
+ * Elements that carry their own tag are skipped so they keep whatever was set
+ * on them specifically, and SVGs are skipped so the icon colour can own them.
+ */
+function colourReach(sel: string, color: unknown, icon: unknown): string {
+  let css = "";
+  const textColor = colorCss(color);
+  if (textColor) {
+    css += `${sel} ${INNER_TEXT}{color:${textColor}!important}`;
+    // An icon follows the text colour unless it has been given its own.
+    css += `${sel} svg,${sel} svg *{color:${textColor}!important}`;
+  }
+  // The selector repeats itself on purpose: two attribute pairs put this above
+  // the text-colour rules, so an icon colour wins over the colour of the text it
+  // sits in regardless of which rule is emitted first.
+  const iconColor = colorCss(icon);
+  if (iconColor) {
+    const twice = sel + sel;
+    css += `${twice} svg,${twice} svg *{color:${iconColor}!important}`;
+  }
+  return css;
+}
+
+// The pseudo-class each state listens to. Focus is two separate rules, not one
+// selector list: a browser that doesn't know :focus-visible would drop the whole
+// list, taking :focus-within with it.
+const STATE_PSEUDO: Record<StateName, string[]> = {
+  hover: [":hover"],
+  focus: [":focus-visible", ":focus-within"],
+  active: [":active"],
+};
+const TRANSITION_PROPS = "color .18s ease,background-color .18s ease,border-color .18s ease,box-shadow .18s ease,opacity .18s ease";
+
+/** Every rule one component's style produces, for the selector `sel`. */
+function styleCss(sel: string, st: Style | null | undefined): string {
+  if (!st || typeof st !== "object") return "";
+  let css = "";
+  const decls = styleDecls(st);
+  if (decls) css += `${sel}{${decls}}`;
+  css += colourReach(sel, st.color, st.iconColor);
+
+  // Interaction states. They come after the base rules and add a pseudo-class
+  // (more specific), so they win while they apply without any ordering tricks.
+  let stated = false, statedColour = false;
+  for (const name of STATES) {
+    const stateStyle = (st as any)[name];
+    const sd = stateDecls(stateStyle);
+    const reach = (sx: string) => colourReach(sx, stateStyle?.color, stateStyle?.iconColor);
+    if (!sd && !reach(sel)) continue;
+    stated = true;
+    if (colorCss(stateStyle?.color) || colorCss(stateStyle?.iconColor)) statedColour = true;
+    for (const pseudo of STATE_PSEUDO[name]) {
+      const rule = (sd ? `${sel}${pseudo}{${sd}}` : "") + reach(sel + pseudo);
+      // Hover is for a pointer. On a touch screen it would stay stuck on after a
+      // tap, so it only applies where hovering is real.
+      css += name === "hover" ? `@media (hover:hover){${rule}}` : rule;
+    }
+  }
+  // Fade between states — but not for anyone who asked their system to cut motion.
+  if (stated) {
+    let t = `${sel}{transition:${TRANSITION_PROPS}}`;
+    // Text inside the component is its own element, so it needs its own transition.
+    if (statedColour) t += `${sel} ${INNER_TEXT},${sel} svg,${sel} svg *{transition:color .18s ease}`;
+    css += `@media (prefers-reduced-motion:no-preference){${t}}`;
+  }
+  return css;
+}
+
 /** True when this style would render nothing — used to drop empty entries. */
-export const isEmptyStyle = (s: Style | null | undefined): boolean => !styleDecls(s) && !colorCss((s as any)?.iconColor);
+export const isEmptyStyle = (s: Style | null | undefined): boolean => styleCss("x", s) === "";
 
 /**
  * The block's per-component style overrides as one CSS string ("" when none).
@@ -244,37 +364,6 @@ export function stylesCss(b: any, scope: number): string {
   // name, and where two rules tie on specificity the later one wins — so the
   // inner component's own colour beats the outer one's.
   const keys = Object.keys(all).filter(isComponentKey).sort((a, b) => a.length - b.length || a.localeCompare(b));
-  for (const k of keys) {
-    const st = all[k];
-    const sel = `[data-vb-s="${scope}"][data-vb-c="${k}"]`;
-    const decls = styleDecls(st);
-    if (decls) css += `${sel}{${decls}}`;
-
-    // Colour has to reach the text INSIDE a component, not just the element
-    // that carries the tag. A card is tagged as one unit ("items.0") but its
-    // title, body and icon are children with colour rules of their own, and a
-    // rule on a child beats a value inherited from its parent — so setting
-    // the card's colour used to change nothing at all. Text tagged directly
-    // (a heading) always worked, which is why only some components failed.
-    //
-    // Elements that carry their own tag are skipped so they keep whatever was
-    // set on them specifically, and SVGs are skipped so the icon colour below
-    // can own them.
-    const textColor = colorCss(st?.color);
-    if (textColor) {
-      css += `${sel} :not([data-vb-c]):not(svg):not(svg *){color:${textColor}!important}`;
-      // An icon follows the text colour unless it has been given its own.
-      css += `${sel} svg,${sel} svg *{color:${textColor}!important}`;
-    }
-
-    // The selector repeats itself on purpose: two attribute pairs put this
-    // above the text-colour rules, so an icon colour wins over the colour of
-    // the text it sits in regardless of which rule is emitted first.
-    const iconColor = colorCss(st?.iconColor);
-    if (iconColor) {
-      const twice = sel + sel;
-      css += `${twice} svg,${twice} svg *{color:${iconColor}!important}`;
-    }
-  }
+  for (const k of keys) css += styleCss(`[data-vb-s="${scope}"][data-vb-c="${k}"]`, all[k]);
   return css;
 }
