@@ -27,10 +27,17 @@ describe("per-device style overrides", () => {
     assert.ok(!media.includes("background-color"));
   });
 
-  test("a spacing override carries its own unit and does not inherit the base unit", () => {
-    const out = css({ heading: { unit: "rem", paddingTop: 2, mobile: { paddingTop: 8 } } });
+  test("a spacing override uses the unit it inherits, unless it sets its own", () => {
+    const out = css({ heading: { unit: "rem", paddingTop: 2, mobile: { paddingTop: 1 } } });
     assert.ok(out.includes(`${SEL}{padding-top:2rem!important}`));
-    assert.ok(out.includes(`@media ${MOB}{${SEL}{padding-top:8px!important}}`));
+    assert.ok(out.includes(`@media ${MOB}{${SEL}{padding-top:1rem!important}}`));
+    const own = css({ heading: { unit: "rem", paddingTop: 2, mobile: { unit: "px", paddingTop: 8 } } });
+    assert.ok(own.includes(`@media ${MOB}{${SEL}{padding-top:8px!important}}`));
+  });
+
+  test("the phone follows the tablet's unit before the base one", () => {
+    const out = css({ heading: { unit: "rem", paddingTop: 2, tablet: { unit: "em" }, mobile: { paddingTop: 3 } } });
+    assert.ok(out.includes(`@media ${MOB}{${SEL}{padding-top:3em!important}}`));
   });
 
   test("a background position set alone, on a device, applies to the base image", () => {

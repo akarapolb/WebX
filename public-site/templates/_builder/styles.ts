@@ -212,6 +212,9 @@ export function isSafeImageUrl(v: unknown): v is string {
 }
 
 const clamp = (v: unknown, lo: number, hi: number): number | undefined => {
+  // Only a number or a non-empty string: Number(null), Number("") and Number([]) are 0, which would
+  // turn a cleared field into a real value (a font size of 8px, a padding of 0).
+  if (typeof v !== "number" && !(typeof v === "string" && v.trim() !== "")) return undefined;
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : undefined;
 };
@@ -406,10 +409,10 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   const layers = !partial || touchesLayers(s) ? backgroundLayers(eff) : undefined;
   if (layers) d.push(`background-image:${layers}!important`);
   if (isSafeImageUrl(s.bgImage)) {
-    d.push(`background-size:${oneOf(s.bgFit, FITS) || "cover"}!important`);
-    d.push(`background-position:${oneOf(s.bgPosition, POSITIONS) || "center"}!important`);
-    d.push(`background-repeat:${oneOf(s.bgRepeat, REPEATS) || "no-repeat"}!important`);
-    const att = oneOf(s.bgAttachment, ATTACHMENTS);
+    d.push(`background-size:${oneOf(s.bgFit, FITS) || oneOf(eff.bgFit, FITS) || "cover"}!important`);
+    d.push(`background-position:${oneOf(s.bgPosition, POSITIONS) || oneOf(eff.bgPosition, POSITIONS) || "center"}!important`);
+    d.push(`background-repeat:${oneOf(s.bgRepeat, REPEATS) || oneOf(eff.bgRepeat, REPEATS) || "no-repeat"}!important`);
+    const att = oneOf(s.bgAttachment, ATTACHMENTS) || oneOf(eff.bgAttachment, ATTACHMENTS);
     if (att) d.push(`background-attachment:${att}!important`);
   } else if (partial) {
     const fit = oneOf(s.bgFit, FITS), pos = oneOf(s.bgPosition, POSITIONS), rep = oneOf(s.bgRepeat, REPEATS), att = oneOf(s.bgAttachment, ATTACHMENTS);
@@ -425,7 +428,12 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   // explicit line height — set here, or inherited by a device override — wins.
   const lh = decimal(s.lineHeight, 0.8, 3, 2);
   if (lh !== undefined) d.push(`line-height:${lh}!important`);
-  else if (fs !== undefined && decimal(eff.lineHeight, 0.8, 3, 2) === undefined) d.push("line-height:1.25!important");
+  else if (fs !== undefined) {
+    // A width that changes the font size writes the line height that applies at that width — the inherited one if
+    // there is one, else the 1.25 — so a rule for another width or for dark mode, which wrote its own, is overridden.
+    const inherited = partial ? decimal(eff.lineHeight, 0.8, 3, 2) : undefined;
+    d.push(`line-height:${inherited ?? 1.25}!important`);
+  }
 
   const ff = typeof s.fontFamily === "string" && Object.prototype.hasOwnProperty.call(FONT_FAMILIES, s.fontFamily) ? (s.fontFamily as keyof typeof FONT_FAMILIES) : undefined;
   if (ff) d.push(`font-family:${FONT_FAMILIES[ff]}!important`);
@@ -455,7 +463,7 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   if (p !== undefined) d.push(`padding:${p}px!important`);
 
   // Per-side spacing, after the all-sides shorthand so a side overrides it.
-  const unit = oneOf(s.unit, UNITS) || "px";
+  const unit = oneOf(s.unit, UNITS) || (partial ? oneOf(eff.unit, UNITS) : undefined) || "px";
   const sides: [string, unknown, "padding" | "margin"][] = [
     ["padding-top", s.paddingTop, "padding"], ["padding-right", s.paddingRight, "padding"],
     ["padding-bottom", s.paddingBottom, "padding"], ["padding-left", s.paddingLeft, "padding"],
@@ -495,9 +503,9 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
 
   const bw = clampSet(s.borderWidth, 0, 20);
   if (bw !== undefined) {
-    d.push(`border-style:${bw === 0 ? "none" : oneOf(s.borderStyle, BORDER_STYLES) || "solid"}!important`);
+    d.push(`border-style:${bw === 0 ? "none" : oneOf(s.borderStyle, BORDER_STYLES) || oneOf(eff.borderStyle, BORDER_STYLES) || "solid"}!important`);
     d.push(`border-width:${bw}px!important`);
-    const bc = colorCss(s.borderColor);
+    const bc = colorCss(s.borderColor) ?? colorCss(eff.borderColor);
     if (bc && bw > 0) d.push(`border-color:${bc}!important`);
   } else if (partial) {
     const bs = oneOf(s.borderStyle, BORDER_STYLES), bc = colorCss(s.borderColor);
@@ -639,10 +647,12 @@ function styleCss(sel: string, st: Style | null | undefined, usedAnimations?: Se
   // (so a font size change keeps an inherited line height, and a gradient turned
   // round keeps its colours and image).
   let eff: Style = st;
+  const effByDevice: { dev: DeviceName; eff: Style }[] = [];
   for (const dev of DEVICES) {
     const o = (st as any)[dev];
     if (!o || typeof o !== "object" || Array.isArray(o)) continue;
     eff = mergeStyle(eff, o);
+    effByDevice.push({ dev, eff });
     const dd = styleDecls(o, true, eff);
     const rules = (dd ? `${sel}{${dd}}` : "") + colourReach(sel, o.color, o.iconColor);
     if (rules) css += `@media ${DEVICE_MAX_WIDTH[dev]}{${rules}}`;
@@ -659,6 +669,15 @@ function styleCss(sel: string, st: Style | null | undefined, usedAnimations?: Se
     // The repeated selector for icon colour sits behind the dark prefix, not inside it.
     const reach = colourReach(dsel, dk.color, dk.iconColor, prefix + sel + sel);
     if (dd || reach) css += (dd ? `${dsel}{${dd}}` : "") + reach;
+    // What dark computes from the whole style (a line height that follows the font size, a
+    // gradient's angle, a transform's other parts) depends on the width, so where a tablet or
+    // phone override changes the inputs the rule is written again for that width, after it.
+    if (dd) {
+      for (const { dev, eff: ed } of effByDevice) {
+        const dw = styleDecls(dk, true, mergeStyle(ed, dk));
+        if (dw && dw !== dd) css += `@media ${DEVICE_MAX_WIDTH[dev]}{${dsel}{${dw}}}`;
+      }
+    }
   }
 
   // Interaction states. They come after the base rules and add a pseudo-class
@@ -676,6 +695,16 @@ function styleCss(sel: string, st: Style | null | undefined, usedAnimations?: Se
       // Hover is for a pointer. On a touch screen it would stay stuck on after a
       // tap, so it only applies where hovering is real.
       css += name === "hover" ? `@media (hover:hover){${rule}}` : rule;
+    }
+    // A state's gradient or transform is built on the main style's other parts, which a tablet
+    // or phone override can change; where that changes the result, it is written for that width.
+    for (const { dev, eff: ed } of effByDevice) {
+      const sdw = stateDecls(stateStyle, ed);
+      if (!sdw || sdw === sd) continue;
+      for (const pseudo of STATE_PSEUDO[name]) {
+        const inner = `@media ${DEVICE_MAX_WIDTH[dev]}{${sel}${pseudo}{${sdw}}}`;
+        css += name === "hover" ? `@media (hover:hover){${inner}}` : inner;
+      }
     }
   }
   // Fade between states — but not for anyone who asked their system to cut motion.
@@ -702,6 +731,9 @@ export const isEmptyStyle = (s: Style | null | undefined): boolean => styleCss("
 export function stylesCss(b: any, scope: number): string {
   const all = b?.styles;
   if (!all || typeof all !== "object") return "";
+  // The scope goes straight into a selector. Both callers pass the block's index; anything else is refused
+  // rather than trusted.
+  if (!Number.isInteger(scope) || scope < 0) return "";
   let css = "";
   // Shorter keys first. A component that contains another ("items" holds
   // "items.0"; "panel" holds "panelHeading") is almost always the shorter

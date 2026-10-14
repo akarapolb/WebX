@@ -11,8 +11,12 @@
 //     start an at-rule, or smuggle in an escape sequence. The value character set below
 //     contains none of them.
 //   - font-family / font: fonts come from the theme (and are downloaded at build time).
-//   - position other than static/relative, and z-index beyond -10..100: nothing here may
-//     float over the rest of the page.
+//   - position other than static/relative, z-index beyond -10..100, and numbers beyond the
+//     ranges the controls themselves allow (a width of 99999px, a margin of -100vh, a
+//     translate of 99999px, a font size of 99999px, repeat(100000, 1px)): nothing here may
+//     float over the rest of the page or cost the browser a huge layout. Where a value can be
+//     built with calc()/min()/max()/clamp() (margins, transforms), those are not accepted at all,
+//     since arithmetic could add small allowed numbers up to a large one.
 //   - custom properties (`--x:`), animations and `content`: not on the list.
 //   - var() other than the theme's own --wx-* tokens.
 //
@@ -63,14 +67,55 @@ const FUNCS = new Set([
 ]);
 
 // The only characters a value may contain. No quotes, backslash, ; { } < > @ = & ? [ ] | ~ ^ $ or `!`
-// (a trailing !important is removed before this check).
-const VALUE_CHARS = /^[A-Za-z0-9 .,%#()+\-/*_]+$/;
+// (a trailing !important is removed before this check) — and no `*`, so a calc() cannot multiply a
+// small allowed number into a huge one.
+const VALUE_CHARS = /^[A-Za-z0-9 .,%#()+\-/_]+$/;
 // The theme's own variables are the only var() allowed, and without a fallback.
 const THEME_VAR = /var\(--wx-[a-z0-9-]+\)/g;
 
 const DISPLAYS = ["block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none", "contents"];
 const POSITIONS = ["static", "relative"];
 const CURSORS = ["auto", "default", "pointer", "text", "move", "not-allowed", "grab", "grabbing", "help", "crosshair", "zoom-in", "zoom-out", "wait"];
+
+// How big a number may be, by unit. Positive limits match what the size controls allow; the negative
+// ones match the move control (400px). A unit that is not listed (fr, ch, none) is limited to +-100.
+const MAX: Record<string, number> = { px: 4000, rem: 250, em: 250, vw: 100, vh: 100, vmin: 100, vmax: 100, "%": 300, deg: 3600, turn: 10, s: 10, ms: 10000 };
+const MIN: Record<string, number> = { px: -400, rem: -25, em: -25, vw: -50, vh: -50, vmin: -50, vmax: -50, "%": -100, deg: -3600, turn: -10, s: 0, ms: 0 };
+// A negative margin pulls a component up under its neighbour; the margin control stops at -200px.
+const MARGIN_MIN: Record<string, number> = { px: -200, rem: -20, em: -20, vw: -30, vh: -30, vmin: -30, vmax: -30, "%": -50 };
+const MARGIN_PROPS = new Set(["margin", "margin-top", "margin-right", "margin-bottom", "margin-left", "scroll-margin-top"]);
+// A translate moves a component; the move control stops at 400px, so this does too.
+const TRANSLATE_MAX: Record<string, number> = { px: 400, rem: 25, em: 25, vw: 50, vh: 50, vmin: 50, vmax: 50, "%": 100 };
+const MAX_NUMBERS_PER_VALUE = 12;
+const MAX_SCALE = 5;
+const MAX_REPEAT = 24;
+// Properties that displace or enlarge a component by arithmetic on their value.
+const NO_MATH_PROPS = new Set(["margin", "margin-top", "margin-right", "margin-bottom", "margin-left", "transform", "text-indent", "scroll-margin-top"]);
+
+/** True when every number in the value is within what the controls themselves allow. */
+function numbersWithinBounds(prop: string, lower: string): boolean {
+  // Theme variables and hex colours contain digits that are not quantities.
+  const body = lower.replace(THEME_VAR, "0").replace(/#[0-9a-f]+/g, "#");
+  // An exponent (1e9px) is a number the checks below would misread.
+  if (/\d[e][+-]?\d/.test(body)) return false;
+  const tokens = [...body.matchAll(/(?<![\w.])(-?)(\d*\.?\d+)([a-z%]*)/g)];
+  if (tokens.length > MAX_NUMBERS_PER_VALUE) return false;
+  for (const t of tokens) {
+    const n = Number(t[1] + t[2]);
+    const unit = t[3];
+    if (n > (MAX[unit] ?? 100) || n < (MIN[unit] ?? -100)) return false;
+    if (MARGIN_PROPS.has(prop) && n < (MARGIN_MIN[unit] ?? -100)) return false;
+  }
+  if (NO_MATH_PROPS.has(prop) && /(?:calc|min|max|clamp)\(/.test(body)) return false;
+  for (const m of body.matchAll(/translate[xyz]?\(([^()]*)\)/g)) {
+    for (const t of m[1].matchAll(/(-?\d*\.?\d+)([a-z%]*)/g)) if (Math.abs(Number(t[1])) > (TRANSLATE_MAX[t[2]] ?? 100)) return false;
+  }
+  for (const m of body.matchAll(/scale[xy]?\(([^()]*)\)/g)) {
+    for (const t of m[1].matchAll(/-?\d*\.?\d+/g)) if (Math.abs(Number(t[0])) > MAX_SCALE) return false;
+  }
+  for (const m of body.matchAll(/repeat\(\s*(\d+)/g)) if (Number(m[1]) > MAX_REPEAT) return false;
+  return true;
+}
 
 export type IgnoredLine = { text: string; reason: "malformed" | "unknown-property" | "bad-value" };
 export type ParsedCustomCss = { accepted: { prop: string; value: string }[]; ignored: IgnoredLine[] };
@@ -96,6 +141,9 @@ function checkValue(prop: string, raw: string): string | null {
   // Every function called must be on the list; the theme's own variables are allowed, no others.
   const without = lower.replace(THEME_VAR, "0");
   for (const m of without.matchAll(/([a-z][a-z0-9-]*)\(/g)) if (!FUNCS.has(m[1])) return null;
+
+  // z-index is clamped below instead of refused, like the control; every other number must be in range.
+  if (prop !== "z-index" && !numbersWithinBounds(prop, lower)) return null;
 
   // Properties whose dangerous values are exactly the ones a general rule cannot see.
   if (prop === "position") return POSITIONS.includes(lower) ? lower : null;

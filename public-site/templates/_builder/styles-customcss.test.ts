@@ -171,3 +171,35 @@ describe("custom CSS: the allowlist itself", () => {
     }
   });
 });
+
+describe("custom CSS: numbers stay within what the controls allow", () => {
+  const refused = [
+    "width: 99999px", "height: 100000vh", "font-size: 99999px", "margin-top: -100vh", "margin: -99999px", "margin-left: -300px",
+    "text-indent: -99999px", "transform: translate(99999px, -99999px)", "transform: translateX(500px)", "transform: scale(500)",
+    "transform: scale(6)", "width: calc(100vw * 1000)", "width: 1e9px", "width: 9e9px", "grid-template-columns: repeat(100000, 1px)",
+    "grid-template-columns: repeat(25, 1px)", "margin-top: calc(-100px - 100px)", "transform: translate(calc(100px + 100px), 0)",
+    "margin: min(-300px, 0px)", "transition: opacity 99999s", "padding: 5000px", "width: 400%", "gap: 99999px",
+    "width: 1px 2px 3px 4px 5px 6px 7px 8px 9px 10px 11px 12px 13px",
+  ];
+  for (const text of refused) test(`refuses: ${text}`, () => assert.deepEqual(kept(text), [], text));
+
+  const accepted = [
+    "width: 4000px", "height: 100vh", "min-height: 60vh", "margin-top: -200px", "margin: 0 -10px", "margin-top: -20rem",
+    "transform: translate(400px, -400px) rotate(3600deg) scale(5)", "transform: translateX(50vw)", "transform: scale(0.5)",
+    "grid-template-columns: repeat(24, minmax(0, 1fr))", "grid-template-columns: repeat(3, 1fr)", "font-size: 200px", "font-size: clamp(1rem, 2vw, 2rem)",
+    "width: calc(100% - 2rem)", "aspect-ratio: 16/9", "grid-column: 1 / 3", "line-height: 1.5", "flex: 1 1 0", "letter-spacing: 0.05em",
+    "background: linear-gradient(90deg, #112233, rgba(0,0,0,.5))", "clip-path: polygon(0 0, 100% 0, 100% 80%, 0 100%)",
+    "color: var(--wx-c-c3)", "opacity: 0.5", "transition: opacity 300ms ease",
+  ];
+  for (const text of accepted) test(`still accepts: ${text}`, () => assert.equal(kept(text).length, 1, text));
+
+  test("a z-index beyond the range is clamped, as with the control", () => {
+    assert.deepEqual(kept("z-index: 500"), ["z-index:100!important"]);
+    assert.deepEqual(kept("z-index: -50"), ["z-index:-10!important"]);
+  });
+
+  test("the overlay recipe from the review is no longer assembled", () => {
+    const got = kept("position:relative;z-index:100;width:100vw;height:100vh;margin-top:-100vh;opacity:0;background:#fff;transform: translate(99999px,-99999px) scale(500);margin:-99999px;width:calc(100vw * 1000);grid-template-columns: repeat(100000, 1px);font-size:99999px");
+    for (const d of got) assert.ok(!/margin-top:-100vh|99999|calc\(100vw|repeat\(100000|scale\(500/.test(d), d);
+  });
+});

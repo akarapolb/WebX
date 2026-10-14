@@ -69,7 +69,9 @@ describe("component typography", () => {
 describe("typography across devices", () => {
   test("a phone font size keeps the line height it inherits instead of resetting it to 1.25", () => {
     const out = css({ title: { fontSize: 40, lineHeight: 1.7, mobile: { fontSize: 24 } } });
-    assert.ok(out.includes(`@media ${MOB}{${SEL}{font-size:24px!important}}`), out);
+    // it writes the line height that applies at that width (the inherited 1.7), so no other rule's value can win
+    assert.ok(out.includes(`@media ${MOB}{${SEL}{font-size:24px!important;line-height:1.7!important}}`), out);
+    assert.ok(!out.includes("line-height:1.25") || out.indexOf("line-height:1.25") < out.indexOf("@media"));
   });
 
   test("a phone font size with no line height anywhere still gets the usual 1.25", () => {
@@ -80,7 +82,7 @@ describe("typography across devices", () => {
   test("the phone follows a tablet line height", () => {
     const out = css({ title: { fontSize: 40, tablet: { lineHeight: 1.5 }, mobile: { fontSize: 20 } } });
     assert.ok(out.includes(`@media ${TAB}{${SEL}{line-height:1.5!important}}`));
-    assert.ok(out.includes(`@media ${MOB}{${SEL}{font-size:20px!important}}`));
+    assert.ok(out.includes(`@media ${MOB}{${SEL}{font-size:20px!important;line-height:1.5!important}}`));
   });
 
   test("a device can change only the letter spacing, case or font", () => {
