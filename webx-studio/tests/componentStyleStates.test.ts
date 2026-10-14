@@ -146,3 +146,15 @@ describe("motion in the style model", () => {
     assert.equal(isBlankStyle({ animation: "fade" }), false);
   });
 });
+
+describe("dark-mode overrides in the style model", () => {
+  test("a dark override alone makes the style non-blank; an empty one does not", () => {
+    assert.equal(isBlankStyle({ dark: { bg: "#111111" } }), false);
+    assert.equal(isBlankStyle({ dark: { opacity: 0 } }), false);
+    assert.equal(isBlankStyle({ dark: {} }), true);
+  });
+
+  test("page swatches include colours set only for dark mode", () => {
+    assert.deepEqual(pageColors([{ styles: { a: { dark: { bg: "#111111", color: "@ink", borderColor: "#222222" } } } }]), ["#111111", "#222222"]);
+  });
+});

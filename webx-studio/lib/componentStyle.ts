@@ -110,9 +110,11 @@ export type ComponentStyle = {
   tablet?: DeviceStyle;
   /** Overrides from 639px down. */
   mobile?: DeviceStyle;
+  /** Overrides while the visitor is in dark mode, at every width. */
+  dark?: DeviceStyle;
 };
-/** What a tablet or phone override can hold: the same properties, minus states and further overrides. */
-export type DeviceStyle = Omit<ComponentStyle, "hover" | "focus" | "active" | "tablet" | "mobile">;
+/** What a tablet, phone or dark-mode override can hold: the same properties, minus states and further overrides. */
+export type DeviceStyle = Omit<ComponentStyle, "hover" | "focus" | "active" | "tablet" | "mobile" | "dark">;
 export const DEVICES = ["tablet", "mobile"] as const;
 export type DeviceName = (typeof DEVICES)[number];
 

@@ -97,7 +97,7 @@ export function pageColors(blocks: any[], limit = 24): string[] {
         push(styles[k]?.gradFrom);
         push(styles[k]?.gradTo);
         push(styles[k]?.shadowColor);
-        for (const dev of ["tablet", "mobile"]) {
+        for (const dev of ["tablet", "mobile", "dark"]) {
           for (const f of ["color", "iconColor", "bg", "borderColor", "bgOverlay", "gradFrom", "gradTo", "shadowColor"]) push(styles[k]?.[dev]?.[f]);
         }
         for (const st of ["hover", "focus", "active"]) {

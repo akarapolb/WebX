@@ -190,12 +190,19 @@ function gradPreview(s: Style, tokens: ThemeToken[]): string {
   return s.gradType === "radial" ? `radial-gradient(circle at center, ${a}, ${b})` : `linear-gradient(${s.gradAngle ?? GRAD_ANGLE.default}deg, ${a}, ${b})`;
 }
 
-export default function ComponentStyle({ style, device = "desktop", full, set, reset, upload, swatches, tokens = [], t }: Props) {
-  const s = style || {};
+export default function ComponentStyle({ style, device = "desktop", full, set: setRaw, reset, upload, swatches, tokens = [], t }: Props) {
+  // Light or dark: dark mode has its own overrides (style.dark), only edited on the main (desktop) look.
+  const [scheme, setScheme] = useState<"light" | "dark">("light");
+  const darkMode = scheme === "dark" && device === "desktop";
+  const s: Style = darkMode ? ((style?.dark as Style) || {}) : style || {};
+  const set = (k: StyleKey, v: any) => setRaw((darkMode ? "dark." + k : k) as StyleKey, v);
   const onDevice = device !== "desktop";
+  // An override (tablet, phone or dark) can adjust how the main look's image is placed or add a gradient,
+  // but the image itself, its overlay, transition and entrance belong to the main look.
+  const override = onDevice || darkMode;
   // The value a tablet or phone field falls back to: the phone follows the tablet
   // override when there is one, then the style itself.
-  const inh = (k: string): any => (!onDevice ? undefined : device === "mobile" ? ((full as any)?.tablet?.[k] ?? (full as any)?.[k]) : (full as any)?.[k]);
+  const inh = (k: string): any => (darkMode ? (style as any)?.[k] : !onDevice ? undefined : device === "mobile" ? ((full as any)?.tablet?.[k] ?? (full as any)?.[k]) : (full as any)?.[k]);
   const fileRef = useRef<HTMLInputElement>(null);
   // Which colour picker is showing, if any. One value for all rows is what makes
   // them mutually exclusive.
@@ -231,11 +238,21 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
     <div className="cs">
       <div className="cs-head">
         <b>{t("cs.title")}</b>
-        {touched && <button type="button" className="cs-reset" onClick={reset}>{t("cs.reset")}</button>}
+        {touched && <button type="button" className="cs-reset" onClick={darkMode ? () => setRaw("dark" as StyleKey, undefined) : reset}>{darkMode ? t("cs.dark.reset") : t("cs.reset")}</button>}
       </div>
 
+      {device === "desktop" && (
+        <div className="cs-states cs-scheme" role="tablist" aria-label={t("cs.scheme")}>
+          {(["light", "dark"] as const).map((m) => (
+            <button type="button" role="tab" key={m} aria-selected={scheme === m}
+              className={(scheme === m ? "on" : "") + (m === "dark" && !isBlankStyle((style as any)?.dark) ? " has" : "")}
+              onClick={() => { setScheme(m); setOpenPicker(null); }}>{t("cs.scheme." + m)}</button>
+          ))}
+        </div>
+      )}
+      {darkMode && <p className="cs-device">{t("cs.dark.hint")}</p>}
       {onDevice && <p className="cs-device">{t("cs.device." + device)}</p>}
-      {!onDevice && (
+      {!onDevice && !darkMode && (
       <div className="cs-states" role="tablist" aria-label={t("cs.states")}>
         {(["normal", ...STATES] as const).map((m) => (
           <button type="button" role="tab" key={m} aria-selected={mode === m}
@@ -245,7 +262,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
       </div>
       )}
 
-      {!onDevice && mode !== "normal" ? (
+      {!onDevice && !darkMode && mode !== "normal" ? (
         <div className="cs-state-body">
           <p className="cs-hint">{t("cs.statehint." + mode)}</p>
           {color(mode + ".color", t("cs.color"))}
@@ -357,7 +374,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
           <NumRow label={t("cs.movex")} value={s.moveX} inherited={inh("moveX")} min={STYLE_LIMITS.move.min} max={STYLE_LIMITS.move.max} unit="px" onChange={(v) => set("moveX", v)} />
           <NumRow label={t("cs.movey")} value={s.moveY} inherited={inh("moveY")} min={STYLE_LIMITS.move.min} max={STYLE_LIMITS.move.max} unit="px" onChange={(v) => set("moveY", v)} />
         </div>
-        {!onDevice && (
+        {!override && (
           <>
             <div className="cs-sub">
               <b>{t("cs.motion.transition")}</b>
@@ -552,8 +569,8 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
         )}
       </Section>
 
-      <Section title={t("cs.sec.bgimage")} defaultOpen={!!s.bgImage || (onDevice && !!(full as any)?.bgImage)}>
-        {!onDevice && (
+      <Section title={t("cs.sec.bgimage")} defaultOpen={!!s.bgImage || (override && !!((full as any)?.bgImage || (style as any)?.bgImage))}>
+        {!override && (
         <div className="cs-row cs-bgimg">
           <label>{t("cs.bgimage")}</label>
           <div className="cs-bgimg-c">
@@ -566,7 +583,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
           </div>
         </div>
         )}
-        {(s.bgImage || (onDevice && (full as any)?.bgImage)) && (
+        {(s.bgImage || (override && ((full as any)?.bgImage || (style as any)?.bgImage))) && (
           <>
             <div className="cs-row">
               <label>{t("cs.bgfit")}</label>
@@ -601,7 +618,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set, r
                 ))}
               </div>
             </div>
-            {!onDevice && color("bgOverlay", t("cs.bgoverlay"))}
+            {!override && color("bgOverlay", t("cs.bgoverlay"))}
           </>
         )}
       </Section>

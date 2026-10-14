@@ -149,8 +149,10 @@ export type Style = {
   tablet?: DeviceStyle;
   /** Overrides from 639px down. */
   mobile?: DeviceStyle;
+  /** Overrides while the visitor is in dark mode, at every width. Same properties, minus states and further overrides. */
+  dark?: DeviceStyle;
 };
-export type DeviceStyle = Omit<Style, "hover" | "focus" | "active" | "tablet" | "mobile">;
+export type DeviceStyle = Omit<Style, "hover" | "focus" | "active" | "tablet" | "mobile" | "dark">;
 
 /** The style keys this module knows how to render, for the editor's own use. */
 export const STYLE_KEYS = [
@@ -163,7 +165,7 @@ export const STYLE_KEYS = [
   "display", "flexDirection", "justifyContent", "alignItems", "flexWrap", "gap", "gridColumns", "position", "zIndex", "overflow",
   "borderWidth", "borderStyle", "borderColor", "shadow", "shadowX", "shadowY", "shadowBlur", "shadowSpread", "shadowColor", "shadowInset", "opacity",
   "scale", "rotate", "moveX", "moveY", "transitionMs", "easing", "animation", "animMs", "animDelayMs",
-  "hover", "focus", "active", "tablet", "mobile",
+  "hover", "focus", "active", "tablet", "mobile", "dark",
 ] as const;
 
 // #rgb / #rgba / #rrggbb / #rrggbbaa — the only colour syntax accepted. The
@@ -359,7 +361,7 @@ function customShadow(s: Style): string | undefined {
 const LAYER_KEYS = ["bgImage", "bgOverlay", "gradFrom", "gradTo", "gradAngle", "gradType"] as const;
 const isSetValue = (v: unknown) => v !== undefined && v !== null && v !== "";
 const touchesLayers = (s: Style): boolean => LAYER_KEYS.some((k) => isSetValue((s as any)[k]));
-const NESTED = new Set(["hover", "focus", "active", "tablet", "mobile"]);
+const NESTED = new Set(["hover", "focus", "active", "tablet", "mobile", "dark"]);
 /** `base` with every plain property `over` sets laid on top (states and overrides are not carried across). */
 function mergeStyle(base: Style, over: Style): Style {
   const out: any = {};
@@ -559,7 +561,7 @@ const INNER_TEXT = ":not([data-vb-c]):not(svg):not(svg *)";
  * Elements that carry their own tag are skipped so they keep whatever was set
  * on them specifically, and SVGs are skipped so the icon colour can own them.
  */
-function colourReach(sel: string, color: unknown, icon: unknown): string {
+function colourReach(sel: string, color: unknown, icon: unknown, twiceSel?: string): string {
   let css = "";
   const textColor = colorCss(color);
   if (textColor) {
@@ -572,7 +574,7 @@ function colourReach(sel: string, color: unknown, icon: unknown): string {
   // sits in regardless of which rule is emitted first.
   const iconColor = colorCss(icon);
   if (iconColor) {
-    const twice = sel + sel;
+    const twice = twiceSel ?? sel + sel;
     css += `${twice} svg,${twice} svg *{color:${iconColor}!important}`;
   }
   return css;
@@ -628,6 +630,19 @@ function styleCss(sel: string, st: Style | null | undefined, usedAnimations?: Se
     const dd = styleDecls(o, true, eff);
     const rules = (dd ? `${sel}{${dd}}` : "") + colourReach(sel, o.color, o.iconColor);
     if (rules) css += `@media ${DEVICE_MAX_WIDTH[dev]}{${rules}}`;
+  }
+
+  // Dark mode: the look to use while the visitor is in dark mode, at every width.
+  // `:where()` adds no specificity, so these rules tie with the style's own and win
+  // by coming later — and still lose to hover/focus/pressed, which add a pseudo-class.
+  const dk = (st as any).dark;
+  if (dk && typeof dk === "object" && !Array.isArray(dk)) {
+    const prefix = ':where(:root[data-theme="dark"]) ';
+    const dsel = prefix + sel;
+    const dd = styleDecls(dk, true, mergeStyle(st, dk));
+    // The repeated selector for icon colour sits behind the dark prefix, not inside it.
+    const reach = colourReach(dsel, dk.color, dk.iconColor, prefix + sel + sel);
+    if (dd || reach) css += (dd ? `${dsel}{${dd}}` : "") + reach;
   }
 
   // Interaction states. They come after the base rules and add a pseudo-class
