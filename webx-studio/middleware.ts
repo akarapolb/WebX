@@ -90,6 +90,11 @@ export function middleware(req: NextRequest) {
 
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
   if (!hasSession) {
+    // An expired session on a fetch() to the API: a redirect would send the POST
+    // on to /login, which answers 405 ("Request failed HTTP 405" in the Agent).
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Your session has expired. Please sign in again." }, { status: 401 });
+    }
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
