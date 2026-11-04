@@ -49,6 +49,8 @@ export type AgentRunContext = {
   threadId: string;
   lang: "en" | "th";
   ref: AgentContextRef;
+  /** Title of the page or entry in `ref`, looked up once per request, so the model can name it. */
+  openTitle?: string;
   signal?: AbortSignal;
   /** The tenant's own publicTemplate ("gov-portal"|"orst"|"royalsociety",
    * governance.ts's AgentPolicy.dialect) and content engine — the

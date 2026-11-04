@@ -16,6 +16,8 @@ import { CmsError } from "@/lib/cms/types";
 import { structured } from "@/lib/llm";
 import { toBuilder, toWire, type Dialect } from "@/lib/blockDialect";
 import { ALL_TYPES, metaOf } from "@/lib/blockCatalog";
+import { MUI_VIEW_BOX, muiIconByName, searchMuiIcons } from "@/lib/muiIcons";
+import { FEATURE_ICONS } from "@/components/blockPreview/iconChoices";
 import { auditEntry } from "./auditRules";
 import { untrustedBlock } from "./prompts";
 import { validateArgs } from "./validateArgs";
@@ -111,35 +113,69 @@ function buildBlock(comp: string, fields: Record<string, any>): Record<string, a
 /** translate_fields's CAND list only ever matched Page/Landing's own
  * `title` — everything else a Visual Builder page actually says lives
  * inside `blocks[]`, so "translate this page" translated almost nothing.
- * Walks each block's own field list from blockCatalog.ts (metaOf) — the
- * SAME registry buildBlock() above uses, not a second copy — and returns
- * translatable string values keyed "blocks.<index>.<field>". Deliberately
- * shallow: only the top-level fields metaOf lists, not nested item arrays
- * (e.g. feature-grid's items[].title) — a real gap, left for later rather
- * than silently claimed as complete. `code` fields (block.embed's raw
- * html) are never translated — that's script content, not copy. */
-export function extractBlockTranslatable(blocks: any[]): Record<string, string> {
+ * Walks every known block (blockCatalog.ts's metaOf, the SAME registry
+ * buildBlock() above uses) all the way down — items, tabs inside tabs, a
+ * featured story — and returns the translatable strings keyed by path
+ * ("blocks.<index>.<path>"). With `target`, only strings that need that
+ * language are returned. `code` fields (block.embed's raw html) are never
+ * translated — that's script content, not copy. */
+export function extractBlockTranslatable(blocks: any[], target?: string): Record<string, string> {
   const out: Record<string, string> = {};
+  const want = wantsTranslation(target);
   blocks.forEach((b, i) => {
     const meta = metaOf(b?.__component);
     if (!meta) return;
-    for (const f of meta.fields || []) {
-      if ((f as any).code) continue;
-      const v = b[f.k];
-      if (typeof v === "string" && v.trim()) out[`blocks.${i}.${f.k}`] = v;
-    }
+    const codeKeys = new Set((meta.fields || []).filter((f: any) => f.code).map((f: any) => f.k));
+    // Any string anywhere in the block can be copy — items, tabs inside tabs, a featured story —
+    // so walk the whole block rather than only the fields the catalog lists. Keys are paths like
+    // "blocks.<i>.tabs.0.items.2.title"; links, icons, images, ids, code and choices stay as they are.
+    const walk = (v: unknown, path: string, key: string, depth: number) => {
+      if (typeof v === "string") {
+        if (isCopyKey(key, depth) && isCopy(v) && want(v)) out[path] = v;
+      } else if (Array.isArray(v)) {
+        v.forEach((x, n) => walk(x, path + "." + n, key, depth + 1));
+      } else if (v && typeof v === "object") {
+        for (const [k, x] of Object.entries(v)) {
+          if (depth === 0 && (k === "type" || k === "__component" || codeKeys.has(k))) continue;
+          walk(x, path + "." + k, k, depth + 1);
+        }
+      }
+    };
+    walk(b, "blocks." + i, "", 0);
   });
   return out;
 }
+// A key holds copy unless it is an id, link, image, icon or a choice from a list.
+const NOT_COPY_KEY = /(^|[a-z])(href|url|image|img|src|icon|id|key|email|phone|tel|link|slug)$/i;
+const CHOICE_KEY = /^(variant|tone|layout|columns|align|theme|size|style)$/i;
+const isCopyKey = (key: string, depth: number) => depth === 0 || (!NOT_COPY_KEY.test(key) && !CHOICE_KEY.test(key));
+const isCopy = (v: unknown): v is string => typeof v === "string" && v.trim() !== "" && !/^(https?:|\/|#|mailto:|tel:)/i.test(v.trim());
+const THAI_CHAR = /[฀-๿]/;
+/** Which strings need translating into `target`: into English only the ones with Thai in them, into
+ * Thai only the ones with Latin letters and no Thai. With no target, every string. */
+function wantsTranslation(target?: string): (s: string) => boolean {
+  if (!target) return () => true;
+  return /^en([-_]|$)/i.test(target) ? (s) => THAI_CHAR.test(s) : (s) => !THAI_CHAR.test(s) && /[A-Za-z]{2}/.test(s);
+}
+
 /** The inverse of extractBlockTranslatable — writes translated values back
- * onto a copy of the builder-shape blocks array at the same paths. */
+ * onto a copy of the builder-shape blocks array at the same paths. Only the
+ * touched blocks are copied, and every other field and item is left as it was. */
 export function applyBlockTranslations(blocks: any[], translated: Record<string, string>): any[] {
-  const next = blocks.map((b) => ({ ...b }));
+  const next = blocks.slice();
+  const cloned = new Set<number>();
   for (const [path, v] of Object.entries(translated)) {
     const m = /^blocks\.(\d+)\.(.+)$/.exec(path);
     if (!m) continue;
     const i = Number(m[1]);
-    if (next[i]) next[i][m[2]] = v;
+    if (!next[i]) continue;
+    if (!cloned.has(i)) { next[i] = JSON.parse(JSON.stringify(next[i])); cloned.add(i); }
+    const parts = m[2].split(".");
+    let node: any = next[i];
+    for (const p of parts.slice(0, -1)) node = node?.[p];
+    const last = parts[parts.length - 1];
+    if (node && typeof node === "object" && last in node) node[last] = v;
+    else if (parts.length === 1 && node) node[last] = v;
   }
   return next;
 }
@@ -147,15 +183,20 @@ export function applyBlockTranslations(blocks: any[], translated: Record<string,
  * safety net VisualBuilder.tsx's own saveVersion() creates before a human's
  * save, labelled so it's identifiable in the History panel. Never blocks
  * the real edit it's protecting if the snapshot itself fails. */
-async function snapshotPageVersion(ctx: AgentRunContext, uid: string, id: string, title: string, blocks: any[]): Promise<void> {
+async function snapshotPageVersion(ctx: AgentRunContext, uid: string, id: string, title: string, blocks: any[], field: "blocks" | "blocks_en" = "blocks"): Promise<void> {
   try {
+    // The History panel restores `data.blocks` into whichever layout is open, so an
+    // English snapshot is stored the same way and tagged in its label.
     await cmsOf(ctx).create(PAGE_VERSION_UID, {
       documentRef: id, contentType: uid, tenantKey: ctx.tenantKey,
-      label: "agent:" + ctx.runId, data: { title, blocks },
+      label: "agent:" + ctx.runId + (field === "blocks_en" ? " (EN)" : ""), data: { title, blocks },
     });
   } catch { /* best-effort safety net, not a precondition for the edit */ }
 }
 const MAX_BLOCKS_RETURNED = 40;
+// One translation request carries at most this many strings / characters.
+const TRANSLATE_BATCH_KEYS = 40;
+const TRANSLATE_BATCH_CHARS = 5000;
 
 // The level a tool's own `mode` requires to be OFFERED to the model at all.
 // "draft" tools still get downgraded to a proposal at exactly "suggest" (or
@@ -178,14 +219,82 @@ function bodyOf(e: any): string {
   return [e?.body, e?.content, e?.answer, e?.description].find((x) => typeof x === "string") || "";
 }
 
+const ICON_UID = "api::icon.icon";
+const BUILTIN_ICON_RE = /^i-[a-z0-9-]{1,40}$/;
+
+/** The workspace's saved icons (governed.*, so the tenant's own only). */
+async function savedIcons(ctx: AgentRunContext): Promise<{ key: string; name: string; svg: string }[]> {
+  try {
+    const { data } = await cmsOf(ctx).list<any>(ICON_UID, { pageSize: 100 });
+    return data.filter((i: any) => typeof i?.key === "string").map((i: any) => ({ key: i.key, name: String(i.name || i.key), svg: String(i.svg || "") }));
+  } catch {
+    return [];
+  }
+}
+
+/** What to store in an item's icon field for `icon`: a built-in id or a saved
+ * icon's key as is, or a Material icon saved to the library first — the same
+ * record the icon picker creates, reusing an identical one if it exists. */
+async function resolveIconValue(ctx: AgentRunContext, icon: string): Promise<string> {
+  const raw = icon.trim();
+  if (BUILTIN_ICON_RE.test(raw)) return raw;
+  const saved = await savedIcons(ctx);
+  const m = /^material:\s*(.+)$/i.exec(raw);
+  if (!m) {
+    if (saved.some((i) => i.key === raw)) return raw;
+    throw new CmsError(`Unknown icon "${raw}". Use a built-in id like "i-book", a saved icon's key, or "material:<Name>" — find_icons lists them.`, 400);
+  }
+  const found = muiIconByName(m[1]);
+  if (!found) {
+    const near = searchMuiIcons(m[1], 5).icons.map((i) => i.name);
+    throw new CmsError(`No Material icon named "${m[1].trim()}".` + (near.length ? ` Close matches: ${near.join(", ")}.` : ""), 404);
+  }
+  const existing = saved.find((i) => i.svg === found.svg);
+  if (existing) return existing.key;
+  if (ctx.level === "suggest") throw new CmsError("Adding a new icon to the workspace's library needs a higher agent level than SUGGEST.", 403);
+  assertContentTypeAllowed(ctx, ICON_UID);
+  const kebab = found.name.replace(/([a-z\d])([A-Z])/g, "$1-$2").toLowerCase();
+  const key = `mui-${kebab}-${randomUUID().slice(0, 4)}`;
+  await cmsOf(ctx).create(ICON_UID, { name: found.name, key, svg: found.svg, viewBox: MUI_VIEW_BOX });
+  return key;
+}
+
+/** The title of the page or entry the user has open, for the system prompt. A
+ * missing, forbidden or untitled target gives "" and the prompt falls back to
+ * ids; the title is shortened to one line because it is stored content. */
+export async function openEditorTitle(ctx: AgentRunContext): Promise<string> {
+  const ref = ctx.ref;
+  if (ref.kind !== "page" && ref.kind !== "entry") return "";
+  try {
+    assertContentTypeAllowed(ctx, ref.uid);
+    const e: any = await cmsOf(ctx).get(ref.uid, ref.docId, { locale: ref.locale });
+    const t = typeof titleOf(e) === "string" ? titleOf(e) : "";
+    return t.replace(/\s+/g, " ").trim().slice(0, 120);
+  } catch {
+    return "";
+  }
+}
+
 /** A draft-mode tool writes for real only at "draft"/"draft_submit" AND when
  * no editor holds unsaved local state for this exact target — otherwise the
  * caller (client) gets a proposal back to apply itself. See
  * AgentContextRef's own doc comment in types.ts for why applyLocally exists. */
-function shouldPropose(ctx: AgentRunContext): boolean {
+function shouldPropose(ctx: AgentRunContext, target?: { uid?: string; locale?: string }): boolean {
   if (ctx.level === "suggest") return true;
   const ref = ctx.ref;
-  return (ref.kind === "page" || ref.kind === "entry") && Boolean(ref.applyLocally);
+  if (!((ref.kind === "page" || ref.kind === "entry") && ref.applyLocally)) return false;
+  // A WordPress page's English layout is a separate field from the Thai one the
+  // open editor holds, so writing it cannot clobber the editor's unsaved state,
+  // and a proposal would land on the wrong canvas.
+  if (target?.uid === "wp:page" && ref.uid === "wp:page" && blocksField("wp:page", target.locale) !== blocksField("wp:page", ref.locale)) return false;
+  return true;
+}
+
+/** The field a page's blocks live in. A WordPress page keeps its English layout
+ * in the sibling `blocks_en` of the SAME entry (the Visual Builder's EN toggle,
+ * the public site's /en/ routes); every other page type has just `blocks`. */
+function blocksField(uid: string, locale?: string): "blocks" | "blocks_en" {
+  return uid === "wp:page" && /^en([-_]|$)/i.test(String(locale || "")) ? "blocks_en" : "blocks";
 }
 
 // Strapi's real uids are always "api::<singular>.<singular>"; WordPress's
@@ -307,11 +416,17 @@ const TOOLS: ToolDef[] = [
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
       if (!args.fields || typeof args.fields !== "object" || Array.isArray(args.fields)) throw new CmsError("fields must be an object", 400);
+      // A raw blocks array skips the block catalog, drops what the model did not repeat
+      // (found live: an English layout lost every item) and takes no version snapshot.
+      const rawBlocks = PAGE_UIDS.has(args.uid) ? ["blocks", "blocks_en"].find((k) => k in args.fields) : undefined;
+      if (rawBlocks) {
+        throw new CmsError(`Do not write "${rawBlocks}" with write_draft_fields. Use insert_blocks, replace_block, remove_block, set_block_style or set_block_item_icons (pass locale "en" for a WordPress page's English layout), or translate_fields to translate the whole page.`, 400);
+      }
       const proposal: AgentProposal = {
         id: randomUUID(), kind: "fields", target: { uid: args.uid, id: args.id, locale: args.locale },
         title: "Field changes", fields: args.fields,
       };
-      if (shouldPropose(ctx)) return { summary: `Proposed ${Object.keys(args.fields).length} field change(s)`, proposal };
+      if (shouldPropose(ctx, args)) return { summary: `Proposed ${Object.keys(args.fields).length} field change(s)`, proposal };
       await cmsOf(ctx).update(args.uid, args.id, args.fields, { locale: args.locale });
       return { summary: `Wrote ${Object.keys(args.fields).length} field(s) as a draft`, data: { uid: args.uid, id: args.id } };
     },
@@ -327,7 +442,7 @@ const TOOLS: ToolDef[] = [
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
       if (!args.fields || typeof args.fields !== "object" || Array.isArray(args.fields)) throw new CmsError("fields must be an object", 400);
-      if (shouldPropose(ctx)) {
+      if (shouldPropose(ctx, args)) {
         return {
           summary: "Proposed a new draft entry",
           proposal: { id: randomUUID(), kind: "fields", target: { uid: args.uid, id: "" }, title: titleOf(args.fields) || "New entry", fields: args.fields },
@@ -340,7 +455,7 @@ const TOOLS: ToolDef[] = [
   {
     name: "translate_fields",
     mode: "draft",
-    description: "Translate an entry's text fields into another locale, including a page's own blocks[] content (headings, body text, CTA labels — not nested item-grid text yet). Never writes the entry directly — files a translation review a human applies from the Reviews board (or, at \"suggest\" level, returns a preview only).",
+    description: "Translate an entry's text fields into another locale, including a page's own blocks[] content (headings, body text, CTA labels, and the text inside items such as feature or card lists; links, icons and images are kept). For a WordPress page, targetLocale \"en\" translates the Thai layout into the same page's English layout (blocks_en) — do NOT create a new page for a translation. Never writes the entry directly — files a translation review a human applies from the Reviews board (or, at \"suggest\" level, returns a preview only).",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id", "targetLocale"],
       properties: { uid: { type: "string" }, id: { type: "string" }, sourceLocale: { type: "string" }, targetLocale: { type: "string" } },
@@ -353,33 +468,49 @@ const TOOLS: ToolDef[] = [
       // Visual Builder pages use) that just overwrites the SAME single entry
       // instead of writing a second-language version. Refuse up front rather
       // than let a human "Apply" a translation that destroys the original.
-      const schema = await cmsOf(ctx).contentTypeSchema(args.uid);
-      if (!schema?.localized) {
+      // A WordPress page is the exception: its English version is the `blocks_en` field of the
+      // same entry (Visual Builder's EN toggle, the site's /en/ routes), so it can be translated.
+      const wpEnglish = blocksField(args.uid, args.targetLocale) === "blocks_en";
+      const schema = wpEnglish ? null : await cmsOf(ctx).contentTypeSchema(args.uid);
+      if (!wpEnglish && !schema?.localized) {
         throw new CmsError(`"${args.uid}" has no separate per-locale copy (i18n isn't enabled for it), so a translation would overwrite the only copy instead of adding a second language. Create a new, separate entry with the translated content instead.`, 422);
       }
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.sourceLocale });
       if (!e) throw new CmsError("Entry not found", 404);
       const CAND = ["title", "name", "subject", "question", "categoryLabel", "excerpt", "summary", "description", "answer", "body", "content"];
       const source: Record<string, string> = {};
-      for (const k of CAND) { const v = e[k]; if (typeof v === "string" && v.trim()) source[k] = v; }
+      // Not for a WordPress page's English layout: the page title is one value shared by both
+      // languages, and applying a translated title would overwrite the Thai one.
+      if (!wpEnglish) for (const k of CAND) { const v = e[k]; if (typeof v === "string" && v.trim()) source[k] = v; }
       // Page/Landing's own real content lives in blocks[], not the flat CAND
       // list above (their only CAND match is `title`) — walk it too, in the
       // SAME builder shape get_page_blocks/insert_blocks use, keyed
       // "blocks.<index>.<field>" so it round-trips through one flat
       // translation call alongside the plain fields above.
       const blockList = Array.isArray(e.blocks) ? toBuilder(e.blocks, dialectOf(ctx)) : null;
-      if (blockList) Object.assign(source, extractBlockTranslatable(blockList));
+      if (blockList) Object.assign(source, extractBlockTranslatable(blockList, args.targetLocale));
       if (!Object.keys(source).length) throw new CmsError("No translatable text fields on this entry", 422);
       const langName = String(args.targetLocale).toLowerCase().startsWith("en") ? "English" : "Thai";
-      const out = await structured<{ fields: Record<string, string> }>({
-        system: `You are a professional translator for public-sector web content. Translate each field value into ${langName}, preserving meaning, a formal public-sector tone, and any HTML tags exactly. Do NOT translate proper nouns or acronyms. Return the same JSON keys with translated values only.`,
-        prompt: "Translate these fields to " + langName + ":\n" + JSON.stringify(source),
-        schema: { type: "object", additionalProperties: false, required: ["fields"], properties: { fields: { type: "object", additionalProperties: { type: "string" } } } },
-        cache: true,
-      }).catch(() => null);
+      // A whole page is hundreds of strings; one reply that long gets cut off, so ask in batches.
       const translated: Record<string, string> = {};
-      for (const k of Object.keys(source)) { const v = out?.fields?.[k]; if (typeof v === "string" && v.trim()) translated[k] = v; }
+      const batches: Record<string, string>[] = [];
+      let cur: Record<string, string> = {}, chars = 0;
+      for (const [k, v] of Object.entries(source)) {
+        if (Object.keys(cur).length >= TRANSLATE_BATCH_KEYS || (chars + v.length > TRANSLATE_BATCH_CHARS && chars > 0)) { batches.push(cur); cur = {}; chars = 0; }
+        cur[k] = v; chars += v.length;
+      }
+      if (Object.keys(cur).length) batches.push(cur);
+      for (const batch of batches) {
+        const out = await structured<{ fields: Record<string, string> }>({
+          system: `You are a professional translator for public-sector web content. Translate each field value into ${langName}, preserving meaning, a formal public-sector tone, and any HTML tags exactly. Do NOT translate proper nouns or acronyms. Return the same JSON keys with translated values only.`,
+          prompt: "Translate these fields to " + langName + ":\n" + JSON.stringify(batch),
+          schema: { type: "object", additionalProperties: false, required: ["fields"], properties: { fields: { type: "object", additionalProperties: { type: "string" } } } },
+          cache: true,
+        }).catch(() => null);
+        for (const k of Object.keys(batch)) { const v = out?.fields?.[k]; if (typeof v === "string" && v.trim()) translated[k] = v; }
+      }
       if (!Object.keys(translated).length) throw new CmsError("Translation produced nothing usable", 502);
+      const missed = Object.keys(source).length - Object.keys(translated).length;
       // Reassemble: plain top-level keys go straight onto `fields`; any
       // "blocks.N.key" entries get folded back into a real blocks[] array
       // (wire shape, via toWire) as a single `fields.blocks` value — a
@@ -392,7 +523,9 @@ const TOOLS: ToolDef[] = [
         if (k.startsWith("blocks.")) blockTranslations[k] = v; else fields[k] = v;
       }
       if (blockList && Object.keys(blockTranslations).length) {
-        fields.blocks = toWire(applyBlockTranslations(blockList, blockTranslations), dialectOf(ctx));
+        // Same blocks, same fields and items: only the text changes. For a WordPress page
+        // the result is the whole English layout, replacing blocks_en when a human applies it.
+        fields[wpEnglish ? "blocks_en" : "blocks"] = toWire(applyBlockTranslations(blockList, blockTranslations), dialectOf(ctx));
       }
       if (ctx.level === "suggest") {
         return {
@@ -400,15 +533,20 @@ const TOOLS: ToolDef[] = [
           proposal: { id: randomUUID(), kind: "fields", target: { uid: args.uid, id: args.id, locale: args.targetLocale }, title: "Translation preview", fields },
         };
       }
-      const title = "[" + String(args.targetLocale).toUpperCase() + "] " + (source.title || source.name || args.id.slice(0, 8));
+      const title = "[" + String(args.targetLocale).toUpperCase() + "] " + (source.title || source.name || titleOf(e) || args.id.slice(0, 8));
+      const existingEn = wpEnglish && Array.isArray(e.blocks_en) && e.blocks_en.length > 0;
       await cmsOf(ctx).create(REVIEW_UID, {
         documentRef: args.id, contentType: args.uid, title, stage: "in_review", kind: "translation",
         requestedBy: ctx.user.email || "agent",
-        note: "Agent draft translation -> " + args.targetLocale + ". Review, then Apply to write the " + args.targetLocale + " locale.",
+        note: "Agent draft translation -> " + args.targetLocale + ". Review, then Apply to write the " + args.targetLocale + " locale."
+          + (existingEn ? " Applying REPLACES the page's existing English layout (blocks_en) with this translation of the Thai blocks." : ""),
         payload: { targetLocale: args.targetLocale, sourceLocale: args.sourceLocale || "", fields },
         history: [{ to: "in_review", by: ctx.user.email || "agent", at: new Date().toISOString() }],
       });
-      return { summary: `Filed a translation review for ${args.targetLocale}`, data: { uid: args.uid, id: args.id, targetLocale: args.targetLocale } };
+      return {
+        summary: `Filed a translation review for ${args.targetLocale}` + (missed > 0 ? ` — ${missed} of ${Object.keys(source).length} text(s) could not be translated and stay in the original language` : ""),
+        data: { uid: args.uid, id: args.id, targetLocale: args.targetLocale, translated: Object.keys(translated).length, untranslated: missed },
+      };
     },
   },
   {
@@ -445,7 +583,7 @@ const TOOLS: ToolDef[] = [
   {
     name: "get_page_blocks",
     mode: "read",
-    description: "Read a page's current blocks (sections) in order, each with its index and field values. Use the index to target replace_block/remove_block.",
+    description: "Read a page's current blocks (sections) in order, each with its index and field values. Use the index to target replace_block/remove_block. For a WordPress page, locale \"en\" reads its English layout (blocks_en); leave locale out for the Thai one. The block tools (insert_blocks, replace_block, remove_block, set_block_style, set_block_item_icons) take the same locale.",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id"],
       properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" } },
@@ -455,7 +593,7 @@ const TOOLS: ToolDef[] = [
       assertPageUid(args.uid);
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
-      const blocks = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx)).map((b: any, index: number) => ({ index, ...b }));
+      const blocks = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx)).map((b: any, index: number) => ({ index, ...b }));
       const truncated = blocks.length > MAX_BLOCKS_RETURNED;
       return {
         summary: `${blocks.length} block(s)` + (truncated ? ` (showing first ${MAX_BLOCKS_RETURNED})` : ""),
@@ -482,7 +620,7 @@ const TOOLS: ToolDef[] = [
       assertContentTypeAllowed(ctx, args.uid);
       assertPageUid(args.uid);
       const newBlocks = args.blocks.map((b: any) => buildBlock(b.comp, b.fields || {}));
-      if (shouldPropose(ctx)) {
+      if (shouldPropose(ctx, args)) {
         return {
           summary: `Proposed inserting ${newBlocks.length} block(s) at position ${args.at}`,
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Insert ${newBlocks.length} block(s)`, blocks: newBlocks, at: args.at },
@@ -490,11 +628,11 @@ const TOOLS: ToolDef[] = [
       }
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
-      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
       const at = Math.max(0, Math.min(args.at, current.length));
       const next = [...current.slice(0, at), ...newBlocks, ...current.slice(at)];
-      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Inserted ${newBlocks.length} block(s) at position ${at}`, data: { uid: args.uid, id: args.id } };
     },
   },
@@ -510,7 +648,7 @@ const TOOLS: ToolDef[] = [
       assertContentTypeAllowed(ctx, args.uid);
       assertPageUid(args.uid);
       const newBlock = buildBlock(args.comp, args.fields || {});
-      if (shouldPropose(ctx)) {
+      if (shouldPropose(ctx, args)) {
         return {
           summary: `Proposed replacing block ${args.index}`,
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Replace block ${args.index}`, blocks: [newBlock], replace: args.index },
@@ -518,11 +656,11 @@ const TOOLS: ToolDef[] = [
       }
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
-      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
       if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
       const next = current.map((b: any, i: number) => (i === args.index ? newBlock : b));
-      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Replaced block ${args.index}`, data: { uid: args.uid, id: args.id } };
     },
   },
@@ -537,7 +675,7 @@ const TOOLS: ToolDef[] = [
     async run(ctx, args) {
       assertContentTypeAllowed(ctx, args.uid);
       assertPageUid(args.uid);
-      if (shouldPropose(ctx)) {
+      if (shouldPropose(ctx, args)) {
         return {
           summary: `Proposed removing block ${args.index}`,
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Remove block ${args.index}`, blocks: [], replace: args.index },
@@ -545,11 +683,11 @@ const TOOLS: ToolDef[] = [
       }
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
-      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
       if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
       const next = current.filter((_: any, i: number) => i !== args.index);
-      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Removed block ${args.index}`, data: { uid: args.uid, id: args.id } };
     },
   },
@@ -566,7 +704,7 @@ const TOOLS: ToolDef[] = [
       assertPageUid(args.uid);
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
-      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
       if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
       const block = current[args.index];
       const meta = metaOf(block.__component);
@@ -576,15 +714,15 @@ const TOOLS: ToolDef[] = [
         throw new CmsError(`"${args.value}" is not a valid ${styleField.k} for "${block.__component}" — allowed: ${styleField.select.map((s: string) => s || "(default)").join(", ")}`, 400);
       }
       const updated = { ...block, [styleField.k]: args.value };
-      if (shouldPropose(ctx)) {
+      if (shouldPropose(ctx, args)) {
         return {
           summary: `Proposed changing ${styleField.k} to "${args.value}"`,
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Change ${styleField.k} to "${args.value}"`, blocks: [updated], replace: args.index },
         };
       }
       const next = current.map((b: any, i: number) => (i === args.index ? updated : b));
-      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Changed ${styleField.k} to "${args.value}" on block ${args.index}`, data: { uid: args.uid, id: args.id } };
     },
   },
@@ -601,7 +739,7 @@ const TOOLS: ToolDef[] = [
       assertPageUid(args.uid);
       const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
       if (!e) throw new CmsError("Page not found", 404);
-      const current = toBuilder((e.blocks ?? []) as any[], dialectOf(ctx));
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
       if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
       const block = current[args.index];
       const imageField = BLOCK_BACKGROUND_IMAGE_FIELD[block.__component];
@@ -609,16 +747,84 @@ const TOOLS: ToolDef[] = [
       const resolvedUrl = await resolveBackgroundImageFromUrl(args.url);
       const updated = { ...block, [imageField]: { url: resolvedUrl } };
       assertSafeBlockContent(updated);
-      if (shouldPropose(ctx)) {
+      if (shouldPropose(ctx, args)) {
         return {
           summary: `Proposed setting the background image from "${args.url}"`,
           proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: "Set background image", blocks: [updated], replace: args.index },
         };
       }
       const next = current.map((b: any, i: number) => (i === args.index ? updated : b));
-      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current);
-      await cmsOf(ctx).update(args.uid, args.id, { blocks: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Set background image on block ${args.index} from "${args.url}"`, data: { uid: args.uid, id: args.id, imageUrl: resolvedUrl } };
+    },
+  },
+  {
+    name: "find_icons",
+    mode: "read",
+    description: "Look up icons for set_block_item_icons. Returns the workspace's saved icons (key + name), the built-in icon ids, and — when `q` is given — Material icon names matching it (e.g. q \"apple\" finds \"Apple\"). Call this when the user names an icon, to see whether it is already saved or must be added from the Material set.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { q: { type: "string", description: "Words to search for, such as \"apple\" or \"home\"." } },
+    },
+    async run(ctx, args) {
+      const q = String(args.q || "").trim().toLowerCase();
+      const saved = await savedIcons(ctx);
+      const library = saved
+        .filter((i) => !q || `${i.name} ${i.key}`.toLowerCase().includes(q))
+        .slice(0, 30).map((i) => ({ key: i.key, name: i.name }));
+      const material = q ? searchMuiIcons(q, 12).icons.map((i) => i.name) : [];
+      return {
+        summary: `${library.length} saved, ${material.length} Material match(es)`,
+        data: { library, material, builtIn: FEATURE_ICONS, usage: "Pass a built-in id as is, a saved icon's key as is, or \"material:<Name>\" to add a Material icon." },
+      };
+    },
+  },
+  {
+    name: "set_block_item_icons",
+    mode: "draft",
+    description: "Set the icon of the items inside one existing block (a feature list, card grid, trust strip, stat row, …) without touching their titles or text. `icon` is a built-in id (e.g. \"i-book\"), a saved icon's key, or \"material:<Name>\" (e.g. \"material:Apple\") — a Material icon is added to the workspace's saved icons first if it is not there yet. Omit `items` to change every item, or list item positions (0 = first) to change only those. Only blocks whose items have an icon support this; the error says so otherwise. Use find_icons first if you are unsure of the name.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "icon"],
+      properties: {
+        uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 },
+        icon: { type: "string" },
+        items: { type: "array", items: { type: "integer", minimum: 0 }, maxItems: 50 },
+      },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
+      if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const block = current[args.index];
+      const meta = metaOf(block.__component);
+      const itemsKey = meta?.items?.key;
+      const iconField = meta?.items?.fields?.find((f: any) => f.icon)?.k;
+      const list: any[] = itemsKey && Array.isArray(block[itemsKey]) ? block[itemsKey] : [];
+      if (!itemsKey || !iconField) throw new CmsError(`Block type "${block.__component}" has no items with an icon to change.`, 400);
+      if (!list.length) throw new CmsError(`Block ${args.index} has no items.`, 400);
+      const which: number[] = Array.isArray(args.items) ? [...new Set<number>(args.items)] : list.map((_, i) => i);
+      const bad = which.find((i) => i < 0 || i >= list.length);
+      if (bad !== undefined) throw new CmsError(`Block ${args.index} has ${list.length} item(s); there is no item ${bad}.`, 400);
+      if (!which.length) throw new CmsError("`items` is empty — leave it out to change every item.", 400);
+
+      const value = await resolveIconValue(ctx, String(args.icon));
+      const updated = { ...block, [itemsKey]: list.map((it, i) => (which.includes(i) ? { ...it, [iconField]: value } : it)) };
+      assertSafeBlockContent(updated);
+      const what = `${which.length} icon(s) to ${args.icon}`;
+      if (shouldPropose(ctx, args)) {
+        return {
+          summary: `Proposed setting ${what}`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Set ${what}`, blocks: [updated], replace: args.index },
+        };
+      }
+      const next = current.map((b: any, i: number) => (i === args.index ? updated : b));
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Set ${what} on block ${args.index}`, data: { uid: args.uid, id: args.id } };
     },
   },
   {

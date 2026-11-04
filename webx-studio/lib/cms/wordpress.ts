@@ -357,7 +357,9 @@ export const wordpressAdapter: CmsAdapter = {
       // completely empty post create. One entry per registered type.
       return Object.entries(POST_TYPES).map(([uid, t]) => ({
         uid, name: t.name, api: t.restBase, pluralName: t.restBase, attributes: { title: { type: "string", required: true } },
-        localized: false, // no per-locale copy mechanism modeled for WordPress here
+        // No second entry per language. A page's English layout is its own blocks_en field,
+        // which the agent's block tools reach with locale "en" (lib/agent/tools.ts blocksField).
+        localized: false,
         draftAndPublish: true, // every native WP post type has its own draft/publish status
       }));
     },

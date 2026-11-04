@@ -2,7 +2,8 @@
 // checks happen in the API route before this is called; the loop itself
 // lives in ./engine so background jobs can run the same code in slices.
 import "server-only";
-import { recordAgentRunStart, recordAgentRunUsage, type AgentPolicy } from "@/lib/cms/governance";
+import { recordAgentRunStart, recordAgentRunUsage, withAgentActor, type AgentPolicy } from "@/lib/cms/governance";
+import { openEditorTitle } from "./tools";
 import { applyInput, startRun } from "./engine/checkpoint";
 import { serverDeps } from "./engine/deps.server";
 import { limitsFor } from "./engine/limits";
@@ -81,6 +82,7 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     model: input.policy.model, runId: cp.runId, threadId: input.threadId, lang: input.lang,
     ref: cp.ref, signal: input.signal, dialect: input.policy.dialect, engine: input.policy.engine,
   };
+  ctx.openTitle = await withAgentActor(ctx.runId, () => openEditorTitle(ctx));
 
   emit({ type: "run_started", runId: cp.runId, threadId: input.threadId, level: ctx.level, model });
 

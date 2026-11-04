@@ -7,31 +7,7 @@
 // anyone has typed anything, and sending it to the public site would defeat
 // the point of storing only the icons a page actually uses.
 import { NextRequest, NextResponse } from "next/server";
-import catalogue from "@/data/mui-icons.json";
-
-type CatalogueIcon = { name: string; paths: { d: string; fillRule?: string; clipRule?: string; opacity?: string }[] };
-
-const ICONS = (catalogue as { icons: CatalogueIcon[] }).icons;
-const VIEW_BOX = (catalogue as { viewBox?: string }).viewBox || "0 0 24 24";
-
-/** "AccountCircle" → "account circle", so a plain-language query matches. */
-const words = (name: string) => name.replace(/([a-z\d])([A-Z])/g, "$1 $2").toLowerCase();
-// Precomputed once per process rather than per request — the catalogue never
-// changes at runtime.
-const INDEX = ICONS.map((i) => ({ icon: i, hay: words(i.name) }));
-
-/** The inner markup for one icon, ready to store on an Icon record. */
-function svgOf(icon: CatalogueIcon): string {
-  return icon.paths
-    .map((p) => {
-      let a = `d="${p.d}"`;
-      if (p.fillRule) a += ` fill-rule="${p.fillRule}"`;
-      if (p.clipRule) a += ` clip-rule="${p.clipRule}"`;
-      if (p.opacity) a += ` opacity="${p.opacity}"`;
-      return `<path ${a}/>`;
-    })
-    .join("");
-}
+import { MUI_VIEW_BOX, searchMuiIcons } from "@/lib/muiIcons";
 
 const MAX_LIMIT = 120;
 
@@ -44,21 +20,6 @@ export async function GET(req: NextRequest) {
   const q = (url.searchParams.get("q") || "").trim().toLowerCase();
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(url.searchParams.get("limit")) || 60));
 
-  let hits = INDEX;
-  if (q) {
-    const terms = q.split(/\s+/).filter(Boolean);
-    hits = INDEX.filter((e) => terms.every((t) => e.hay.includes(t)));
-    // A name that starts with the query is what the searcher usually meant
-    // ("search" should lead with Search, not ManageSearch).
-    hits = [...hits].sort((a, b) => {
-      const as = a.hay.startsWith(q) ? 0 : 1, bs = b.hay.startsWith(q) ? 0 : 1;
-      return as - bs || a.icon.name.length - b.icon.name.length || a.icon.name.localeCompare(b.icon.name);
-    });
-  }
-
-  return NextResponse.json({
-    total: hits.length,
-    viewBox: VIEW_BOX,
-    icons: hits.slice(0, limit).map((e) => ({ name: e.icon.name, svg: svgOf(e.icon) })),
-  });
+  const { total, icons } = searchMuiIcons(q, limit);
+  return NextResponse.json({ total, viewBox: MUI_VIEW_BOX, icons });
 }

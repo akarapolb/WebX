@@ -1053,8 +1053,10 @@ export default function VisualBuilder() {
       return [...bs.slice(0, at), ...marked, ...bs.slice(at)];
     });
     setActive(typeof p.replace === "number" ? p.replace : (typeof p.at === "number" ? p.at : 0));
+    // The agent may have saved a new icon to the library for this block (set_block_item_icons).
+    loadIcons();
     return { undo: () => setBlocks(snapshot) };
-  }, []);
+  }, [loadIcons]);
   // {kind:"page"} registration — lets the docked panel/workspace show a real
   // context chip for the open page and, via applyLocally=isDirty, downgrades
   // the agent's own draft-level page writes to a proposal whenever this
@@ -1075,8 +1077,8 @@ export default function VisualBuilder() {
   // somewhere else.
   useAgentContext(
     sel ? { kind: "page", uid, docId: sel.docId, locale: sel.locale, applyLocally: isDirty } : { kind: "none" },
-    { applyProposal: applyAgentProposal, refresh: () => { loadPages(); if (selRef.current) open(selRef.current); } },
-    [uid, sel?.docId, sel?.locale, isDirty, loadPages]
+    { applyProposal: applyAgentProposal, refresh: () => { loadPages(); loadIcons(); if (selRef.current) open(selRef.current); } },
+    [uid, sel?.docId, sel?.locale, isDirty, loadPages, loadIcons, applyAgentProposal]
   );
 
   async function save() {
