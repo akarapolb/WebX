@@ -187,14 +187,16 @@ export default function EntryEditor({
     };
   }
 
+  // Whether the form holds edits not saved yet: the agent's auto mode only writes and publishes when it does not.
+  const entryDirty = fields.some((f) => f.value !== f.initial);
   useAgentContext(
-    { kind: "entry", uid, docId, locale, applyLocally: true },
+    { kind: "entry", uid, docId, locale, applyLocally: true, dirty: entryDirty },
     { applyFieldPatch, applyProposal: applyAgentProposal, refresh: load },
     // fp (field-policy hidden/readonly sets) loads asynchronously AFTER the
     // first render, inside load() — it must be a dep too, or the registered
     // closures above would keep checking against the always-empty initial
     // fp forever instead of picking up the real policy once it arrives.
-    [uid, docId, locale, fp]
+    [uid, docId, locale, fp, entryDirty]
   );
 
   function setVal(key: string, value: string) {
@@ -304,7 +306,8 @@ export default function EntryEditor({
       await cms.publish.publish(uid, docId, locOpt);
       setMsg({ t: t("e.publishedOk"), ok: true }); onSaved(); setTimeout(onClose, 800);
     } catch (err) {
-      if (err instanceof CmsError) setMsg({ t: "Publish failed (HTTP " + err.status + ")", ok: false });
+      // The server's own reason (e.g. a review that is not approved yet), not just the status code.
+      if (err instanceof CmsError) setMsg({ t: "Publish failed (HTTP " + err.status + ")" + (err.message && err.message !== String(err.status) ? " — " + err.message : ""), ok: false });
       else setMsg({ t: "Cannot reach the backend.", ok: false });
     }
     finally { setBusy(""); }

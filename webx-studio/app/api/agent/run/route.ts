@@ -18,6 +18,7 @@ import { getAgentThread, createAgentThread, appendMessages } from "@/lib/agent/t
 import { fitCheckpoint, parseCheckpoint } from "@/lib/agent/engine/checkpoint";
 import type { RunCheckpoint } from "@/lib/agent/engine/types";
 import type { AgentContextRef, AgentEvent } from "@/lib/agent/types";
+import { attachmentBlock } from "@/lib/agent/prompts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ const MAX_CHECKPOINT_BYTES = 256 * 1024;
 // again here since the client-side cap is only a UX nicety, not a trust
 // boundary.
 const MAX_ATTACH_DATA_URL_CHARS = 6_000_000;
+// A text file's characters, as read in the browser (the model sees at most prompts.ts's ATTACHMENT_MAX_CHARS).
+const MAX_FILE_TEXT_CHARS = 400_000;
 
 type StoppedEvent = Extract<AgentEvent, { type: "stopped" }>;
 
@@ -44,7 +47,7 @@ function errorStatus(e: unknown, fallback: number): number {
 function normalizeRef(raw: any): AgentContextRef {
   if (raw && typeof raw === "object") {
     if ((raw.kind === "page" || raw.kind === "entry") && raw.uid && raw.docId) {
-      return { kind: raw.kind, uid: String(raw.uid), docId: String(raw.docId), locale: raw.locale ? String(raw.locale) : undefined, applyLocally: Boolean(raw.applyLocally) };
+      return { kind: raw.kind, uid: String(raw.uid), docId: String(raw.docId), locale: raw.locale ? String(raw.locale) : undefined, applyLocally: Boolean(raw.applyLocally), dirty: Boolean(raw.dirty) };
     }
     if (raw.kind === "board") return { kind: "board" };
   }
@@ -58,7 +61,7 @@ function priorTextFrom(messages: any[]): ChatMsg[] {
     .map((m) => ({ role: m.role, content: m.content }));
 }
 
-function buildPersistMessages(userMessage: string, hasImage: boolean, result: RunResult, resumable: boolean): any[] {
+function buildPersistMessages(userMessage: string, hasImage: boolean, result: RunResult, resumable: boolean, fileName = ""): any[] {
   const out: any[] = [];
   // The raw data URL is NOT persisted here — messages.ts's MAX_MESSAGES
   // trims by count, not bytes, and a handful of multi-MB images sitting in a
@@ -66,7 +69,8 @@ function buildPersistMessages(userMessage: string, hasImage: boolean, result: Ru
   // checkpoint (fitCheckpoint, checkpoint.ts) is what actually carries the
   // image to the model for THIS run; reopening an old thread later shows
   // that one was attached, not the picture itself.
-  if (userMessage.trim() || hasImage) out.push({ role: "user", content: userMessage, ...(hasImage ? { hadImage: true } : {}) });
+  // An attached file's text is not stored either (it can be tens of KB); the thread keeps its name.
+  if (userMessage.trim() || hasImage || fileName) out.push({ role: "user", content: userMessage, ...(hasImage ? { hadImage: true } : {}), ...(fileName ? { fileName } : {}) });
   if (result.toolSteps.length) out.push({ role: "tools", steps: result.toolSteps });
   for (const p of result.proposals) out.push({ role: "proposal", proposal: p });
   if (result.plan) out.push({ role: "plan", items: result.plan });
@@ -104,10 +108,20 @@ export async function POST(req: NextRequest) {
     }
     image = { dataUrl: body.image.dataUrl, mimeType: typeof body.image.mimeType === "string" ? body.image.mimeType : "image/png" };
   }
-  if (!resume && !message.trim() && !image) return Response.json({ error: "message is required" }, { status: 400 });
+  // A text file (CSV, TXT, MD, JSON, HTML) read in the browser; the client caps it too, but this is the real limit.
+  let file: { name: string; text: string } | undefined;
+  if (body.file && typeof body.file.text === "string") {
+    if (body.file.text.length > MAX_FILE_TEXT_CHARS) return Response.json({ error: "Attached file is too large." }, { status: 400 });
+    if (body.file.text.trim()) file = { name: typeof body.file.name === "string" ? body.file.name.slice(0, 120) : "file", text: body.file.text };
+  }
+  if (!resume && !message.trim() && !image && !file) return Response.json({ error: "message is required" }, { status: 400 });
+  // What the model reads: the message plus the file as labelled data. Only `message` is stored on the thread.
+  const modelMessage = file ? (message.trim() ? message + "\n\n" : "") + attachmentBlock(file.name, file.text) : message;
   const mode: "docked" | "workspace" = body.mode === "workspace" ? "workspace" : "docked";
   const lang: "en" | "th" = body.lang === "th" ? "th" : "en";
   const ref = normalizeRef(body.context);
+  // Auto mode (the agent publishes too) is for the top autonomy level only; anything else runs in review mode.
+  const publishMode: "review" | "auto" = body.publishMode === "auto" && policy.level === "draft_submit" ? "auto" : "review";
 
   let threadId: string = typeof body.threadId === "string" ? body.threadId : "";
   if (resume && !threadId) return Response.json({ error: "threadId is required to continue a run" }, { status: 400 });
@@ -116,7 +130,7 @@ export async function POST(req: NextRequest) {
   // The token-budget check runs regardless of resume/new-message, unlike the
   // run-count check above it: a workspace already over its monthly usage
   // shouldn't be able to burn more tokens by pressing Continue either.
-  if (message.trim() || image) {
+  if (message.trim() || image || file) {
     try {
       await checkAgentRunBudget(user);
     } catch (e) {
@@ -143,7 +157,7 @@ export async function POST(req: NextRequest) {
   }
   if (resume && !checkpoint) return Response.json({ error: "This run can no longer be continued." }, { status: 409 });
   if (!threadId) {
-    const created = await createAgentThread({ tenantKey: policy.tenantKey, title: message.slice(0, 60) || (image ? "[image]" : ""), context: ref as any });
+    const created = await createAgentThread({ tenantKey: policy.tenantKey, title: message.slice(0, 60) || (file ? "[" + file.name.slice(0, 50) + "]" : image ? "[image]" : ""), context: ref as any });
     threadId = String(created?.documentId ?? created?.id ?? "");
   }
   const priorText = priorTextFrom(existingMessages);
@@ -172,11 +186,11 @@ export async function POST(req: NextRequest) {
       };
       try {
         const result = await runAgent(
-          { user, policy, runId, threadId: finalThreadId, mode, lang, ref, priorText, message, image, resume: checkpoint, signal: abort.signal },
+          { user, policy, runId, threadId: finalThreadId, mode, lang, ref, publishMode, priorText, message: modelMessage, image, resume: checkpoint, signal: abort.signal },
           emit
         );
         const saved = result.checkpoint ? fitCheckpoint(result.checkpoint, MAX_CHECKPOINT_BYTES, { stripReasoning: true }) : null;
-        const persisted = await appendMessages(finalThreadId, settledMessages, buildPersistMessages(message, Boolean(image), result, Boolean(saved)), {
+        const persisted = await appendMessages(finalThreadId, settledMessages, buildPersistMessages(message, Boolean(image), result, Boolean(saved), file?.name ?? ""), {
           runState: result.aborted ? "idle" : saved ? "paused" : "done",
           lastRunId: runId,
           usage: { promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens },

@@ -1076,7 +1076,10 @@ export default function VisualBuilder() {
   // re-read in place so an agent edit shows without yanking the editor
   // somewhere else.
   useAgentContext(
-    sel ? { kind: "page", uid, docId: sel.docId, locale: sel.locale, applyLocally: isDirty } : { kind: "none" },
+    // applyLocally is always on while a page is open: the agent's edits (text from an attached
+    // file, new items, icons…) arrive as proposals applied to THIS canvas as an unsaved draft
+    // the editor can undo or save, never written straight to the saved page behind their back.
+    sel ? { kind: "page", uid, docId: sel.docId, locale: sel.locale, applyLocally: true, dirty: isDirty } : { kind: "none" },
     { applyProposal: applyAgentProposal, refresh: () => { loadPages(); loadIcons(); if (selRef.current) open(selRef.current); } },
     [uid, sel?.docId, sel?.locale, isDirty, loadPages, loadIcons, applyAgentProposal]
   );
@@ -1111,7 +1114,8 @@ export default function VisualBuilder() {
       setMsg({ t: t("vb.published"), ok: true });
       await saveVersion("Published");
     } catch (e) {
-      setMsg(e instanceof CmsError ? { t: "Publish failed (HTTP " + e.status + ")", ok: false } : { t: "Cannot reach the backend.", ok: false });
+      // The server's own reason (e.g. a review that is not approved yet), not just the status code.
+      setMsg(e instanceof CmsError ? { t: "Publish failed (HTTP " + e.status + ")" + (e.message && e.message !== String(e.status) ? " — " + e.message : ""), ok: false } : { t: "Cannot reach the backend.", ok: false });
     }
     finally { setSaving(false); }
   }

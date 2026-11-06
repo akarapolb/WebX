@@ -7,7 +7,7 @@ import { digestContentType } from "../../lib/agent/schemaDigest";
 import type { AgentCms } from "../../lib/agent/types";
 
 export type FakeType = { uid: string; name: string; attributes: Record<string, any>; localized?: boolean };
-export type FakeCmsOp = "list" | "get" | "create" | "update" | "listContentTypes" | "contentTypeSchema";
+export type FakeCmsOp = "list" | "get" | "create" | "update" | "publish" | "listContentTypes" | "contentTypeSchema";
 
 export function fakeCms(types: FakeType[], seed: Record<string, Record<string, any>[]> = {}) {
   const tables = new Map<string, Map<string, Record<string, any>>>();
@@ -77,6 +77,13 @@ export function fakeCms(types: FakeType[], seed: Record<string, Record<string, a
       validate(uid, data, "update");
       Object.assign(row, data);
       return row as any;
+    },
+    async publish(uid: string, id: string) {
+      calls.push({ op: "publish", uid, id });
+      takeFailure("publish", uid);
+      const row = table(uid).get(id);
+      if (!row) throw new CmsError("publish failed: Not Found", 404);
+      row.status = "published";
     },
     async listContentTypes() {
       calls.push({ op: "listContentTypes" });

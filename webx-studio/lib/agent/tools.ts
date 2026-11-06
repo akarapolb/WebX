@@ -74,6 +74,8 @@ const governedCms: AgentCms = {
   get: (uid, id, opts) => governed.get(uid, id, opts),
   create: (uid, data) => governed.create(uid, data),
   update: (uid, id, data, opts) => governed.update(uid, id, data, opts),
+  // governed.publish checks the caller's own publish permission, the tenant and any review still open.
+  publish: (uid, id, opts) => governed.publish(uid, id, opts),
   listContentTypes: (tenantKey) => listGovernableContentTypes(tenantKey),
   contentTypeSchema: (uid) => getContentTypeSchema(uid),
 };
@@ -204,13 +206,18 @@ const TRANSLATE_BATCH_CHARS = 5000;
 // — see shouldPropose() below; MODE_MIN_LEVEL only gates whether the tool
 // exists in this turn's tool list in the first place.
 const MODE_MIN_LEVEL: Record<ToolMode, "read" | "suggest" | "draft_submit"> = {
-  read: "read", draft: "suggest", submit: "draft_submit",
+  read: "read", draft: "suggest", submit: "draft_submit", publish: "draft_submit",
 };
 
 // Defense in depth — checked again here even though no tool in this
 // registry implements any of these, so a future tool addition can't
 // accidentally reintroduce one without this also being edited (and reviewed).
-const DENY_NAME = /publish|unpublish|delete|remove_entry|permission|role|token|rebuild|tenant/i;
+// The one tool that may contain "publish" is publish_entry, and only in auto mode (see tool.mode "publish").
+const DENY_NAME = /unpublish|delete|remove_entry|permission|role|token|rebuild|tenant/i;
+const denied = (name: string) => DENY_NAME.test(name) || (/publish/i.test(name) && name !== "publish_entry");
+/** Whether a tool is offered in this run's mode: publishing only in auto mode, and in auto mode no review round-trip. */
+const allowedInMode = (t: { name: string; mode: ToolMode }, ctx: AgentRunContext) =>
+  t.mode === "publish" ? ctx.publishMode === "auto" : !(ctx.publishMode === "auto" && t.name === "submit_for_review");
 
 function titleOf(e: any): string {
   return e?.title || e?.name || e?.subject || e?.question || e?.heading || "";
@@ -218,6 +225,9 @@ function titleOf(e: any): string {
 function bodyOf(e: any): string {
   return [e?.body, e?.content, e?.answer, e?.description].find((x) => typeof x === "string") || "";
 }
+
+// Block keys the Visual Builder owns (identity, type, positions, styles): the agent edits content only.
+const PROTECTED_BLOCK_KEYS = new Set(["type", "id", "styles", "boxes", "source"]);
 
 const ICON_UID = "api::icon.icon";
 const BUILTIN_ICON_RE = /^i-[a-z0-9-]{1,40}$/;
@@ -283,6 +293,9 @@ function shouldPropose(ctx: AgentRunContext, target?: { uid?: string; locale?: s
   if (ctx.level === "suggest") return true;
   const ref = ctx.ref;
   if (!((ref.kind === "page" || ref.kind === "entry") && ref.applyLocally)) return false;
+  // Auto mode finishes the job by publishing what is SAVED, so while the open editor holds nothing
+  // unsaved the edits are written for real (and the editor reloads); with unsaved edits they stay proposals.
+  if (ctx.publishMode === "auto" && !ref.dirty) return false;
   // A WordPress page's English layout is a separate field from the Thai one the
   // open editor holds, so writing it cannot clobber the editor's unsaved state,
   // and a proposal would land on the wrong canvas.
@@ -552,7 +565,7 @@ const TOOLS: ToolDef[] = [
   {
     name: "submit_for_review",
     mode: "submit",
-    description: "Submit an entry for human review. This is the ONLY way content the agent touched can move toward publish — the agent itself can never publish.",
+    description: "Submit an entry for human review. In review mode this is how content the agent touched moves toward publish: a person approves and publishes it (the agent cannot).",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id"],
       properties: { uid: { type: "string" }, id: { type: "string" }, title: { type: "string" } },
@@ -564,7 +577,28 @@ const TOOLS: ToolDef[] = [
       const created: any = await cmsOf(ctx).create(REVIEW_UID, {
         documentRef: args.id, contentType: args.uid, title, stage: "in_review", requestedBy: ctx.user.email || "agent", history: [entry],
       });
-      return { summary: "Submitted for review", data: { reviewId: String(created?.documentId ?? created?.id ?? "") } };
+      // uid + id name the entry under review, so the chat can offer Approve / Publish for it.
+      return { summary: "Submitted for review", data: { uid: args.uid, id: args.id, reviewId: String(created?.documentId ?? created?.id ?? "") } };
+    },
+  },
+  {
+    name: "publish_entry",
+    mode: "publish",
+    description: "Publish one entry or page so it goes live (the public site rebuilds). Offered only in auto mode, where the user has asked you to finish the whole job. It publishes what is SAVED, as the signed-in user: it fails if they may not publish this, or if a review on it is still open. Publish only what the user asked for, once the content is final, and say exactly what went live. Never unpublish or delete.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      const ref = ctx.ref;
+      if ((ref.kind === "page" || ref.kind === "entry") && ref.dirty && ref.uid === args.uid && ref.docId === String(args.id)) {
+        throw new CmsError("The editor has unsaved changes for this one, so what is saved is not what the user sees. Ask them to save or discard first; do not publish it now.", 409);
+      }
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Entry not found", 404);
+      await cmsOf(ctx).publish(args.uid, args.id, args.locale ? { locale: args.locale } : undefined);
+      return { summary: `Published "${titleOf(e) || args.id}"`, data: { uid: args.uid, id: String(args.id), published: true } };
     },
   },
 
@@ -760,6 +794,107 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "update_block",
+    mode: "draft",
+    description: "Edit the text and values INSIDE one existing block without rebuilding it (unlike replace_block, everything you do not mention stays exactly as it is). Call get_page_blocks first and use the block's index. `set` changes values that already exist, each by its path as get_page_blocks shows it: \"heading\", \"lead\", \"items.2.title\", \"tabs.0.featured.title\" (a number is a position, 0 = first); the value must be new text (or a number where a number is now). `removeItems` deletes items of the block's main list by position. `addItems` adds items to it (`fields` for the new item; a list of plain strings takes `value` instead), at position `at` or at the end. Order: set and removeItems use the positions you read; addItems positions apply after removals. An `icon` value may be a built-in id, a saved icon key or \"material:<Name>\" (see find_icons). Links, icons, images and ids can be set; code, styles and layout positions cannot. For a WordPress page pass locale \"en\" to edit the English layout. Use get_page_blocks again afterwards if you need to check the result.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index"],
+      properties: {
+        uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 },
+        set: {
+          type: "array", maxItems: 40,
+          items: { type: "object", additionalProperties: false, required: ["path", "value"], properties: { path: { type: "string" }, value: { type: ["string", "number"], maxLength: 8000 } } },
+        },
+        removeItems: { type: "array", maxItems: 40, items: { type: "integer", minimum: 0 } },
+        addItems: {
+          type: "array", maxItems: 20,
+          items: { type: "object", additionalProperties: false, properties: { at: { type: "integer", minimum: 0 }, fields: { type: "object" }, value: { type: "string" } } },
+        },
+      },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const sets: { path: string; value: string | number }[] = Array.isArray(args.set) ? args.set : [];
+      const removes: number[] = Array.isArray(args.removeItems) ? [...new Set<number>(args.removeItems)] : [];
+      const adds: { at?: number; fields?: Record<string, any>; value?: string }[] = Array.isArray(args.addItems) ? args.addItems : [];
+      if (!sets.length && !removes.length && !adds.length) throw new CmsError("Nothing to do: give `set`, `removeItems` or `addItems`.", 400);
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
+      if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const meta = metaOf(current[args.index].__component);
+      const block: any = JSON.parse(JSON.stringify(current[args.index]));
+      const codeKeys = new Set((meta?.fields || []).filter((f: any) => f.code).map((f: any) => f.k));
+
+      for (const s of sets) {
+        const parts = String(s.path).split(".").filter((p) => p !== "");
+        if (!parts.length) throw new CmsError("`set` needs a path.", 400);
+        if (PROTECTED_BLOCK_KEYS.has(parts[0]) || codeKeys.has(parts[0]) || parts.some((p) => p.startsWith("__"))) {
+          throw new CmsError(`"${s.path}" cannot be changed with update_block (it is not content).`, 400);
+        }
+        let node: any = block;
+        for (const p of parts.slice(0, -1)) node = node != null && typeof node === "object" ? node[p] : undefined;
+        const last = parts[parts.length - 1];
+        const exists = node != null && typeof node === "object" && (Array.isArray(node) ? /^\d+$/.test(last) && Number(last) < node.length : Object.prototype.hasOwnProperty.call(node, last));
+        if (!exists) throw new CmsError(`There is no "${s.path}" in block ${args.index}. Use the paths get_page_blocks shows (addItems adds a new item).`, 400);
+        const old = node[last];
+        if (typeof old === "string") {
+          if (typeof s.value !== "string") throw new CmsError(`"${s.path}" holds text; the value must be a string.`, 400);
+          node[last] = last === "icon" ? await resolveIconValue(ctx, s.value) : s.value;
+        } else if (typeof old === "number") {
+          if (typeof s.value !== "number") throw new CmsError(`"${s.path}" holds a number; the value must be a number.`, 400);
+          node[last] = s.value;
+        } else {
+          throw new CmsError(`"${s.path}" is not a single text or number value, so it cannot be set directly.`, 400);
+        }
+      }
+
+      if (removes.length || adds.length) {
+        const its = meta?.items as any;
+        const key = its?.key;
+        const list: any[] | null = key && Array.isArray(block[key]) ? block[key] : null;
+        if (!its || !list) throw new CmsError(`Block type "${block.__component}" has no main item list to add to or remove from.`, 400);
+        const bad = removes.find((i) => i < 0 || i >= list.length);
+        if (bad !== undefined) throw new CmsError(`Block ${args.index} has ${list.length} item(s); there is no item ${bad}.`, 400);
+        let next = list.filter((_, i) => !removes.includes(i));
+        for (const a of adds) {
+          let item: any;
+          if (its.scalar) {
+            if (typeof a.value !== "string") throw new CmsError("This list holds plain text: give `value` for each new item.", 400);
+            item = a.value;
+          } else {
+            const base = JSON.parse(JSON.stringify(its.def && typeof its.def === "object" ? its.def : {}));
+            const allowed = new Set<string>([...Object.keys(base), ...(its.fields || []).map((f: any) => f.k)]);
+            const given = a.fields && typeof a.fields === "object" && !Array.isArray(a.fields) ? a.fields : {};
+            for (const [k, v] of Object.entries(given)) {
+              if (!allowed.has(k) || k.startsWith("__")) throw new CmsError(`"${k}" is not a field of this block's items (allowed: ${[...allowed].join(", ")}).`, 400);
+              if (typeof v !== "string" && typeof v !== "number") throw new CmsError(`Item field "${k}" must be text or a number.`, 400);
+              base[k] = k === "icon" && typeof v === "string" ? await resolveIconValue(ctx, v) : v;
+            }
+            item = base;
+          }
+          const at = typeof a.at === "number" ? Math.max(0, Math.min(a.at, next.length)) : next.length;
+          next = [...next.slice(0, at), item, ...next.slice(at)];
+        }
+        block[key] = next;
+      }
+
+      assertSafeBlockContent(block);
+      const parts = [sets.length && `${sets.length} value(s) set`, removes.length && `${removes.length} item(s) removed`, adds.length && `${adds.length} item(s) added`].filter(Boolean).join(", ");
+      if (shouldPropose(ctx, args)) {
+        return {
+          summary: `Proposed on block ${args.index}: ${parts}`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Edit block ${args.index}`, blocks: [block], replace: args.index },
+        };
+      }
+      const next = current.map((b: any, i: number) => (i === args.index ? block : b));
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Block ${args.index}: ${parts}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
     name: "find_icons",
     mode: "read",
     description: "Look up icons for set_block_item_icons. Returns the workspace's saved icons (key + name), the built-in icon ids, and — when `q` is given — Material icon names matching it (e.g. q \"apple\" finds \"Apple\"). Call this when the user names an icon, to see whether it is already saved or must be added from the Material set.",
@@ -862,7 +997,8 @@ const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
  * visible to the model, not just rejected if called. */
 export function availableTools(ctx: AgentRunContext) {
   return TOOLS.filter((t) => {
-    if (DENY_NAME.test(t.name)) return false; // unreachable given the registry above, kept as a real assertion, not a comment
+    if (denied(t.name)) return false; // unreachable given the registry above, kept as a real assertion, not a comment
+    if (!allowedInMode(t, ctx)) return false;
     if (!levelAtLeast(ctx.level, MODE_MIN_LEVEL[t.mode])) return false;
     if (ctx.allowedTools && !ctx.allowedTools.includes(t.name)) return false;
     return true;
@@ -903,9 +1039,12 @@ function withSchemaHint(name: string, args: Record<string, any>, e: CmsError): s
 export async function executeTool(
   ctx: AgentRunContext, name: string, argsJson: string,
 ): Promise<{ ok: boolean; summary: string; data?: any; proposal?: AgentProposal; retryable?: boolean }> {
-  if (DENY_NAME.test(name)) return { ok: false, summary: "This action is not available to the agent." };
+  if (denied(name)) return { ok: false, summary: "This action is not available to the agent." };
   const tool = TOOL_BY_NAME.get(name);
   if (!tool) return { ok: false, summary: `Unknown tool "${name}".` };
+  if (!allowedInMode(tool, ctx)) {
+    return { ok: false, summary: tool.mode === "publish" ? "Publishing is not available in review mode: a person approves and publishes." : "Submitting for review is not used in auto mode; publish with publish_entry instead." };
+  }
   if (!levelAtLeast(ctx.level, MODE_MIN_LEVEL[tool.mode])) return { ok: false, summary: "This action requires a higher autonomy level than this workspace has granted the agent." };
   if (ctx.allowedTools && !ctx.allowedTools.includes(name)) return { ok: false, summary: "This tool is not enabled for the agent in this workspace." };
   let args: Record<string, any>;

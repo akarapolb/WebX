@@ -21,10 +21,14 @@ export const levelAtLeast = (have: AgentLevel, need: AgentLevel): boolean => LEV
  * EntryEditor hold their own unsaved local state, so a server-side write
  * would diverge from or clobber it. */
 export type AgentContextRef =
-  | { kind: "page"; uid: string; docId: string; locale?: string; applyLocally?: boolean }
-  | { kind: "entry"; uid: string; docId: string; locale?: string; applyLocally?: boolean }
+  | { kind: "page"; uid: string; docId: string; locale?: string; applyLocally?: boolean; dirty?: boolean }
+  | { kind: "entry"; uid: string; docId: string; locale?: string; applyLocally?: boolean; dirty?: boolean }
   | { kind: "board" }
   | { kind: "none" };
+
+/** How far the agent takes a job. "review" (the default): it drafts, and a person approves and publishes.
+ * "auto": it also publishes, as the signed-in user, so only what that user may publish. */
+export type PublishMode = "review" | "auto";
 
 /** The CMS operations the agent's tools use. Production passes governed.*,
  * so every tenant, role and field-policy guard applies; tests pass an
@@ -34,6 +38,7 @@ export type AgentCms = {
   get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null>;
   create<T = any>(uid: string, data: Record<string, any>): Promise<T>;
   update<T = any>(uid: string, id: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T>;
+  publish(uid: string, id: string, opts?: { locale?: string }): Promise<void>;
   listContentTypes(tenantKey: string): Promise<{ uid: string; label: string }[]>;
   contentTypeSchema(uid: string): Promise<ContentTypeSchema | null>;
 };
@@ -51,6 +56,8 @@ export type AgentRunContext = {
   ref: AgentContextRef;
   /** Title of the page or entry in `ref`, looked up once per request, so the model can name it. */
   openTitle?: string;
+  /** "auto" lets the agent publish (publish_entry); anything else is "review". */
+  publishMode?: PublishMode;
   signal?: AbortSignal;
   /** The tenant's own publicTemplate ("gov-portal"|"orst"|"royalsociety",
    * governance.ts's AgentPolicy.dialect) and content engine — the
@@ -110,7 +117,7 @@ export type AgentProposal = {
  * (read <= "read", the rest need at least "suggest"/"draft"/"draft_submit" —
  * see tools.ts's MODE_MIN_LEVEL) and, separately, whether it may run at all
  * when applyLocally downgrades a write to a proposal. */
-export type ToolMode = "read" | "draft" | "submit";
+export type ToolMode = "read" | "draft" | "submit" | "publish";
 export type ToolDef = {
   name: string;
   mode: ToolMode;

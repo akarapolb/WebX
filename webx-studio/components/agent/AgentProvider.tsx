@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import { useTenant } from "../TenantProvider";
 import { useLang } from "../LangProvider";
 import { useAgentRun, chatMsgsFromThread, type ChatMsg } from "./useAgentRun";
-import type { AgentContextRef, AgentLevel, AgentProposal } from "@/lib/agent/types";
+import type { AgentContextRef, AgentLevel, AgentProposal, PublishMode } from "@/lib/agent/types";
 
 export type AgentPolicy = {
   level: AgentLevel;
@@ -65,7 +65,13 @@ type Ctx = {
   messages: ChatMsg[];
   running: boolean;
   usage: { promptTokens: number; completionTokens: number };
-  send: (text: string, image?: { dataUrl: string; mimeType: string }) => void;
+  send: (text: string, image?: { dataUrl: string; mimeType: string }, file?: { name: string; text: string }) => void;
+  /** "review": the agent drafts and a person approves and publishes (buttons under its reply). "auto": it publishes too.
+   * Auto needs the top autonomy level; below that this is always "review". */
+  publishMode: PublishMode;
+  setPublishMode: (m: PublishMode) => void;
+  /** Whether this user can choose auto at all (the policy's level is the top one). */
+  canAuto: boolean;
   /** Continues the thread's stopped run from the checkpoint the server saved for it. */
   resume: () => void;
   abort: () => void;
@@ -108,6 +114,7 @@ export const useAgent = () => {
 export const useAgentOptional = () => useContext(AgentCtx);
 
 const STORAGE_OPEN = "webx_agent_open";
+const STORAGE_MODE = "webx_agent_publish_mode";
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
   const { currentKey } = useTenant();
@@ -118,6 +125,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [draftPrompt, setDraftPrompt] = useState("");
   const [autosendPending, setAutosendPending] = useState(false);
+  const [modeChoice, setModeChoice] = useState<PublishMode>("review");
   const registrationRef = useRef<Registration | null>(null);
   const [, bumpRegistration] = useState(0);
 
@@ -127,6 +135,16 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_OPEN, open ? "1" : "0"); } catch {}
   }, [open]);
+  useEffect(() => {
+    try { if (localStorage.getItem(STORAGE_MODE) === "auto") setModeChoice("auto"); } catch {}
+  }, []);
+  const setPublishMode = useCallback((m: PublishMode) => {
+    setModeChoice(m);
+    try { localStorage.setItem(STORAGE_MODE, m); } catch {}
+  }, []);
+  // Auto mode is for the top autonomy level only; a lower level (or no policy yet) always runs in review mode.
+  const canAuto = policy?.level === "draft_submit";
+  const publishMode: PublishMode = canAuto && modeChoice === "auto" ? "auto" : "review";
 
   // The full-page workspace (Milestone 3) IS the agent — the docked panel
   // would be redundant chrome on top of itself there.
@@ -190,16 +208,16 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   // derived from the route rather than threaded through every send() call
   // site, since "which surface is this" is exactly what `suppressed`
   // already answers.
-  const send = useCallback((text: string, image?: { dataUrl: string; mimeType: string }) => {
+  const send = useCallback((text: string, image?: { dataUrl: string; mimeType: string }, file?: { name: string; text: string }) => {
     const t = text.trim();
-    if ((!t && !image) || run.running || !policy || policy.level === "off") return;
-    run.send({ message: t, image, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
-  }, [run, lang, ref, threadId, policy, suppressed]);
+    if ((!t && !image && !file) || run.running || !policy || policy.level === "off") return;
+    run.send({ message: t, image, file, publishMode, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
+  }, [run, lang, ref, threadId, policy, suppressed, publishMode]);
 
   const resume = useCallback(() => {
     if (run.running || !threadId || !policy || policy.level === "off") return;
-    run.send({ message: "", resume: true, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
-  }, [run, lang, ref, threadId, policy, suppressed]);
+    run.send({ message: "", resume: true, publishMode, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
+  }, [run, lang, ref, threadId, policy, suppressed, publishMode]);
 
   const loadThread = useCallback(async (id: string) => {
     run.abort();
@@ -240,7 +258,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const value: Ctx = {
     open: open && !suppressed, toggle: () => setOpen((o) => !o), close: () => setOpen(false), openWith,
     policy, ref, threadId, messages: run.messages, running: run.running, usage: run.usage,
-    send, resume, abort: run.abort, newThread, loadThread, setProposalStatus, applyProposal, register,
+    send, publishMode, setPublishMode, canAuto, resume, abort: run.abort, newThread, loadThread, setProposalStatus, applyProposal, register,
     draftPrompt, setDraftPrompt, autosendPending, consumeAutosend,
   };
 

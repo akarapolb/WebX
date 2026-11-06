@@ -14,7 +14,7 @@ export type ChatMsg =
    * THIS session — `hadImage` marks a rehydrated older turn that had one
    * (buildPersistMessages, app/api/agent/run/route.ts, never persists the
    * raw picture; see that function's own comment). */
-  | { kind: "user"; id: string; text: string; image?: string; hadImage?: boolean }
+  | { kind: "user"; id: string; text: string; image?: string; hadImage?: boolean; fileName?: string }
   | { kind: "assistant"; id: string; text: string }
   | { kind: "tools"; id: string; steps: ToolStep[] }
   | { kind: "proposal"; id: string; proposal: AgentProposal; status: "pending" | "applied" | "undone" | "stale" }
@@ -24,7 +24,9 @@ export type ChatMsg =
   /** The model's checklist. A thread shows one, updated in place. */
   | { kind: "plan"; id: string; items: PlanItem[] }
   /** The run is waiting for the user; `answered` once any later message is sent. */
-  | { kind: "question"; id: string; question: string; options: string[]; answered: boolean };
+  | { kind: "question"; id: string; question: string; options: string[]; answered: boolean }
+  /** What a review-mode run created or changed, with Approve / Publish buttons (components/agent/ResultsCard.tsx). */
+  | { kind: "results"; id: string; targets: { uid: string; id: string }[] };
 
 type SendOpts = {
   /** Empty when continuing a stopped run. */
@@ -33,6 +35,10 @@ type SendOpts = {
    * for the model to look at, not a URL for a tool to fetch (see
    * lib/agent/urlImage.ts for that separate, tool-driven path). */
   image?: { dataUrl: string; mimeType: string };
+  /** A text file (CSV, TXT, MD, JSON, HTML) read in the browser: the content to work from. */
+  file?: { name: string; text: string };
+  /** "auto" lets the agent publish too; "review" (default) leaves approving and publishing to the person. */
+  publishMode?: "review" | "auto";
   /** Continue the thread's stopped run from its saved checkpoint. */
   resume?: boolean;
   mode: "docked" | "workspace";
@@ -40,6 +46,20 @@ type SendOpts = {
   context: AgentContextRef;
   threadId: string | null;
 };
+
+// Bookkeeping the agent also writes (the review itself, icon library, page history): not something to publish.
+const NOT_PUBLISHABLE = new Set(["api::review.review", "api::icon.icon", "api::page-version.page-version", "api::page-template.page-template"]);
+/** The entries a run changed that a person can approve and publish, once each. */
+export function reviewTargets(applied: { uid: string; id: string }[] | undefined): { uid: string; id: string }[] {
+  const seen = new Set<string>();
+  const out: { uid: string; id: string }[] = [];
+  for (const a of applied || []) {
+    if (!a?.uid || !a?.id || NOT_PUBLISHABLE.has(a.uid)) continue;
+    const k = a.uid + "\u0000" + a.id;
+    if (!seen.has(k)) { seen.add(k); out.push({ uid: a.uid, id: String(a.id) }); }
+  }
+  return out;
+}
 
 let seq = 0;
 const nid = () => "m" + Date.now().toString(36) + (seq++).toString(36);
@@ -59,7 +79,7 @@ export function chatMsgsFromThread(rows: any[], resumable = false): ChatMsg[] {
   rows.forEach((r, i) => {
     const id = "h" + i;
     if (!r || typeof r !== "object") return;
-    if (r.role === "user" && typeof r.content === "string") out.push({ kind: "user", id, text: r.content, hadImage: Boolean(r.hadImage) });
+    if (r.role === "user" && typeof r.content === "string") out.push({ kind: "user", id, text: r.content, hadImage: Boolean(r.hadImage), ...(typeof r.fileName === "string" && r.fileName ? { fileName: r.fileName } : {}) });
     else if (r.role === "assistant" && typeof r.content === "string") out.push({ kind: "assistant", id, text: r.content });
     else if (r.role === "tools" && Array.isArray(r.steps)) {
       out.push({ kind: "tools", id, steps: r.steps.map((s: any, j: number) => ({ id: id + "-" + j, name: s?.name || "", ok: s?.ok, summary: s?.summary, pending: false })) });
@@ -128,7 +148,7 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
   }, []);
 
   const send = useCallback(async (opts: SendOpts) => {
-    const userMsg: ChatMsg | null = (opts.message || opts.image) ? { kind: "user", id: nid(), text: opts.message, image: opts.image?.dataUrl } : null;
+    const userMsg: ChatMsg | null = (opts.message || opts.image || opts.file) ? { kind: "user", id: nid(), text: opts.message, image: opts.image?.dataUrl, fileName: opts.file?.name } : null;
     // Any new run retires older Continue buttons (the server keeps only the
     // newest checkpoint) and settles open questions (this message answers them).
     setMessages((m) => {
@@ -150,7 +170,7 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: opts.message || undefined, image: opts.image || undefined, resume: opts.resume || undefined, mode: opts.mode, lang: opts.lang,
+          message: opts.message || undefined, image: opts.image || undefined, file: opts.file || undefined, publishMode: opts.publishMode || undefined, resume: opts.resume || undefined, mode: opts.mode, lang: opts.lang,
           context: opts.context, threadId: opts.threadId || undefined,
         }),
         signal: ac.signal,
@@ -241,9 +261,13 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
             toolsMsgId.current = null;
             setMessages((m) => [...m, { kind: "error", id: nid(), text: d.message || "Something went wrong." }]);
             break;
-          case "done":
+          case "done": {
             appliedList = d.applied;
+            // Review mode: show what this run made, with Approve / Publish buttons right here.
+            const targets = reviewTargets(d.applied);
+            if (opts.publishMode !== "auto" && targets.length) setMessages((m) => [...m, { kind: "results", id: nid(), targets }]);
             break;
+          }
         }
       }
     } catch (e: any) {

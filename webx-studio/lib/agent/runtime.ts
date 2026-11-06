@@ -9,7 +9,7 @@ import { serverDeps } from "./engine/deps.server";
 import { limitsFor } from "./engine/limits";
 import { runSlice } from "./engine/loop";
 import type { RunCheckpoint, StopReason } from "./engine/types";
-import type { AgentContextRef, AgentEvent, AgentProposal, AgentRunContext, PlanItem } from "./types";
+import type { AgentContextRef, AgentEvent, AgentProposal, AgentRunContext, PlanItem, PublishMode } from "./types";
 
 const DEFAULT_MODEL = process.env.LITELLM_MODEL || "webx-default";
 
@@ -29,6 +29,8 @@ export type RunInput = {
   mode: "docked" | "workspace";
   lang: "en" | "th";
   ref: AgentContextRef;
+  /** "auto": the agent also publishes. The route only passes "auto" to a user whose agent level allows it. */
+  publishMode?: PublishMode;
   /** Plain text turns from the thread; tool calls are never replayed across separate runs. */
   priorText: ChatMsg[];
   /** Empty only when continuing a stopped run. */
@@ -81,6 +83,7 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     allowedTools: input.policy.tools, allowedContentTypes: input.policy.contentTypes,
     model: input.policy.model, runId: cp.runId, threadId: input.threadId, lang: input.lang,
     ref: cp.ref, signal: input.signal, dialect: input.policy.dialect, engine: input.policy.engine,
+    publishMode: input.publishMode === "auto" ? "auto" : "review",
   };
   ctx.openTitle = await withAgentActor(ctx.runId, () => openEditorTitle(ctx));
 
