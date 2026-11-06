@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Icon from "./Icon";
 import EntryEditor from "./EntryEditor";
+import ImportDialog from "./ImportDialog";
 import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 import { planLimit } from "@/lib/plans";
@@ -41,6 +42,7 @@ export default function ContentBrowser() {
   const [editing, setEditing] = useState<{ docId: string; locale?: string } | null>(null);
   const [schemas, setSchemas] = useState<Record<string, any>>({});
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   // Bulk "add to release" — Releases.tsx's own "New release" button has
   // nothing to add entries WITH beyond EntryEditor's one-at-a-time dropdown;
   // this is the batch equivalent for the list view (2026-09-15).
@@ -211,6 +213,23 @@ export default function ContentBrowser() {
     finally { setCreating(false); }
   }
 
+  // What a file import needs before it sends rows: the tenant to attach (as createNew does) and whether
+  // the plan's content limit would be passed. Types without a tenant relation (WordPress) need neither.
+  async function importPrepare(rowCount: number): Promise<{ tenant?: string | number; blocked?: string }> {
+    if (!uid || !tenantUids.has(uid) || !currentKey || currentKey === "workspace") return {};
+    try {
+      const [{ data: tRows }, sum] = await Promise.all([
+        cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: currentKey }] }),
+        fetch("/api/strapi/api/analytics/summary?tenant=" + encodeURIComponent(currentKey)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      const tn = tRows[0];
+      const limit = planLimit(tn?.plan).items;
+      const used = sum?.contentTotal ?? 0;
+      if (used + rowCount > limit) return { blocked: t("c.overLimit").replace("{n}", String(limit)).replace("{plan}", String(tn?.plan || "free")) };
+      return tn?.id ? { tenant: tn.id } : {};
+    } catch { return {}; }
+  }
+
   const SEG: { v: Status; k: string }[] = [{ v: "", k: "c.all" }, { v: "draft", k: "c.draft" }, { v: "published", k: "c.published" }];
 
   return (
@@ -222,6 +241,7 @@ export default function ContentBrowser() {
         </div>
         <div className="vh-act">
           <button className="btn btn--g" onClick={() => uid && loadEntries(uid, opts)}>{t("c.refresh")}</button>
+          <button className="btn btn--g" onClick={() => setImporting(true)} disabled={!uid} data-testid="content-import"><Icon name="up" />{t("imp.btn")}</button>
           <button className="btn btn--p" onClick={createNew} disabled={!uid || creating}><Icon name="plus" />{creating ? t("c.creating") : t("c.new")}</button>
         </div>
       </div>
@@ -307,6 +327,14 @@ export default function ContentBrowser() {
       )}
 
       <div className="notice"><Icon name="shield" /> {t("c.bffnote")}</div>
+
+      {importing && current && (
+        <ImportDialog
+          uid={current.uid} typeName={current.name} prepare={importPrepare}
+          onClose={() => setImporting(false)}
+          onDone={(n) => { setImporting(false); if (n > 0) loadEntries(current.uid, opts); }}
+        />
+      )}
 
       {editing && current && (
         <EntryEditor
