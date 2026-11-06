@@ -84,6 +84,23 @@ add_action('acf/init', function () {
         'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'event']]],
     ]);
 
+    // Where the card for an item goes when clicked — set per entry, so a news post, a publication, a service
+    // and so on can each link to its own page (on this site or elsewhere). public-site/lib/linkUrl.ts checks the
+    // address before it is used, and an empty value means no link.
+    acf_add_local_field_group([
+        'key' => 'group_link',
+        'title' => 'Link',
+        'show_in_rest' => 1,
+        'fields' => [
+            ['key' => 'field_link_url', 'label' => 'Link', 'name' => 'link_url', 'type' => 'text',
+                'instructions' => 'The page this item\'s card opens, e.g. https://www.orst.go.th/... or /orst/about. Leave empty for no link.'],
+        ],
+        'location' => array_map(
+            fn($pt) => [['param' => 'post_type', 'operator' => '==', 'value' => $pt]],
+            ['post', 'service', 'publication', 'resource', 'event', 'member', 'document', 'org-unit']
+        ),
+    ]);
+
     acf_add_local_field_group([
         'key' => 'group_member',
         'title' => 'Member Details',

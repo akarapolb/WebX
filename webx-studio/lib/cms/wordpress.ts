@@ -118,21 +118,24 @@ function resolvePostType(uid: string): { restBase: string; name: string } {
 // in the acf-fields.php mu-plugin.
 const ACF_FIELDS: Record<string, string[]> = {
   "wp:timeline": ["year", "status_label", "order"],
+  // link_url: acf-fields.php's group_link — where the item's card goes when clicked. On every type
+  // that shows up as a card or list row on the public site (news posts, services, publications, …).
+  "wp:post": ["link_url"],
   // title_en / excerpt_en: acf-fields.php's group_i18n_en, on exactly these five
   // types. Listed here, they save; left out, the form showed the fields but WP
   // never received them.
   "wp:mission": ["icon", "order", "title_en", "excerpt_en"],
-  "wp:org-unit": ["order", "title_en", "excerpt_en"],
-  "wp:document": ["tag", "fiscal_year", "file_url", "order"],
-  "wp:service": ["icon", "title_en", "excerpt_en"],
-  "wp:publication": ["icon"],
-  "wp:resource": ["icon"],
+  "wp:org-unit": ["order", "title_en", "excerpt_en", "link_url"],
+  "wp:document": ["tag", "fiscal_year", "file_url", "order", "link_url"],
+  "wp:service": ["icon", "title_en", "excerpt_en", "link_url"],
+  "wp:publication": ["icon", "link_url"],
+  "wp:resource": ["icon", "link_url"],
   "wp:faq": ["icon", "title_en", "excerpt_en"],
   // group_event / group_member. Missing, nothing typed in the Studio's Event or
   // Member form (day, time, place, tier…) was ever saved, so no event could be
   // given the date the calendar needs.
-  "wp:event": ["event_date", "event_time", "location", "category"],
-  "wp:member": ["tier", "division", "order", "title_en", "excerpt_en"],
+  "wp:event": ["event_date", "event_time", "location", "category", "link_url"],
+  "wp:member": ["tier", "division", "order", "title_en", "excerpt_en", "link_url"],
   // "blocks_en" already existed as an orphaned ACF field (acf-fields.php's
   // group_page_layout) — public-site's getWpPage() has read it for a while,
   // but nothing here could write or even see it, so only a one-off seed

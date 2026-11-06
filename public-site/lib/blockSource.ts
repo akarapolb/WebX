@@ -15,6 +15,7 @@ import {
   getWpServices, getWpPublications, getWpNews, getWpFaqs, getWpResources,
   getWpMissionItems, getWpOrgUnits, getWpDocuments, getWpTimeline, getWpEvents, getWpMembers, fmtDateTh, type WpEntry, type Locale,
 } from "./cms";
+import { entryLink, safeLink } from "./linkUrl";
 
 export type SourcePostType = "service" | "publication" | "news" | "faq" | "resource" | "mission" | "org-unit" | "document" | "timeline" | "event" | "member";
 export type SourceMap = "card" | "link" | "faq" | "mission" | "orgunit" | "document" | "timeline" | "dated" | "calendar" | "directory";
@@ -44,10 +45,10 @@ const FETCHERS: Record<SourcePostType, (tenant: string, locale?: Locale) => Prom
 };
 
 function toCardItems(entries: WpEntry[], icon: string, tag?: string): any[] {
-  return entries.map((e) => ({ icon, title: e.title, body: e.excerpt, meta: fmtDateTh(e.date), href: "#", ...(tag ? { tag } : {}) }));
+  return entries.map((e) => ({ icon, title: e.title, body: e.excerpt, meta: fmtDateTh(e.date), href: entryLink(e), ...(tag ? { tag } : {}) }));
 }
 function toLinkItems(entries: WpEntry[], icon: string): any[] {
-  return entries.map((e) => ({ icon, title: e.title, desc: e.excerpt, meta: fmtDateTh(e.date), href: "#" }));
+  return entries.map((e) => ({ icon, title: e.title, desc: e.excerpt, meta: fmtDateTh(e.date), href: entryLink(e) }));
 }
 function toFaqItems(entries: WpEntry[]): any[] {
   return entries.map((e) => ({ q: e.title, a: e.excerpt }));
@@ -59,7 +60,7 @@ function toMissionItems(entries: WpEntry[]): any[] {
   return entries.map((e) => ({ icon: e.acf?.icon || "i-service", title: e.title, body: e.excerpt }));
 }
 function toOrgUnitItems(entries: WpEntry[]): any[] {
-  return entries.map((e) => ({ icon: "i-dictionary", title: e.title, body: e.excerpt, href: "#" }));
+  return entries.map((e) => ({ icon: "i-dictionary", title: e.title, body: e.excerpt, href: entryLink(e) }));
 }
 // Carries both ORST's link-list item shape (desc/meta) and RoyalSociety's
 // list-panel shape (body/date) at once — the same WP document entries feed
@@ -72,7 +73,7 @@ function toDocumentItems(entries: WpEntry[]): any[] {
     const meta = e.acf?.fiscal_year || undefined;
     return {
       title: e.title, desc, body: desc, tag: e.acf?.tag || "PDF",
-      meta, date: meta, href: e.acf?.file_url || "#",
+      meta, date: meta, href: safeLink(e.acf?.link_url) ?? (e.acf?.file_url || "#"),
     };
   });
 }
@@ -87,32 +88,32 @@ function toTimelineItems(entries: WpEntry[]): any[] {
 // articles, ActivitiesPage's activities) — a "link" item plus a date, which
 // the existing card/link mappers don't carry.
 function toDatedItems(entries: WpEntry[]): any[] {
-  return entries.map((e) => ({ date: fmtDateTh(e.date), tag: undefined, title: e.title, body: e.excerpt, href: "#" }));
+  return entries.map((e) => ({ date: fmtDateTh(e.date), tag: undefined, title: e.title, body: e.excerpt, href: entryLink(e) }));
 }
 // EventCalendar.tsx's own item shape — event_date/event_time/location/
 // category are the group_event ACF fields (wordpress/mu-plugins/
 // acf-fields.php); event_date stays a plain "Ymd" string (ACF's return
 // format), not parsed into a Date here, since the calendar groups by exact
 // string match against its own day cells anyway.
-export type CalendarItem = { id: number; date: string; time?: string; location?: string; category?: string; title: string; body?: string };
+export type CalendarItem = { id: number; date: string; time?: string; location?: string; category?: string; title: string; body?: string; href?: string };
 export function toCalendarItems(entries: WpEntry[]): CalendarItem[] {
   return entries
     .filter((e) => e.acf?.event_date)
     .map((e) => ({
       id: e.id, date: String(e.acf?.event_date), time: e.acf?.event_time || undefined,
       location: e.acf?.location || undefined, category: e.acf?.category || undefined,
-      title: e.title, body: e.excerpt || undefined,
+      title: e.title, body: e.excerpt || undefined, href: safeLink(e.acf?.link_url) ?? undefined,
     }));
 }
 
 // MemberDirectory.tsx's own item shape — tier/division are the group_member
 // ACF fields (wordpress/mu-plugins/acf-fields.php); photo comes from the
 // CPT's own featured-image (imageUrl), same as every other WP entry.
-export type MemberItem = { id: number; name: string; photo: string | null; bio?: string; tier?: string; division?: string };
+export type MemberItem = { id: number; name: string; photo: string | null; bio?: string; tier?: string; division?: string; href?: string };
 export function toMemberItems(entries: WpEntry[]): MemberItem[] {
   return entries.map((e) => ({
     id: e.id, name: e.title, photo: e.imageUrl, bio: e.excerpt || undefined,
-    tier: e.acf?.tier || undefined, division: e.acf?.division || undefined,
+    tier: e.acf?.tier || undefined, division: e.acf?.division || undefined, href: safeLink(e.acf?.link_url) ?? undefined,
   }));
 }
 

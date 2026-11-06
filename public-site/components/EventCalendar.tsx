@@ -129,7 +129,7 @@ export default function EventCalendar({ items, icsHref }: { items: CalendarItem[
             {selectedItems.map((it) => (
               <li className="wx-cal-event" key={it.id}>
                 {it.category ? <span className="wx-cal-event-cat">{it.category}</span> : null}
-                <strong className="wx-cal-event-title">{it.title}</strong>
+                <strong className="wx-cal-event-title">{it.href ? <a href={it.href}>{it.title}</a> : it.title}</strong>
                 <div className="wx-cal-event-meta">
                   {it.time ? <span>{it.time}</span> : null}
                   {it.location ? <span>{it.location}</span> : null}

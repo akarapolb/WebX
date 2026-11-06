@@ -90,7 +90,7 @@ export default function MemberDirectory({ items, locale = "th" }: { items: Membe
               <div className="wx-dir-photo">
                 {m.photo ? <img src={m.photo} alt="" loading="lazy" /> : <span className="wx-dir-photo-fallback" aria-hidden="true">{m.name.slice(0, 1)}</span>}
               </div>
-              <h3 className="wx-dir-name">{m.name}</h3>
+              <h3 className="wx-dir-name">{m.href ? <a href={m.href}>{m.name}</a> : m.name}</h3>
               {m.tier ? <span className="wx-dir-tier-badge">{m.tier}</span> : null}
               {m.division ? <p className="wx-dir-division">{m.division}</p> : null}
               {m.bio ? <p className="wx-dir-bio">{m.bio}</p> : null}
