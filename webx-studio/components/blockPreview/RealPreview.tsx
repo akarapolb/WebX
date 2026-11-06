@@ -92,6 +92,7 @@ const HARNESS_PATH: Record<string, string> = { orst: "/orst/preview", royalsocie
 // the wrong breakpoint. Each width sits inside the matching range of
 // public-site/templates/_builder/boxes.ts's DEVICE_MEDIA.
 const VIRTUAL_W: Record<string, number> = { desktop: 1280, tablet: 800, mobile: 390 };
+const MAX_DESKTOP_W = 1920;
 
 export default function RealPreview({
   blocks, homeData, customTypes, customIcons, collectionData, tenant, harness, labels,
@@ -185,8 +186,13 @@ export default function RealPreview({
     setAvail(el.clientWidth);
     return () => ro.disconnect();
   }, [harnessPath]);
-  const vw = VIRTUAL_W[device || "desktop"];
+  const dev = device || "desktop";
+  // On a wide screen the desktop preview is laid out at the width it really has (up to MAX_DESKTOP_W), instead
+  // of a 1280px page at scale 1 with an empty white strip beside it. Tablet and phone keep their device width.
+  const vw = dev === "desktop" && avail > VIRTUAL_W.desktop ? Math.min(avail, MAX_DESKTOP_W) : VIRTUAL_W[dev];
   const scale = avail ? Math.min(1, avail / vw) : 1;
+  // Wider than MAX_DESKTOP_W: centre the page rather than hang it from the left edge.
+  const offsetX = avail > vw * scale ? Math.floor((avail - vw * scale) / 2) : 0;
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
   useEffect(() => {
@@ -291,13 +297,13 @@ export default function RealPreview({
 
   if (harnessPath) {
     return (
-      <div className="vb-realpreview" ref={wrapRef} style={{ position: "relative", height: Math.ceil(harnessHeight * scale), minHeight: 0 }}>
+      <div className="vb-realpreview" ref={wrapRef} style={{ position: "relative", height: Math.ceil(harnessHeight * scale), minHeight: 0, background: "var(--sunk)" }}>
         <div ref={scrollMarkRef} aria-hidden="true" style={{ position: "absolute", left: 0, width: 1, top: 0, height: 1, pointerEvents: "none" }} />
         <iframe ref={iframeRef} src={PUBLIC_SITE + harnessPath} title="Real preview"
           // Absolutely positioned so its real-device width can't widen the
           // wrapper it's measured against (the wrapper's height is set
           // explicitly above instead).
-          style={{ position: "absolute", top: 0, left: 0, width: vw, height: harnessHeight, border: 0, display: "block", transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}
+          style={{ position: "absolute", top: 0, left: offsetX, width: vw, height: harnessHeight, border: 0, display: "block", transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}
           onLoad={() => setHarnessReady(false) /* a reload means the child's own state (and its "hello") is gone — wait for a fresh one before sending */} />
       </div>
     );
