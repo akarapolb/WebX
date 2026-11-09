@@ -97,7 +97,7 @@ function SectionHead({ b, titleId }: { b: Block; titleId: string }) {
 function Section({ b, children }: { b: Block; children: ReactNode }) {
   const titleId = (b.id || "sec") + "-title";
   return (
-    <section className="section" id={b.id} aria-labelledby={b.heading ? titleId : undefined}>
+    <section {...vc(b, "section")} className="section" id={b.id} aria-labelledby={b.heading ? titleId : undefined}>
       <div className="container">
         <SectionHead b={b} titleId={titleId} />
         {children}
@@ -117,7 +117,7 @@ function PageHero({ b, locale }: { b: Block; locale?: "th" | "en" }) {
   // site — a real navigation bug, not just a cosmetic one.
   const home = locale === "en" ? { href: "/en/royalsociety", label: "Home", nav: "Breadcrumb" } : { href: "/royalsociety", label: "หน้าหลัก", nav: "เส้นทางนำทาง" };
   return (
-    <section className={"page-hero" + (b.variant === "deep" ? " page-hero--deep" : "")} id={b.id}>
+    <section {...vc(b, "section")} className={"page-hero" + (b.variant === "deep" ? " page-hero--deep" : "")} id={b.id}>
       <div className="container page-hero__inner">
         <nav className="breadcrumb" aria-label={home.nav}>
           <a href={home.href}>{home.label}</a>
@@ -149,7 +149,7 @@ function AboutHero({ b, locale }: { b: Block; locale?: "th" | "en" }) {
     ? { founded: "Established", law: "Current Act", structure: "Academic Structure" }
     : { founded: "สถาปนา", law: "กฎหมายปัจจุบัน", structure: "โครงสร้างวิชาการ" };
   return (
-    <section className="about-hero-clean" aria-labelledby="about-hero-title">
+    <section {...vc(b, "section")} className="about-hero-clean" aria-labelledby="about-hero-title">
       <div className="about-container">
         <div className="about-hero-clean-grid">
           <div className="about-hero-clean-content">
@@ -193,7 +193,7 @@ const HERO_SLIDES = [
 ];
 function HomeHero({ b }: { b: Block }) {
   return (
-    <section className="rs-hero rs-hero-institution" id={b.id || "home-hero"} aria-label="ภาพนำราชบัณฑิตยสภา">
+    <section {...vc(b, "section")} className="rs-hero rs-hero-institution" id={b.id || "home-hero"} aria-label="ภาพนำราชบัณฑิตยสภา">
       <HeroSlider slides={HERO_SLIDES} />
       <div className="rs-hero__shade"></div>
       <div className="container rs-hero__inner">
@@ -211,7 +211,7 @@ function HomeHero({ b }: { b: Block }) {
 function TrustStrip({ b }: { b: Block }) {
   const items: { icon?: string; title: string }[] = b.items || [];
   return (
-    <section className="trust-strip" aria-label={b.eyebrow || "คุณค่าหลักของเว็บไซต์"} id={b.id}>
+    <section {...vc(b, "section")} className="trust-strip" aria-label={b.eyebrow || "คุณค่าหลักของเว็บไซต์"} id={b.id}>
       <div className="container trust-grid" {...vc(b, "items")}>
         {items.map((it, i) => (
           <article className="trust-item" key={i} {...vc(b, "items." + i)}>
@@ -246,7 +246,7 @@ function NewsFeed({ b }: { b: Block }) {
   const [featured, ...rest] = items;
   const titleId = (b.id || "news") + "-title";
   return (
-    <section className="latest-updates-section section latest-news-only-section" id={b.id} aria-labelledby={titleId}>
+    <section {...vc(b, "section")} className="latest-updates-section section latest-news-only-section" id={b.id} aria-labelledby={titleId}>
       <div className="container">
         <div className="latest-news-only-head reveal">
           <div>
@@ -520,7 +520,7 @@ type CtaAction = { label: string; href: string; variant?: string };
 function CtaBand({ b }: { b: Block }) {
   const actions: CtaAction[] = b.actions || [];
   return (
-    <section className="section" id={b.id}>
+    <section {...vc(b, "section")} className="section" id={b.id}>
       <div className="container">
         <div className="rs-panel rs-panel--deep">
           {/* The one ornamental moment on the page. A closing band is where
@@ -566,7 +566,7 @@ const CONTACT_LABELS = {
 function ContactInfo({ b, locale = "th" }: { b: Block; locale?: "th" | "en" }) {
   const l = CONTACT_LABELS[locale];
   return (
-    <section className="section" id={b.id}>
+    <section {...vc(b, "section")} className="section" id={b.id}>
       <div className="container">
         <div className="rs-panel rs-panel--deep">
           {b.heading ? <h3 style={{ marginTop: 0 }} {...vc(b, "heading")}>{b.heading}</h3> : null}
@@ -612,7 +612,7 @@ type StoryCard = { label: string; title: string; body: string };
 function IntroFeature({ b }: { b: Block }) {
   const cards: StoryCard[] = b.items || [];
   return (
-    <section className="about-intro-v3 section-soft" aria-labelledby="about-intro-title">
+    <section {...vc(b, "section")} className="about-intro-v3 section-soft" aria-labelledby="about-intro-title">
       <div className="about-container">
         <div className="about-intro-v3-grid">
           <div className="about-intro-v3-feature">
@@ -647,7 +647,7 @@ function IntroFeature({ b }: { b: Block }) {
 function Timeline({ b }: { b: Block }) {
   const items: { year?: string; statusLabel?: string; title: string; body?: string }[] = b.items || [];
   return (
-    <section className="about-history-v2" id={b.id} aria-labelledby="history-title">
+    <section {...vc(b, "section")} className="about-history-v2" id={b.id} aria-labelledby="history-title">
       <div className="about-container">
         <div className="about-history-head">
           {b.eyebrow ? <span className="about-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
@@ -676,7 +676,7 @@ function Timeline({ b }: { b: Block }) {
 function MissionGrid({ b }: { b: Block }) {
   const items: { icon?: string; title: string; body?: string }[] = b.items || [];
   return (
-    <section className="mission-v2" id={b.id} aria-labelledby="mission-title">
+    <section {...vc(b, "section")} className="mission-v2" id={b.id} aria-labelledby="mission-title">
       <div className="about-container">
         <div className="mission-v2-grid">
           <div className="mission-v2-head">
@@ -707,7 +707,7 @@ function MissionGrid({ b }: { b: Block }) {
 function OrgStructure({ b }: { b: Block }) {
   const items: { title: string; body?: string }[] = b.items || [];
   return (
-    <section className="structure-v2" id={b.id} aria-labelledby="structure-title">
+    <section {...vc(b, "section")} className="structure-v2" id={b.id} aria-labelledby="structure-title">
       <div className="about-container">
         <div className="structure-v2-grid">
           <div className="structure-v2-head">
@@ -768,7 +768,7 @@ function FeatureDirectory({ b }: { b: Block }) {
   const items: DirItem[] = b.items || [];
   if (b.variant === "knowledge") {
     return (
-      <section className="knowledge-standards-v2" id={b.id} aria-labelledby="knowledge-title">
+      <section {...vc(b, "section")} className="knowledge-standards-v2" id={b.id} aria-labelledby="knowledge-title">
         <div className="about-container">
           <div className="knowledge-standards-head">
             {b.eyebrow ? <span className="about-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
@@ -799,7 +799,7 @@ function FeatureDirectory({ b }: { b: Block }) {
     );
   }
   return (
-    <section className="key-services section" id={b.id} aria-labelledby="services-title">
+    <section {...vc(b, "section")} className="key-services section" id={b.id} aria-labelledby="services-title">
       <div className="container">
         <div className="ks-layout reveal">
           <div className="ks-main ks-feature-card">
@@ -828,7 +828,7 @@ function RecommendedCarousel({ b }: { b: Block }) {
   const items: RecItem[] = b.items || [];
   const rowId = (b.id || "recommend") + "-row";
   return (
-    <section className="recommended-section section" id={b.id} aria-labelledby="recommended-title">
+    <section {...vc(b, "section")} className="recommended-section section" id={b.id} aria-labelledby="recommended-title">
       <div className="container">
         <div className="rec-head reveal">
           <div>
@@ -877,7 +877,7 @@ function ServiceGateway({ b }: { b: Block }) {
   const items: GatewayItem[] = b.items || [];
   const steps: string[] = b.steps || [];
   return (
-    <section className="public-service section ps-gateway-section" id={b.id} aria-labelledby="public-service-title">
+    <section {...vc(b, "section")} className="public-service section ps-gateway-section" id={b.id} aria-labelledby="public-service-title">
       <div className="container">
         <div className="ps-gateway-head reveal">
           <div>
@@ -946,7 +946,7 @@ function LogoMarquee({ b }: { b: Block }) {
     </div>
   );
   return (
-    <section className="cn-section cn-marquee-section" id={b.id} aria-labelledby="network-title">
+    <section {...vc(b, "section")} className="cn-section cn-marquee-section" id={b.id} aria-labelledby="network-title">
       <div className="container">
         <div className="cn-marquee-head reveal">
           <div>
@@ -971,7 +971,7 @@ function LogoMarquee({ b }: { b: Block }) {
 function VmStrip({ b }: { b: Block }) {
   const items: string[] = b.items || [];
   return (
-    <section className="vm-strip-section" id={b.id} aria-label="วิสัยทัศน์และพันธกิจราชบัณฑิตยสภา">
+    <section {...vc(b, "section")} className="vm-strip-section" id={b.id} aria-label="วิสัยทัศน์และพันธกิจราชบัณฑิตยสภา">
       <div className="container">
         <div className="vm-strip reveal">
           <div className="vm-strip__items" {...vc(b, "items")}>{items.map((s, i) => <span key={i} {...vc(b, "items." + i)}>{s}</span>)}</div>
@@ -1027,7 +1027,7 @@ function FlexPanel({ b }: { b: Block }) {
 
   if (layout === "cta") {
     return (
-      <section className="section" id={b.id}>
+      <section {...vc(b, "section")} className="section" id={b.id}>
         <div className="container">
           <div className="rs-panel rs-panel--deep">
             <h2 {...vc(b, "heading")}>{b.heading}</h2>
@@ -1067,7 +1067,7 @@ function FlexPanel({ b }: { b: Block }) {
     // a heading/lead: TrustStrip's own dedicated block never supported that
     // either.
     return (
-      <section className="trust-strip" id={b.id}>
+      <section {...vc(b, "section")} className="trust-strip" id={b.id}>
         <div className="container trust-grid" {...vc(b, "items")}>
           {items.map((it, i) => (
             <article className="trust-item" key={i} {...vc(b, "items." + i)}>

@@ -3,7 +3,7 @@
 // checks "a valid colour produces a rule" proves very little on its own.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeTheme, themeToCss, FONT_STACKS, TYPE_LIMITS } from "./theme";
+import { sanitizeTheme, themeToCss, FONT_STACKS, TYPE_LIMITS, googleFontsPreviewHref } from "./theme";
 
 describe("sanitizeTheme — what is dropped", () => {
   test("rejects anything that is not a hex colour", () => {
@@ -194,5 +194,18 @@ describe("custom palette", () => {
 
   test("no palette, no variables", () => {
     assert.doesNotMatch(themeToCss("orst", { radius: 10 }), /wx-c-/);
+  });
+});
+
+describe("googleFontsPreviewHref — the editor preview's own font link", () => {
+  test("builds Google's CSS URL for the picked families, with spaces as +", () => {
+    assert.equal(googleFontsPreviewHref(["Sarabun"]), "https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap");
+    assert.equal(googleFontsPreviewHref(["Noto Serif Thai", "Prompt"]),
+      "https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap");
+  });
+  test("nothing to load, or a name that is not a plain family name, gives no link", () => {
+    assert.equal(googleFontsPreviewHref([]), "");
+    assert.equal(googleFontsPreviewHref(["Evil&family=x", "a/b", "x\"y", ""]), "");
+    assert.equal(googleFontsPreviewHref(["Evil;}", "Sarabun"]), "https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap");
   });
 });

@@ -275,7 +275,9 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
       out.push(el.getAttribute("data-vb-c")!);
       el = el.parentElement?.closest("[data-vb-c]") as HTMLElement | null;
     }
-    return out;
+    // The whole section ("section") wraps everything in its block, so as the outermost it would be what every click
+    // picked. It is styled from the sidebar button instead; clicking inside a block still picks the part under it.
+    return out.filter((k) => k !== "section");
   }
   const savedBox = (key: string): SavedBox => ({ ...(blocks[active]?.boxes?.[device]?.[key] || {}) });
   const pickComp = (key: string | null) => { setComp(key); lastComp.current = key; post({ type: "webx:harness:component", index: active, key }); };
@@ -324,6 +326,22 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     window.addEventListener("pointercancel", onCancel);
     return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); window.removeEventListener("pointercancel", onCancel); };
   }, [active, device, measure, post]);
+
+  // Ctrl/Cmd+Z (Shift+Z or Y = redo) pressed while this preview has the focus: the Studio's undo history is
+  // what it should undo, so hand the key to it. Left alone while typing in a field of the page (native undo).
+  useEffect(() => {
+    function onUndoKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== "z" && k !== "y") return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.preventDefault();
+      post({ type: "webx:harness:undo", redo: k === "y" || e.shiftKey });
+    }
+    window.addEventListener("keydown", onUndoKey);
+    return () => window.removeEventListener("keydown", onUndoKey);
+  }, [post]);
 
   // Arrow keys nudge the picked component (Shift = 10px); Escape backs out
   // to the block.

@@ -244,6 +244,17 @@ export function themeToCss(tenant: string, raw: unknown): string {
 }
 
 /** The distinct Google families a tenant's saved theme asks for (after sanitising). */
+/** Google's own stylesheet for the picked families, for the Visual Builder's preview ONLY. The live site never uses it:
+ * its Google fonts are downloaded at build time and served from its own origin (see scripts/google-fonts.mjs),
+ * so a visitor never contacts Google. The preview runs from a dev server where that build step has not run for
+ * a font picked a minute ago, which left the preview in the fallback font. Only names matching FAMILY_RE reach
+ * the URL. "" when there is nothing to load. */
+export function googleFontsPreviewHref(families: string[]): string {
+  const ok = families.filter((f) => FAMILY_RE.test(f));
+  if (!ok.length) return "";
+  return "https://fonts.googleapis.com/css2?" + ok.map((f) => "family=" + f.trim().split(/ +/).map(encodeURIComponent).join("+") + ":wght@400;500;600;700").join("&") + "&display=swap";
+}
+
 export function themeGoogleFamilies(raw: unknown): string[] {
   const t = sanitizeTheme(raw);
   const out: string[] = [];

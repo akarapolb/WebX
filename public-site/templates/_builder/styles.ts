@@ -571,6 +571,14 @@ function stateDecls(s: StateStyle | null | undefined, base?: Style | null): stri
 // Elements inside a component that carry no tag of their own, and not icons.
 const INNER_TEXT = ":not([data-vb-c]):not(svg):not(svg *)";
 
+// A card's title, text, icon, tag and meta are components of their own (itemTitle.0, itemBody.0, …) so each can be
+// coloured separately. A colour set on the whole item (items.0) or the whole list must still reach the ones that
+// have nothing of their own, or setting a card's colour would change nothing in it. stylesCss sets this per rule:
+// those parts, minus the ones that have their own styles.
+const ITEM_PART = /^item(?:Title|Body|Icon|Tag|Meta)\.\d+$/;
+const ITEM_PART_PREFIXES = ["itemTitle.", "itemBody.", "itemIcon.", "itemTag.", "itemMeta."];
+let reachExtra: string[] = [];
+
 /**
  * The rules that carry a colour into a component's text and icons, for any
  * selector `sel` (a plain component or one of its states).
@@ -590,6 +598,8 @@ function colourReach(sel: string, color: unknown, icon: unknown, twiceSel?: stri
   const textColor = colorCss(color);
   if (textColor) {
     css += `${sel} ${INNER_TEXT}{color:${textColor}!important}`;
+    // Its own rule (not added to the selector above) so the rule for untagged text stays exactly as it was.
+    if (reachExtra.length) css += `${reachExtra.map((x) => `${sel} ${x}`).join(",")}{color:${textColor}!important}`;
     // An icon follows the text colour unless it has been given its own.
     css += `${sel} svg,${sel} svg *{color:${textColor}!important}`;
   }
@@ -741,7 +751,14 @@ export function stylesCss(b: any, scope: number): string {
   // inner component's own colour beats the outer one's.
   const keys = Object.keys(all).filter(isComponentKey).sort((a, b) => a.length - b.length || a.localeCompare(b));
   const used = new Set<AnimationName>();
-  for (const k of keys) css += styleCss(`[data-vb-s="${scope}"][data-vb-c="${k}"]`, all[k], used);
+  const ownItemParts = keys.filter((x) => ITEM_PART.test(x));
+  for (const k of keys) {
+    const notOwn = ownItemParts.map((x) => `:not([data-vb-c="${x}"])`).join("");
+    // Only a component that can contain item parts (the section, the list, one item) needs the extra rule.
+    reachExtra = /^(?:section|items(?:\.\d+)?)$/.test(k) ? ITEM_PART_PREFIXES.map((pre) => `[data-vb-c^="${pre}"]${notOwn}`) : [];
+    css += styleCss(`[data-vb-s="${scope}"][data-vb-c="${k}"]`, all[k], used);
+  }
+  reachExtra = [];
   for (const name of used) css += `@keyframes wx-in-${name}{from{${ANIMATIONS[name]}}}`;
   return css;
 }

@@ -450,3 +450,10 @@ a.block-media-card.is-link:hover { transform: translateY(-4px); box-shadow: var(
 .block-contact-map { border-radius: var(--orst-radius-card); overflow: hidden; min-height: 260px; border: 1px solid var(--orst-line); }
 .block-contact-map iframe { width: 100%; height: 100%; min-height: 260px; border: 0; }
 }
+
+/* An item's text as a link that covers the whole item (feature list, steps, stats): same layout with or without it. */
+.block-feature, .block-step, .block-stat { position: relative; }
+.block-link-stretch { color: inherit; text-decoration: none; }
+.block-link-stretch::after { content: ""; position: absolute; inset: 0; }
+.block-link-stretch:hover { text-decoration: underline; }
+.block-link-stretch:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

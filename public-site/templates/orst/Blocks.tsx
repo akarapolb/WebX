@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
+import { safeLink } from "@/lib/linkUrl";
 import FaqAccordion from "./FaqAccordion";
 import ContactFormBlock from "./ContactFormBlock";
 import PollBlock from "./PollBlock";
@@ -101,6 +102,13 @@ function SectionHead({ block }: { block: Block }) {
   );
 }
 
+/** A piece of text as a link when the item has a (safe) address: the link covers the whole item (see .block-link-stretch),
+ * so the layout is the same with or without it. An empty or unsafe address leaves plain text. */
+function linked(href: unknown, children: ReactNode): ReactNode {
+  const to = safeLink(href);
+  return to ? <a className="block-link-stretch" href={to}>{children}</a> : children;
+}
+
 /** Wraps block content in <section class="section[ alt][ extraClass]"><div class="container">. */
 function Section({
   block,
@@ -113,7 +121,7 @@ function Section({
 }) {
   const cls = ["section", block.variant === "alt" ? "alt" : "", extraClass].filter(Boolean).join(" ");
   return (
-    <section className={cls} id={block.id}>
+    <section className={cls} id={block.id} {...vc(block, "section")}>
       <div className="container">
         <SectionHead block={block} />
         {children}
@@ -149,7 +157,7 @@ function colsClass(n?: number) {
 function PageHero({ b }: { b: Block }) {
   const crumbs: { label: string; href?: string }[] = b.breadcrumb || [];
   return (
-    <section className="page-hero" id={b.id}>
+    <section {...vc(b, "section")} className="page-hero" id={b.id}>
       <div className="container">
         {crumbs.length ? (
           <nav className="block-breadcrumb" aria-label="เส้นทางหน้า" {...vc(b, "breadcrumb")}>
@@ -210,18 +218,19 @@ function CardGrid({ b }: { b: Block }) {
           const inner = (
             <>
               {it.icon ? (
-                <span className="block-card-icon">
+                <span className="block-card-icon" {...vc(b, "itemIcon." + i)}>
                   <BlockIcon id={it.icon} className="icon-lg" />
                 </span>
               ) : null}
-              {it.tag ? <span className="block-tag">{it.tag}</span> : null}
-              <h3>{it.title}</h3>
-              {it.body ? <p>{it.body}</p> : null}
-              {it.meta ? <small className="block-meta">{it.meta}</small> : null}
+              {it.tag ? <span className="block-tag" {...vc(b, "itemTag." + i)}>{it.tag}</span> : null}
+              <h3 {...vc(b, "itemTitle." + i)}>{it.title}</h3>
+              {it.body ? <p {...vc(b, "itemBody." + i)}>{it.body}</p> : null}
+              {it.meta ? <small className="block-meta" {...vc(b, "itemMeta." + i)}>{it.meta}</small> : null}
             </>
           );
-          return it.href ? (
-            <a key={i} className="content-card block-card is-link" href={it.href} {...vc(b, "items." + i)}>
+          const to = safeLink(it.href);
+          return to ? (
+            <a key={i} className="content-card block-card is-link" href={to} {...vc(b, "items." + i)}>
               {inner}
             </a>
           ) : (
@@ -244,12 +253,12 @@ function FeatureList({ b }: { b: Block }) {
       <ul className={colsClass(b.columns) + " block-feature-list"} {...vc(b, "items")}>
         {items.map((it, i) => (
           <li className="block-feature" key={i} {...vc(b, "items." + i)}>
-            <span className="block-feature-icon">
+            <span className="block-feature-icon" {...vc(b, "itemIcon." + i)}>
               <BlockIcon id={it.icon || "i-shield"} className="icon-lg" />
             </span>
             <div>
-              <strong>{it.title}</strong>
-              {it.body ? <p>{it.body}</p> : null}
+              <strong {...vc(b, "itemTitle." + i)}>{linked(it.href, it.title)}</strong>
+              {it.body ? <p {...vc(b, "itemBody." + i)}>{it.body}</p> : null}
             </div>
           </li>
         ))}
@@ -268,7 +277,7 @@ function StatRow({ b }: { b: Block }) {
         {items.map((it, i) => (
           <div className="block-stat" key={i} {...vc(b, "items." + i)}>
             <strong>{it.value}</strong>
-            <span>{it.label}</span>
+            <span>{linked(it.href, it.label)}</span>
             {it.note ? <small>{it.note}</small> : null}
           </div>
         ))}
@@ -286,16 +295,16 @@ function LinkList({ b }: { b: Block }) {
       <ul className="block-link-list" {...vc(b, "items")}>
         {items.map((it, i) => (
           <li key={i} {...vc(b, "items." + i)}>
-            <a className="block-link-row" href={it.href || "#"}>
-              <span className="block-link-icon">
+            <a className="block-link-row" href={safeLink(it.href) ?? "#"}>
+              <span className="block-link-icon" {...vc(b, "itemIcon." + i)}>
                 <BlockIcon id={it.icon || "i-file"} />
               </span>
               <span className="block-link-text">
-                <strong>{it.title}</strong>
-                {it.desc ? <span>{it.desc}</span> : null}
+                <strong {...vc(b, "itemTitle." + i)}>{it.title}</strong>
+                {it.desc ? <span {...vc(b, "itemBody." + i)}>{it.desc}</span> : null}
               </span>
-              {it.tag ? <span className="block-tag">{it.tag}</span> : null}
-              {it.meta ? <span className="block-meta">{it.meta}</span> : null}
+              {it.tag ? <span className="block-tag" {...vc(b, "itemTag." + i)}>{it.tag}</span> : null}
+              {it.meta ? <span className="block-meta" {...vc(b, "itemMeta." + i)}>{it.meta}</span> : null}
             </a>
           </li>
         ))}
@@ -414,7 +423,7 @@ function Steps({ b }: { b: Block }) {
               {i + 1}
             </span>
             <div>
-              <strong>{it.title}</strong>
+              <strong>{linked(it.href, it.title)}</strong>
               {it.body ? <p>{it.body}</p> : null}
             </div>
           </li>
@@ -451,7 +460,7 @@ function TwoColumn({ b }: { b: Block }) {
 
 function CtaBand({ b }: { b: Block }) {
   return (
-    <section className="block-cta" id={b.id}>
+    <section {...vc(b, "section")} className="block-cta" id={b.id}>
       {/* The one ornamental moment on the page. A closing band is where a
           printed institutional document would carry a device, so it's where
           the kranok-derived hairline earns its place — see .orst-ornament in
@@ -624,7 +633,7 @@ function ContactInfo({ b, locale = "th" }: { b: Block; locale?: "th" | "en" }) {
 function ContactHero({ b }: { b: Block }) {
   const telHref = b.phone ? "tel:" + String(b.phone).replace(/[^0-9]/g, "") : undefined;
   return (
-    <section className="contact-hero" aria-labelledby="page-title">
+    <section {...vc(b, "section")} className="contact-hero" aria-labelledby="page-title">
       <div className="container contact-hero-inner">
         <div>
           {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
@@ -689,7 +698,7 @@ function ContactHero({ b }: { b: Block }) {
 function StatsHero({ b }: { b: Block }) {
   const stats: { label: string; value: string }[] = b.stats || [];
   return (
-    <section className="knowledge-hero" aria-labelledby="page-title">
+    <section {...vc(b, "section")} className="knowledge-hero" aria-labelledby="page-title">
       <div className="container hero-inner">
         <div className="hero-copy">
           {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
@@ -741,7 +750,7 @@ function HomeHero({ b }: { b: Block }) {
   const image = b.image || "/assets/orst/images/hero03.png";
   const alt = b.imageAlt || "";
   return (
-    <section className="hero hero-reference orst-hero-wow" aria-labelledby="hero-title">
+    <section {...vc(b, "section")} className="hero hero-reference orst-hero-wow" aria-labelledby="hero-title">
       <div className="orst-hero-media" aria-hidden={alt ? undefined : "true"}>
         <Picture src={image} alt={alt} className="orst-hero-photo" fetchPriority="high" decoding="async" />
         <span className="orst-hero-scrim" />
@@ -806,7 +815,7 @@ function MediaTabItemCard({ it, kind }: { it: MediaTabItem; kind: string }) {
 function MediaTabsBlock({ b }: { b: Block }) {
   const tabs: any[] = b.tabs || [];
   return (
-    <section className="section knowledge-hub-section" id={b.id}>
+    <section {...vc(b, "section")} className="section knowledge-hub-section" id={b.id}>
       <div className="container">
         <div className="section-head knowledge-hub-head">
           <div>
@@ -898,7 +907,7 @@ function NewsEventsCalendar() {
 function NewsTabsBlock({ b }: { b: Block }) {
   const tabs: NewsTabDef[] = b.tabs || [];
   return (
-    <section className="section alt news-events-section" id={b.id}>
+    <section {...vc(b, "section")} className="section alt news-events-section" id={b.id}>
       <div className="container">
         <div className="section-head news-events-head">
           <div>
@@ -984,7 +993,7 @@ function ServiceHub({ b }: { b: Block }) {
   const hasHead = !!(b.eyebrow || b.heading || b.lead || b.viewAllLabel);
   const hasIntro = !!(b.introLabel || b.introHeading || b.introLead || steps.length);
   return (
-    <section className="section public-service-section" id={b.id}>
+    <section {...vc(b, "section")} className="section public-service-section" id={b.id}>
       <div className="container">
         {hasHead ? (
         <div className="service-directory-head">
@@ -1060,7 +1069,7 @@ function LogoMarquee({ b }: { b: Block }) {
     </div>
   );
   return (
-    <section className="section alt network-section network-section-compact" id={b.id}>
+    <section {...vc(b, "section")} className="section alt network-section network-section-compact" id={b.id}>
       <div className="container">
         <div className="network-head network-head-compact">
           <div>
@@ -1137,7 +1146,7 @@ function FlexPanel({ b }: { b: Block }) {
 
   if (layout === "cta") {
     return (
-      <section className="block-cta" id={b.id}>
+      <section {...vc(b, "section")} className="block-cta" id={b.id}>
         <div className="container block-cta-inner">
           <div>
             <h2 {...vc(b, "heading")}>{b.heading}</h2>

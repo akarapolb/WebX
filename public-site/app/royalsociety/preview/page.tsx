@@ -1,7 +1,8 @@
 import Header from "@/templates/royalsociety/Header";
 import Footer from "@/templates/royalsociety/Footer";
 import PreviewBridgeRoyalSociety from "@/templates/_builder/PreviewBridgeRoyalSociety";
-import { getTenant } from "@/lib/cms";
+import { getTenant, getThemeGoogleFamilies } from "@/lib/cms";
+import { googleFontsPreviewHref } from "@/lib/theme";
 
 // The Visual Builder's preview harness for RoyalSociety — see
 // app/orst/preview/page.tsx (the sibling this mirrors) and PreviewBridge.tsx
@@ -14,9 +15,12 @@ import { getTenant } from "@/lib/cms";
 export const metadata = { robots: { index: false, follow: false } };
 
 export default async function RoyalSocietyBuilderPreview() {
-  const tenant = await getTenant("royalsociety");
+  const [tenant, families] = await Promise.all([getTenant("royalsociety"), getThemeGoogleFamilies("royalsociety")]);
+  const fontsHref = googleFontsPreviewHref(families);
   return (
     <>
+      {/* The editor's preview loads a picked Google font straight from Google (see googleFontsPreviewHref). */}
+      {fontsHref && <link rel="stylesheet" href={fontsHref} />}
       <Header active="" />
       <main id="main-content">
         <div id="app-content">
