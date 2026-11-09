@@ -12,6 +12,7 @@ import Icon from "../Icon";
 import { useLang } from "../LangProvider";
 import { useTenant } from "../TenantProvider";
 import type { AgentLevel } from "@/lib/agent/types";
+import { modelLabel, mocksFor } from "@/lib/modelLabels";
 
 const LEVELS: AgentLevel[] = ["off", "read", "suggest", "draft", "draft_submit"];
 const LEVEL_KEY: Record<AgentLevel, string> = {
@@ -143,7 +144,7 @@ export default function AgentSettings() {
                 const mine = model.trim() === m.alias;
                 return (
                   <tr key={m.alias} data-testid={"as-model-" + m.alias}>
-                    <td><b className="mono">{m.alias}</b></td>
+                    <td><b>{modelLabel(m)}</b> <span className="mono muted" style={{ fontSize: 11 }}>{m.alias}</span></td>
                     <td className="mono" style={{ fontSize: 12 }}>{m.model}{m.host ? " · " + m.host : ""}</td>
                     <td>
                       {m.alias === gw.defaultModel && <span className="badge b-ok"><span className="dot" />{t("as.m.default")}</span>}{" "}
@@ -153,6 +154,13 @@ export default function AgentSettings() {
                   </tr>
                 );
               })}
+              {mocksFor(gw.models).map((m) => (
+                <tr key={m.alias} style={{ opacity: 0.6 }} data-testid={"as-model-" + m.alias}>
+                  <td><b>{m.label}</b></td>
+                  <td className="mono" style={{ fontSize: 12 }}>—</td>
+                  <td><span className="badge b-mut"><span className="dot" />{t("as.m.mock")}</span></td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
@@ -160,7 +168,7 @@ export default function AgentSettings() {
         {gw && gw.models.length > 0 ? (
           <select className="rv-assignee" style={{ width: "100%" }} value={model} onChange={(e) => setModel(e.target.value)} disabled={local} data-testid="as-model-select">
             <option value="">{t("as.modelDefault").replace("{m}", gw.defaultModel)}</option>
-            {gw.models.filter((m) => m.kind === "chat").map((m) => <option key={m.alias} value={m.alias}>{m.alias} — {m.model}</option>)}
+            {gw.models.filter((m) => m.kind === "chat").map((m) => <option key={m.alias} value={m.alias}>{modelLabel(m)} · {m.alias} — {m.model}</option>)}
             {model && !gw.models.some((m) => m.alias === model) && <option value={model}>{model}</option>}
           </select>
         ) : (

@@ -1481,6 +1481,7 @@ export const DICT: Record<string, Entry> = {
   "as.localHint": { en: "Routes every run to webx-local (Ollama) instead of the default hosted model.", th: "ส่งทุกการทำงานไปที่ webx-local (Ollama) แทนโมเดลที่โฮสต์ไว้เป็นค่าเริ่มต้น" },
   "ag.model.pick": { en: "Choose the AI model for this chat (★ = default)", th: "เลือกโมเดล AI สำหรับแชทนี้ (★ = ค่าเริ่มต้น)" },
   "ag.model.fixed": { en: "The model this workspace uses", th: "โมเดลที่ workspace นี้ใช้" },
+  "as.m.mock": { en: "Example only, not connected", th: "ตัวอย่าง ยังไม่เชื่อมต่อ" },
   "as.models": { en: "Models this gateway really serves", th: "โมเดลที่ gateway ให้บริการจริง" },
   "as.modelsDown": { en: "Cannot reach the AI gateway, so the list below may be missing.", th: "ติดต่อ AI gateway ไม่ได้ รายการด้านล่างอาจไม่ครบ" },
   "as.m.alias": { en: "Name to use", th: "ชื่อที่ใช้เรียก" },

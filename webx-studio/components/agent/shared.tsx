@@ -10,6 +10,7 @@ import Icon from "../Icon";
 import { useAgent, targetMatches, type AgentPolicy } from "./AgentProvider";
 import ContinueInBackground from "./jobs/ContinueInBackground";
 import { ResultsCard } from "./ResultsCard";
+import { modelLabel, mocksFor } from "@/lib/modelLabels";
 import type { ChatMsg } from "./useAgentRun";
 import type { AgentLevel } from "@/lib/agent/types";
 
@@ -366,7 +367,8 @@ export function Composer({ t }: { t: (k: string) => string }) {
             <select className="ag-model-sel mono" value={agent.chosenModel || agent.defaultModel} title={t("ag.model.pick")} aria-label={t("ag.model.pick")}
               disabled={agent.running} data-testid="agent-model-select"
               onChange={(e) => agent.setChosenModel(e.target.value === agent.defaultModel ? "" : e.target.value)}>
-              {agent.models.map((m) => <option key={m.alias} value={m.alias}>{m.alias}{m.alias === agent.defaultModel ? " ★" : ""}</option>)}
+              {agent.models.map((m) => <option key={m.alias} value={m.alias}>{modelLabel(m)} · {m.alias}{m.alias === agent.defaultModel ? " ★" : ""}</option>)}
+              {mocksFor(agent.models).map((m) => <option key={m.alias} value={m.alias} disabled>{m.label} · {t("as.m.mock")}</option>)}
             </select>
           ) : (
             <span className="ag-model mono" title={t("ag.model.fixed")} data-testid="agent-model">{agent.effectiveModel || "…"}</span>

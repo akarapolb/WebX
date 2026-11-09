@@ -73,7 +73,7 @@ type Ctx = {
   /** Whether this user can choose auto at all (the policy's level is the top one). */
   canAuto: boolean;
   /** The chat models the AI gateway serves, the one this user picked (""= the default), and the name a run will really use. */
-  models: { alias: string; model: string }[];
+  models: { alias: string; model: string; provider: string }[];
   defaultModel: string;
   chosenModel: string;
   setChosenModel: (m: string) => void;
@@ -135,7 +135,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [draftPrompt, setDraftPrompt] = useState("");
   const [autosendPending, setAutosendPending] = useState(false);
   const [modeChoice, setModeChoice] = useState<PublishMode>("review");
-  const [gateway, setGateway] = useState<{ models: { alias: string; model: string }[]; defaultModel: string }>({ models: [], defaultModel: "" });
+  const [gateway, setGateway] = useState<{ models: { alias: string; model: string; provider: string }[]; defaultModel: string }>({ models: [], defaultModel: "" });
   const [modelPick, setModelPick] = useState("");
   const registrationRef = useRef<Registration | null>(null);
   const [, bumpRegistration] = useState(0);
