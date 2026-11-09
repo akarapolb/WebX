@@ -831,6 +831,71 @@ describe("update_block (lib/agent/tools.ts)", () => {
   });
 });
 
+// set_component_style — the agent could not recolour icons (or anything else); the person had to do it by hand.
+describe("set_component_style (lib/agent/tools.ts)", () => {
+  const page = () => ({
+    documentId: "1",
+    blocks: [
+      { __component: "orst.feature-list", heading: "Why us", styles: { heading: { color: "#112233", fontSize: 30 } }, items: [
+        { icon: "i-book", title: "One", body: "a" }, { icon: "i-shield", title: "Two", body: "b" }, { icon: "i-people", title: "Three", body: "c" } ] },
+      { __component: "orst.stat-row", items: [] },
+    ],
+  });
+  const seed = () => fakeCms([PAGE_TYPE], { "api::page.page": [page()] });
+  const run = (fc: ReturnType<typeof seed>, args: object, over: Partial<AgentRunContext> = {}) =>
+    executeTool(ctx({ level: "draft_submit", dialect: "orst", cms: fc.cms, ...over }), "set_component_style", JSON.stringify({ uid: "api::page.page", id: "1", index: 0, ...args }));
+  const styles = (fc: ReturnType<typeof seed>) => fc.rows("api::page.page")[0].blocks[0].styles;
+
+  test("recolours every icon of a list with one call, leaving other styles and the content alone", async () => {
+    const fc = seed();
+    const r = await run(fc, { components: ["itemIcon.*"], set: { iconColor: "@primary" } });
+    assert.equal(r.ok, true, r.summary);
+    const s = styles(fc);
+    assert.deepEqual(["itemIcon.0", "itemIcon.1", "itemIcon.2"].map((k) => s[k]), [{ iconColor: "@primary" }, { iconColor: "@primary" }, { iconColor: "@primary" }]);
+    assert.deepEqual(s.heading, { color: "#112233", fontSize: 30 });
+    assert.deepEqual(fc.rows("api::page.page")[0].blocks[0].items.map((i: any) => i.title), ["One", "Two", "Three"]);
+  });
+  test("merges into a part's existing style, and null clears just that property", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, { components: ["heading"], set: { color: "#ff0000", fontWeight: 700 } })).ok, true);
+    assert.deepEqual(styles(fc).heading, { color: "#ff0000", fontSize: 30, fontWeight: 700 });
+    assert.equal((await run(fc, { components: ["heading"], set: { color: null, fontSize: null, fontWeight: null } })).ok, true);
+    assert.equal(styles(fc), undefined); // nothing left, so the styles key goes
+  });
+  test("the whole section and single item parts can be styled by name", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, { components: ["section", "itemTitle.1"], set: { bg: "#fafafa", color: "@ink" } })).ok, true);
+    assert.deepEqual(styles(fc).section, { bg: "#fafafa", color: "@ink" });
+    assert.deepEqual(styles(fc)["itemTitle.1"], { bg: "#fafafa", color: "@ink" });
+  });
+  test("refuses a bad colour, a number out of range, an unknown part and a wildcard with no items", async () => {
+    const fc = seed();
+    for (const [args, re] of [
+      [{ components: ["heading"], set: { color: "red" } }, /hex colour/],
+      [{ components: ["heading"], set: { color: "javascript:alert(1)" } }, /hex colour/],
+      [{ components: ["heading"], set: { bg: "#12345" } }, /hex colour/],
+      [{ components: ["heading"], set: { fontSize: 5 } }, /from 8 to 200/],
+      [{ components: ["nonsense"], set: { color: "#fff" } }, /not a styleable part/],
+      [{ components: ["itemIcon.9"], set: { color: "#fff" } }, /not a styleable part/],
+      [{ index: 1, components: ["itemIcon.*"], set: { color: "#fff" } }, /no items/],
+    ] as [object, RegExp][]) {
+      const r = await run(fc, args);
+      assert.equal(r.ok, false, JSON.stringify(args));
+      assert.match(r.summary, re);
+    }
+    assert.deepEqual(styles(fc), page().blocks[0].styles);
+  });
+  test("at suggest level it proposes and writes nothing; it is offered from the draft level up", async () => {
+    const fc = seed();
+    const r = await run(fc, { components: ["itemIcon.*"], set: { iconColor: "#00ff00" } }, { level: "suggest" });
+    assert.equal(r.ok, true);
+    assert.equal(r.proposal!.blocks![0].styles["itemIcon.2"].iconColor, "#00ff00");
+    assert.deepEqual(styles(fc), page().blocks[0].styles);
+    assert.ok(availableTools(ctx({ level: "draft" })).some((t) => t.name === "set_component_style"));
+    assert.equal(availableTools(ctx({ level: "read" })).some((t) => t.name === "set_component_style"), false);
+  });
+});
+
 // set_block_item_icons / find_icons — added after the agent answered that it could not
 // change the icons inside a feature list. Items keep their text; only the icon changes.
 const ICON_TYPE = { uid: "api::icon.icon", name: "Icon", attributes: { name: { type: "string" }, key: { type: "string" }, svg: { type: "text" }, viewBox: { type: "string" } } };

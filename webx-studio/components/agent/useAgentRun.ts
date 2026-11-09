@@ -39,6 +39,8 @@ type SendOpts = {
   file?: { name: string; text: string };
   /** "auto" lets the agent publish too; "review" (default) leaves approving and publishing to the person. */
   publishMode?: "review" | "auto";
+  /** A gateway model alias picked in the chat (ignored when the workspace has fixed one). */
+  model?: string;
   /** Continue the thread's stopped run from its saved checkpoint. */
   resume?: boolean;
   mode: "docked" | "workspace";
@@ -170,7 +172,7 @@ export function useAgentRun(onDone: (applied: { uid: string; id: string }[] | un
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: opts.message || undefined, image: opts.image || undefined, file: opts.file || undefined, publishMode: opts.publishMode || undefined, resume: opts.resume || undefined, mode: opts.mode, lang: opts.lang,
+          message: opts.message || undefined, image: opts.image || undefined, file: opts.file || undefined, publishMode: opts.publishMode || undefined, model: opts.model || undefined, resume: opts.resume || undefined, mode: opts.mode, lang: opts.lang,
           context: opts.context, threadId: opts.threadId || undefined,
         }),
         signal: ac.signal,

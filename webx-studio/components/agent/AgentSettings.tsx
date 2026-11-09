@@ -39,6 +39,8 @@ export default function AgentSettings() {
   const [background, setBackground] = useState(false);
   const [schedules, setSchedules] = useState(false);
   const [saving, setSaving] = useState(false);
+  type GwModel = { alias: string; model: string; provider: string; host: string; kind: "chat" | "embedding" };
+  const [gw, setGw] = useState<{ models: GwModel[]; defaultModel: string; embedModel: string; reachable: boolean } | null>(null);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
 
   const load = useCallback(async () => {
@@ -58,6 +60,12 @@ export default function AgentSettings() {
     finally { setLoading(false); }
   }, [tenant]);
   useEffect(() => { load(); }, [load]);
+  // The models the AI gateway really serves, not a guess typed from memory.
+  useEffect(() => {
+    let live = true;
+    fetch("/api/ai/models").then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setGw(j); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
 
   async function save() {
     setSaving(true); setMsg(null);
@@ -124,11 +132,46 @@ export default function AgentSettings() {
         <small className="muted">{t("as.localHint")}</small>
       </label>
 
-      <label className="vb-fld" style={{ marginBottom: 18 }}>
-        <span>{t("as.model")}</span>
-        <input className="rv-assignee" style={{ width: "100%" }} value={model} onChange={(e) => setModel(e.target.value)} placeholder={t("as.modelPh")} disabled={local} />
+      <div className="vb-fld" style={{ marginBottom: 18 }} data-testid="as-models">
+        <span>{t("as.models")}</span>
+        {gw && !gw.reachable && <small className="auth-err">{t("as.modelsDown")}</small>}
+        {gw && gw.models.length > 0 && (
+          <table className="tbl as-models">
+            <thead><tr><th>{t("as.m.alias")}</th><th>{t("as.m.model")}</th><th>{t("as.m.role")}</th></tr></thead>
+            <tbody>
+              {gw.models.map((m) => {
+                const mine = model.trim() === m.alias;
+                return (
+                  <tr key={m.alias} data-testid={"as-model-" + m.alias}>
+                    <td><b className="mono">{m.alias}</b></td>
+                    <td className="mono" style={{ fontSize: 12 }}>{m.model}{m.host ? " · " + m.host : ""}</td>
+                    <td>
+                      {m.alias === gw.defaultModel && <span className="badge b-ok"><span className="dot" />{t("as.m.default")}</span>}{" "}
+                      {m.kind === "embedding" && <span className="badge b-mut"><span className="dot" />{t("as.m.embed")}</span>}{" "}
+                      {mine && <span className="badge b-acc"><span className="dot" />{t("as.m.mine")}</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <span style={{ marginTop: 10 }}>{t("as.model")}</span>
+        {gw && gw.models.length > 0 ? (
+          <select className="rv-assignee" style={{ width: "100%" }} value={model} onChange={(e) => setModel(e.target.value)} disabled={local} data-testid="as-model-select">
+            <option value="">{t("as.modelDefault").replace("{m}", gw.defaultModel)}</option>
+            {gw.models.filter((m) => m.kind === "chat").map((m) => <option key={m.alias} value={m.alias}>{m.alias} — {m.model}</option>)}
+            {model && !gw.models.some((m) => m.alias === model) && <option value={model}>{model}</option>}
+          </select>
+        ) : (
+          <input className="rv-assignee" style={{ width: "100%" }} value={model} onChange={(e) => setModel(e.target.value)} placeholder={t("as.modelPh")} disabled={local} />
+        )}
         <small className="muted">{t("as.modelHint")}</small>
-      </label>
+        <div style={{ marginTop: 10 }}>
+          <button type="button" className="btn btn--g" disabled title={t("as.addModelWhy")} data-testid="as-add-model"><Icon name="plus" />{t("as.addModel")}</button>
+          <small className="muted" style={{ display: "block", marginTop: 6 }}>{t("as.addModelWhy")}</small>
+        </div>
+      </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button className="btn btn--p" onClick={save} disabled={saving} data-testid="agent-settings-save">

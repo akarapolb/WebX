@@ -31,6 +31,8 @@ export type RunInput = {
   ref: AgentContextRef;
   /** "auto": the agent also publishes. The route only passes "auto" to a user whose agent level allows it. */
   publishMode?: PublishMode;
+  /** A model the user chose in the chat (already checked against the gateway); the workspace's own setting wins over it. */
+  modelOverride?: string;
   /** Plain text turns from the thread; tool calls are never replayed across separate runs. */
   priorText: ChatMsg[];
   /** Empty only when continuing a stopped run. */
@@ -61,7 +63,7 @@ export type RunResult = {
 };
 
 export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): Promise<RunResult> {
-  const model = input.policy.model || DEFAULT_MODEL;
+  const model = input.policy.model || input.modelOverride || DEFAULT_MODEL;
   const text = input.message.trim();
 
   let cp: RunCheckpoint;

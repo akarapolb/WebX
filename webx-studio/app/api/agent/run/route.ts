@@ -19,6 +19,7 @@ import { fitCheckpoint, parseCheckpoint } from "@/lib/agent/engine/checkpoint";
 import type { RunCheckpoint } from "@/lib/agent/engine/types";
 import type { AgentContextRef, AgentEvent } from "@/lib/agent/types";
 import { attachmentBlock } from "@/lib/agent/prompts";
+import { validChatModel } from "@/lib/aiModels";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -121,6 +122,8 @@ export async function POST(req: NextRequest) {
   const lang: "en" | "th" = body.lang === "th" ? "th" : "en";
   const ref = normalizeRef(body.context);
   // Auto mode (the agent publishes too) is for the top autonomy level only; anything else runs in review mode.
+  // A model the user picked in the chat: only when the workspace has not fixed one, and only one the gateway really serves.
+  const modelOverride = policy.model ? "" : await validChatModel(body.model);
   const publishMode: "review" | "auto" = body.publishMode === "auto" && policy.level === "draft_submit" ? "auto" : "review";
 
   let threadId: string = typeof body.threadId === "string" ? body.threadId : "";
@@ -186,7 +189,7 @@ export async function POST(req: NextRequest) {
       };
       try {
         const result = await runAgent(
-          { user, policy, runId, threadId: finalThreadId, mode, lang, ref, publishMode, priorText, message: modelMessage, image, resume: checkpoint, signal: abort.signal },
+          { user, policy, runId, threadId: finalThreadId, mode, lang, ref, publishMode, modelOverride, priorText, message: modelMessage, image, resume: checkpoint, signal: abort.signal },
           emit
         );
         const saved = result.checkpoint ? fitCheckpoint(result.checkpoint, MAX_CHECKPOINT_BYTES, { stripReasoning: true }) : null;

@@ -362,7 +362,15 @@ export function Composer({ t }: { t: (k: string) => string }) {
               title={agent.canAuto ? t("ag.mode.autoTip") : t("ag.mode.needLevel")} data-testid="agent-mode-auto">{t("ag.mode.auto")}</button>
           </div>
           <span className="sp" />
-          <span className="ag-model mono">{policy?.model || "Claude"}</span>
+          {agent.canChooseModel ? (
+            <select className="ag-model-sel mono" value={agent.chosenModel || agent.defaultModel} title={t("ag.model.pick")} aria-label={t("ag.model.pick")}
+              disabled={agent.running} data-testid="agent-model-select"
+              onChange={(e) => agent.setChosenModel(e.target.value === agent.defaultModel ? "" : e.target.value)}>
+              {agent.models.map((m) => <option key={m.alias} value={m.alias}>{m.alias}{m.alias === agent.defaultModel ? " ★" : ""}</option>)}
+            </select>
+          ) : (
+            <span className="ag-model mono" title={t("ag.model.fixed")} data-testid="agent-model">{agent.effectiveModel || "…"}</span>
+          )}
           {agent.running
             ? <button className="ag-send" onClick={agent.abort} title={t("ag.stop")} data-testid="agent-stop"><Icon name="stop" /></button>
             : <button className="ag-send" onClick={submit} disabled={(!text.trim() && !image && !file) || disabled} title={t("ag.send")} data-testid="agent-send"><Icon name="up" /></button>}

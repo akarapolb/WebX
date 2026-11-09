@@ -17,6 +17,7 @@ import { structured } from "@/lib/llm";
 import { toBuilder, toWire, type Dialect } from "@/lib/blockDialect";
 import { ALL_TYPES, metaOf } from "@/lib/blockCatalog";
 import { MUI_VIEW_BOX, muiIconByName, searchMuiIcons } from "@/lib/muiIcons";
+import { PART_BLOCKS, ITEM_PART_NAMES } from "@/lib/itemParts";
 import { FEATURE_ICONS } from "@/components/blockPreview/iconChoices";
 import { auditEntry } from "./auditRules";
 import { untrustedBlock } from "./prompts";
@@ -892,6 +893,102 @@ const TOOLS: ToolDef[] = [
       await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
       await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
       return { summary: `Block ${args.index}: ${parts}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "set_component_style",
+    mode: "draft",
+    description: "Change the look of parts of ONE existing block: colours (text `color`, `iconColor` for icons, `bg` background), font size and weight, alignment, italic, underline, letter case. `components` names the parts: \"section\" (the whole block's background and colours), a field such as \"heading\" / \"lead\" / \"eyebrow\", \"items\" (the whole list), \"items.2\" (one item, 0 = first), and for card, feature and link lists the parts of each item: \"itemIcon.N\", \"itemTitle.N\", \"itemBody.N\", \"itemTag.N\", \"itemMeta.N\". Use \"*\" for every item: \"itemIcon.*\" recolours all the icons. Colours are a hex (#1a73e8) or a theme colour (@primary, @accent, @ground, @ink, @c1 … @c8); prefer theme colours so a theme change follows. Set a property to null to clear it back to the template's own. Everything not mentioned stays as it is. Call get_page_blocks first for the block's index and field names. For a WordPress page pass locale \"en\" to style its English layout.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "components", "set"],
+      properties: {
+        uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 },
+        components: { type: "array", minItems: 1, maxItems: 12, items: { type: "string", maxLength: 40 } },
+        set: {
+          type: "object", additionalProperties: false, minProperties: 1,
+          properties: {
+            color: { type: ["string", "null"] }, iconColor: { type: ["string", "null"] }, bg: { type: ["string", "null"] },
+            fontSize: { type: ["number", "null"] }, fontWeight: { type: ["number", "null"] },
+            lineHeight: { type: ["number", "null"] }, letterSpacing: { type: ["number", "null"] },
+            align: { type: ["string", "null"], enum: ["left", "center", "right", null] },
+            fontStyle: { type: ["string", "null"], enum: ["normal", "italic", null] },
+            textDecoration: { type: ["string", "null"], enum: ["none", "underline", "line-through", null] },
+            textTransform: { type: ["string", "null"], enum: ["none", "uppercase", "lowercase", "capitalize", null] },
+            fontFamily: { type: ["string", "null"], enum: ["heading", "body", "mono", null] },
+          },
+        },
+      },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
+      if (!e) throw new CmsError("Page not found", 404);
+      const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
+      if (args.index < 0 || args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const block: any = JSON.parse(JSON.stringify(current[args.index]));
+      const meta: any = metaOf(block.__component);
+      const listKey: string | undefined = meta?.items?.key;
+      const count = listKey && Array.isArray(block[listKey]) ? block[listKey].length : 0;
+
+      // The parts this block can have. The renderer decides what is really a component; this is the set the
+      // catalog and the renderers agree on, so a name that would silently do nothing is refused with the list.
+      const known = new Set<string>(["section", ...(meta?.fields || []).map((f: any) => f.k), ...(meta?.objects || []).map((o: any) => o.key), ...(meta?.lists || []).map((l: any) => l.key)]);
+      if (listKey) {
+        known.add(listKey);
+        for (let i = 0; i < count; i++) {
+          known.add(`${listKey}.${i}`);
+          if (PART_BLOCKS.has(block.__component) && listKey === "items") for (const p of ITEM_PART_NAMES) known.add(`${p}.${i}`);
+        }
+      }
+      const keys = new Set<string>();
+      for (const raw of args.components as string[]) {
+        const c = String(raw).trim();
+        const m = /^([A-Za-z][A-Za-z0-9_-]{0,40})\.\*$/.exec(c);
+        if (m) {
+          if (!count) throw new CmsError(`Block ${args.index} has no items for "${c}".`, 400);
+          for (let i = 0; i < count; i++) keys.add(`${m[1]}.${i}`);
+        } else keys.add(c);
+      }
+      for (const k of keys) {
+        if (!known.has(k)) throw new CmsError(`"${k}" is not a styleable part of block ${args.index} ("${block.__component}"). Valid: ${[...known].sort().join(", ")}.`, 400);
+      }
+
+      // Validate and normalise what to set; null clears a property.
+      const patch: Record<string, any> = {};
+      const COLOUR = /^(?:#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|@(?:primary|accent|ground|ink|c[1-8]))$/;
+      const RANGE: Record<string, [number, number]> = { fontSize: [8, 200], fontWeight: [100, 900], lineHeight: [0.8, 3], letterSpacing: [-0.1, 0.5] };
+      for (const [p, v] of Object.entries(args.set as Record<string, any>)) {
+        if (v === null) { patch[p] = null; continue; }
+        if (p === "color" || p === "iconColor" || p === "bg") {
+          if (typeof v !== "string" || !COLOUR.test(v.trim())) throw new CmsError(`"${p}" must be a hex colour like #1a73e8 or a theme colour (@primary, @accent, @ground, @ink, @c1 … @c8).`, 400);
+          patch[p] = v.trim();
+        } else if (RANGE[p]) {
+          const [lo, hi] = RANGE[p];
+          if (typeof v !== "number" || !Number.isFinite(v) || v < lo || v > hi) throw new CmsError(`"${p}" must be a number from ${lo} to ${hi}.`, 400);
+          patch[p] = p === "fontSize" || p === "fontWeight" ? Math.round(v) : v;
+        } else patch[p] = v; // the enum fields were checked against their allowed values by the tool's schema
+      }
+
+      const styles: Record<string, any> = { ...(block.styles || {}) };
+      for (const k of keys) {
+        const next: Record<string, any> = { ...(styles[k] || {}) };
+        for (const [p, v] of Object.entries(patch)) { if (v === null) delete next[p]; else next[p] = v; }
+        if (Object.keys(next).length) styles[k] = next; else delete styles[k];
+      }
+      const updated = { ...block };
+      if (Object.keys(styles).length) updated.styles = styles; else delete updated.styles;
+      const what = `${[...keys].length} part(s): ${Object.keys(patch).join(", ")}`;
+      if (shouldPropose(ctx, args)) {
+        return {
+          summary: `Proposed styling on block ${args.index} — ${what}`,
+          proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Style block ${args.index}`, blocks: [updated], replace: args.index },
+        };
+      }
+      const nextBlocks = current.map((b: any, i: number) => (i === args.index ? updated : b));
+      await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+      await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(nextBlocks, dialectOf(ctx)) }, { locale: args.locale });
+      return { summary: `Styled block ${args.index} — ${what}`, data: { uid: args.uid, id: args.id } };
     },
   },
   {

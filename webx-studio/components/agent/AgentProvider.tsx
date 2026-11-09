@@ -72,6 +72,14 @@ type Ctx = {
   setPublishMode: (m: PublishMode) => void;
   /** Whether this user can choose auto at all (the policy's level is the top one). */
   canAuto: boolean;
+  /** The chat models the AI gateway serves, the one this user picked (""= the default), and the name a run will really use. */
+  models: { alias: string; model: string }[];
+  defaultModel: string;
+  chosenModel: string;
+  setChosenModel: (m: string) => void;
+  /** Whether the user may pick: the workspace has not fixed a model and the gateway serves more than one. */
+  canChooseModel: boolean;
+  effectiveModel: string;
   /** Continues the thread's stopped run from the checkpoint the server saved for it. */
   resume: () => void;
   abort: () => void;
@@ -115,6 +123,7 @@ export const useAgentOptional = () => useContext(AgentCtx);
 
 const STORAGE_OPEN = "webx_agent_open";
 const STORAGE_MODE = "webx_agent_publish_mode";
+const STORAGE_MODEL = "webx_agent_model";
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
   const { currentKey } = useTenant();
@@ -126,6 +135,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [draftPrompt, setDraftPrompt] = useState("");
   const [autosendPending, setAutosendPending] = useState(false);
   const [modeChoice, setModeChoice] = useState<PublishMode>("review");
+  const [gateway, setGateway] = useState<{ models: { alias: string; model: string }[]; defaultModel: string }>({ models: [], defaultModel: "" });
+  const [modelPick, setModelPick] = useState("");
   const registrationRef = useRef<Registration | null>(null);
   const [, bumpRegistration] = useState(0);
 
@@ -138,6 +149,18 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try { if (localStorage.getItem(STORAGE_MODE) === "auto") setModeChoice("auto"); } catch {}
   }, []);
+  useEffect(() => {
+    try { setModelPick(localStorage.getItem(STORAGE_MODEL) || ""); } catch {}
+    let live = true;
+    fetch("/api/ai/models").then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (live && j) setGateway({ models: (j.models || []).filter((m: any) => m.kind === "chat"), defaultModel: j.defaultModel || "" });
+    }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const setChosenModel = useCallback((m: string) => {
+    setModelPick(m);
+    try { if (m) localStorage.setItem(STORAGE_MODEL, m); else localStorage.removeItem(STORAGE_MODEL); } catch {}
+  }, []);
   const setPublishMode = useCallback((m: PublishMode) => {
     setModeChoice(m);
     try { localStorage.setItem(STORAGE_MODE, m); } catch {}
@@ -145,6 +168,10 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   // Auto mode is for the top autonomy level only; a lower level (or no policy yet) always runs in review mode.
   const canAuto = policy?.level === "draft_submit";
   const publishMode: PublishMode = canAuto && modeChoice === "auto" ? "auto" : "review";
+  // A model the workspace has fixed wins; otherwise the user's pick, if the gateway still serves it; otherwise the default.
+  const canChooseModel = !policy?.model && gateway.models.length > 1;
+  const chosenModel = gateway.models.some((m) => m.alias === modelPick) ? modelPick : "";
+  const effectiveModel = policy?.model || (canChooseModel && chosenModel) || gateway.defaultModel;
 
   // The full-page workspace (Milestone 3) IS the agent — the docked panel
   // would be redundant chrome on top of itself there.
@@ -211,13 +238,13 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const send = useCallback((text: string, image?: { dataUrl: string; mimeType: string }, file?: { name: string; text: string }) => {
     const t = text.trim();
     if ((!t && !image && !file) || run.running || !policy || policy.level === "off") return;
-    run.send({ message: t, image, file, publishMode, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
-  }, [run, lang, ref, threadId, policy, suppressed, publishMode]);
+    run.send({ message: t, image, file, publishMode, model: canChooseModel ? chosenModel || undefined : undefined, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
+  }, [run, lang, ref, threadId, policy, suppressed, publishMode, canChooseModel, chosenModel]);
 
   const resume = useCallback(() => {
     if (run.running || !threadId || !policy || policy.level === "off") return;
-    run.send({ message: "", resume: true, publishMode, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
-  }, [run, lang, ref, threadId, policy, suppressed, publishMode]);
+    run.send({ message: "", resume: true, publishMode, model: canChooseModel ? chosenModel || undefined : undefined, mode: suppressed ? "workspace" : "docked", lang, context: ref, threadId });
+  }, [run, lang, ref, threadId, policy, suppressed, publishMode, canChooseModel, chosenModel]);
 
   const loadThread = useCallback(async (id: string) => {
     run.abort();
@@ -258,7 +285,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const value: Ctx = {
     open: open && !suppressed, toggle: () => setOpen((o) => !o), close: () => setOpen(false), openWith,
     policy, ref, threadId, messages: run.messages, running: run.running, usage: run.usage,
-    send, publishMode, setPublishMode, canAuto, resume, abort: run.abort, newThread, loadThread, setProposalStatus, applyProposal, register,
+    send, publishMode, setPublishMode, canAuto,
+    models: gateway.models, defaultModel: gateway.defaultModel, chosenModel, setChosenModel, canChooseModel, effectiveModel, resume, abort: run.abort, newThread, loadThread, setProposalStatus, applyProposal, register,
     draftPrompt, setDraftPrompt, autosendPending, consumeAutosend,
   };
 
