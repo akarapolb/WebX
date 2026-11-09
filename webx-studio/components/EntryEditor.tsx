@@ -394,6 +394,12 @@ export default function EntryEditor({
         </div>
 
         <div className="ovbody">
+          {!loading && ["wp:page", "api::page.page", "api::landing.landing"].includes(uid) && (
+            <div className="ed-pagehint" data-testid="ed-pagehint">
+              <Icon name="layout" /><span>{t("ed.pagehint")}</span>
+              <a className="btn btn--g" style={{ marginLeft: "auto" }} href={uid === "api::page.page" ? "/builder?uid=api::page.page" : "/builder"}>{t("ed.pageopen")}</a>
+            </div>
+          )}
           {!loading && (
             <div className="ed-review">
               <Icon name="check" />

@@ -19,6 +19,7 @@
 // dirty-tracking behave identically.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
+import { PART_BLOCKS, PART_OF } from "@/lib/itemParts";
 import IconPicker from "./IconPicker";
 import type { CustomIcon } from "./IconManager";
 import { FEATURE_ICONS } from "./blockPreview/iconChoices";
@@ -271,6 +272,11 @@ function summaryOf(it: any, l: ListDesc): string {
   return "";
 }
 
+// Each part of an item has its own style control beside its field (lib/itemParts.ts says which blocks and parts).
+function partKeyOf(comp: string | undefined, listKey: string | null, k: number, field: string): string | null {
+  return listKey === "items" && comp && PART_BLOCKS.has(comp) && PART_OF[field] ? PART_OF[field] + "." + k : null;
+}
+
 function ListEditor({ l, path, value, ctx, onRemove }: { l: ListDesc; path: Path; value: any; ctx: Ctx; onRemove?: () => void }) {
   const items: any[] = Array.isArray(value) ? value : [];
   // Items that hold their own nested lists (tabs) start collapsed — a tab's
@@ -281,6 +287,7 @@ function ListEditor({ l, path, value, ctx, onRemove }: { l: ListDesc; path: Path
   // Which items have their style panel showing. Kept apart from `open`: an item
   // can be collapsed (its fields hidden) and still be mid-restyle.
   const [styleOpen, setStyleOpen] = useState<Record<number, boolean>>({});
+  const [partOpen, setPartOpen] = useState<Record<string, boolean>>({});
   const cols: any[] = l.matrix ? (getAt(ctx.block, [...path.slice(0, -1), l.matrix]) || []) : [];
 
   function move(k: number, d: number) {
@@ -349,9 +356,25 @@ function ListEditor({ l, path, value, ctx, onRemove }: { l: ListDesc; path: Path
                     ))
               ) : (
                 <>
-                  {(l.fields || []).filter((f) => applies(f, ctx.block, ctx.template)).map((f) => (
-                    <FieldInput key={f.k} f={f} placeholder={f.k} value={it?.[f.k]} onChange={(v) => ctx.update([...path, k, f.k], v)} ctx={ctx} />
-                  ))}
+                  {(l.fields || []).filter((f) => applies(f, ctx.block, ctx.template)).map((f) => {
+                    // The title, text, icon, tag and date of a card are components of their own: each gets its own
+                    // style control right beside its field (colour, font, size …), separate from the whole item's.
+                    const pk = partKeyOf(ctx.block?.__component, compKey, k, f.k);
+                    const pOpen = !!(pk && partOpen[pk]);
+                    const input = <FieldInput key={f.k} f={f} placeholder={f.k} value={it?.[f.k]} onChange={(v) => ctx.update([...path, k, f.k], v)} ctx={ctx} />;
+                    if (!pk || !ctx.styleSlot) return input;
+                    return (
+                      <div key={f.k} className="bc-part" data-testid={"part-" + pk}>
+                        <div className="bc-part-row">
+                          <div className="bc-part-in">{input}</div>
+                          <button type="button" className={"bc-mini bc-paint" + (pOpen ? " on" : "") + (isBlankStyle(ctx.block?.styles?.[pk]) ? "" : " has")}
+                            aria-label={ctx.t("vb.comp.style") + " · " + f.k} title={ctx.t("vb.comp.style") + " · " + f.k} aria-expanded={pOpen}
+                            onClick={() => setPartOpen((o) => ({ ...o, [pk]: !o[pk] }))}><Icon name="palette" /></button>
+                        </div>
+                        {pOpen && <div className="bc-item-style">{ctx.styleSlot(pk)}</div>}
+                      </div>
+                    );
+                  })}
                   {(l.objects || []).filter((o) => applies(o, ctx.block, ctx.template)).map((o) => (
                     <div key={o.key} className="bc-sub">
                       <label>{o.key}</label>

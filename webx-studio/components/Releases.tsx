@@ -26,6 +26,9 @@ export default function Releases() {
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
   const [sched, setSched] = useState<Record<number, string>>({});
+  // Everything published by the Publish button (or the agent), not only what went out in a release.
+  type Pub = { key: string; contentType: string; id: string; title: string; path: string | null; at?: string; by?: string; agent: boolean };
+  const [pubs, setPubs] = useState<Pub[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");
@@ -40,6 +43,23 @@ export default function Releases() {
     finally { setLoading(false); }
   }, [t]);
   useEffect(() => { load(); }, [load]);
+
+  const loadPubs = useCallback(async () => {
+    try {
+      const { data } = await cms.entries.list<any>("api::audit-log.audit-log", { sort: "createdAt:DESC", pageSize: 80, filter: [{ field: "action", op: "contains", value: "publish" }] });
+      const seen = new Set<string>();
+      const rows = data.filter((l: any) => /(^|_)publish$/.test(String(l.action || "")) && l.contentType && l.entryId != null)
+        .filter((l: any) => { const k = l.contentType + "|" + l.entryId; if (seen.has(k)) return false; seen.add(k); return true; })
+        .slice(0, 20);
+      const out: Pub[] = await Promise.all(rows.map(async (l: any) => {
+        let title = String(l.entryId), path: string | null = null;
+        try { const e: any = await cms.entries.get(l.contentType, String(l.entryId)); if (e) { title = e.title || e.name || e.question || title; path = publicPagePath(l.contentType, e); } } catch {}
+        return { key: l.contentType + "|" + l.entryId, contentType: l.contentType, id: String(l.entryId), title, path, at: l.at || l.createdAt, by: l.adminEmail, agent: String(l.action).startsWith("agent_") };
+      }));
+      setPubs(out);
+    } catch { /* the list is a convenience; the releases above do not depend on it */ }
+  }, []);
+  useEffect(() => { loadPubs(); }, [loadPubs]);
 
   const idOf = (r: Release) => String(r.documentId ?? r.id);
   async function put(r: Release, data: any) {
@@ -168,6 +188,27 @@ export default function Releases() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {!err && pubs.length > 0 && (
+        <div className="rl-card" style={{ marginTop: 14 }} data-testid="recent-publishes">
+          <div className="rl-head"><b>{t("rl.recent")}</b><span className="rl-count">{pubs.length}</span></div>
+          <p className="muted" style={{ fontSize: 12, margin: "2px 0 8px" }}>{t("rl.recent.sub")}</p>
+          <div className="rl-items">
+            {pubs.map((p) => (
+              <div className="rl-item" key={p.key}>
+                <span className="rl-itype mono">{shortType(p.contentType)}</span>
+                <span className="rl-ititle">{p.title}</span>
+                <span className="muted" style={{ fontSize: 11.5 }}>{fmt(p.at)}{p.by ? " · " + (p.agent ? "agent · " : "") + p.by : ""}</span>
+                {p.path && (
+                  <a className="rl-link" href={publicPageUrl(PUBLIC_SITE, p.path)} target="_blank" rel="noopener noreferrer" title={publicPageUrl(PUBLIC_SITE, p.path)}>
+                    <Icon name="eye" />{p.path}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

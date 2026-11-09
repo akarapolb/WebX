@@ -6,6 +6,7 @@ import RichText from "./RichText";
 import InlineText from "./InlineText";
 import BlockTypeEditor, { BlockType } from "./BlockTypeEditor";
 import Toolbox, { type PageTemplate } from "./Toolbox";
+import SourceBinding from "./SourceBinding";
 import IconManager, { CustomIcon } from "./IconManager";
 import IconPicker from "./IconPicker";
 import IconSpriteDefs from "./blockPreview/IconSpriteDefs";
@@ -1251,7 +1252,11 @@ export default function VisualBuilder() {
       // own undo-while-typing, Backspace deleting a character, etc.) — only
       // acts when focus isn't inside a text input/textarea/contentEditable.
       const el = document.activeElement as HTMLElement | null;
-      const isTyping = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      // Typing in a free-text field keeps the browser's own undo. A colour, slider, checkbox or select is not
+      // typing, and neither is a field in the style panel (its value is part of the page's undo history).
+      const inStylePanel = !!el?.closest?.(".cs, .cs-pop");
+      const textInput = el?.tagName === "INPUT" && !["color", "range", "checkbox", "radio", "button", "file"].includes((el as HTMLInputElement).type);
+      const isTyping = !!el && (el.tagName === "TEXTAREA" || el.isContentEditable || (textInput && !inStylePanel));
       if (isTyping) return;
       if (k === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (k === "y") { e.preventDefault(); redo(); return; }
@@ -1540,6 +1545,26 @@ export default function VisualBuilder() {
       <div className={"vb2" + (previewMode ? " preview" : "") + (tbOpen && !previewMode ? " tbx-open" : "")}>
         <aside className="vb-insp" ref={inspRef}>
           <div className="vb-insp-h">{t("vb.blocks")} {blocks.length > 0 && <span className="mono" style={{ color: "var(--mut)" }}>{blocks.length}</span>}</div>
+          {/* A page with no blocks yet (a new page): the + buttons only sit between existing blocks, so without this
+              there was nothing to click to place the first one. */}
+          {blocks.length === 0 && sel && !loading && (
+            <div className="vb-empty" data-testid="vb-empty">
+              <b>{t("vb.empty.title")}</b>
+              <span className="muted">{t("vb.empty.hint")}</span>
+              <button className="btn btn--p" onClick={() => setInsAt(insAt === 0 ? -1 : 0)} data-testid="vb-empty-add"><Icon name="plus" />{t("vb.empty.add")}</button>
+              {insAt === 0 && (
+                <div className="vb-empty-pop">
+                  <Toolbox compact t={t} dialect={template}
+                    types={paletteTypes as any} categories={BLOCK_CATEGORIES} customTypes={customTypes} templates={templates}
+                    onAdd={(comp) => { addAt(0, comp); setInsAt(-1); }}
+                    onAddCustom={(ct) => { addCustomAt(0, ct); setInsAt(-1); }}
+                    onApplyTemplate={(tpl) => { addTemplateAt(0, tpl); setInsAt(-1); }}
+                    onDragNew={setDragNew} onDragEnd={() => { setDragNew(null); setDropAt(-1); }} />
+                </div>
+              )}
+              <button className="btn btn--g" onClick={() => setTbOpen(true)}>{t("vb.empty.palette")}</button>
+            </div>
+          )}
           {blocks.map((b, i) => {
             const bm = metaOf(b.__component);
             const isA = i === active;
@@ -1650,20 +1675,7 @@ export default function VisualBuilder() {
                           {t("vb.orst.source")}
                         </label>
                         {b.source && (
-                          <div style={{ display: "grid", gap: 6, marginTop: 6, background: "var(--sunk)", borderRadius: 9, padding: 8 }}>
-                            <select value={b.source.postType || "service"} onChange={(e) => updateBlockField(i, ["source", "postType"], e.target.value)}>
-                              {["service", "publication", "news", "faq", "resource", "mission", "org-unit", "document", "timeline"].map((v) => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                            <select value={b.source.map || "card"} onChange={(e) => updateBlockField(i, ["source", "map"], e.target.value)}>
-                              {["card", "link", "faq", "mission", "orgunit", "document", "timeline", "dated"].map((v) => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                            <input placeholder="icon (i-file, i-video, …)" value={b.source.icon || ""} onChange={(e) => updateBlockField(i, ["source", "icon"], e.target.value)} />
-                            <input placeholder="tag override" value={b.source.tag || ""} onChange={(e) => updateBlockField(i, ["source", "tag"], e.target.value)} />
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <input style={{ flex: 1 }} placeholder="limit" value={b.source.limit ?? ""} onChange={(e) => updateBlockField(i, ["source", "limit"], e.target.value ? Number(e.target.value) : undefined)} />
-                              <input style={{ flex: 1 }} placeholder="offset" value={b.source.offset ?? ""} onChange={(e) => updateBlockField(i, ["source", "offset"], e.target.value ? Number(e.target.value) : undefined)} />
-                            </div>
-                          </div>
+                          <SourceBinding source={b.source} lang={lang} t={t} onField={(k, v) => updateBlockField(i, ["source", k], v)} />
                         )}
                       </div>
                     )} />}
@@ -1674,7 +1686,14 @@ export default function VisualBuilder() {
                         b.styles turns into. Nothing shows until a component is
                         actually selected — a block-wide style control would be
                         ambiguous about which of its parts it meant. */}
-                    {wpMeta && isA && activeComp && !/\.\d+$/.test(activeComp) && (
+                    {/* The whole section's own background and colours: every block has it, and until now only the
+                        parts inside a section could be restyled. */}
+                    {wpMeta && isA && activeComp !== "section" && (
+                      <button type="button" className="btn btn--g" style={{ margin: "6px 0" }} onClick={() => setSelComp({ i, key: "section" })} data-testid="style-section">{t("vb.sectionstyle")}</button>
+                    )}
+                    {/* A list's own items (items.0) are styled inside that list's editor, so they are left out here;
+                        an item's parts (itemTitle.0, itemBody.0, itemIcon.0 …) are components of their own and show here. */}
+                    {wpMeta && isA && activeComp && !(/\.\d+$/.test(activeComp) && !/^item(Title|Body|Icon|Tag|Meta)\./.test(activeComp)) && (
                       <ComponentStyle key={`${i}:${activeComp}`} {...styleProps(i, b, activeComp)} />
                     )}
                     {/* Generic repeatable-list editor — one `items` descriptor per
@@ -2197,7 +2216,7 @@ export default function VisualBuilder() {
                   blockDialect.ts. */}
               <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))}
                 labels={blockLabels} active={active} onSelect={setActive}
-                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} onNavigate={navigateTo} />
+                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} onNavigate={navigateTo} onUndo={(isRedo) => (isRedo ? redo() : undo())} />
             </div>
           ) : previewMode ? (
             <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.previewunsupported")}</div>

@@ -84,6 +84,8 @@ function ColorRow({ label, value, onChange, onClear, swatches, tokens, t, open, 
         <span style={shown ? { background: shown } : undefined} className={shown ? "" : "none"} />
         <em>{tok ? t("cs.theme") + " · " + tok.label : value ? value.toUpperCase() : t("cs.notset")}</em>
       </button>
+      {/* One click back to the template's own colour: this used to be reachable only inside the open picker. */}
+      {value && <button type="button" className="cs-revert" title={t("cs.revert")} aria-label={label + " · " + t("cs.revert")} onClick={() => { onClear(); setOpen(false); }}>↺</button>}
       {open && (
         <div className="cs-pop">
           {tokens.length > 0 && (

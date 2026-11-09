@@ -96,7 +96,7 @@ const MAX_DESKTOP_W = 1920;
 
 export default function RealPreview({
   blocks, homeData, customTypes, customIcons, collectionData, tenant, harness, labels,
-  device, comp, onComponent, onBox, onNavigate,
+  device, comp, onComponent, onBox, onNavigate, onUndo,
   active, onSelect, onFieldChange, onImagePick, onArrayAdd, onArrayRemove, onDeselect,
 }: {
   blocks: any[]; homeData?: any; customTypes?: Record<string, any>; customIcons?: Record<string, any>;
@@ -119,6 +119,8 @@ export default function RealPreview({
   onBox?: (i: number, key: string, device: string, box: any) => void;
   /** A same-site link clicked in the harness's header/footer — its path, e.g. "/orst/about". */
   onNavigate?: (path: string) => void;
+  /** Ctrl/Cmd+Z (redo: true for Shift+Z / Y) pressed inside the preview itself. */
+  onUndo?: (redo: boolean) => void;
   active?: number;
   onSelect?: (i: number) => void;
   onFieldChange?: (i: number, path: Path, value: any) => void;
@@ -175,6 +177,8 @@ export default function RealPreview({
   onBoxRef.current = onBox;
   const onNavigateRef = useRef(onNavigate);
   onNavigateRef.current = onNavigate;
+  const onUndoRef = useRef(onUndo);
+  onUndoRef.current = onUndo;
   // Fit the real-width harness into the canvas (see VIRTUAL_W).
   const wrapRef = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(0);
@@ -202,6 +206,7 @@ export default function RealPreview({
       if (e.source !== iframeRef.current?.contentWindow) return; // and only THIS preview's own iframe
       const d = e.data;
       if (d?.type === "webx:harness:hello") setHarnessReady(true);
+      else if (d?.type === "webx:harness:undo") onUndoRef.current?.(d.redo === true);
       else if (d?.type === "webx:harness:height" && typeof d.px === "number") setHarnessHeight(Math.max(200, d.px));
       else if (d?.type === "webx:harness:select" && Number.isInteger(d.index)) {
         clickedInHarness.current = d.index;
