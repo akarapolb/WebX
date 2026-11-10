@@ -37,6 +37,20 @@ export const deviceForWidth = (w: number): Device => (w >= 1024 ? "desktop" : w 
 // bounded.
 const KEY_RE = /^[A-Za-z][A-Za-z0-9_-]{0,40}(\.\d{1,3})?$/;
 export const isComponentKey = (k: string) => KEY_RE.test(k);
+// "items.*": one size for every item of a list (and items added later). Size only — each item keeps its own offset —
+// and an item's own box, written after it, still wins.
+const ALL_RE = /^([A-Za-z][A-Za-z0-9_-]{0,40})\.\*$/;
+export const isAllItemsKey = (k: string) => ALL_RE.test(k);
+function allRule(scope: number, key: string, box: Box): string {
+  const prefix = ALL_RE.exec(key)![1];
+  const w = num(box.w, 8, 4000), h = num(box.h, 8, 4000);
+  const decl: string[] = [];
+  if (w !== undefined) decl.push(`width:${w}px!important`, "max-width:none!important", "flex:none!important");
+  if (h !== undefined) decl.push(`height:${h}px!important`, "max-height:none!important");
+  if (!decl.length) return "";
+  decl.push("box-sizing:border-box!important");
+  return `[data-vb-s="${scope}"][data-vb-c^="${prefix}."]{${decl.join(";")}}`;
+}
 const num = (v: any, lo: number, hi: number) => {
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : undefined;
@@ -46,6 +60,8 @@ const num = (v: any, lo: number, hi: number) => {
 export function vc(b: any, key: string): Record<string, string> {
   const p: Record<string, string> = { "data-vb-c": key };
   if (b && Number.isInteger(b.__vbi)) p["data-vb-s"] = String(b.__vbi);
+  // A block can be always light or always dark, whatever mode the visitor is in (tokens.css applies that colour set).
+  if (key === "section" && (b?.__scheme === "light" || b?.__scheme === "dark")) p["data-vb-scheme"] = b.__scheme;
   return p;
 }
 
@@ -72,7 +88,12 @@ export function boxesCss(b: any, scope: number): string {
   for (const d of Object.keys(DEVICE_MEDIA) as Device[]) {
     const map = all[d];
     if (!map || typeof map !== "object") continue;
-    const rules = Object.keys(map).filter(isComponentKey).map((k) => (map[k] && typeof map[k] === "object" ? rule(scope, k, map[k]) : "")).filter(Boolean);
+    const valid = (k: string) => map[k] && typeof map[k] === "object";
+    // Every-item sizes first, so an item's own box (same specificity, later) wins over them.
+    const rules = [
+      ...Object.keys(map).filter((k) => isAllItemsKey(k) && valid(k)).map((k) => allRule(scope, k, map[k])),
+      ...Object.keys(map).filter((k) => isComponentKey(k) && valid(k)).map((k) => rule(scope, k, map[k])),
+    ].filter(Boolean);
     if (rules.length) css += `@media ${DEVICE_MEDIA[d]}{${rules.join("")}}`;
   }
   return css;

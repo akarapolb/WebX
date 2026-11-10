@@ -29,6 +29,7 @@ import { applies, freshDef, listsOf, type BlockTypeMeta, type ItemField, type Li
 import { isBlankStyle } from "@/lib/componentStyle";
 import InlineRichField from "./InlineRichField";
 import { RICH_FIELD_KEYS, stripMarkup } from "@/lib/inlineMarkup";
+import ImageField from "./ImageField";
 
 type Ops = {
   update: (path: Path, value: any) => void;
@@ -259,9 +260,11 @@ function FieldInput({ f, value, onChange, ctx, placeholder }: { f: ItemField; va
     );
   }
   // Headings, leads and body text take formatting on a few words (bold, a link, a theme colour …).
+  // A picture: type a path, upload, or pick from the Media Library.
+  if (/^(image|logo|thumbnail|photo|cover|avatar)$/i.test(f.k)) return <ImageField value={typeof v === "string" ? v : ""} onChange={onChange} placeholder={f.hint || placeholder} t={ctx.t} testId={"img-" + f.k} />;
   if (RICH_FIELD_KEYS.has(f.k)) return <InlineRichField value={typeof v === "string" ? v : String(v)} onChange={onChange} multiline={!!f.ta} placeholder={placeholder} tokens={ctx.tokens} t={ctx.t} testId={"rich-" + f.k} />;
   if (f.ta) return <textarea placeholder={placeholder} value={v} onChange={(e) => onChange(e.target.value)} style={{ minHeight: placeholder ? 44 : 54 }} />;
-  return <input placeholder={placeholder} value={v} onChange={(e) => onChange(e.target.value)} />;
+  return <input placeholder={f.hint || placeholder} value={v} onChange={(e) => onChange(e.target.value)} />;
 }
 
 function ObjectFields({ o, path, value, ctx }: { o: ObjDesc; path: Path; value: any; ctx: Ctx }) {

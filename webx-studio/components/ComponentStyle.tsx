@@ -56,6 +56,11 @@ type Props = {
   t: (k: string, v?: Record<string, any>) => string;
   /** "background": opened from the Layers panel's Background — its colour, gradient and picture open first and come into view. */
   focus?: "background";
+  /** The Light / Dark tab changed: the Builder shows its preview in that mode, so a dark-mode colour can be seen. */
+  onScheme?: (scheme: "light" | "dark" | null) => void;
+  /** The whole section only: which mode the block shows in (follow the site, always light, always dark). Kept next
+   * to the light / dark tabs below, which choose which mode's colours are being edited. */
+  blockScheme?: { value: "" | "light" | "dark"; set: (v: "" | "light" | "dark") => void };
 };
 
 const ALIGNS = [
@@ -273,7 +278,7 @@ function gradPreview(s: Style, tokens: ThemeToken[]): string {
   return s.gradType === "radial" ? `radial-gradient(circle at center, ${a}, ${b})` : `linear-gradient(${s.gradAngle ?? GRAD_ANGLE.default}deg, ${a}, ${b})`;
 }
 
-export default function ComponentStyle({ style, device = "desktop", full, set: setRaw, reset, upload, replaceAll, presets, swatches, tokens = [], t, focus }: Props) {
+export default function ComponentStyle({ style, device = "desktop", full, set: setRaw, reset, upload, replaceAll, presets, swatches, tokens = [], t, focus, onScheme, blockScheme }: Props) {
   const bgFocus = focus === "background";
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -285,6 +290,9 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
   const [, bumpClip] = useState(0);
   // Light or dark: dark mode has its own overrides (style.dark), only edited on the main (desktop) look.
   const [scheme, setScheme] = useState<"light" | "dark">("light");
+  // The preview follows the tab only once someone uses it; when this panel closes the preview goes back to the
+  // mode it was in (null = leave the page's own mode alone). Opening a panel never changes the preview.
+  useEffect(() => () => onScheme?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
   const darkMode = scheme === "dark" && device === "desktop";
   const s: Style = darkMode ? ((style?.dark as Style) || {}) : style || {};
   const set = (k: StyleKey, v: any) => setRaw((darkMode ? "dark." + k : k) as StyleKey, v);
@@ -339,16 +347,30 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         {touched && <button type="button" className="cs-reset" onClick={darkMode ? () => setRaw("dark" as StyleKey, undefined) : reset}>{darkMode ? t("cs.dark.reset") : t("cs.reset")}</button>}
       </div>
 
+      {blockScheme && (
+        <div className="cs-blockscheme" data-testid="block-scheme">
+          <span className="cs-bs-label">{t("vb.scheme")}</span>
+          <div className="cs-seg">
+            {(["", "light", "dark"] as const).map((m) => (
+              <button type="button" key={m || "auto"} className={blockScheme.value === m ? "on" : ""} aria-pressed={blockScheme.value === m}
+                onClick={() => blockScheme.set(m)} data-testid={"block-scheme-" + (m || "auto")}>{t("vb.scheme." + (m || "auto"))}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {device === "desktop" && (
+        <div className="cs-schemehead">{t("cs.scheme")}</div>
+      )}
       {device === "desktop" && (
         <div className="cs-states cs-scheme" role="tablist" aria-label={t("cs.scheme")}>
           {(["light", "dark"] as const).map((m) => (
             <button type="button" role="tab" key={m} aria-selected={scheme === m}
               className={(scheme === m ? "on" : "") + (m === "dark" && !isBlankStyle((style as any)?.dark) ? " has" : "")}
-              onClick={() => { setScheme(m); setOpenPicker(null); }}>{t("cs.scheme." + m)}</button>
+              onClick={() => { setScheme(m); setOpenPicker(null); onScheme?.(m); }}>{t("cs.scheme." + m)}</button>
           ))}
         </div>
       )}
-      {darkMode && <p className="cs-device">{t("cs.dark.hint")}</p>}
+      {darkMode && <p className="cs-device">{blockScheme?.value === "light" ? t("cs.dark.unused") : t("cs.dark.hint")}</p>}
       {onDevice && <p className="cs-device">{t("cs.device." + device)}</p>}
       {!onDevice && !darkMode && (
       <div className="cs-states" role="tablist" aria-label={t("cs.states")}>

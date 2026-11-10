@@ -7,7 +7,7 @@
 // Hiding (the eye) is for editing only: never saved, never on the real page. Locking and names ARE saved with the
 // block (`__locks`, `__names`), like in Figma: a locked layer cannot be picked or dragged in the preview, so it does
 // not get moved by accident. The background layer opens the section's style (colour, picture, gradient, overlay).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Icon from "./Icon";
 
 export type Layer = { kind: "comp" | "layer" | "bg"; key: string; depth: number };
@@ -58,6 +58,14 @@ export default function LayersPanel({ blocks, active, layers, hidden, selected, 
   t: (k: string) => string;
 }) {
   const [drag, setDrag] = useState<number | null>(null);
+  // Collapse / expand. The selected block opens; each one item of a list starts closed (a long list stays short)
+  // and opens with its arrow; everything else starts open. A part that is picked always shows.
+  const [blockOpen, setBlockOpen] = useState(true);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  useEffect(() => { setBlockOpen(true); }, [active]);
+  const nodeId = (l: Pick<Layer, "kind" | "key">) => active + ":" + l.kind + ":" + l.key;
+  const isOpen = (l: Layer) => open[nodeId(l)] ?? !/^[A-Za-z]+\.\d+$/.test(l.key);
+  const setAll = (v: boolean) => setOpen(Object.fromEntries(layers.map((l) => [nodeId(l), v])));
   const [over, setOver] = useState<number | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const isHidden = (i: number, l: Pick<Layer, "kind" | "key">) => hidden.includes(layerId(i, l));
@@ -71,6 +79,23 @@ export default function LayersPanel({ blocks, active, layers, hidden, selected, 
     under.push({ hidden: ph, locked: pl });
     stack.push({ depth: l.depth, hidden: ph || isHidden(active, l), locked: pl || !!row?.locks.includes(lockKey(l)) });
   }
+  // The layers that hold a picked part are shown open whatever was clicked, so a pick in the preview is never hidden.
+  const forced = new Set<number>();
+  layers.forEach((l, idx) => {
+    if (!(l.kind === "comp" && selected.includes(l.key))) return;
+    let d = l.depth;
+    for (let j = idx - 1; j >= 0 && d > 0; j--) if (layers[j].depth < d) { forced.add(j); d = layers[j].depth; }
+  });
+  const visibleParts: Layer[] = [];
+  let closedAt = -1; // depth of the closed layer whose insides are being skipped
+  layers.forEach((l, idx) => {
+    if (closedAt >= 0 && l.depth > closedAt) return;
+    closedAt = -1;
+    if (l.kind === "comp" && l.key === "section") return;
+    visibleParts.push(l);
+    const hasKids = layers[idx + 1] !== undefined && layers[idx + 1].depth > l.depth;
+    if (hasKids && !isOpen(l) && !forced.has(idx)) closedAt = l.depth;
+  });
   const nameInput = (id: string, value: string, done: (v: string) => void) => (
     <input className="ly-rename" autoFocus defaultValue={value} maxLength={80} data-testid="layer-rename-input"
       onClick={(e) => e.stopPropagation()}
@@ -100,6 +125,12 @@ export default function LayersPanel({ blocks, active, layers, hidden, selected, 
         <small className="muted">{t("ly.hint")}</small>
         {hidden.length > 0 && <button type="button" className="ly-all" onClick={onShowAll} data-testid="layers-show-all">{t("ly.showAll")}</button>}
       </div>
+      {active >= 0 && layers.length > 0 && (
+        <div className="ly-tools">
+          <button type="button" className="ly-all" onClick={() => { setBlockOpen(true); setAll(true); }} data-testid="layers-expand-all">{t("ly.expandAll")}</button>
+          <button type="button" className="ly-all" onClick={() => setAll(false)} data-testid="layers-collapse-all">{t("ly.collapseAll")}</button>
+        </div>
+      )}
       <ul className="ly-list ly-tree">
         {blocks.map((b, i) => {
           const secLocked = b.locks.includes("section");
@@ -115,6 +146,11 @@ export default function LayersPanel({ blocks, active, layers, hidden, selected, 
                 onDrop={(e) => { e.preventDefault(); if (drag !== null && drag !== i) onReorder(drag, i); setDrag(null); setOver(null); }}
                 onDragEnd={() => { setDrag(null); setOver(null); }}
                 data-testid={"layer-block-" + i}>
+                <button type="button" className={"ly-chev" + (isActive && blockOpen ? " open" : "")} aria-expanded={isActive && blockOpen}
+                  aria-label={(isActive && blockOpen ? t("ly.collapse") : t("ly.expand")) + ": " + b.name}
+                  onClick={() => { if (!isActive) { onSelectBlock(i); setBlockOpen(true); } else setBlockOpen((o) => !o); }} data-testid={"layer-chev-block-" + i}>
+                  <Icon name="chevron" />
+                </button>
                 <span className="ly-grip" aria-hidden="true"><Icon name="drag" /></span>
                 <button type="button" className="ly-name" onClick={() => onSelectBlock(i)} onDoubleClick={() => setEditing(bid)} title={t("ly.renameHint")}>
                   <Icon name={b.icon} />
@@ -123,11 +159,13 @@ export default function LayersPanel({ blocks, active, layers, hidden, selected, 
                 {lock(i, "section", secLocked, b.name, "layer-lock-block-" + i)}
                 {eye(i, { kind: "comp", key: "section" }, b.name, "layer-eye-block-" + i)}
               </div>
-              {isActive && (
+              {isActive && blockOpen && (
                 <ul className="ly-list ly-sub">
                   {layers.length === 0 && <li className="muted" style={{ fontSize: 12, padding: "6px 8px" }}>{t("ly.none")}</li>}
-                  {layers.filter((l) => !(l.kind === "comp" && l.key === "section")).map((l, n) => {
+                  {visibleParts.map((l, n) => {
                     const idx = layers.indexOf(l);
+                    const hasKids = layers[idx + 1] !== undefined && layers[idx + 1].depth > l.depth;
+                    const kidsOpen = hasKids && (isOpen(l) || forced.has(idx));
                     const name = layerName(l, t, b.names);
                     const pickKey = l.kind === "comp" ? l.key : "section";
                     const sel = l.kind === "comp" && selected.includes(l.key);
@@ -137,6 +175,13 @@ export default function LayersPanel({ blocks, active, layers, hidden, selected, 
                       <li key={l.kind + ":" + l.key + ":" + n}
                         className={"ly-row" + (sel ? " sel" : "") + (isHidden(i, l) || under[idx]?.hidden ? " off" : "") + (locked || under[idx]?.locked || secLocked ? " locked" : "")}
                         style={{ paddingLeft: 4 + Math.max(0, l.depth - 1) * 14 }} data-testid={"layer-" + l.kind + "-" + l.key}>
+                        {hasKids ? (
+                          <button type="button" className={"ly-chev" + (kidsOpen ? " open" : "")} aria-expanded={kidsOpen}
+                            aria-label={(kidsOpen ? t("ly.collapse") : t("ly.expand")) + ": " + name}
+                            onClick={() => setOpen((o) => ({ ...o, [nodeId(l)]: !kidsOpen }))} data-testid={"layer-chev-" + l.kind + "-" + l.key}>
+                            <Icon name="chevron" />
+                          </button>
+                        ) : <span className="ly-chev-sp" aria-hidden="true" />}
                         <button type="button" className="ly-name"
                           onClick={(e) => onPick(pickKey, l.kind, e.shiftKey || e.ctrlKey || e.metaKey)}
                           onDoubleClick={() => setEditing(id)}

@@ -461,3 +461,14 @@ a.block-media-card.is-link:hover { transform: translateY(-4px); box-shadow: var(
 /* A web address or e-mail typed in a text becomes a link by itself (lib/autolink.ts). Above a card's stretched link so it stays clickable. */
 .block-autolink { color: inherit; text-decoration: underline; text-underline-offset: 2px; position: relative; z-index: 2; overflow-wrap: anywhere; }
 .block-autolink:hover { text-decoration-thickness: 2px; }
+
+/* A block that is always light or always dark (Visual Builder): the page colour and text of that set. :where() keeps
+   it weaker than any background the block's own design or style panel gives it. */
+:where([data-vb-scheme]) { background-color: var(--orst-ground); color: var(--orst-ink); }
+
+/* Media tabs: a card with a link is the link itself; a video link gets a play badge over its picture. */
+a.hub-tile.is-link { display: block; color: inherit; text-decoration: none; }
+a.hub-tile.is-link:hover { transform: translateY(-3px); }
+.hub-tile .media-thumb, .hub-tile .cover, .hub-tile .knowledge-text-cover { position: relative; }
+.media-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; padding-left: 4px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 20px; line-height: 1; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); pointer-events: none; transition: transform .15s, background .15s; }
+a.hub-tile:hover .media-play { transform: translate(-50%, -50%) scale(1.08); background: #c4302b; }

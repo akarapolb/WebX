@@ -1,26 +1,32 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { stylesCss, isEmptyStyle } from "./styles";
+import { stylesCss, isEmptyStyle, DARK_HERE } from "./styles";
 
 const css = (styles: any) => stylesCss({ styles }, 0);
 const SEL = `[data-vb-s="0"][data-vb-c="card"]`;
-const DARK = `:where(:root[data-theme="dark"]) `;
+// Dark is decided per element: its block always dark, or the page dark and its block not always light.
+const DARK = DARK_HERE;
 
 describe("per-component dark mode", () => {
+  test("dark follows the block's own light / dark choice before the page's", () => {
+    assert.ok(DARK.includes('[data-vb-scheme="dark"]'));
+    assert.ok(DARK.includes(':root[data-theme="dark"] :not([data-vb-scheme="light"],[data-vb-scheme="light"] *)'));
+  });
+
   test("dark values are scoped to dark mode and add no specificity", () => {
     const out = css({ card: { bg: "#ffffff", dark: { bg: "#111111" } } });
     assert.ok(out.includes(`${SEL}{background-color:#ffffff!important}`));
-    assert.ok(out.includes(`${DARK}${SEL}{background-color:#111111!important}`));
+    assert.ok(out.includes(`${SEL}${DARK}{background-color:#111111!important}`));
   });
 
   test("the dark rule comes after the light one, so it wins by order", () => {
     const out = css({ card: { bg: "#ffffff", dark: { bg: "#111111" } } });
-    assert.ok(out.indexOf(`${DARK}${SEL}`) > out.indexOf(`${SEL}{background-color:#ffffff`));
+    assert.ok(out.indexOf(`${SEL}${DARK}`) > out.indexOf(`${SEL}{background-color:#ffffff`));
   });
 
   test("dark loses to a hover, which adds a pseudo-class", () => {
     const out = css({ card: { dark: { bg: "#111111" }, hover: { bg: "#222222" } } });
-    assert.ok(out.indexOf(`:hover{background-color:#222222`) > out.indexOf(`${DARK}${SEL}`));
+    assert.ok(out.indexOf(`:hover{background-color:#222222`) > out.indexOf(`${SEL}${DARK}`));
   });
 
   test("only what dark sets changes; the rest stays as it is", () => {
@@ -31,11 +37,11 @@ describe("per-component dark mode", () => {
 
   test("dark text colour reaches the text and icons inside, behind the dark prefix", () => {
     const out = css({ card: { dark: { color: "#eeeeee", iconColor: "#ffcc00" } } });
-    assert.ok(out.includes(`${DARK}${SEL} :not([data-vb-c]):not(svg):not(svg *){color:#eeeeee!important}`));
-    assert.ok(out.includes(`${DARK}${SEL} svg,${DARK}${SEL} svg *{color:#eeeeee!important}`));
+    assert.ok(out.includes(`${SEL}${DARK} :not([data-vb-c]):not(svg):not(svg *){color:#eeeeee!important}`));
+    assert.ok(out.includes(`${SEL}${DARK} svg,${SEL}${DARK} svg *{color:#eeeeee!important}`));
     // The icon rule's repeated selector must keep the dark prefix in front, not splice it into the middle.
-    assert.ok(out.includes(`${DARK}${SEL}${SEL} svg,${DARK}${SEL}${SEL} svg *{color:#ffcc00!important}`));
-    assert.ok(!out.includes(`${SEL}${DARK}`));
+    assert.ok(out.includes(`${SEL}${SEL}${DARK} svg,${SEL}${SEL}${DARK} svg *{color:#ffcc00!important}`));
+    assert.ok(!out.includes(`${SEL}${DARK}${SEL}`));
   });
 
   test("theme tokens work in dark mode (they already follow it, so this is for exceptions)", () => {
@@ -44,7 +50,7 @@ describe("per-component dark mode", () => {
 
   test("dark can swap a gradient or image without restating the rest", () => {
     const out = css({ card: { bgImage: "/p.jpg", gradFrom: "#111111", gradTo: "#222222", dark: { gradFrom: "#eeeeee" } } });
-    assert.ok(out.includes(`${DARK}${SEL}{background-image:linear-gradient(180deg,#eeeeee,#222222),url("/p.jpg")!important}`));
+    assert.ok(out.includes(`${SEL}${DARK}{background-image:linear-gradient(180deg,#eeeeee,#222222),url("/p.jpg")!important}`));
   });
 
   test("dark text/typography and shadow settings are honoured too", () => {

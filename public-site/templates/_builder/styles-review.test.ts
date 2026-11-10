@@ -1,12 +1,12 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { stylesCss, isEmptyStyle } from "./styles";
+import { stylesCss, isEmptyStyle, DARK_HERE } from "./styles";
 
 // Regression tests for problems found when the style code was reviewed.
 
 const css = (s: any) => stylesCss({ styles: { c: s } }, 0);
 const SEL = `[data-vb-s="0"][data-vb-c="c"]`;
-const DARK = `:where(:root[data-theme="dark"]) `;
+const DARK = DARK_HERE;
 const MOB = "(max-width: 639.98px)";
 const TAB = "(max-width: 1023.98px)";
 
@@ -34,29 +34,29 @@ describe("dark mode keeps the tablet and phone cascade", () => {
     const out = css({ fontSize: 20, mobile: { lineHeight: 2 }, dark: { fontSize: 18 } });
     // the dark rule for the phone width is written after it, and carries the phone's line height —
     // without it the base dark rule's 1.25 would win (this once passed while the page still showed 1.25)
-    assert.ok(out.includes(`@media ${MOB}{${DARK}${SEL}{font-size:18px!important;line-height:2!important}}`), out);
-    assert.ok(out.indexOf(`@media ${MOB}{${DARK}`) > out.indexOf(`@media ${MOB}{${SEL}{line-height:2`));
+    assert.ok(out.includes(`@media ${MOB}{${SEL}${DARK}{font-size:18px!important;line-height:2!important}}`), out);
+    assert.ok(out.indexOf(`@media ${MOB}{${SEL}${DARK}`) > out.indexOf(`@media ${MOB}{${SEL}{line-height:2`));
   });
 
   test("a dark gradient keeps the angle a phone chose", () => {
     const out = css({ gradFrom: "#111111", gradTo: "#222222", gradAngle: 90, mobile: { gradAngle: 0 }, dark: { gradFrom: "#333333" } });
-    assert.ok(out.includes(`${DARK}${SEL}{background-image:linear-gradient(90deg,#333333,#222222)!important}`));
-    assert.ok(out.includes(`@media ${MOB}{${DARK}${SEL}{background-image:linear-gradient(0deg,#333333,#222222)!important}}`));
+    assert.ok(out.includes(`${SEL}${DARK}{background-image:linear-gradient(90deg,#333333,#222222)!important}`));
+    assert.ok(out.includes(`@media ${MOB}{${SEL}${DARK}{background-image:linear-gradient(0deg,#333333,#222222)!important}}`));
   });
 
   test("a dark transform keeps the scale a phone chose", () => {
     const out = css({ scale: 100, mobile: { scale: 50 }, dark: { moveX: 10 } });
-    assert.ok(out.includes(`@media ${MOB}{${DARK}${SEL}{transform:translate(10px,0px) scale(0.5)!important}}`));
+    assert.ok(out.includes(`@media ${MOB}{${SEL}${DARK}{transform:translate(10px,0px) scale(0.5)!important}}`));
   });
 
   test("with no override that changes the result, no extra dark rule is written", () => {
     const out = css({ fontSize: 20, mobile: { opacity: 50 }, dark: { color: "#eeeeee" } });
-    assert.equal(out.split(`${DARK}${SEL}{`).length - 1, 1);
+    assert.equal(out.split(`${SEL}${DARK}{`).length - 1, 1);
   });
 
   test("the tablet override is honoured at tablet width and below", () => {
     const out = css({ fontSize: 20, tablet: { lineHeight: 1.8 }, dark: { fontSize: 16 } });
-    assert.ok(out.includes(`@media ${TAB}{${DARK}${SEL}{font-size:16px!important;line-height:1.8!important}}`));
+    assert.ok(out.includes(`@media ${TAB}{${SEL}${DARK}{font-size:16px!important;line-height:1.8!important}}`));
   });
 });
 

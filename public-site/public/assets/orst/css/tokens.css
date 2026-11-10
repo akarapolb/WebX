@@ -26,7 +26,9 @@
  * ========================================================================== */
 @layer tokens {
 
-:root {
+/* A block set to "always light" (data-vb-scheme, Visual Builder) takes this set too, even on a dark page. */
+:root,
+[data-vb-scheme="light"] {
   /* Color */
   --orst-primary: #073b34;
   --orst-primary-strong: #052a25;
@@ -238,7 +240,9 @@
  * NOT redefined here: those color the hero/footer/CTA bands and solid
  * buttons, which are already dark in light mode and stay exactly as they
  * are in dark mode too. */
-:root[data-theme="dark"] {
+/* …and a block set to "always dark" takes the dark set, even on a light page. */
+:root[data-theme="dark"],
+[data-vb-scheme="dark"] {
   --orst-ground: #0e1613;
   --orst-surface: #172520;
   --orst-surface-sunk: #0a100d;

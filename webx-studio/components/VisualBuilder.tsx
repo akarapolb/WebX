@@ -130,6 +130,22 @@ function stripAgentMarks(bl: Block[]): Block[] {
 function getPath(obj: any, path: Path): any {
   return path.reduce((o: any, k) => (o == null ? undefined : o[k]), obj);
 }
+/** One size for every item of a list: the size goes on "<list>.*", the item that was dragged keeps only its own
+ * place, and every other item's own size is dropped so they all match. */
+function resizeAllItems(perDevice: Record<string, any> | undefined, list: string, key: string, box: any): Record<string, any> | undefined {
+  const cur: Record<string, any> = { ...(perDevice || {}) };
+  const size: any = {};
+  if (typeof box?.w === "number") size.w = box.w;
+  if (typeof box?.h === "number") size.h = box.h;
+  if (Object.keys(size).length) cur[list + ".*"] = size; else delete cur[list + ".*"];
+  for (const k of Object.keys(cur)) {
+    if (!new RegExp("^" + list + "\\.\\d+$").test(k)) continue;
+    const { w: _w, h: _h, ...rest } = k === key ? { ...cur[k], ...box } : cur[k];
+    if (Object.keys(rest).filter((p) => rest[p] !== undefined).length) cur[k] = rest; else delete cur[k];
+  }
+  if (!cur[key] && (box?.x || box?.y || box?.ib)) cur[key] = { x: box.x, y: box.y, ...(box.ib ? { ib: true } : {}) };
+  return Object.keys(cur).length ? cur : undefined;
+}
 function setPath(obj: any, path: Path, value: any): any {
   if (!path.length) return value;
   const [k, ...rest] = path;
@@ -511,6 +527,10 @@ export default function VisualBuilder() {
   }, [tenantKey]);
   useEffect(() => { loadTemplates(); }, [loadTemplates]);
 
+  const drafts = useRef<Map<string, { blocks: Block[]; otherBlocks: Block[]; editing: "A" | "B"; abEnabled: boolean; abSplit: number }>>(new Map());
+  const draftKey = (p: Page | null | undefined) => (p ? uid + "|" + p.docId + "|" + (p.locale || "") : "");
+  const persistDrafts = () => { try { sessionStorage.setItem("webx_vb_drafts", JSON.stringify([...drafts.current])); } catch {} };
+  useEffect(() => { try { const raw = sessionStorage.getItem("webx_vb_drafts"); if (raw) drafts.current = new Map(JSON.parse(raw)); } catch {} }, []);
   async function open(p: Page) {
     selRef.current = p;
     setSel(p); setLoading(true); setBlocks([]); setActive(-1); setMsg(null); clearUndo(); setLocaleMissing(false);
@@ -576,6 +596,14 @@ export default function VisualBuilder() {
       // hasn't committed the setBlocks/etc. calls above yet). open() always
       // resets to editing "A" above, so that's the side to snapshot against.
       savedSnapshotRef.current = snapshotOf(bl, variantBlocks, "A", ab, split, pageTemplate);
+      // Unsaved edits left on this page earlier in the session come back (still unsaved: the snapshot above is what
+      // the server has).
+      const d = drafts.current.get(draftKey(p));
+      if (d && selRef.current === p) {
+        setBlocks(d.blocks); setActive(d.blocks.length ? 0 : -1);
+        if (isLanding) { setOtherBlocks(d.otherBlocks); setEditing(d.editing); setAbEnabled(d.abEnabled); setAbSplit(d.abSplit); }
+        setMsg({ t: t("vb.draftkept"), ok: true });
+      }
     } catch {} finally { setLoading(false); }
   }
 
@@ -859,6 +887,8 @@ export default function VisualBuilder() {
   const [layers, setLayers] = useState<{ i: number; list: Layer[] }>({ i: -1, list: [] });
   const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
   const [layerFocus, setLayerFocus] = useState<"background" | undefined>(undefined);
+  // Light or dark: the preview shows the page in the mode the style panel's Light / Dark tab is on.
+  const [previewScheme, setPreviewScheme] = useState<"light" | "dark" | null>(null);
   const onLayers = useCallback((i: number, list: Layer[]) => setLayers({ i, list }), []);
   const toggleLayer = useCallback((id: string) => setHiddenLayers((h) => (h.includes(id) ? h.filter((x) => x !== id) : [...h, id])), []);
   useEffect(() => { setHiddenLayers([]); setLayers({ i: -1, list: [] }); }, [sel?.docId]);
@@ -886,6 +916,8 @@ export default function VisualBuilder() {
       presets: tenantKey ? presetApi : undefined,
       upload: (f: File) => uploadFieldImage(i, [...at, "bgImage"], f),
       swatches: pageSwatches, tokens: themeTokenList, t,
+      onScheme: setPreviewScheme,
+      ...(key === "section" ? { blockScheme: { value: (b.__scheme === "light" || b.__scheme === "dark" ? b.__scheme : "") as "" | "light" | "dark", set: (v: string) => setField(i, "__scheme", v || undefined) } } : {}),
     };
   };
   /** One style panel for several parts at once: it shows the first one's style and every change goes to all. */
@@ -902,6 +934,14 @@ export default function VisualBuilder() {
   const setBox = useCallback((i: number, key: string, dev: string, box: any) => {
     updateBlockField(i, ["boxes", dev, key], box && Object.keys(box).length ? box : undefined);
   }, [updateBlockField]);
+  // Resizing an item of a list: this one only, or every item of the list (stored once as "items.*", so items added
+  // later follow too; size only — each item keeps its own place).
+  const [sizeAll, setSizeAll] = useState(true);
+  const applyBox = useCallback((i: number, key: string, dev: string, box: any) => {
+    const m = /^([A-Za-z][A-Za-z0-9_-]*)\.\d+$/.exec(key);
+    if (!m || !sizeAll || !box) { setBox(i, key, dev, box); return; }
+    updateBlock(i, (b) => setPath(b, ["boxes", dev], resizeAllItems(b.boxes?.[dev], m[1], key, box)));
+  }, [sizeAll, setBox, updateBlock]);
   // Keep the selected block's editor in view in the sidebar — selection can
   // come from the canvas/preview (a click on a section there), which would
   // otherwise leave the sidebar showing some other block. Scrolls only the
@@ -1021,8 +1061,18 @@ export default function VisualBuilder() {
     [blocks, otherBlocks, editing, abEnabled, abSplit, sel]);
   // Gate for any action that would discard the canvas (switch page, create a
   // new page, navigate away) — a no-op confirm when there's nothing unsaved.
+  // Opening another page no longer throws away what is unsaved here: it is kept for this page (in memory and in
+  // this browser tab's sessionStorage) and comes back when the page is opened again. Saving drops it.
   function confirmDiscardIfDirty(): boolean {
-    return !isDirty || window.confirm(t("vb.unsavedwarn"));
+    stashDraft();
+    return true;
+  }
+  function stashDraft() {
+    const k = draftKey(sel);
+    if (!k) return;
+    if (isDirty) drafts.current.set(k, { blocks, otherBlocks, editing, abEnabled, abSplit });
+    else drafts.current.delete(k);
+    persistDrafts();
   }
   // A link clicked in the harness preview's own header/footer/menu (the
   // harness never lets the iframe itself navigate). Public routes map to
@@ -1150,7 +1200,7 @@ export default function VisualBuilder() {
     setSaving(true); setMsg(null);
     try {
       await cms.entries.update(uid, sel.docId, pageBody(), sel.locale ? { locale: sel.locale } : undefined);
-      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit);
+      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit); drafts.current.delete(draftKey(sel)); persistDrafts();
       setMsg({ t: t("vb.saved"), ok: true });
     } catch (e) {
       if (e instanceof CmsError) setMsg({ t: "Save failed (HTTP " + e.status + ")", ok: false });
@@ -1165,7 +1215,7 @@ export default function VisualBuilder() {
     const opts = sel.locale ? { locale: sel.locale } : undefined;
     try {
       await cms.entries.update(uid, sel.docId, pageBody(), opts);
-      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit);
+      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit); drafts.current.delete(draftKey(sel)); persistDrafts();
     } catch (e) {
       setMsg(e instanceof CmsError ? { t: "Save failed (HTTP " + e.status + ")", ok: false } : { t: "Cannot reach the backend.", ok: false });
       setSaving(false); return;
@@ -1755,6 +1805,47 @@ export default function VisualBuilder() {
                         than not offering the control at all. */}
                     {/* With the Layers panel, the picked layer's style sits right under it (the background, a picture,
                         a heading …) instead of at the bottom of the block's fields, where it was out of sight. */}
+                    {/* Size of the picked part: drag its handles in the preview, or type it here. For an item of a list,
+                        "every item" sizes the whole list together; "this one" only this item. */}
+                    {wpMeta && isHarness && isA && activeComp && activeComp !== "section" && (() => {
+                      const m = /^([A-Za-z][A-Za-z0-9_-]*)\.\d+$/.exec(activeComp);
+                      const per = b.boxes?.[device] || {};
+                      const all = m ? per[m[1] + ".*"] || {} : {};
+                      const own = per[activeComp] || {};
+                      const shown = m && sizeAll ? { w: own.w ?? all.w, h: own.h ?? all.h } : { w: own.w, h: own.h };
+                      const setSize = (dim: "w" | "h", raw: string) => {
+                        const n = raw.trim() === "" ? undefined : Math.max(8, Math.min(4000, Math.round(Number(raw))));
+                        if (n !== undefined && !Number.isFinite(n)) return;
+                        if (m && sizeAll) updateBlock(i, (blk) => setPath(blk, ["boxes", device], resizeAllItems(blk.boxes?.[device], m[1], activeComp, { ...(blk.boxes?.[device]?.[m[1] + ".*"] || {}), [dim]: n })));
+                        else setBox(i, activeComp, device, { ...own, [dim]: n });
+                      };
+                      return (
+                        <div className="vb-size" data-testid="size-bar">
+                          <div className="vb-size-h"><b>{t("sz.title")}</b><span className="muted">{t("sz.device." + device)}</span></div>
+                          {m && (
+                            <div className="cs-seg" role="group" aria-label={t("sz.scope")}>
+                              <button type="button" className={sizeAll ? "on" : ""} aria-pressed={sizeAll} onClick={() => setSizeAll(true)} data-testid="size-all">{t("sz.all")}</button>
+                              <button type="button" className={!sizeAll ? "on" : ""} aria-pressed={!sizeAll} onClick={() => setSizeAll(false)} data-testid="size-one">{t("sz.one")}</button>
+                            </div>
+                          )}
+                          <div className="vb-size-row">
+                            <label>{t("sz.w")}<input type="number" min={8} max={4000} placeholder={t("sz.auto")} value={shown.w ?? ""} onChange={(e) => setSize("w", e.target.value)} data-testid="size-w" /></label>
+                            <span aria-hidden="true">×</span>
+                            <label>{t("sz.h")}<input type="number" min={8} max={4000} placeholder={t("sz.auto")} value={shown.h ?? ""} onChange={(e) => setSize("h", e.target.value)} data-testid="size-h" /></label>
+                            <span className="muted">px</span>
+                            <button type="button" className="cs-revert" title={t("sz.clear")} aria-label={t("sz.clear")} data-testid="size-clear"
+                              onClick={() => updateBlock(i, (blk) => {
+                                const cur = { ...(blk.boxes?.[device] || {}) };
+                                const strip = (k: string) => { if (!cur[k]) return; const { w: _w, h: _h, ...rest } = cur[k]; if (Object.keys(rest).length) cur[k] = rest; else delete cur[k]; };
+                                if (m && sizeAll) { strip(m[1] + ".*"); Object.keys(cur).forEach((k) => { if (new RegExp("^" + m[1] + "\\.\\d+$").test(k)) strip(k); }); }
+                                else strip(activeComp);
+                                return setPath(blk, ["boxes", device], Object.keys(cur).length ? cur : undefined);
+                              })}>↺</button>
+                          </div>
+                          <small className="muted">{t("sz.hint")}</small>
+                        </div>
+                      );
+                    })()}
                     {wpMeta && isHarness && isA && activeComp && (
                       <div className="ly-style" data-testid="layer-style">
                         <div className="ly-style-h">
@@ -2323,7 +2414,7 @@ export default function VisualBuilder() {
                   blockDialect.ts. */}
               <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))}
                 labels={blockLabels} active={active} onSelect={setActive}
-                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} hidden={hiddenLayers} locked={lockedLayers} onLayers={onLayers}
+                device={device} comp={activeComp} onComponent={onComponent} onBox={applyBox} sizeAll={sizeAll} hidden={hiddenLayers} locked={lockedLayers} scheme={previewScheme} onLayers={onLayers}
                 onImgPos={(i, key, pos, zoom) => {
                   // Position and zoom together, as one step of undo. Zoom back at 100% is dropped, not stored.
                   updateBlock(i, (b) => setPath(setPath(b, ["styles", key, "bgPosition"], pos), ["styles", key, "imgZoom"], zoom && zoom > 1 ? zoom : undefined));

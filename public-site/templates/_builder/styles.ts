@@ -685,11 +685,12 @@ function styleCss(sel: string, st: Style | null | undefined, usedAnimations?: Se
   // by coming later — and still lose to hover/focus/pressed, which add a pseudo-class.
   const dk = (st as any).dark;
   if (dk && typeof dk === "object" && !Array.isArray(dk)) {
-    const prefix = ':where(:root[data-theme="dark"]) ';
-    const dsel = prefix + sel;
+    // Dark when the block is always dark, or when the page is dark and the block is not always light.
+    // One compound selector (colourReach builds descendants from it); :where() adds no specificity.
+    const dsel = sel + DARK_HERE;
     const dd = styleDecls(dk, true, mergeStyle(st, dk));
     // The repeated selector for icon colour sits behind the dark prefix, not inside it.
-    const reach = colourReach(dsel, dk.color, dk.iconColor, prefix + sel + sel);
+    const reach = colourReach(dsel, dk.color, dk.iconColor, sel + sel + DARK_HERE);
     if (dd || reach) css += (dd ? `${dsel}{${dd}}` : "") + reach;
     // What dark computes from the whole style (a line height that follows the font size, a
     // gradient's angle, a transform's other parts) depends on the width, so where a tablet or
@@ -777,6 +778,10 @@ function pct(pos: string | undefined): [number, number] {
   const h = a === "top" || a === "bottom" ? b : a, v = a === "top" || a === "bottom" ? a : b;
   return [ANCHOR_PCT[h] ?? 50, ANCHOR_PCT[v] ?? 50];
 }
+
+/** Matches an element that is shown in dark mode: inside a block that is always dark, or on a dark page and not inside
+ * a block that is always light (data-vb-scheme, see vc() and tokens.css). */
+export const DARK_HERE = ':where([data-vb-scheme="dark"],[data-vb-scheme="dark"] *,:root[data-theme="dark"] :not([data-vb-scheme="light"],[data-vb-scheme="light"] *))';
 
 export function stylesCss(b: any, scope: number): string {
   const all = b?.styles;

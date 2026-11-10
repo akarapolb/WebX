@@ -58,7 +58,7 @@ const ALLOWED_PARENT_ORIGINS = (process.env.NEXT_PUBLIC_STUDIO_ORIGIN || "http:/
 // `icons` — the workspace's saved icon library, keyed by the value a block stores
 // in its `icon` field. The harness has no backend of its own, so without it a
 // custom icon's key would reach BlockIcon as a bare string and draw nothing.
-export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null; icons?: IconLibrary; hidden?: string[]; locked?: string[] };
+export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null; icons?: IconLibrary; hidden?: string[]; locked?: string[]; scheme?: "light" | "dark" | null; sizeAll?: boolean };
 
 // A layer of the active block: a tagged component (vc()), a picture or shade a template marks with data-vb-layer, or
 // "bg" — the section's own background (colour, picture, gradient).
@@ -243,6 +243,9 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
   const [device, setDevice] = useState<Device>("desktop");
   const [dragging, setDragging] = useState(false);
   const [hidden, setHidden] = useState<string[]>([]);
+  const [previewScheme, setPreviewScheme] = useState<"light" | "dark" | null>(null);
+  // Resize every item of a list together (the Builder's "every item" choice).
+  const sizeAllRef = useRef(false);
   // Layers locked in the Layers panel ("<block>|<key>", "<block>|section" for the whole block, "<block>|layer:<name>"):
   // they cannot be picked, dragged or panned here, so they are not moved by accident.
   const [locked, setLocked] = useState<Set<string>>(new Set());
@@ -278,6 +281,11 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
       setLabels(Array.isArray(data.labels) ? data.labels : []);
       if ("comp" in data && data.comp !== lastComp.current) { lastComp.current = data.comp; setComp(data.comp ?? null); }
       setHidden(Array.isArray(data.hidden) ? data.hidden.filter((h) => typeof h === "string") : []);
+      // Light or dark, as the Builder's style panel is set: the same attribute the site's own theme toggle writes
+      // (not its saved choice — the visitor's preference on the real site is left alone).
+      // The style panel's Light / Dark tab: shown on the block being edited only (null = as it really is).
+      setPreviewScheme(data.scheme === "light" || data.scheme === "dark" ? data.scheme : null);
+      sizeAllRef.current = data.sizeAll === true;
       const nextLocks = new Set(Array.isArray(data.locked) ? data.locked.filter((h) => typeof h === "string" && /^\d{1,4}\|[A-Za-z][A-Za-z0-9_.:-]{0,70}$/.test(h)) : []);
       setLocked((prev) => (prev.size === nextLocks.size && [...nextLocks].every((x) => prev.has(x)) ? prev : nextLocks));
       if (data.scroll) wantScroll.current = true;
@@ -322,6 +330,21 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     setBoxes((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   }, [active, hover, comp, hoverComp]);
   useLayoutEffect(() => { measure(); });
+  // Light / Dark tab: the active block's section takes that mode for the preview only (its saved choice comes back
+  // as soon as the tab is left). Re-applied after every render, since a re-render may rebuild the section.
+  useLayoutEffect(() => {
+    document.querySelectorAll<HTMLElement>("[data-vb-scheme-preview]").forEach((el) => {
+      const was = el.getAttribute("data-vb-scheme-was");
+      if (was) el.setAttribute("data-vb-scheme", was); else el.removeAttribute("data-vb-scheme");
+      el.removeAttribute("data-vb-scheme-preview"); el.removeAttribute("data-vb-scheme-was");
+    });
+    if (!previewScheme || active < 0) return;
+    const sec = wrapAt(active)?.querySelector<HTMLElement>(`[data-vb-s="${active}"][data-vb-c="section"]`);
+    if (!sec) return;
+    sec.setAttribute("data-vb-scheme-was", sec.getAttribute("data-vb-scheme") || "");
+    sec.setAttribute("data-vb-scheme-preview", "1");
+    sec.setAttribute("data-vb-scheme", previewScheme);
+  });
   // Tell the parent the active block's layers whenever they change (a new block, an added item, a re-render).
   useLayoutEffect(() => {
     if (!parent) return;
@@ -421,7 +444,19 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
       const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
       if (!g.moved && Math.hypot(dx, dy) < 3) return;
       if (!g.moved) { g.moved = true; setDragging(true); }
-      setLive(g.el, next(g, dx, dy, e.shiftKey));
+      const nb = next(g, dx, dy, e.shiftKey);
+      setLive(g.el, nb);
+      // Every item of the list takes the new size as it is dragged (their own place is left alone).
+      const m = g.kind === "resize" && sizeAllRef.current ? /^([A-Za-z][A-Za-z0-9_-]*)\.\d+$/.exec(g.key) : null;
+      if (m) {
+        wrapAt(active)?.querySelectorAll<HTMLElement>(`[data-vb-s="${active}"][data-vb-c^="${m[1]}."]`).forEach((el) => {
+          if (el === g.el || !new RegExp("^" + m[1] + "\\.\\d+$").test(el.getAttribute("data-vb-c") || "")) return;
+          el.dataset.vbLive = "1";
+          if (nb.w !== undefined) { el.style.setProperty("width", nb.w + "px", "important"); el.style.setProperty("max-width", "none", "important"); el.style.setProperty("flex", "none", "important"); }
+          if (nb.h !== undefined) { el.style.setProperty("height", nb.h + "px", "important"); el.style.setProperty("max-height", "none", "important"); }
+          el.style.setProperty("box-sizing", "border-box", "important");
+        });
+      }
       measure();
     }
     function onUp(e: PointerEvent) {

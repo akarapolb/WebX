@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { safeLink } from "@/lib/linkUrl";
+import { cardLink, isVideoLink, videoThumbnail } from "@/lib/mediaLink";
 import { inline, plainText } from "@/lib/inlineText";
 import FaqAccordion from "./FaqAccordion";
 import ContactFormBlock from "./ContactFormBlock";
@@ -784,36 +785,51 @@ function HomeHero({ b }: { b: Block }) {
 // Deep tab/item content is edited as JSON via the Content screen, not a
 // bespoke nested sidebar UI — same scope line as the table block's
 // columns/rows (see ORST_TYPES's own comment there).
-type MediaTabItem = { image?: string; tag?: string; title?: string; caption: string };
+// `href` (optional): the whole card links there — a page, a PDF, or a video. A YouTube link with no picture of its
+// own shows the video's thumbnail; any video link gets a play badge. Another site's address opens in a new tab.
+type MediaTabItem = { image?: string; tag?: string; title?: string; caption: string; href?: string };
 function MediaTabItemCard({ it, kind }: { it: MediaTabItem; kind: string }) {
+  const link = cardLink(it.href);
+  const video = !!link && isVideoLink(link.href);
+  const image = it.image || (link ? videoThumbnail(link.href) : null) || "";
+  const play = video ? <span className="media-play" aria-hidden="true">▶</span> : null;
+  // The card is the link itself (not a link around it), so the template's grid and card styles stay as they are.
+  const Card = ({ className, children }: { className: string; children: ReactNode }) =>
+    link ? (
+      <a className={className + " is-link"} href={link.href} {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        aria-label={video ? (it.title || it.caption || "") + " (วิดีโอ)" : undefined}>{children}</a>
+    ) : <article className={className}>{children}</article>;
   if (kind === "media") {
     return (
-      <article className="media-card hub-tile">
+      <Card className="media-card hub-tile">
         <div className="media-thumb has-photo">
-          {it.image ? <Picture src={it.image} alt={it.caption} loading="lazy" /> : null}
+          {image ? <Picture src={image} alt={it.caption} loading="lazy" /> : null}
+          {play}
         </div>
         <p>{it.caption}</p>
-      </article>
+      </Card>
     );
   }
-  if (it.image) {
+  if (image) {
     return (
-      <article className="pub-card hub-tile">
+      <Card className="pub-card hub-tile">
         <div className="cover cover-image">
-          <Picture src={it.image} alt={it.caption} loading="lazy" />
+          <Picture src={image} alt={it.caption} loading="lazy" />
+          {play}
         </div>
         <p>{it.caption}</p>
-      </article>
+      </Card>
     );
   }
   return (
-    <article className="pub-card hub-tile text-card">
+    <Card className="pub-card hub-tile text-card">
       <div className="knowledge-text-cover">
         {it.tag ? <span>{it.tag}</span> : null}
         {it.title ? <strong>{it.title}</strong> : null}
+        {play}
       </div>
       <p>{it.caption}</p>
-    </article>
+    </Card>
   );
 }
 function MediaTabsBlock({ b }: { b: Block }) {

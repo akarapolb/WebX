@@ -902,9 +902,27 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "set_block_scheme",
+    mode: "draft",
+    description: "Make one block always light or always dark, whatever mode the visitor has the site in (the template's own light / dark colours), or let it follow the site again with \"auto\". Like the Visual Builder's \"Light / dark for this block\".",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "scheme"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 }, scheme: { type: "string", enum: ["auto", "light", "dark"] } },
+    },
+    async run(ctx, args) {
+      const { e, current } = await loadPageBlocks(ctx, args);
+      if (args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      if (!["auto", "light", "dark"].includes(args.scheme)) throw new CmsError('"scheme" must be auto, light or dark.', 400);
+      const updated = { ...current[args.index] };
+      if (args.scheme === "auto") delete updated.__scheme; else updated.__scheme = args.scheme;
+      return await writeOneBlock(ctx, args, e, current, args.index, updated,
+        args.scheme === "auto" ? `Block ${args.index} follows the site's light / dark mode` : `Block ${args.index} is always ${args.scheme}`);
+    },
+  },
+  {
     name: "set_component_box",
     mode: "draft",
-    description: "Move or resize one part of a block, like dragging it or its handles in the Visual Builder preview. `component` is a part name as for set_component_style (\"heading\", \"items.1\", \"itemIcon.0\" …). `x`/`y` shift it in px from where the layout puts it, `w`/`h` set its size in px. `device` is the width it applies to (desktop, tablet or mobile; desktop by default) — each width keeps its own. `reset: true` puts the part back where the layout puts it.",
+    description: "Move or resize one part of a block, like dragging it or its handles in the Visual Builder preview. `component` is a part name as for set_component_style (\"heading\", \"items.1\", \"itemIcon.0\" …), or \"items.*\" to give EVERY item of a list the same size (w/h only; an item's own size still wins). `x`/`y` shift it in px from where the layout puts it, `w`/`h` set its size in px. `device` is the width it applies to (desktop, tablet or mobile; desktop by default) — each width keeps its own. `reset: true` puts the part back where the layout puts it.",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id", "index", "component"],
       properties: {
@@ -918,7 +936,10 @@ const TOOLS: ToolDef[] = [
       const { e, current } = await loadPageBlocks(ctx, args);
       if (args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
       const key = String(args.component || "").trim();
-      if (!/^[A-Za-z][A-Za-z0-9_-]{0,40}(?:\.\d{1,3})?$/.test(key)) throw new CmsError(`"${key}" is not a part name.`, 400);
+      // "items.*": one size for every item of the list (w/h only; an item's own size still wins).
+      const everyItem = /^[A-Za-z][A-Za-z0-9_-]{0,40}\.\*$/.test(key);
+      if (!everyItem && !/^[A-Za-z][A-Za-z0-9_-]{0,40}(?:\.\d{1,3})?$/.test(key)) throw new CmsError(`"${key}" is not a part name.`, 400);
+      if (everyItem && (typeof args.x === "number" || typeof args.y === "number")) throw new CmsError(`"${key}" sets a size for every item (w, h); move one item by its own name.`, 400);
       const device = args.device || "desktop";
       const block: any = JSON.parse(JSON.stringify(current[args.index]));
       const boxes: any = block.boxes || {};

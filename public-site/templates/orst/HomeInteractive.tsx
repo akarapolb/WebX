@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { scrollRow } from "@/lib/scrollRow";
 
 /* =============================================================================
    HomeInteractive.tsx — the genuinely-JS-dependent slivers of HomePage.tsx
@@ -33,9 +34,8 @@ export function ScrollButton({ rowId, dir, label }: { rowId: string; dir: "left"
       className={`scroll-btn ${dir}`}
       type="button"
       aria-label={label}
-      onClick={() =>
-        document.getElementById(rowId)?.scrollBy({ left: dir === "left" ? -320 : 320, behavior: "smooth" })
-      }
+      // The row beside this arrow (not just the first element with that id: a page can hold the block twice).
+      onClick={(e) => scrollRow(e.currentTarget, rowId, dir)}
     >
       {dir === "left" ? "‹" : "›"}
     </button>

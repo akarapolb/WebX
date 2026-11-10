@@ -79,7 +79,8 @@ describe("themeToCss", () => {
     assert.match(all, /--orst-font-body/);
     assert.match(all, /--orst-radius-card:10px/);
     assert.doesNotMatch(all, /--orst-primary/);
-    assert.match(light, /^:root:not\(\[data-theme="dark"\]\)\{/);
+    // …and a block set to "always light" in the Visual Builder takes the same colours on a dark page.
+    assert.match(light, /^:root:not\(\[data-theme="dark"\]\),\[data-vb-scheme="light"\]\{/);
     assert.match(light, /--orst-primary:#112233/);
   });
 

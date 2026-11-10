@@ -30,6 +30,49 @@ export default function MediaLibrary({ onPick }: { onPick?: (asset: MediaAsset) 
   const [editing, setEditing] = useState<MediaAsset | null>(null);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Picking several files to delete at once (management page only, not the picker): the tick in a card's corner,
+  // Shift-click for a run, Ctrl/Cmd-click on a card. While some are picked, a click on a card ticks it too.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const lastTick = useRef<number>(-1);
+  const [deleting, setDeleting] = useState<{ done: number; of: number } | null>(null);
+  const keyOf = (a: MediaAsset) => a.documentId ?? String(a.id);
+  function tick(index: number, range: boolean) {
+    // Read where the run starts now: the updater below may run after lastTick has moved on.
+    const from = lastTick.current;
+    setPicked((prev) => {
+      const next = new Set(prev);
+      const k = keyOf(items[index]);
+      const on = !prev.has(k);
+      if (range && from >= 0) {
+        const [a, b] = [Math.min(from, index), Math.max(from, index)];
+        for (let j = a; j <= b; j++) next.add(keyOf(items[j]));
+      } else if (on) next.add(k); else next.delete(k);
+      return next;
+    });
+    lastTick.current = index;
+  }
+  async function deletePicked() {
+    const list = items.filter((a) => picked.has(keyOf(a)));
+    if (!list.length) return;
+    if (!window.confirm(t("ml.confirmMany").replace("{n}", String(list.length)))) return;
+    setMsg(null);
+    setDeleting({ done: 0, of: list.length });
+    const gone: string[] = [], failed: string[] = [];
+    // A few at a time: quick, without flooding the CMS.
+    for (let k = 0; k < list.length; k += 4) {
+      await Promise.all(list.slice(k, k + 4).map(async (a) => {
+        try { await cms.media.remove(keyOf(a)); gone.push(keyOf(a)); } catch { failed.push(a.name || keyOf(a)); }
+        setDeleting((d) => (d ? { ...d, done: d.done + 1 } : d));
+      }));
+    }
+    setItems((all) => all.filter((a) => !gone.includes(keyOf(a))));
+    setTotal((n) => Math.max(0, n - gone.length));
+    setPicked(new Set(failed.length ? list.filter((a) => !gone.includes(keyOf(a))).map(keyOf) : []));
+    setDeleting(null);
+    setMsg(failed.length
+      ? { t: t("ml.deletedSome").replace("{n}", String(gone.length)).replace("{f}", String(failed.length)), ok: false }
+      : { t: t("ml.deletedMany").replace("{n}", String(gone.length)), ok: true });
+  }
 
   const load = useCallback(async (opts: { search: string; page: number; append?: boolean }) => {
     setLoading(true);
@@ -49,6 +92,8 @@ export default function MediaLibrary({ onPick }: { onPick?: (asset: MediaAsset) 
 
   function onSearchChange(v: string) {
     setQuery(v);
+    setPicked(new Set()); // a new search shows other files: start the picking again
+    lastTick.current = -1;
     load({ search: v, page: 1 });
   }
 
@@ -82,6 +127,7 @@ export default function MediaLibrary({ onPick }: { onPick?: (asset: MediaAsset) 
 
   async function deleteAsset(asset: MediaAsset) {
     const id = asset.documentId ?? String(asset.id);
+    if (!window.confirm(t("ml.confirmOne").replace("{name}", asset.name || id))) return;
     try {
       await cms.media.remove(id);
       setItems((list) => list.filter((it) => it.id !== asset.id));
@@ -109,20 +155,54 @@ export default function MediaLibrary({ onPick }: { onPick?: (asset: MediaAsset) 
 
       <input style={{ ...fieldStyle, marginBottom: 14 }} placeholder={t("ml.search")} value={query} onChange={(e) => onSearchChange(e.target.value)} />
 
+      {!onPick && items.length > 0 && (
+        <div className={"ml-bar" + (picked.size ? " on" : "")} data-testid="ml-bar">
+          {picked.size ? (
+            <>
+              <b>{t("ml.picked").replace("{n}", String(picked.size))}</b>
+              <button type="button" className="btn btn--g" onClick={() => setPicked(new Set(items.map(keyOf)))} disabled={!!deleting} data-testid="ml-pick-all">{t("ml.pickAll").replace("{n}", String(items.length))}</button>
+              <button type="button" className="btn btn--g" onClick={() => setPicked(new Set())} disabled={!!deleting}>{t("ml.pickNone")}</button>
+              <span style={{ flex: 1 }} />
+              <button type="button" className="btn ml-del" onClick={deletePicked} disabled={!!deleting} data-testid="ml-delete-picked">
+                <Icon name="trash" />{deleting ? t("ml.deleting").replace("{d}", String(deleting.done)).replace("{n}", String(deleting.of)) : t("ml.deletePicked").replace("{n}", String(picked.size))}
+              </button>
+            </>
+          ) : (
+            <span className="muted">{t("ml.pickHint")}</span>
+          )}
+        </div>
+      )}
+
       {!loading && items.length === 0 && (
         <div className="muted" style={{ padding: 12 }}>{query ? t("ml.noresults") : t("ml.empty")}</div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
-        {items.map((asset) => (
+        {items.map((asset, index) => {
+          const on = picked.has(keyOf(asset));
+          return (
+          <div key={asset.id} className={"ml-card" + (on ? " on" : "")} style={{ position: "relative" }}>
+          {!onPick && (
+            // A button drawn as a tick box: a real checkbox whose click is cancelled (to read Shift) shows the wrong state.
+            <button type="button" role="checkbox" aria-checked={on} className={"ml-tick" + (on ? " on" : "")}
+              title={t("ml.pickOne")} aria-label={t("ml.pickOne") + ": " + (asset.name || "")} data-testid={"ml-tick-" + index}
+              onClick={(e) => { e.stopPropagation(); tick(index, e.shiftKey); }}>
+              {on ? "✓" : ""}
+            </button>
+          )}
           <button
-            key={asset.id}
             type="button"
-            onClick={() => (onPick ? onPick(asset) : setEditing(asset))}
-            style={{
-              display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 10,
-              border: "1px solid var(--line2)", background: "var(--sunk)", cursor: "pointer", textAlign: "left",
+            onClick={(e) => {
+              if (onPick) { onPick(asset); return; }
+              // Picking: a click (or Ctrl/Cmd/Shift-click any time) ticks instead of opening the file.
+              if (picked.size || e.ctrlKey || e.metaKey || e.shiftKey) { tick(index, e.shiftKey); return; }
+              setEditing(asset);
             }}
+            style={{
+              display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 10, width: "100%",
+              border: "1px solid " + (on ? "var(--accent)" : "var(--line2)"), background: on ? "var(--accent-soft)" : "var(--sunk)", cursor: "pointer", textAlign: "left",
+            }}
+            data-testid={"ml-card-" + index}
           >
             <div style={{ aspectRatio: "1", borderRadius: 8, overflow: "hidden", background: "var(--panel)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {asset.mime?.startsWith("image/") ? (
@@ -134,7 +214,9 @@ export default function MediaLibrary({ onPick }: { onPick?: (asset: MediaAsset) 
             </div>
             <div style={{ fontSize: 12, color: "var(--ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{asset.name}</div>
           </button>
-        ))}
+          </div>
+          );
+        })}
       </div>
 
       {hasMore && (

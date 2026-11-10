@@ -96,7 +96,7 @@ const MAX_DESKTOP_W = 1920;
 
 export default function RealPreview({
   blocks, homeData, customTypes, customIcons, collectionData, tenant, harness, labels,
-  device, comp, onComponent, onBox, onNavigate, onUndo, hidden, locked, onLayers, onImgPos,
+  device, comp, onComponent, onBox, onNavigate, onUndo, hidden, locked, scheme, sizeAll, onLayers, onImgPos,
   active, onSelect, onFieldChange, onImagePick, onArrayAdd, onArrayRemove, onDeselect,
 }: {
   blocks: any[]; homeData?: any; customTypes?: Record<string, any>; customIcons?: Record<string, any>;
@@ -125,6 +125,10 @@ export default function RealPreview({
   hidden?: string[];
   /** Harness mode: locked layers ("<block>|<key>", "<block>|section" for a whole block), not pickable in the preview. */
   locked?: string[];
+  /** Harness mode: show the page in light or dark mode (the style panel's Light / Dark tab). */
+  scheme?: "light" | "dark" | null;
+  /** Harness mode: resizing an item of a list resizes every item of it (live while dragging). */
+  sizeAll?: boolean;
   /** Harness mode: the active block's layers, as the harness reports them. */
   onLayers?: (i: number, layers: { kind: "comp" | "layer" | "bg"; key: string; depth: number }[]) => void;
   /** Harness mode: a picture in component `key` of block `i` was dragged to show another part of it ("x% y%"). */
@@ -174,8 +178,8 @@ export default function RealPreview({
     const scroll = changed && (active ?? -1) >= 0 && clickedInHarness.current !== active;
     sentActive.current = active;
     clickedInHarness.current = null;
-    win.postMessage({ type: "webx:builder:render", blocks, active: active ?? -1, labels: labels || [], scroll, comp: comp ?? null, icons: harnessIcons, hidden: hidden || [], locked: locked || [] }, PUBLIC_SITE);
-  }, [harnessPath, harnessReady, blocks, active, labels, comp, harnessIcons, hidden, locked]);
+    win.postMessage({ type: "webx:builder:render", blocks, active: active ?? -1, labels: labels || [], scroll, comp: comp ?? null, icons: harnessIcons, hidden: hidden || [], locked: locked || [], scheme: scheme ?? null, sizeAll: !!sizeAll }, PUBLIC_SITE);
+  }, [harnessPath, harnessReady, blocks, active, labels, comp, harnessIcons, hidden, locked, scheme, sizeAll]);
   // Latest callbacks without re-subscribing the listener on every render.
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;

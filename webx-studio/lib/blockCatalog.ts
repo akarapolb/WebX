@@ -209,7 +209,7 @@ export const ORST_TYPES = [
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
     lists: [{ key: "tabs", fields: [{ k: "label" }, { k: "kind", select: ["pub", "media"] }],
       def: () => ({ id: uid("tab"), label: "แท็บใหม่", kind: "pub", items: [] }),
-      lists: [{ key: "items", fields: [{ k: "image" }, { k: "tag" }, { k: "title" }, { k: "caption", ta: true }], def: { image: "", title: "หัวข้อ", caption: "" } }] }],
+      lists: [{ key: "items", fields: [{ k: "image" }, { k: "tag" }, { k: "title" }, { k: "caption", ta: true }, { k: "href", hint: "ลิงก์ (หน้าเว็บ, PDF หรือ YouTube)" }], def: { image: "", title: "หัวข้อ", caption: "" } }] }],
     def: { heading: "คลังสื่อและองค์ความรู้", tabs: [] } },
   { comp: "orst.news-tabs", key: "vb.orst.newstabs", icon: "doc", cat: "orst", tpl: "orst",
     fields: [{ k: "eyebrow" }, { k: "heading" }, { k: "lead", ta: true }, { k: "viewAllLabel" }, { k: "viewAllUrl" }],
@@ -457,7 +457,9 @@ export const ALL_TYPES = [...TYPES, ...GENERIC_TYPES, ...ORST_TYPES, ...ROYALSOC
 // across templates whose renderers read different keys). `keep` — the
 // renderer draws this element (or a built-in default) even when the key is
 // absent, so offering "remove" would be a no-op; the sidebar hides its ×.
-export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean; tpl?: string; keep?: boolean };
+export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean; tpl?: string; keep?: boolean;
+  /** What to show in the empty field instead of its name, e.g. the kind of link it takes. */
+  hint?: string };
 // One repeatable list. `def` is the new-item template — a function when each
 // new item needs something unique (e.g. media-tabs' tab `id`, which the
 // renderer uses for DOM ids). Items may themselves hold nested `lists`/

@@ -1,4 +1,5 @@
 "use client";
+import { scrollRow } from "@/lib/scrollRow";
 // Small interactive pieces Blocks.tsx needs that plain server-rendered JSX
 // can't provide — same split-out-a-client-file convention as ORST's
 // HomeInteractive.tsx (ScrollButton). Currently just the recommended-
@@ -12,7 +13,7 @@ export function RsScrollButton({ rowId, dir, label }: { rowId: string; dir: "lef
       className="rec-nav"
       type="button"
       aria-label={label}
-      onClick={() => document.getElementById(rowId)?.scrollBy({ left: dir === "left" ? -320 : 320, behavior: "smooth" })}
+      onClick={(e) => scrollRow(e.currentTarget, rowId, dir)}
     >
       {dir === "left" ? "‹" : "›"}
     </button>

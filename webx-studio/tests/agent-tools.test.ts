@@ -1207,6 +1207,10 @@ describe("block list and boxes (lib/agent/tools.ts)", () => {
     assert.equal((await run(fc, "set_component_box", { index: 0, component: "heading", reset: true })).ok, true);
     assert.deepEqual(saved(fc)[0].boxes, { mobile: { heading: { y: 4 } } });
     assert.equal((await run(fc, "set_component_box", { index: 0, component: "a b" , x: 1 })).ok, false);
+    // one size for every item of the list
+    assert.equal((await run(fc, "set_component_box", { index: 0, component: "items.*", w: 240, h: 160 })).ok, true);
+    assert.deepEqual(saved(fc)[0].boxes.desktop["items.*"], { w: 240, h: 160 });
+    assert.equal((await run(fc, "set_component_box", { index: 0, component: "items.*", x: 5 })).ok, false);
   });
   test("offered from the draft level up", () => {
     for (const n of ["move_block", "duplicate_block", "rename_block", "set_component_box"]) {
@@ -1268,5 +1272,22 @@ describe("page-level tools (lib/agent/tools.ts)", () => {
     assert.match((await run(fc, "set_block_source", { index: 0, postType: "recipes" })).summary, /not a kind of content/);
     assert.equal((await run(fc, "set_block_source", { index: 0, postType: null })).ok, true);
     assert.equal(page(fc).blocks[0].source, undefined);
+  });
+});
+
+// set_block_scheme — "Light / dark for this block".
+describe("set_block_scheme (lib/agent/tools.ts)", () => {
+  const seed = () => fakeCms([PAGE_TYPE], { "api::page.page": [{ documentId: "1", blocks: [{ __component: "orst.card-grid", heading: "A" }] }] });
+  const run = (fc: ReturnType<typeof seed>, scheme: string) =>
+    executeTool(ctx({ level: "draft_submit", dialect: "orst", cms: fc.cms }), "set_block_scheme", JSON.stringify({ uid: "api::page.page", id: "1", index: 0, scheme }));
+  test("always dark, always light, then back to following the site", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, "dark")).ok, true);
+    assert.equal(fc.rows("api::page.page")[0].blocks[0].__scheme, "dark");
+    assert.equal((await run(fc, "light")).ok, true);
+    assert.equal(fc.rows("api::page.page")[0].blocks[0].__scheme, "light");
+    assert.equal((await run(fc, "auto")).ok, true);
+    assert.equal(fc.rows("api::page.page")[0].blocks[0].__scheme, undefined);
+    assert.equal((await run(fc, "sepia")).ok, false);
   });
 });

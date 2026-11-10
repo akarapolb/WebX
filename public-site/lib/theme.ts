@@ -239,7 +239,7 @@ export function themeToCss(tenant: string, raw: unknown): string {
   const parts: string[] = [];
   if (all.length) parts.push(`:root{${all.join(";")}}`);
   parts.push(...typeRules);
-  if (light.length) parts.push(`:root:not([data-theme="dark"]){${light.join(";")}}`);
+  if (light.length) parts.push(`:root:not([data-theme="dark"]),[data-vb-scheme="light"]{${light.join(";")}}`);
   return parts.join("\n");
 }
 

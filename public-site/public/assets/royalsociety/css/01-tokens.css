@@ -21,7 +21,9 @@
  * ========================================================================== */
 @layer tokens {
 
-:root {
+/* A block set to "always light" (data-vb-scheme, Visual Builder) takes this set too, even on a dark page. */
+:root,
+[data-vb-scheme="light"] {
   /* Color */
   --rs-primary: #06473f;
   --rs-primary-strong: #033029;
@@ -196,7 +198,9 @@
  * `--rs-primary*`-as-fill and the hardcoded `#fff` used on the always-dark
  * panel/hero bands are deliberately left alone — those surfaces are already
  * dark in light mode. */
-:root[data-theme="dark"] {
+/* …and a block set to "always dark" takes the dark set, even on a light page. */
+:root[data-theme="dark"],
+[data-vb-scheme="dark"] {
   --rs-ground: #0d1614;
   --rs-surface: #16211e;
   --rs-surface-sunk: #0a100e;
