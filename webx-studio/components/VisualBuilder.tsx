@@ -1027,6 +1027,28 @@ export default function VisualBuilder() {
   // Undo button, which reverts exactly that proposal regardless of the stack.
   const applyAgentProposal = useCallback((p: AgentProposal): { undo: () => void } | void => {
     if (p.kind !== "blocks" || !Array.isArray(p.blocks)) return;
+    if (p.all) {
+      // A restored version: the whole page.
+      let before: Block[] = [];
+      setBlocks((bs) => { before = bs; return p.blocks!.map((b: any) => ({ ...b, __agent: p.id })); });
+      setActive(-1);
+      return { undo: () => setBlocks(before) };
+    }
+    if (p.move && Number.isInteger(p.move.from) && Number.isInteger(p.move.to)) {
+      // A move carries no blocks: reorder what is on the canvas.
+      const { from, to } = p.move;
+      let before: Block[] = [];
+      setBlocks((bs) => {
+        before = bs;
+        if (from < 0 || from >= bs.length || to < 0 || to >= bs.length) return bs;
+        const next = bs.slice();
+        const [b] = next.splice(from, 1);
+        next.splice(to, 0, b);
+        return next;
+      });
+      setActive(to);
+      return { undo: () => setBlocks(before) };
+    }
     // __agent marks the block as agent-authored (see .ag-draft's own CSS —
     // a visible tag on the canvas until accepted the same way a review
     // approves any other draft) and is stripped before it's ever sent back

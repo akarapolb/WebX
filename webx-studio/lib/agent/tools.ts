@@ -24,6 +24,8 @@ import { untrustedBlock } from "./prompts";
 import { validateArgs } from "./validateArgs";
 import { resolveBackgroundImageFromUrl } from "./urlImage";
 import { imageFileFromDataUrl, isSafeBackgroundUrl } from "./attachedImage";
+import { SOURCE_CATEGORIES, categoryOf } from "@/lib/sourceOptions";
+import { STYLE_SPEC, STYLE_VARIANTS, specSchema, checkStyleValue, type StyleVariant } from "./styleSpec";
 import { fetchWordpressPage } from "./wordpressImport";
 import { fetchUrlPageContent } from "./pageContent";
 import { levelAtLeast, type AgentCms, type AgentRunContext, type ToolDef, type ToolMode, type AgentProposal } from "./types";
@@ -83,6 +85,37 @@ const governedCms: AgentCms = {
   uploadMedia: (file) => governed.media.upload(file),
 };
 const cmsOf = (ctx: AgentRunContext): AgentCms => ctx.cms ?? governedCms;
+
+// The page's blocks as the builder sees them, for the block tools below; and writing them back (with a version to go
+// back to first). The same steps every block tool takes, kept in one place.
+async function loadPageBlocks(ctx: AgentRunContext, args: Record<string, any>) {
+  assertContentTypeAllowed(ctx, args.uid);
+  assertPageUid(args.uid);
+  const e: any = await cmsOf(ctx).get(args.uid, args.id, { locale: args.locale });
+  if (!e) throw new CmsError("Page not found", 404);
+  const current = toBuilder((e[blocksField(args.uid, args.locale)] ?? []) as any[], dialectOf(ctx));
+  return { e, current };
+}
+async function savePageBlocks(ctx: AgentRunContext, args: Record<string, any>, e: any, current: any[], next: any[]) {
+  await snapshotPageVersion(ctx, args.uid, args.id, titleOf(e), current, blocksField(args.uid, args.locale));
+  await cmsOf(ctx).update(args.uid, args.id, { [blocksField(args.uid, args.locale)]: toWire(next, dialectOf(ctx)) }, { locale: args.locale });
+}
+/** The page's History versions, newest first (same filter as the Visual Builder's History). */
+async function pageVersions(ctx: AgentRunContext, uid: string, id: string, limit: number): Promise<any[]> {
+  const filter: any[] = [{ field: "documentRef", op: "eq", value: String(id) }, { field: "contentType", op: "eq", value: uid }];
+  if (uid.startsWith("wp:")) filter.push({ field: "tenantKey", op: "eq", value: ctx.tenantKey });
+  const { data } = await cmsOf(ctx).list<any>(PAGE_VERSION_UID, { sort: "createdAt:DESC", pageSize: limit, filter } as any);
+  return data || [];
+}
+/** Replace one block: a proposal in review, else saved. */
+async function writeOneBlock(ctx: AgentRunContext, args: Record<string, any>, e: any, current: any[], index: number, updated: any, done: string) {
+  assertSafeBlockContent(updated);
+  if (shouldPropose(ctx, args)) {
+    return { summary: "Proposed: " + done, proposal: { id: randomUUID(), kind: "blocks" as const, target: { uid: args.uid, id: args.id, locale: args.locale }, title: done, blocks: [updated], replace: index } };
+  }
+  await savePageBlocks(ctx, args, e, current, current.map((b: any, i: number) => (i === index ? updated : b)));
+  return { summary: done, data: { uid: args.uid, id: args.id } };
+}
 
 // AgentRunContext.dialect is a plain string (governance.ts's AgentPolicy.dialect
 // comes straight from the tenant's own free-form publicTemplate field, never
@@ -702,6 +735,207 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "schedule_page",
+    mode: "publish",
+    description: "Set when a page starts showing on the public site and when it stops, like the Visual Builder's Schedule. `start` and `end` are ISO date-times (e.g. \"2026-12-01T09:00:00+07:00\"); null clears one (always on). Only offered when the user lets the agent publish.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, start: { type: ["string", "null"] }, end: { type: ["string", "null"] } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      if (!("start" in args) && !("end" in args)) throw new CmsError("Give start, end or both (null clears one).", 400);
+      const when = (k: "start" | "end"): string | null | undefined => {
+        if (!(k in args)) return undefined;
+        if (args[k] === null || args[k] === "") return null;
+        const d = new Date(String(args[k]));
+        if (isNaN(d.getTime())) throw new CmsError(`"${k}" is not a date and time.`, 400);
+        return d.toISOString();
+      };
+      const start = when("start"), end = when("end");
+      if (start && end && end <= start) throw new CmsError("The end must be after the start.", 400);
+      const body: Record<string, any> = {};
+      if (start !== undefined) body.publishStart = start;
+      if (end !== undefined) body.publishEnd = end;
+      await cmsOf(ctx).update(args.uid, args.id, body, { locale: args.locale });
+      return { summary: `Scheduled page ${args.id}: ${start === undefined ? "" : "shows from " + (start || "now")}${end === undefined ? "" : (start === undefined ? "" : ", ") + "hides " + (end ? "after " + end : "never")}`, data: { uid: args.uid, id: args.id, ...body } };
+    },
+  },
+  {
+    name: "list_page_versions",
+    mode: "read",
+    description: "The page's saved versions (the Visual Builder's History), newest first: id, name, when, and how many blocks. Use before restore_page_version or rename_page_version.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 50 } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const list = await pageVersions(ctx, args.uid, args.id, args.limit || 20);
+      return { summary: `${list.length} version(s)`, data: list.map((v: any) => ({ versionId: v.documentId ?? v.id, name: v.label || "", savedAt: v.createdAt, blocks: Array.isArray(v.data?.blocks) ? v.data.blocks.length : 0 })) };
+    },
+  },
+  {
+    name: "restore_page_version",
+    mode: "draft",
+    description: "Put a saved version (from list_page_versions) back as the page's content, like History's Restore. The page as it is now is saved as a version first, so this can be undone.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "versionId"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, versionId: { type: "string" } },
+    },
+    async run(ctx, args) {
+      const { e, current } = await loadPageBlocks(ctx, args);
+      const v = (await pageVersions(ctx, args.uid, args.id, 50)).find((x: any) => String(x.documentId ?? x.id) === String(args.versionId));
+      if (!v || !Array.isArray(v.data?.blocks)) throw new CmsError("No such version of this page (see list_page_versions).", 404);
+      const blocks = v.data.blocks;
+      blocks.forEach((b: any) => assertSafeBlockContent(b));
+      if (shouldPropose(ctx, args)) {
+        return { summary: `Proposed restoring version "${v.label || args.versionId}"`, proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Restore version "${v.label || args.versionId}"`, blocks, all: true } };
+      }
+      await savePageBlocks(ctx, args, e, current, blocks);
+      return { summary: `Restored version "${v.label || args.versionId}" (${blocks.length} blocks)`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "rename_page_version",
+    mode: "draft",
+    description: "Give a saved version (from list_page_versions) a name, like clicking its name in History. It changes only the version's name, never the page.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "versionId", "name"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, versionId: { type: "string" }, name: { type: "string", minLength: 1, maxLength: 120 } },
+    },
+    async run(ctx, args) {
+      assertContentTypeAllowed(ctx, args.uid);
+      assertPageUid(args.uid);
+      const v = (await pageVersions(ctx, args.uid, args.id, 50)).find((x: any) => String(x.documentId ?? x.id) === String(args.versionId));
+      if (!v) throw new CmsError("No such version of this page (see list_page_versions).", 404);
+      const name = String(args.name).replace(/[\u0000-\u001f]/g, "").trim().slice(0, 120);
+      if (!name) throw new CmsError("Give a name.", 400);
+      await cmsOf(ctx).update(PAGE_VERSION_UID, String(v.documentId ?? v.id), { label: name });
+      return { summary: `Named the version "${name}"`, data: { versionId: args.versionId, name } };
+    },
+  },
+  {
+    name: "set_block_source",
+    mode: "draft",
+    description: "Fill a block's list from live WordPress content instead of hand-made items, like the Visual Builder's \"Bind to a live WordPress field\": `postType` is the kind of content (news, service, publication, resource, event, member, faq, mission, org-unit, document, timeline) and `map` how each entry shows (card, link, dated, faq, mission, orgunit, document, timeline, calendar, directory — each kind allows some). null as `postType` unbinds it, so the hand-made items show again. While bound, the hand-made items are not shown.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "postType"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 }, postType: { type: ["string", "null"] }, map: { type: "string" } },
+    },
+    async run(ctx, args) {
+      const { e, current } = await loadPageBlocks(ctx, args);
+      if (args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const block: any = { ...current[args.index] };
+      const meta: any = metaOf(block.__component);
+      if (!meta?.tpl || meta?.items?.key !== "items") throw new CmsError(`Block ${args.index} ("${block.__component}") has no list that can be bound to live content.`, 400);
+      if (args.postType === null) { delete block.source; return await writeOneBlock(ctx, args, e, current, args.index, block, `Unbound block ${args.index} from live content`); }
+      const cat = categoryOf(args.postType);
+      if (!cat) throw new CmsError(`"${args.postType}" is not a kind of content. Choose one of: ${SOURCE_CATEGORIES.map((c) => c.value).join(", ")}.`, 400);
+      const map = args.map || cat.maps[0];
+      if (!cat.maps.includes(map)) throw new CmsError(`"${cat.value}" can show as: ${cat.maps.join(", ")}.`, 400);
+      block.source = { ...(block.source || {}), kind: "wp", postType: cat.value, map };
+      return await writeOneBlock(ctx, args, e, current, args.index, block, `Bound block ${args.index} to live ${cat.en.toLowerCase()} (${map})`);
+    },
+  },
+  {
+    name: "move_block",
+    mode: "draft",
+    description: "Move one block to another position on the page, like dragging it in the Visual Builder's block list. `from` and `to` are indexes from get_page_blocks (0 = top); the other blocks shift to make room.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "from", "to"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, from: { type: "integer", minimum: 0 }, to: { type: "integer", minimum: 0 } },
+    },
+    async run(ctx, args) {
+      const { e, current } = await loadPageBlocks(ctx, args);
+      for (const k of ["from", "to"]) if (args[k] >= current.length) throw new CmsError(`No block at index ${args[k]} (page has ${current.length}).`, 400);
+      if (args.from === args.to) return { summary: `Block ${args.from} is already there` };
+      if (shouldPropose(ctx, args)) {
+        return { summary: `Proposed moving block ${args.from} to ${args.to}`, proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Move block ${args.from} to ${args.to}`, blocks: [], move: { from: args.from, to: args.to } } };
+      }
+      const next = current.slice();
+      const [b] = next.splice(args.from, 1);
+      next.splice(args.to, 0, b);
+      await savePageBlocks(ctx, args, e, current, next);
+      return { summary: `Moved block ${args.from} to ${args.to}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "duplicate_block",
+    mode: "draft",
+    description: "Copy one block (content and style) and put the copy right below it, like the Visual Builder's duplicate button.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 } },
+    },
+    async run(ctx, args) {
+      const { e, current } = await loadPageBlocks(ctx, args);
+      if (args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const copy = JSON.parse(JSON.stringify(current[args.index]));
+      delete copy.id;
+      if (shouldPropose(ctx, args)) {
+        return { summary: `Proposed a copy of block ${args.index}`, proposal: { id: randomUUID(), kind: "blocks", target: { uid: args.uid, id: args.id, locale: args.locale }, title: `Duplicate block ${args.index}`, blocks: [copy], at: args.index + 1 } };
+      }
+      const next = current.slice();
+      next.splice(args.index + 1, 0, copy);
+      await savePageBlocks(ctx, args, e, current, next);
+      return { summary: `Copied block ${args.index} to ${args.index + 1}`, data: { uid: args.uid, id: args.id } };
+    },
+  },
+  {
+    name: "rename_block",
+    mode: "draft",
+    description: "Give a block the name shown in the Visual Builder's block list and on its outline (it is not shown on the site). An empty name goes back to the block type's own name.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "name"],
+      properties: { uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 }, name: { type: "string", maxLength: 80 } },
+    },
+    async run(ctx, args) {
+      const { e, current } = await loadPageBlocks(ctx, args);
+      if (args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const name = String(args.name || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 80);
+      const updated = { ...current[args.index] };
+      if (name) updated.__label = name; else delete updated.__label;
+      return await writeOneBlock(ctx, args, e, current, args.index, updated, name ? `Renamed block ${args.index} to "${name}"` : `Cleared block ${args.index}'s name`);
+    },
+  },
+  {
+    name: "set_component_box",
+    mode: "draft",
+    description: "Move or resize one part of a block, like dragging it or its handles in the Visual Builder preview. `component` is a part name as for set_component_style (\"heading\", \"items.1\", \"itemIcon.0\" …). `x`/`y` shift it in px from where the layout puts it, `w`/`h` set its size in px. `device` is the width it applies to (desktop, tablet or mobile; desktop by default) — each width keeps its own. `reset: true` puts the part back where the layout puts it.",
+    parameters: {
+      type: "object", additionalProperties: false, required: ["uid", "id", "index", "component"],
+      properties: {
+        uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 },
+        component: { type: "string", maxLength: 40 }, device: { type: "string", enum: ["desktop", "tablet", "mobile"] },
+        x: { type: "number", minimum: -4000, maximum: 4000 }, y: { type: "number", minimum: -4000, maximum: 4000 },
+        w: { type: "number", minimum: 8, maximum: 4000 }, h: { type: "number", minimum: 8, maximum: 4000 }, reset: { type: "boolean" },
+      },
+    },
+    async run(ctx, args) {
+      const { e, current } = await loadPageBlocks(ctx, args);
+      if (args.index >= current.length) throw new CmsError(`No block at index ${args.index} (page has ${current.length}).`, 400);
+      const key = String(args.component || "").trim();
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,40}(?:\.\d{1,3})?$/.test(key)) throw new CmsError(`"${key}" is not a part name.`, 400);
+      const device = args.device || "desktop";
+      const block: any = JSON.parse(JSON.stringify(current[args.index]));
+      const boxes: any = block.boxes || {};
+      const per: any = { ...(boxes[device] || {}) };
+      if (args.reset) delete per[key];
+      else {
+        const box: any = { ...(per[key] || {}) };
+        for (const k of ["x", "y", "w", "h"]) if (typeof args[k] === "number") box[k] = Math.round(args[k]);
+        if (!Object.keys(box).length) throw new CmsError("Give x, y, w or h (or reset: true).", 400);
+        per[key] = box;
+      }
+      if (Object.keys(per).length) boxes[device] = per; else delete boxes[device];
+      if (Object.keys(boxes).length) block.boxes = boxes; else delete block.boxes;
+      return await writeOneBlock(ctx, args, e, current, args.index, block, args.reset ? `Put ${key} back in place (${device})` : `Moved/resized ${key} on block ${args.index} (${device})`);
+    },
+  },
+  {
     name: "remove_block",
     mode: "draft",
     description: "Remove one existing block from a page by its index (from get_page_blocks).",
@@ -919,26 +1153,16 @@ const TOOLS: ToolDef[] = [
   {
     name: "set_component_style",
     mode: "draft",
-    description: "Change the look of parts of ONE existing block: colours (text `color`, `iconColor` for icons, `bg` background), a background picture (`bgImage`: an https address or one returned by save_attached_image; `bgFit`: \"cover\" fills, \"contain\" shows the whole picture), font size and weight, alignment, italic, underline, letter case. `components` names the parts: \"section\" (the whole block's background and colours), a field such as \"heading\" / \"lead\" / \"eyebrow\", \"items\" (the whole list), \"items.2\" (one item, 0 = first), and for card, feature and link lists the parts of each item: \"itemIcon.N\", \"itemTitle.N\", \"itemBody.N\", \"itemTag.N\", \"itemMeta.N\". Use \"*\" for every item: \"itemIcon.*\" recolours all the icons. Colours are a hex (#1a73e8) or a theme colour (@primary, @accent, @ground, @ink, @c1 … @c8); prefer theme colours so a theme change follows. Set a property to null to clear it back to the template's own. Everything not mentioned stays as it is. Call get_page_blocks first for the block's index and field names. For a WordPress page pass locale \"en\" to style its English layout.",
+    description: "Change the look of parts of ONE existing block — everything the Visual Builder's Style panel can set except free CSS. `set` takes any of: colours (`color` text, `iconColor`, `bg`, `bgOverlay` over a picture, `borderColor`, `shadowColor`); background picture (`bgImage` an https address or the url save_attached_image returned, `bgFit`, `bgRepeat`, `bgAttachment`, `bgPosition` \"x% y%\" or an anchor — it also moves which part of the block's own photo shows, `imgZoom` 1–4 zooms that photo); gradient (`gradFrom`, `gradTo`, `gradAngle`, `gradType`); text (`fontSize`, `fontWeight`, `lineHeight`, `letterSpacing`, `align`, `fontFamily`, `fontStyle`, `textDecoration`, `textTransform`); spacing and size (`padding`, per side `paddingTop`… `marginLeft` with `unit` or a theme step @1…@6, `width`, `height`, `min*`, `max*` like \"320px\" or \"50%\"); layout (`display`, `flexDirection`, `justifyContent`, `alignItems`, `flexWrap`, `gap`, `gridColumns`, `position`, `zIndex`, `overflow`); border and effects (`radius` px or @card/@sm/@pill, `borderWidth`, `borderStyle`, `shadow` none/sm/md/lg/xl or `shadowX`/`shadowY`/`shadowBlur`/`shadowSpread`/`shadowInset`, `opacity` 0–100); motion (`scale` %, `rotate`, `moveX`, `moveY`, `transitionMs`, `easing`, `animation` on entrance, `animMs`, `animDelayMs`). `variant` puts the change on one look only: \"tablet\" or \"mobile\" (that width and below), \"dark\" (dark mode), or \"hover\" / \"focus\" / \"active\" (pressed) — those three take only colours, shadow, opacity and scale. `components` names the parts: \"section\" (the whole block), a field such as \"heading\" / \"lead\" / \"eyebrow\", \"items\" (the whole list), \"items.2\" (one item, 0 = first), and for card, feature and link lists the parts of each item: \"itemIcon.N\", \"itemTitle.N\", \"itemBody.N\", \"itemTag.N\", \"itemMeta.N\"; \"itemIcon.*\" means every item. Prefer theme colours so a theme change follows. null clears a property back to the template's own; everything not mentioned stays. Call get_page_blocks first for the block's index and field names. For a WordPress page pass locale \"en\" to style its English layout.",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id", "index", "components", "set"],
       properties: {
         uid: { type: "string" }, id: { type: "string" }, locale: { type: "string" }, index: { type: "integer", minimum: 0 },
         components: { type: "array", minItems: 1, maxItems: 12, items: { type: "string", maxLength: 40 } },
+        variant: { type: "string", enum: [...STYLE_VARIANTS], description: "Only this look: tablet, mobile, dark, hover, focus or active. Leave out for the main look." },
         set: {
           type: "object", additionalProperties: false, minProperties: 1,
-          properties: {
-            color: { type: ["string", "null"] }, iconColor: { type: ["string", "null"] }, bg: { type: ["string", "null"] },
-            fontSize: { type: ["number", "null"] }, fontWeight: { type: ["number", "null"] },
-            lineHeight: { type: ["number", "null"] }, letterSpacing: { type: ["number", "null"] },
-            align: { type: ["string", "null"], enum: ["left", "center", "right", null] },
-            fontStyle: { type: ["string", "null"], enum: ["normal", "italic", null] },
-            textDecoration: { type: ["string", "null"], enum: ["none", "underline", "line-through", null] },
-            textTransform: { type: ["string", "null"], enum: ["none", "uppercase", "lowercase", "capitalize", null] },
-            fontFamily: { type: ["string", "null"], enum: ["heading", "body", "mono", null] },
-            bgImage: { type: ["string", "null"], maxLength: 2000 },
-            bgFit: { type: ["string", "null"], enum: ["cover", "contain", "auto", null] },
-          },
+          properties: Object.fromEntries(Object.entries(STYLE_SPEC).map(([k, sp]) => [k, specSchema(sp)])),
         },
       },
     },
@@ -977,34 +1201,28 @@ const TOOLS: ToolDef[] = [
         if (!known.has(k)) throw new CmsError(`"${k}" is not a styleable part of block ${args.index} ("${block.__component}"). Valid: ${[...known].sort().join(", ")}.`, 400);
       }
 
-      // Validate and normalise what to set; null clears a property.
+      // Validate and normalise what to set (lib/agent/styleSpec.ts); null clears a property.
+      const variant: StyleVariant | undefined = args.variant;
+      if (variant !== undefined && !STYLE_VARIANTS.includes(variant)) throw new CmsError(`"variant" must be one of: ${STYLE_VARIANTS.join(", ")}.`, 400);
       const patch: Record<string, any> = {};
-      const COLOUR = /^(?:#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|@(?:primary|accent|ground|ink|c[1-8]))$/;
-      const RANGE: Record<string, [number, number]> = { fontSize: [8, 200], fontWeight: [100, 900], lineHeight: [0.8, 3], letterSpacing: [-0.1, 0.5] };
       for (const [p, v] of Object.entries(args.set as Record<string, any>)) {
-        if (v === null) { patch[p] = null; continue; }
-        if (p === "color" || p === "iconColor" || p === "bg") {
-          if (typeof v !== "string" || !COLOUR.test(v.trim())) throw new CmsError(`"${p}" must be a hex colour like #1a73e8 or a theme colour (@primary, @accent, @ground, @ink, @c1 … @c8).`, 400);
-          patch[p] = v.trim();
-        } else if (p === "bgImage") {
-          if (!isSafeBackgroundUrl(v)) throw new CmsError(`"bgImage" must be an https address of a picture (or the url save_attached_image returned).`, 400);
-          patch[p] = v.trim();
-        } else if (RANGE[p]) {
-          const [lo, hi] = RANGE[p];
-          if (typeof v !== "number" || !Number.isFinite(v) || v < lo || v > hi) throw new CmsError(`"${p}" must be a number from ${lo} to ${hi}.`, 400);
-          patch[p] = p === "fontSize" || p === "fontWeight" ? Math.round(v) : v;
-        } else patch[p] = v; // the enum fields were checked against their allowed values by the tool's schema
+        const r = checkStyleValue(p, v, variant);
+        if (!r.ok) throw new CmsError(r.error, 400);
+        patch[p] = r.value;
       }
 
       const styles: Record<string, any> = { ...(block.styles || {}) };
       for (const k of keys) {
-        const next: Record<string, any> = { ...(styles[k] || {}) };
+        const main: Record<string, any> = { ...(styles[k] || {}) };
+        // The main look, or one variant of it (styles[k].tablet, .dark, .hover …).
+        const next: Record<string, any> = variant ? { ...(main[variant] || {}) } : main;
         for (const [p, v] of Object.entries(patch)) { if (v === null) delete next[p]; else next[p] = v; }
-        if (Object.keys(next).length) styles[k] = next; else delete styles[k];
+        if (variant) { if (Object.keys(next).length) main[variant] = next; else delete main[variant]; }
+        if (Object.keys(main).length) styles[k] = main; else delete styles[k];
       }
       const updated = { ...block };
       if (Object.keys(styles).length) updated.styles = styles; else delete updated.styles;
-      const what = `${[...keys].length} part(s): ${Object.keys(patch).join(", ")}`;
+      const what = `${[...keys].length} part(s)${variant ? " (" + variant + ")" : ""}: ${Object.keys(patch).join(", ")}`;
       if (shouldPropose(ctx, args)) {
         return {
           summary: `Proposed styling on block ${args.index} — ${what}`,

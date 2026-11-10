@@ -894,6 +894,41 @@ describe("set_component_style (lib/agent/tools.ts)", () => {
     assert.ok(availableTools(ctx({ level: "draft" })).some((t) => t.name === "set_component_style"));
     assert.equal(availableTools(ctx({ level: "read" })).some((t) => t.name === "set_component_style"), false);
   });
+  test("everything the Style panel sets: gradient, corners, spacing, size, layout, border, shadow, motion", async () => {
+    const fc = seed();
+    const set = { gradFrom: "@primary", gradTo: "#000000", gradAngle: 135, radius: "@card", paddingTop: "@3", marginBottom: 24, unit: "px",
+      maxWidth: "720px", display: "flex", justifyContent: "between", gap: "12px", borderWidth: 1, borderStyle: "dashed", borderColor: "@accent",
+      shadow: "md", opacity: 90, rotate: -3, animation: "slide-up", animMs: 800, bgPosition: "30% 70%", imgZoom: 1.5 };
+    const r = await run(fc, { components: ["section"], set });
+    assert.equal(r.ok, true, r.summary);
+    assert.deepEqual(styles(fc).section, set);
+  });
+  test("variant: a tablet, phone, dark or hover look of its own, leaving the main look alone", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, { components: ["heading"], variant: "mobile", set: { fontSize: 22 } })).ok, true);
+    assert.equal((await run(fc, { components: ["heading"], variant: "hover", set: { color: "@accent" } })).ok, true);
+    assert.equal((await run(fc, { components: ["heading"], variant: "dark", set: { color: "#ffffff" } })).ok, true);
+    assert.deepEqual(styles(fc).heading, { color: "#112233", fontSize: 30, mobile: { fontSize: 22 }, hover: { color: "@accent" }, dark: { color: "#ffffff" } });
+    assert.equal((await run(fc, { components: ["heading"], variant: "mobile", set: { fontSize: null } })).ok, true);
+    assert.equal(styles(fc).heading.mobile, undefined); // an emptied variant goes
+  });
+  test("refuses what a hover may not change, free CSS, and values the page would drop", async () => {
+    const fc = seed();
+    for (const [args, re] of [
+      [{ components: ["heading"], variant: "hover", set: { paddingTop: 10 } }, /cannot change on hover/],
+      [{ components: ["heading"], set: { customCss: "color:red" } }, /customCss is not an accepted argument|for a person to write/],
+      [{ components: ["heading"], set: { width: "wide" } }, /number with a unit/],
+      [{ components: ["heading"], set: { bgPosition: "120% 5%" } }, /from 0 to 100/],
+      [{ components: ["heading"], set: { radius: "@huge" } }, /0 to 999/],
+      [{ components: ["heading"], set: { display: "table" } }, /one of/],
+      [{ components: ["heading"], variant: "print", set: { color: "#fff" } }, /variant/],
+    ] as [object, RegExp][]) {
+      const r = await run(fc, args);
+      assert.equal(r.ok, false, JSON.stringify(args));
+      assert.match(r.summary, re);
+    }
+    assert.deepEqual(styles(fc), page().blocks[0].styles);
+  });
   test("a background picture on the whole section, and a refused unsafe address", async () => {
     const fc = seed();
     const ok = await run(fc, { components: ["section"], set: { bgImage: "https://cms.example.org/uploads/bg.jpg", bgFit: "cover" } });
@@ -1122,5 +1157,116 @@ describe("htmlText (lib/agent/htmlText.ts) — the two shapes an import returns"
     assert.equal(out.length, 1);
     assert.ok(out[0].endsWith("…"), "over-long paragraph is elided, not dropped");
     assert.ok(out[0].length <= 601);
+  });
+});
+
+// move_block / duplicate_block / rename_block / set_component_box — what a person does with the block list and by
+// dragging parts in the preview.
+describe("block list and boxes (lib/agent/tools.ts)", () => {
+  const blocks = () => [
+    { __component: "orst.feature-list", heading: "A", items: [{ title: "x" }] },
+    { __component: "orst.stat-row", heading: "B", items: [] },
+    { __component: "orst.notice", heading: "C" },
+  ];
+  const seed = () => fakeCms([PAGE_TYPE], { "api::page.page": [{ documentId: "1", blocks: blocks() }] });
+  const run = (fc: ReturnType<typeof seed>, name: string, args: object, over: Partial<AgentRunContext> = {}) =>
+    executeTool(ctx({ level: "draft_submit", dialect: "orst", cms: fc.cms, ...over }), name, JSON.stringify({ uid: "api::page.page", id: "1", ...args }));
+  const saved = (fc: ReturnType<typeof seed>) => fc.rows("api::page.page")[0].blocks;
+
+  test("move a block down and up", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, "move_block", { from: 0, to: 2 })).ok, true);
+    assert.deepEqual(saved(fc).map((b: any) => b.heading), ["B", "C", "A"]);
+    assert.equal((await run(fc, "move_block", { from: 2, to: 0 })).ok, true);
+    assert.deepEqual(saved(fc).map((b: any) => b.heading), ["A", "B", "C"]);
+    assert.equal((await run(fc, "move_block", { from: 5, to: 0 })).ok, false);
+  });
+  test("in review a move is a proposal the builder can apply, and nothing is written", async () => {
+    const fc = seed();
+    const r = await run(fc, "move_block", { from: 0, to: 1 }, { level: "suggest" });
+    assert.deepEqual(r.proposal!.move, { from: 0, to: 1 });
+    assert.deepEqual(saved(fc).map((b: any) => b.heading), ["A", "B", "C"]);
+  });
+  test("duplicate puts a copy right below", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, "duplicate_block", { index: 0 })).ok, true);
+    assert.deepEqual(saved(fc).map((b: any) => b.heading), ["A", "A", "B", "C"]);
+  });
+  test("rename sets the builder's name, and an empty name clears it", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, "rename_block", { index: 1, name: "  ตัวเลขสถิติ  " })).ok, true);
+    assert.equal(saved(fc)[1].__label, "ตัวเลขสถิติ");
+    assert.equal((await run(fc, "rename_block", { index: 1, name: "" })).ok, true);
+    assert.equal(saved(fc)[1].__label, undefined);
+  });
+  test("move/resize a part per width, and reset it", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, "set_component_box", { index: 0, component: "heading", x: 12.4, y: -8, w: 300 })).ok, true);
+    assert.equal((await run(fc, "set_component_box", { index: 0, component: "heading", device: "mobile", y: 4 })).ok, true);
+    assert.deepEqual(saved(fc)[0].boxes, { desktop: { heading: { x: 12, y: -8, w: 300 } }, mobile: { heading: { y: 4 } } });
+    assert.equal((await run(fc, "set_component_box", { index: 0, component: "heading", reset: true })).ok, true);
+    assert.deepEqual(saved(fc)[0].boxes, { mobile: { heading: { y: 4 } } });
+    assert.equal((await run(fc, "set_component_box", { index: 0, component: "a b" , x: 1 })).ok, false);
+  });
+  test("offered from the draft level up", () => {
+    for (const n of ["move_block", "duplicate_block", "rename_block", "set_component_box"]) {
+      assert.ok(availableTools(ctx({ level: "draft" })).some((t) => t.name === n), n);
+      assert.equal(availableTools(ctx({ level: "read" })).some((t) => t.name === n), false, n);
+    }
+  });
+});
+
+// schedule_page / list_page_versions / restore_page_version / rename_page_version / set_block_source — the page-level
+// things a person does in the Visual Builder (Schedule, History, live-data binding).
+describe("page-level tools (lib/agent/tools.ts)", () => {
+  const PV_TYPE = { uid: "api::page-version.page-version", name: "Page version", attributes: { label: { type: "string" }, documentRef: { type: "string" }, contentType: { type: "string" }, tenantKey: { type: "string" }, data: { type: "json" } } };
+  const SCHED_PAGE = { ...PAGE_TYPE, attributes: { ...PAGE_TYPE.attributes, publishStart: { type: "datetime" }, publishEnd: { type: "datetime" } } };
+  const seed = () => fakeCms([SCHED_PAGE, PV_TYPE], {
+    "api::page.page": [{ documentId: "1", blocks: [{ __component: "orst.card-grid", heading: "Now", items: [{ title: "a" }] }] }],
+    "api::page-version.page-version": [{ documentId: "v1", label: "Published", documentRef: "1", contentType: "api::page.page", createdAt: "2026-11-01T10:00:00Z", data: { blocks: [{ __component: "orst.card-grid", heading: "Before", items: [] }] } }],
+  });
+  const run = (fc: ReturnType<typeof seed>, name: string, args: object, over: Partial<AgentRunContext> = {}) =>
+    executeTool(ctx({ level: "draft_submit", dialect: "orst", cms: fc.cms, ...over }), name, JSON.stringify({ uid: "api::page.page", id: "1", ...args }));
+  const page = (fc: ReturnType<typeof seed>) => fc.rows("api::page.page")[0];
+
+  test("list, rename and restore a version; the page as it was is kept as a version first", async () => {
+    const fc = seed();
+    const l = await run(fc, "list_page_versions", {});
+    assert.equal(l.ok, true);
+    assert.deepEqual((l.data as any[]).map((v) => [v.versionId, v.name, v.blocks]), [["v1", "Published", 1]]);
+    assert.equal((await run(fc, "rename_page_version", { versionId: "v1", name: "ก่อนแก้หน้าแรก" })).ok, true);
+    assert.equal(fc.rows("api::page-version.page-version").find((v: any) => v.documentId === "v1")?.label, "ก่อนแก้หน้าแรก");
+    const r = await run(fc, "restore_page_version", { versionId: "v1" });
+    assert.equal(r.ok, true, r.summary);
+    assert.equal(page(fc).blocks[0].heading, "Before");
+    assert.ok(fc.rows("api::page-version.page-version").some((v: any) => v.data?.blocks?.[0]?.heading === "Now"), "the page before the restore was saved");
+    assert.equal((await run(fc, "restore_page_version", { versionId: "nope" })).ok, false);
+  });
+  test("in review a restore is a whole-page proposal and the page is untouched", async () => {
+    const fc = seed();
+    const r = await run(fc, "restore_page_version", { versionId: "v1" }, { level: "suggest" });
+    assert.equal(r.proposal!.all, true);
+    assert.equal(page(fc).blocks[0].heading, "Now");
+  });
+  test("schedule: only when the agent may publish; dates checked", async () => {
+    const fc = seed();
+    assert.equal(availableTools(ctx({ level: "draft_submit" })).some((t) => t.name === "schedule_page"), false);
+    const auto = { publishMode: "auto" as const };
+    const r = await run(fc, "schedule_page", { start: "2026-12-01T09:00:00+07:00", end: "2026-12-31T23:59:00+07:00" }, auto);
+    assert.equal(r.ok, true, r.summary);
+    assert.equal(page(fc).publishStart, "2026-12-01T02:00:00.000Z");
+    assert.equal((await run(fc, "schedule_page", { start: "2026-12-31T00:00:00Z", end: "2026-12-01T00:00:00Z" }, auto)).ok, false);
+    assert.equal((await run(fc, "schedule_page", { start: "tomorrow-ish" }, auto)).ok, false);
+    assert.equal((await run(fc, "schedule_page", { end: null }, auto)).ok, true);
+    assert.equal(page(fc).publishEnd, null);
+  });
+  test("bind a list to live content, with a valid kind and view; unbind", async () => {
+    const fc = seed();
+    assert.equal((await run(fc, "set_block_source", { index: 0, postType: "news", map: "dated" })).ok, true);
+    assert.deepEqual(page(fc).blocks[0].source, { kind: "wp", postType: "news", map: "dated" });
+    assert.match((await run(fc, "set_block_source", { index: 0, postType: "faq", map: "card" })).summary, /can show as: faq/);
+    assert.match((await run(fc, "set_block_source", { index: 0, postType: "recipes" })).summary, /not a kind of content/);
+    assert.equal((await run(fc, "set_block_source", { index: 0, postType: null })).ok, true);
+    assert.equal(page(fc).blocks[0].source, undefined);
   });
 });

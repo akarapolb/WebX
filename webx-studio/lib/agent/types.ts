@@ -115,6 +115,10 @@ export type AgentProposal = {
   blocks?: any[];
   at?: number;
   replace?: number;
+  /** A block moved from one position to another (move_block); `blocks` is empty. */
+  move?: { from: number; to: number };
+  /** `blocks` is the whole page (restore_page_version), not one block. */
+  all?: boolean;
 };
 
 /** One tool's contract — `mode` gates it against the resolved AgentLevel
