@@ -8,6 +8,7 @@
 // component, same reason ContactFormBlock.tsx is: Blocks.tsx itself has no
 // "use client" of its own.
 import { useEffect, useState } from "react";
+import { inline } from "@/lib/inlineText";
 import type { Block } from "./Blocks";
 
 const WORDPRESS = (process.env.NEXT_PUBLIC_WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
@@ -66,7 +67,7 @@ export default function PollBlock({ b }: { b: Block }) {
     <section className="section" id={b.id}>
       <div className="container">
         <div className="poll-panel">
-          {b.heading ? <h2>{b.heading}</h2> : null}
+          {b.heading ? <h2>{inline(b.heading)}</h2> : null}
           <p className="poll-question">{poll.question}</p>
           <div className="poll-options">
             {poll.options.map((opt, i) => {

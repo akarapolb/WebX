@@ -58,7 +58,7 @@ const ALLOWED_PARENT_ORIGINS = (process.env.NEXT_PUBLIC_STUDIO_ORIGIN || "http:/
 // `icons` — the workspace's saved icon library, keyed by the value a block stores
 // in its `icon` field. The harness has no backend of its own, so without it a
 // custom icon's key would reach BlockIcon as a bare string and draw nothing.
-export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null; icons?: IconLibrary; hidden?: string[] };
+export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null; icons?: IconLibrary; hidden?: string[]; locked?: string[] };
 
 // A layer of the active block: a tagged component (vc()), a picture or shade a template marks with data-vb-layer, or
 // "bg" — the section's own background (colour, picture, gradient).
@@ -243,6 +243,12 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
   const [device, setDevice] = useState<Device>("desktop");
   const [dragging, setDragging] = useState(false);
   const [hidden, setHidden] = useState<string[]>([]);
+  // Layers locked in the Layers panel ("<block>|<key>", "<block>|section" for the whole block, "<block>|layer:<name>"):
+  // they cannot be picked, dragged or panned here, so they are not moved by accident.
+  const [locked, setLocked] = useState<Set<string>>(new Set());
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+  const isLocked = (i: number, key: string) => locked.has(i + "|" + key) || locked.has(i + "|section");
   const [pan, setPan] = useState<Pan | null>(null);
   const panRef = useRef<Pan | null>(null);
   panRef.current = pan;
@@ -272,6 +278,8 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
       setLabels(Array.isArray(data.labels) ? data.labels : []);
       if ("comp" in data && data.comp !== lastComp.current) { lastComp.current = data.comp; setComp(data.comp ?? null); }
       setHidden(Array.isArray(data.hidden) ? data.hidden.filter((h) => typeof h === "string") : []);
+      const nextLocks = new Set(Array.isArray(data.locked) ? data.locked.filter((h) => typeof h === "string" && /^\d{1,4}\|[A-Za-z][A-Za-z0-9_.:-]{0,70}$/.test(h)) : []);
+      setLocked((prev) => (prev.size === nextLocks.size && [...nextLocks].every((x) => prev.has(x)) ? prev : nextLocks));
       if (data.scroll) wantScroll.current = true;
       if (e.source && "postMessage" in e.source) setParent({ win: e.source as Window, origin: e.origin });
     }
@@ -386,7 +394,8 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     }
     // The whole section ("section") wraps everything in its block, so as the outermost it would be what every click
     // picked. It is styled from the sidebar button instead; clicking inside a block still picks the part under it.
-    return out.filter((k) => k !== "section");
+    // A locked part is skipped: a click goes to what it sits in, or to nothing.
+    return out.filter((k) => k !== "section" && !isLocked(i, k));
   }
   const savedBox = (key: string): SavedBox => ({ ...(blocks[active]?.boxes?.[device]?.[key] || {}) });
   const pickComp = (key: string | null) => { setComp(key); lastComp.current = key; post({ type: "webx:harness:component", index: active, key }); };
@@ -458,6 +467,7 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     function onKey(e: KeyboardEvent) {
       if (!comp || active < 0) return;
       if (e.key === "Escape") { pickComp(null); return; }
+      if (isLocked(active, comp)) return; // a locked part is not nudged either
       const d = e.shiftKey ? 10 : 1;
       const mv: Record<string, [number, number]> = { ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] };
       if (!mv[e.key]) return;
@@ -483,7 +493,8 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
       if (!kind) continue;
       const owner = el.closest(`[data-vb-s="${i}"][data-vb-c]`);
       const key = owner?.getAttribute("data-vb-c");
-      if (key) out.push({ el, kind, key });
+      const layer = el.closest("[data-vb-layer]")?.getAttribute("data-vb-layer");
+      if (key && !isLocked(i, key) && !(layer && isLocked(i, "layer:" + layer))) out.push({ el, kind, key });
     }
     return out;
   }
@@ -623,7 +634,7 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     if (i < 0) return;
     if ((e.target as HTMLElement).closest("a, button")) e.preventDefault();
     if (suppressClick.current) { suppressClick.current = false; e.stopPropagation(); return; }
-    if (i !== active) post({ type: "webx:harness:select", index: i });
+    if (i !== active && !locked.has(i + "|section")) post({ type: "webx:harness:select", index: i });
   }
   function onMouseOver(e: React.MouseEvent) {
     const i = indexFrom(e.target);

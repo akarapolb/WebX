@@ -7,6 +7,7 @@
 // its own client boundary to construct that function client-side instead.
 import { useEffect, useRef } from "react";
 import { vc } from "@/templates/_builder/boxes";
+import { inline } from "@/lib/inlineText";
 import { ContactForm } from "./ContactInteractive";
 import type { Block } from "./Blocks";
 
@@ -50,9 +51,9 @@ export default function ContactFormBlock({ b }: { b: Block }) {
   }, []);
   return (
     <section {...vc(b, "section")} className="contact-form-panel" id="contact-form" aria-labelledby="form-title">
-      {b.kicker ? <span className="section-kicker" {...vc(b, "kicker")}>{b.kicker}</span> : null}
-      <h2 id="form-title" {...vc(b, "heading")}>{b.heading}</h2>
-      {b.intro ? <div className="form-intro" {...vc(b, "intro")}>{b.intro}</div> : null}
+      {b.kicker ? <span className="section-kicker" {...vc(b, "kicker")}>{inline(b.kicker)}</span> : null}
+      <h2 id="form-title" {...vc(b, "heading")}>{inline(b.heading)}</h2>
+      {b.intro ? <div className="form-intro" {...vc(b, "intro")}>{inline(b.intro)}</div> : null}
 
       <div data-vb-layer="form" style={{ display: "contents" }}>
       <ContactForm tenant="orst">

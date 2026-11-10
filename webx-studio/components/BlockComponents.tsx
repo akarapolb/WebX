@@ -27,6 +27,8 @@ import type { Path } from "./blockPreview/editing";
 import { useLang } from "./LangProvider";
 import { applies, freshDef, listsOf, type BlockTypeMeta, type ItemField, type ListDesc, type ObjDesc } from "@/lib/blockCatalog";
 import { isBlankStyle } from "@/lib/componentStyle";
+import InlineRichField from "./InlineRichField";
+import { RICH_FIELD_KEYS, stripMarkup } from "@/lib/inlineMarkup";
 
 type Ops = {
   update: (path: Path, value: any) => void;
@@ -43,6 +45,8 @@ type Ctx = Ops & {
   styleSlot?: (compKey: string) => ReactNode;
   moved: Record<string, any>; selectedComp: string | null;
   onPickComp?: (key: string | null) => void; onResetBox?: (key: string) => void;
+  /** Theme colours offered when a few words are coloured (InlineRichField). */
+  tokens?: { key: string; value: string; label?: string }[];
 };
 
 // "Moved/resized on this device" marker + reset, next to a component's label.
@@ -107,8 +111,9 @@ function newItem(l: ListDesc, b: any): any {
 
 export default function BlockComponents({
   block, meta, template, customIcons, onIconsChanged, styleSlot, update, arrayAdd, arrayRemove, hidePrimary, sourceSlot,
-  device = "desktop", selectedComp, onPickComp, onResetBox, onResetAllBoxes,
+  device = "desktop", selectedComp, onPickComp, onResetBox, onResetAllBoxes, tokens,
 }: Ops & {
+  tokens?: { key: string; value: string; label?: string }[];
   block: any; meta: BlockTypeMeta; template?: string; customIcons: CustomIcon[];
   onIconsChanged?: () => void | Promise<void>;
   styleSlot?: (compKey: string) => ReactNode;
@@ -127,7 +132,7 @@ export default function BlockComponents({
 }) {
   const { t } = useLang();
   const moved: Record<string, any> = (block?.boxes?.[device] && typeof block.boxes[device] === "object") ? block.boxes[device] : {};
-  const ctx: Ctx = { block, template, customIcons, onIconsChanged, styleSlot, t, update, arrayAdd, arrayRemove, moved, selectedComp: selectedComp ?? null, onPickComp, onResetBox };
+  const ctx: Ctx = { block, template, customIcons, onIconsChanged, styleSlot, t, update, arrayAdd, arrayRemove, moved, selectedComp: selectedComp ?? null, onPickComp, onResetBox, tokens };
   const rootRef = useRef<HTMLDivElement>(null);
   // Picked on the preview → bring its field into view in the sidebar.
   useEffect(() => {
@@ -253,6 +258,8 @@ function FieldInput({ f, value, onChange, ctx, placeholder }: { f: ItemField; va
       </select>
     );
   }
+  // Headings, leads and body text take formatting on a few words (bold, a link, a theme colour …).
+  if (RICH_FIELD_KEYS.has(f.k)) return <InlineRichField value={typeof v === "string" ? v : String(v)} onChange={onChange} multiline={!!f.ta} placeholder={placeholder} tokens={ctx.tokens} t={ctx.t} testId={"rich-" + f.k} />;
   if (f.ta) return <textarea placeholder={placeholder} value={v} onChange={(e) => onChange(e.target.value)} style={{ minHeight: placeholder ? 44 : 54 }} />;
   return <input placeholder={placeholder} value={v} onChange={(e) => onChange(e.target.value)} />;
 }
@@ -271,7 +278,7 @@ function ObjectFields({ o, path, value, ctx }: { o: ObjDesc; path: Path; value: 
 function summaryOf(it: any, l: ListDesc): string {
   if (typeof it === "string") return it;
   if (Array.isArray(it)) return it.filter(Boolean).join(" · ");
-  for (const f of l.fields || []) if (!f.icon && typeof it?.[f.k] === "string" && it[f.k].trim()) return it[f.k];
+  for (const f of l.fields || []) if (!f.icon && typeof it?.[f.k] === "string" && it[f.k].trim()) return stripMarkup(it[f.k]);
   return "";
 }
 

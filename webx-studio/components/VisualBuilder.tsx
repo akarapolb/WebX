@@ -815,7 +815,44 @@ export default function VisualBuilder() {
   const [selComp, setSelComp] = useState<{ i: number; key: string } | null>(null);
   useEffect(() => { setSelComp((c) => (c && c.i === active ? c : null)); }, [active]);
   const activeComp = selComp && selComp.i === active ? selComp.key : null;
-  const onComponent = useCallback((i: number, key: string | null) => setSelComp(key ? { i, key } : null), []);
+  const onComponent = useCallback((i: number, key: string | null) => { setSelComp(key ? { i, key } : null); setMultiKeys([]); }, []);
+  // Parts picked together in the Layers panel (Shift / Ctrl / Cmd-click), besides the main one: one style change reaches all.
+  const [multiKeys, setMultiKeys] = useState<string[]>([]);
+  const pickedKeys = activeComp ? [activeComp, ...multiKeys.filter((k) => k !== activeComp)] : [];
+  const [lyOpen, setLyOpen] = useState(true);
+  useEffect(() => { try { const v = localStorage.getItem("webx_vb_layers"); if (v === "0") setLyOpen(false); } catch {} }, []);
+  const toggleLyOpen = () => setLyOpen((o) => { try { localStorage.setItem("webx_vb_layers", o ? "0" : "1"); } catch {} return !o; });
+  /** Lock or unlock a layer (saved with the block, as `__locks`): a locked layer cannot be picked or dragged in the preview. */
+  const toggleLock = (i: number, key: string) => updateBlock(i, (b) => {
+    const locks: string[] = Array.isArray(b.__locks) ? b.__locks : [];
+    const next = locks.includes(key) ? locks.filter((k) => k !== key) : [...locks, key];
+    const out: any = { ...b };
+    if (next.length) out.__locks = next; else delete out.__locks;
+    return out;
+  });
+  /** A layer's own name (saved with the block, as `__names`); empty goes back to the usual name. */
+  const renameLayer = (i: number, key: string, raw: string) => updateBlock(i, (b) => {
+    const name = raw.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 80);
+    const names: Record<string, string> = { ...(b.__names || {}) };
+    if (name) names[key] = name; else delete names[key];
+    const out: any = { ...b };
+    if (Object.keys(names).length) out.__names = names; else delete out.__names;
+    return out;
+  });
+  /** Pick a layer from the panel; with `add`, toggle it in the group of picked parts instead. */
+  const pickLayer = (key: string, kind: string, add: boolean) => {
+    if (active < 0) return;
+    setLayerFocus(kind === "bg" ? "background" : undefined);
+    if (add && kind === "comp" && activeComp && key !== "section" && activeComp !== "section") {
+      if (key === activeComp) { const rest = multiKeys.filter((k) => k !== key); if (rest.length) { setSelComp({ i: active, key: rest[0] }); setMultiKeys(rest.slice(1)); } return; }
+      setMultiKeys((m) => (m.includes(key) ? m.filter((k) => k !== key) : [...m, key]));
+      return;
+    }
+    setSelComp({ i: active, key });
+    setMultiKeys([]);
+    requestAnimationFrame(() => document.querySelector('[data-testid="layer-style"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  };
+  const lockedLayers = useMemo(() => blocks.flatMap((b: any, i: number) => (Array.isArray(b.__locks) ? b.__locks : []).map((k: string) => i + "|" + k)), [blocks]);
   // Layers panel: the active block's layers (reported by the preview) and the ones switched off with the eye.
   // Hidden only while editing — never saved, and cleared when another page is opened.
   const isHarness = isWpPage && (template === "orst" || template === "royalsociety");
@@ -849,6 +886,17 @@ export default function VisualBuilder() {
       presets: tenantKey ? presetApi : undefined,
       upload: (f: File) => uploadFieldImage(i, [...at, "bgImage"], f),
       swatches: pageSwatches, tokens: themeTokenList, t,
+    };
+  };
+  /** One style panel for several parts at once: it shows the first one's style and every change goes to all. */
+  const multiStyleProps = (i: number, b: any, keys: string[]) => {
+    const base = styleProps(i, b, keys[0]);
+    const at = (key: string): (string | number)[] => (device === "desktop" ? ["styles", key] : ["styles", key, device]);
+    return {
+      ...base,
+      set: (k: string, v: any) => updateBlock(i, (blk) => keys.reduce((acc, key) => setPath(acc, [...at(key), ...String(k).split(".")], v === "" ? undefined : v), blk)),
+      reset: () => updateBlock(i, (blk) => keys.reduce((acc, key) => setPath(acc, at(key), undefined), blk)),
+      replaceAll: device === "desktop" ? (st: any) => updateBlock(i, (blk) => keys.reduce((acc, key) => setPath(acc, ["styles", key], st), blk)) : undefined,
     };
   };
   const setBox = useCallback((i: number, key: string, dev: string, box: any) => {
@@ -1530,6 +1578,11 @@ export default function VisualBuilder() {
                 title={t("tbx.toolbox")} aria-label={t("tbx.toolbox")} aria-pressed={tbOpen}>
                 <Icon name="grid" />
               </button>
+              {isHarness && (
+                <button className={lyOpen ? "on" : ""} onClick={toggleLyOpen} title={t("ly.title")} aria-label={t("ly.title")} aria-pressed={lyOpen} data-testid="vb-layers-toggle">
+                  <Icon name="menu" />
+                </button>
+              )}
             </div>
           )}
           <div className="seg">
@@ -1570,7 +1623,21 @@ export default function VisualBuilder() {
 
       {previewMode && <div className="vb-pvbar"><Icon name="eye" />{t("vb.previewhint")}</div>}
       {editing === "B" && !previewMode && <div className="vb-pvbar vb-bbar"><Icon name="split" />{t("vb.editingb")}</div>}
-      <div className={"vb2" + (previewMode ? " preview" : "") + (tbOpen && !previewMode ? " tbx-open" : "")}>
+      <div className={"vb2" + (previewMode ? " preview" : "") + (tbOpen && !previewMode ? " tbx-open" : "") + (isHarness && lyOpen && !previewMode && sel ? " ly-open" : "")}>
+        {isHarness && lyOpen && !previewMode && sel && (
+          <aside className="vb-lypane">
+            <LayersPanel t={t} active={active} hidden={hiddenLayers} selected={pickedKeys}
+              blocks={blocks.map((b: any) => ({ name: labelOf(b), icon: iconOf(b), locks: Array.isArray(b.__locks) ? b.__locks : [], names: b.__names || {} }))}
+              layers={layers.i === active ? layers.list : []}
+              onSelectBlock={(i) => { setActive(i); setSelComp(null); setMultiKeys([]); }}
+              onReorder={(from, to) => { reorder(from, to); setHiddenLayers([]); setActive(to); setSelComp(null); setMultiKeys([]); }}
+              onToggle={toggleLayer}
+              onShowAll={() => setHiddenLayers([])}
+              onPick={pickLayer}
+              onLock={toggleLock}
+              onRename={(i, key, name) => (key === null ? commitRename(i, name) : renameLayer(i, key, name))} />
+          </aside>
+        )}
         <aside className="vb-insp" ref={inspRef}>
           <div className="vb-insp-h">{t("vb.blocks")} {blocks.length > 0 && <span className="mono" style={{ color: "var(--mut)" }}>{blocks.length}</span>}</div>
           {/* A page with no blocks yet (a new page): the + buttons only sit between existing blocks, so without this
@@ -1686,29 +1753,19 @@ export default function VisualBuilder() {
                         — hand-editing items on a source-bound block would
                         silently vanish on the next publish, which is worse
                         than not offering the control at all. */}
-                    {wpMeta && isHarness && (
-                      <LayersPanel index={i} layers={layers.i === i ? layers.list : []} hidden={hiddenLayers} selected={activeComp} t={t}
-                        onToggle={toggleLayer}
-                        onShowAll={() => setHiddenLayers((h) => h.filter((x) => !x.startsWith(i + "|")))}
-                        onPick={(k, kind) => {
-                          setSelComp({ i, key: k });
-                          setLayerFocus(kind === "bg" ? "background" : undefined);
-                          // The style opens right under the Layers panel: bring it into view.
-                          requestAnimationFrame(() => document.querySelector('[data-testid="layer-style"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
-                        }} />
-                    )}
                     {/* With the Layers panel, the picked layer's style sits right under it (the background, a picture,
                         a heading …) instead of at the bottom of the block's fields, where it was out of sight. */}
                     {wpMeta && isHarness && isA && activeComp && (
                       <div className="ly-style" data-testid="layer-style">
                         <div className="ly-style-h">
-                          <b>{layerName({ kind: "comp", key: activeComp }, t)}</b>
-                          <button type="button" className="ly-all" onClick={() => setSelComp(null)}>{t("a11y.close")}</button>
+                          <b>{pickedKeys.length > 1 ? t("ly.multi").replace("{n}", String(pickedKeys.length)) : layerName({ kind: "comp", key: activeComp }, t, b.__names)}</b>
+                          <button type="button" className="ly-all" onClick={() => { setSelComp(null); setMultiKeys([]); }}>{t("a11y.close")}</button>
                         </div>
-                        <ComponentStyle key={`${i}:${activeComp}:${layerFocus || ""}`} {...styleProps(i, b, activeComp)} focus={activeComp === "section" ? layerFocus : undefined} />
+                        <ComponentStyle key={`${i}:${pickedKeys.join(",")}:${layerFocus || ""}`} {...(pickedKeys.length > 1 ? multiStyleProps(i, b, pickedKeys) : styleProps(i, b, activeComp))} focus={activeComp === "section" ? layerFocus : undefined} />
                       </div>
                     )}
                     {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
+                      tokens={themeTokenList.filter((x) => x.value).map((x) => ({ key: x.token, value: x.value, label: x.label }))}
                       styleSlot={(key) => (
                         <ComponentStyle key={`${i}:${key}`} {...styleProps(i, b, key)} />
                       )}
@@ -2266,7 +2323,7 @@ export default function VisualBuilder() {
                   blockDialect.ts. */}
               <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))}
                 labels={blockLabels} active={active} onSelect={setActive}
-                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} hidden={hiddenLayers} onLayers={onLayers}
+                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} hidden={hiddenLayers} locked={lockedLayers} onLayers={onLayers}
                 onImgPos={(i, key, pos, zoom) => {
                   // Position and zoom together, as one step of undo. Zoom back at 100% is dropped, not stored.
                   updateBlock(i, (b) => setPath(setPath(b, ["styles", key, "bgPosition"], pos), ["styles", key, "imgZoom"], zoom && zoom > 1 ? zoom : undefined));
