@@ -24,6 +24,9 @@ export function layerName(l: Pick<Layer, "kind" | "key">, t: (k: string) => stri
   if (l.key === "section") return t("ly.section");
   const part = /^item(Title|Body|Icon|Tag|Meta)\.(\d+)$/.exec(l.key);
   if (part) return t("ly.item") + " " + (Number(part[2]) + 1) + " · " + t("ly.p." + part[1].toLowerCase());
+  // A card in a tab (media tabs): "tab1Item.2" → "Tab 2 · Item 3".
+  const tabItem = /^tab(\d+)Item\.(\d+)$/.exec(l.key);
+  if (tabItem) return t("ly.tab") + " " + (Number(tabItem[1]) + 1) + " · " + t("ly.item") + " " + (Number(tabItem[2]) + 1);
   const item = /^([A-Za-z]+)\.(\d+)$/.exec(l.key);
   if (item) return (item[1] === "items" ? t("ly.item") : item[1]) + " " + (Number(item[2]) + 1);
   if (l.key === "href") return "Hyperlink";

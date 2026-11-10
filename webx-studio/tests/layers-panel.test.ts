@@ -26,3 +26,8 @@ describe("layer names", () => {
     assert.equal(layerId(3, { kind: "layer", key: "photo" }), "3|layer|photo");
   });
 });
+
+test("a card in a tab reads as its tab and its place", () => {
+  assert.equal(layerName({ kind: "comp", key: "tab1Item.2" }, en), "Tab 2 · Item 3");
+  assert.equal(layerName({ kind: "comp", key: "tab0Item.0" }, th), "แท็บ 1 · รายการ 1");
+});

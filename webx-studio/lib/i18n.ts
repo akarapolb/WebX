@@ -1012,6 +1012,7 @@ export const DICT: Record<string, Entry> = {
   "ly.bgHint": { en: "Colour, picture, gradient and overlay of the section", th: "สี รูป ไล่สี และชั้นทับของ section" },
   "ly.customize": { en: "customize", th: "ปรับแต่ง" },
   "ly.section": { en: "Section", th: "Section ทั้งหมด" },
+  "ly.tab": { en: "Tab", th: "แท็บ" },
   "ly.item": { en: "Item", th: "รายการ" },
   "ly.p.title": { en: "title", th: "หัวข้อ" },
   "ly.p.body": { en: "text", th: "เนื้อหา" },

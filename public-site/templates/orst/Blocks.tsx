@@ -788,7 +788,9 @@ function HomeHero({ b }: { b: Block }) {
 // `href` (optional): the whole card links there — a page, a PDF, or a video. A YouTube link with no picture of its
 // own shows the video's thumbnail; any video link gets a play badge. Another site's address opens in a new tab.
 type MediaTabItem = { image?: string; tag?: string; title?: string; caption: string; href?: string };
-function MediaTabItemCard({ it, kind }: { it: MediaTabItem; kind: string }) {
+// `part`: the card's component tag (vc) — "tab<T>Item.<i>", one per tab — so a card can be picked, moved, resized
+// and styled in the Visual Builder; "tab<T>Item.*" sizes every card of that tab.
+function MediaTabItemCard({ it, kind, part }: { it: MediaTabItem; kind: string; part?: Record<string, string> }) {
   const link = cardLink(it.href);
   const video = !!link && isVideoLink(link.href);
   const image = it.image || (link ? videoThumbnail(link.href) : null) || "";
@@ -797,8 +799,8 @@ function MediaTabItemCard({ it, kind }: { it: MediaTabItem; kind: string }) {
   const Card = ({ className, children }: { className: string; children: ReactNode }) =>
     link ? (
       <a className={className + " is-link"} href={link.href} {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-        aria-label={video ? (it.title || it.caption || "") + " (วิดีโอ)" : undefined}>{children}</a>
-    ) : <article className={className}>{children}</article>;
+        aria-label={video ? (it.title || it.caption || "") + " (วิดีโอ)" : undefined} {...part}>{children}</a>
+    ) : <article className={className} {...part}>{children}</article>;
   if (kind === "media") {
     return (
       <Card className="media-card hub-tile">
@@ -847,14 +849,14 @@ function MediaTabsBlock({ b }: { b: Block }) {
         </div>
         <div {...vc(b, "tabs")}>
         <MediaTabs
-          tabs={tabs.map((t) => ({
+          tabs={tabs.map((t, ti) => ({
             id: t.id,
             label: t.label,
             panel: (
               <div className={(t.kind === "media" ? "media-tab-shell" : "publication-shell") + " media-tab-shell"}>
                 <ScrollButton rowId={`${t.id}-row`} dir="left" label={`เลื่อน${t.label}ไปทางซ้าย`} />
                 <div className={(t.kind === "media" ? "media-row" : "publication-row") + " knowledge-scroll-row"} id={`${t.id}-row`}>
-                  {(t.items || []).map((it: MediaTabItem, i: number) => <MediaTabItemCard key={i} it={it} kind={t.kind} />)}
+                  {(t.items || []).map((it: MediaTabItem, i: number) => <MediaTabItemCard key={i} it={it} kind={t.kind} part={vc(b, `tab${ti}Item.${i}`)} />)}
                 </div>
                 <ScrollButton rowId={`${t.id}-row`} dir="right" label={`เลื่อน${t.label}ไปทางขวา`} />
               </div>
