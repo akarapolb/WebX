@@ -165,7 +165,7 @@ export default function BlockComponents({
       {presentScalars.map((e) => (
         <div className={"fld bc-fld" + (selectedComp === e.key ? " bc-sel" : "")} key={e.key} data-comp={e.key}>
           <div className="bc-lbl">
-            <label className="bc-pick" onClick={() => onPickComp?.(selectedComp === e.key ? null : e.key)}>{e.key}</label>
+            <label className="bc-pick" onClick={() => onPickComp?.(selectedComp === e.key ? null : e.key)}>{fieldName(e.key)}</label>
             <MovedChip k={e.key} ctx={ctx} />
             {!(e.kind === "field" && e.f.keep) && <RemoveBtn onClick={() => remove(e.key)} title={t("vb.comp.remove")} />}
           </div>
@@ -224,7 +224,7 @@ function AddMenu({ entries, onPick, t }: { entries: Entry[]; onPick: (e: Entry) 
               {g.items.map((e) => (
                 <button key={e.key} type="button" role="menuitem" className="bc-menu-i" onClick={() => { onPick(e); setOpen(false); }}>
                   <span className="bc-menu-ic"><Icon name={KIND_ICON[kindOf(e)]} /></span>
-                  <span className="bc-menu-k">{e.key}</span>
+                  <span className="bc-menu-k">{fieldName(e.key)}</span>
                   <span className="bc-menu-t">{t("vb.comp.k." + kindOf(e))}</span>
                 </button>
               ))}
@@ -240,13 +240,16 @@ function RemoveBtn({ onClick, title }: { onClick: () => void; title: string }) {
   return <button type="button" className="bc-x" aria-label={title} title={title} onClick={onClick}><Icon name="close" /></button>;
 }
 
+// What the editor calls a field. The data key stays "href"; people see "Hyperlink".
+export function fieldName(k: string): string { return k === "href" ? "Hyperlink" : k; }
+
 function FieldInput({ f, value, onChange, ctx, placeholder }: { f: ItemField; value: any; onChange: (v: any) => void; ctx: Ctx; placeholder?: string }) {
   const v = value ?? "";
   if (f.icon) return <IconPicker value={v || "i-check"} builtIn={FEATURE_ICONS} customIcons={ctx.customIcons} onLibraryChanged={ctx.onIconsChanged} title="icon" onChange={onChange} />;
   if (f.select) {
     return (
       <select value={String(v)} onChange={(e) => onChange(e.target.value)}>
-        {f.select.map((opt) => <option key={opt} value={opt}>{placeholder ? f.k + (opt ? ": " + opt : "") : opt || "—"}</option>)}
+        {f.select.map((opt) => <option key={opt} value={opt}>{placeholder ? fieldName(f.k) + (opt ? ": " + opt : "") : opt || "—"}</option>)}
       </select>
     );
   }
@@ -258,7 +261,7 @@ function ObjectFields({ o, path, value, ctx }: { o: ObjDesc; path: Path; value: 
   return (
     <div className="bc-obj">
       {o.fields.filter((f) => applies(f, ctx.block, ctx.template)).map((f) => (
-        <FieldInput key={f.k} f={f} placeholder={f.k} value={value?.[f.k]} onChange={(v) => ctx.update([...path, f.k], v)} ctx={ctx} />
+        <FieldInput key={f.k} f={f} placeholder={fieldName(f.k)} value={value?.[f.k]} onChange={(v) => ctx.update([...path, f.k], v)} ctx={ctx} />
       ))}
     </div>
   );
@@ -361,14 +364,14 @@ function ListEditor({ l, path, value, ctx, onRemove }: { l: ListDesc; path: Path
                     // style control right beside its field (colour, font, size …), separate from the whole item's.
                     const pk = partKeyOf(ctx.block?.__component, compKey, k, f.k);
                     const pOpen = !!(pk && partOpen[pk]);
-                    const input = <FieldInput key={f.k} f={f} placeholder={f.k} value={it?.[f.k]} onChange={(v) => ctx.update([...path, k, f.k], v)} ctx={ctx} />;
+                    const input = <FieldInput key={f.k} f={f} placeholder={fieldName(f.k)} value={it?.[f.k]} onChange={(v) => ctx.update([...path, k, f.k], v)} ctx={ctx} />;
                     if (!pk || !ctx.styleSlot) return input;
                     return (
                       <div key={f.k} className="bc-part" data-testid={"part-" + pk}>
                         <div className="bc-part-row">
                           <div className="bc-part-in">{input}</div>
                           <button type="button" className={"bc-mini bc-paint" + (pOpen ? " on" : "") + (isBlankStyle(ctx.block?.styles?.[pk]) ? "" : " has")}
-                            aria-label={ctx.t("vb.comp.style") + " · " + f.k} title={ctx.t("vb.comp.style") + " · " + f.k} aria-expanded={pOpen}
+                            aria-label={ctx.t("vb.comp.style") + " · " + fieldName(f.k)} title={ctx.t("vb.comp.style") + " · " + fieldName(f.k)} aria-expanded={pOpen}
                             onClick={() => setPartOpen((o) => ({ ...o, [pk]: !o[pk] }))}><Icon name="palette" /></button>
                         </div>
                         {pOpen && <div className="bc-item-style">{ctx.styleSlot(pk)}</div>}

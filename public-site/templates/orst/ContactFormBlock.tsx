@@ -6,6 +6,7 @@
 // from the (server) route app/orst/[page]/page.tsx, so this block needed
 // its own client boundary to construct that function client-side instead.
 import { useEffect, useRef } from "react";
+import { vc } from "@/templates/_builder/boxes";
 import { ContactForm } from "./ContactInteractive";
 import type { Block } from "./Blocks";
 
@@ -48,11 +49,12 @@ export default function ContactFormBlock({ b }: { b: Block }) {
     if (topic && subjectRef.current) subjectRef.current.value = topic;
   }, []);
   return (
-    <section className="contact-form-panel" id="contact-form" aria-labelledby="form-title">
-      {b.kicker ? <span className="section-kicker">{b.kicker}</span> : null}
-      <h2 id="form-title">{b.heading}</h2>
-      {b.intro ? <div className="form-intro">{b.intro}</div> : null}
+    <section {...vc(b, "section")} className="contact-form-panel" id="contact-form" aria-labelledby="form-title">
+      {b.kicker ? <span className="section-kicker" {...vc(b, "kicker")}>{b.kicker}</span> : null}
+      <h2 id="form-title" {...vc(b, "heading")}>{b.heading}</h2>
+      {b.intro ? <div className="form-intro" {...vc(b, "intro")}>{b.intro}</div> : null}
 
+      <div data-vb-layer="form" style={{ display: "contents" }}>
       <ContactForm tenant="orst">
         {(captchaField) => (
           <>
@@ -116,6 +118,7 @@ export default function ContactFormBlock({ b }: { b: Block }) {
           </>
         )}
       </ContactForm>
+      </div>
     </section>
   );
 }

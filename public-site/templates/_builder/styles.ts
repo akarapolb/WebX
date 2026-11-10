@@ -69,7 +69,9 @@ export type Style = {
   /** Background image tiling. */
   bgRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
   /** Where a background image sits — one of the nine anchor points. */
-  bgPosition?: "left top" | "center top" | "right top" | "left center" | "center" | "right center" | "left bottom" | "center bottom" | "right bottom";
+  bgPosition?: "left top" | "center top" | "right top" | "left center" | "center" | "right center" | "left bottom" | "center bottom" | "right bottom" | `${number}% ${number}%`;
+  /** How far a photo the component shows is zoomed in (1 = as it fits, up to 4), so it can be dragged sideways too. */
+  imgZoom?: number;
   /** "fixed" keeps the image still while the page scrolls past it. */
   bgAttachment?: "scroll" | "fixed";
   /** A colour laid over the background image (usually translucent) so text on it stays readable. */
@@ -163,7 +165,7 @@ export type DeviceStyle = Omit<Style, "hover" | "focus" | "active" | "tablet" | 
 
 /** The style keys this module knows how to render, for the editor's own use. */
 export const STYLE_KEYS = [
-  "color", "iconColor", "bg", "bgImage", "bgFit", "bgRepeat", "bgPosition", "bgAttachment", "bgOverlay",
+  "color", "iconColor", "bg", "bgImage", "bgFit", "bgRepeat", "bgPosition", "bgAttachment", "bgOverlay", "imgZoom",
   "gradFrom", "gradTo", "gradAngle", "gradType",
   "fontSize", "fontWeight", "align", "fontFamily", "lineHeight", "letterSpacing", "textTransform", "textDecoration", "fontStyle",
   "radius", "padding", "unit",
@@ -224,6 +226,16 @@ const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): T | undefin
 const FITS = ["cover", "contain", "auto"] as const;
 const REPEATS = ["no-repeat", "repeat", "repeat-x", "repeat-y"] as const;
 const POSITIONS = ["left top", "center top", "right top", "left center", "center", "right center", "left bottom", "center bottom", "right bottom"] as const;
+// Besides the nine anchors, an exact spot as "x% y%" (0–100 each): what dragging a picture in the Visual Builder sets.
+const PCT_POSITION = /^(\d{1,3}(?:\.\d{1,2})?)% (\d{1,3}(?:\.\d{1,2})?)%$/;
+/** A picture's position as CSS: one of the nine anchors, or "x% y%" with both from 0 to 100. Anything else: undefined. */
+export function positionCss(v: unknown): string | undefined {
+  const anchor = oneOf(v, POSITIONS);
+  if (anchor) return anchor;
+  const m = typeof v === "string" ? PCT_POSITION.exec(v) : null;
+  if (!m || Number(m[1]) > 100 || Number(m[2]) > 100) return undefined;
+  return `${Number(m[1])}% ${Number(m[2])}%`;
+}
 const ATTACHMENTS = ["scroll", "fixed"] as const;
 const BORDER_STYLES = ["solid", "dashed", "dotted", "double"] as const;
 const UNITS = ["px", "rem", "em", "%"] as const;
@@ -410,12 +422,12 @@ export function styleDecls(s: Style | null | undefined, partial = false, effecti
   if (layers) d.push(`background-image:${layers}!important`);
   if (isSafeImageUrl(s.bgImage)) {
     d.push(`background-size:${oneOf(s.bgFit, FITS) || oneOf(eff.bgFit, FITS) || "cover"}!important`);
-    d.push(`background-position:${oneOf(s.bgPosition, POSITIONS) || oneOf(eff.bgPosition, POSITIONS) || "center"}!important`);
+    d.push(`background-position:${positionCss(s.bgPosition) || positionCss(eff.bgPosition) || "center"}!important`);
     d.push(`background-repeat:${oneOf(s.bgRepeat, REPEATS) || oneOf(eff.bgRepeat, REPEATS) || "no-repeat"}!important`);
     const att = oneOf(s.bgAttachment, ATTACHMENTS) || oneOf(eff.bgAttachment, ATTACHMENTS);
     if (att) d.push(`background-attachment:${att}!important`);
   } else if (partial) {
-    const fit = oneOf(s.bgFit, FITS), pos = oneOf(s.bgPosition, POSITIONS), rep = oneOf(s.bgRepeat, REPEATS), att = oneOf(s.bgAttachment, ATTACHMENTS);
+    const fit = oneOf(s.bgFit, FITS), pos = positionCss(s.bgPosition), rep = oneOf(s.bgRepeat, REPEATS), att = oneOf(s.bgAttachment, ATTACHMENTS);
     if (fit) d.push(`background-size:${fit}!important`);
     if (pos) d.push(`background-position:${pos}!important`);
     if (rep) d.push(`background-repeat:${rep}!important`);
@@ -738,6 +750,34 @@ export const isEmptyStyle = (s: Style | null | undefined): boolean => styleCss("
  * onto every tagged element — without it, two blocks sharing a component key
  * would style each other.
  */
+/**
+ * The declarations that place a photo inside its box: which part shows (object-position) and, when zoomed in, a
+ * scale about that same point, clipped back to the box it had (so the zoomed photo never spills over the page).
+ */
+export function imgPositionDecls(pos: string | undefined, zoom: unknown): string {
+  const z = decimal(zoom, 1, 4, 2);
+  const d: string[] = [];
+  if (pos) d.push(`object-position:${pos}!important`);
+  if (z !== undefined && z > 1) {
+    const [ox, oy] = pct(pos);
+    const k = 1 - 1 / z;
+    const r = (n: number) => Math.round(n * 100) / 100;
+    d.push(`transform:scale(${z})!important`, `transform-origin:${ox}% ${oy}%!important`,
+      `clip-path:inset(${r(oy * k)}% ${r((100 - ox) * k)}% ${r((100 - oy) * k)}% ${r(ox * k)}%)!important`);
+  }
+  return d.join(";");
+}
+const ANCHOR_PCT: Record<string, number> = { left: 0, top: 0, center: 50, right: 100, bottom: 100 };
+/** A position as two percentages (the nine anchors included); the centre when there is none. */
+function pct(pos: string | undefined): [number, number] {
+  if (!pos) return [50, 50];
+  const m = /^([\d.]+)% ([\d.]+)%$/.exec(pos);
+  if (m) return [Number(m[1]), Number(m[2])];
+  const [a, b = "center"] = pos.split(" ");
+  const h = a === "top" || a === "bottom" ? b : a, v = a === "top" || a === "bottom" ? a : b;
+  return [ANCHOR_PCT[h] ?? 50, ANCHOR_PCT[v] ?? 50];
+}
+
 export function stylesCss(b: any, scope: number): string {
   const all = b?.styles;
   if (!all || typeof all !== "object") return "";
@@ -756,7 +796,14 @@ export function stylesCss(b: any, scope: number): string {
     const notOwn = ownItemParts.map((x) => `:not([data-vb-c="${x}"])`).join("");
     // Only a component that can contain item parts (the section, the list, one item) needs the extra rule.
     reachExtra = /^(?:section|items(?:\.\d+)?)$/.test(k) ? ITEM_PART_PREFIXES.map((pre) => `[data-vb-c^="${pre}"]${notOwn}`) : [];
-    css += styleCss(`[data-vb-s="${scope}"][data-vb-c="${k}"]`, all[k], used);
+    const sel = `[data-vb-s="${scope}"][data-vb-c="${k}"]`;
+    css += styleCss(sel, all[k], used);
+    // The same position for a photo this component shows as an <img> (a hero picture, a slideshow, a card's
+    // picture), so dragging the picture in the builder moves what part of it shows. Only its own pictures: one
+    // inside another component belongs to that component.
+    const pos = positionCss(all[k]?.bgPosition);
+    const pic = imgPositionDecls(pos, all[k]?.imgZoom);
+    if (pic) css += `${sel} img:not(${sel} [data-vb-c] img){${pic}}`;
   }
   reachExtra = [];
   for (const name of used) css += `@keyframes wx-in-${name}{from{${ANIMATIONS[name]}}}`;

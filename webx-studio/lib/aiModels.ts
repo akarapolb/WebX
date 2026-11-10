@@ -3,8 +3,8 @@
 // chat, and to check a model a user picked before a run uses it.
 import "server-only";
 
-export type GatewayModel = { alias: string; model: string; provider: string; host: string; kind: "chat" | "embedding" };
-export type Gateway = { models: GatewayModel[]; defaultModel: string; embedModel: string; reachable: boolean; reason?: string };
+export type GatewayModel = { alias: string; model: string; provider: string; host: string; kind: "chat" | "embedding"; custom?: boolean };
+export type Gateway = { models: GatewayModel[]; defaultModel: string; embedModel: string; reachable: boolean; reason?: string; canAdd?: boolean };
 
 const hostOf = (u: unknown): string => {
   try { return u ? new URL(String(u)).host : ""; } catch { return ""; }
@@ -12,6 +12,9 @@ const hostOf = (u: unknown): string => {
 
 let cache: { at: number; value: Gateway } | null = null;
 const TTL_MS = 30_000;
+
+/** Forget the cached list (after a model is added or removed). */
+export function resetGatewayCache() { cache = null; }
 
 export async function gatewayModels(): Promise<Gateway> {
   const defaultModel = process.env.LITELLM_MODEL || "webx-default";
@@ -34,9 +37,12 @@ export async function gatewayModels(): Promise<Gateway> {
         alias, model: underlying, provider: underlying.includes("/") ? underlying.split("/")[0] : "",
         host: hostOf(m?.litellm_params?.api_base),
         kind: alias === embedModel || /embed/i.test(alias) ? "embedding" : "chat",
+        ...(m?.model_info?.db_model ? { custom: true } : {}),
       } as GatewayModel;
     }).filter((m: GatewayModel) => m.alias);
-    value = { models, defaultModel, embedModel, reachable: true };
+    // /health/readiness says whether the gateway has a database; without one it cannot store a model added at runtime.
+    const ready: any = await fetch(base + "/health/readiness", { signal: AbortSignal.timeout(5000), cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    value = { models, defaultModel, embedModel, reachable: true, canAdd: String(ready?.db || "").toLowerCase() === "connected" };
   } catch {
     return { models: [], defaultModel, embedModel, reachable: false, reason: "unreachable" };
   }

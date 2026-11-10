@@ -7,14 +7,23 @@
 // browser without WebP support. No JS, no client component needed — this
 // is exactly what `<picture>`/`<source>` are for.
 //
-// Safe on any src, not just ones that were actually converted: a `.webp`
-// sibling that doesn't exist on disk just 404s silently and the browser
-// falls through to the `<img>` fallback, same as any missing <source>.
+// Only for the site's own pictures under /assets/, the ones convert-webp.mjs
+// gives a .webp copy. A browser that picks a <source> does NOT fall back to the
+// <img> when that file is missing: it shows a broken picture. So a picture
+// uploaded to the CMS (an absolute URL with no .webp beside it) gets a plain
+// <img>. Found when a hero picture uploaded through the agent showed nothing.
 import type { ImgHTMLAttributes } from "react";
 
+/** The .webp copy the build made for this picture, or null when there is none to offer. */
+export function webpSibling(src: string): string | null {
+  if (!/^\/assets\/[^?#]+\.(png|jpe?g)$/i.test(src)) return null;
+  return src.replace(/\.(png|jpe?g)$/i, ".webp");
+}
+
 export default function Picture({ src, alt, ...rest }: { src: string; alt: string } & ImgHTMLAttributes<HTMLImageElement>) {
-  const webp = src.replace(/\.(png|jpe?g)$/i, ".webp");
-  if (webp === src) return <img src={src} alt={alt} {...rest} />; // not a convertible type (svg, already .webp, etc.)
+  const webp = typeof src === "string" ? webpSibling(src) : null;
+  // eslint-disable-next-line @next/next/no-img-element
+  if (!webp) return <img src={src} alt={alt} {...rest} />;
   return (
     <picture>
       <source srcSet={webp} type="image/webp" />

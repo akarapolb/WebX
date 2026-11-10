@@ -1148,3 +1148,7 @@
 }
 .wx-breaking-close:hover { opacity: 1; }
 }
+
+/* A web address or e-mail typed in a text becomes a link by itself (lib/autolink.ts). */
+.block-autolink { color: inherit; text-decoration: underline; text-underline-offset: 2px; position: relative; z-index: 2; overflow-wrap: anywhere; }
+.block-autolink:hover { text-decoration-thickness: 2px; }

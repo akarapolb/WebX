@@ -24,7 +24,9 @@ import { wpPageSlug } from "@/lib/pageSlug";
 import { useThemeTokens } from "@/lib/useThemeTokens";
 import { useStylePresets } from "@/lib/useStylePresets";
 import { coalesce } from "@/lib/undoCoalesce";
+import { versionName, dayHeading, clockTime, ago, fullDate, compareVersions } from "@/lib/versionHistory";
 import ComponentStyle from "./ComponentStyle";
+import LayersPanel, { layerName, type Layer } from "./LayersPanel";
 import { pageColors } from "@/lib/color";
 import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
 import { TYPES, ORST_TYPES, ROYALSOCIETY_TYPES, GENERIC_TYPES, BLOCK_CATEGORIES, ALL_TYPES, metaOf } from "@/lib/blockCatalog";
@@ -62,29 +64,7 @@ function toLocalInput(iso?: string) {
   const p = (n: number) => String(n).padStart(2, "0");
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes());
 }
-function fmtTime(iso: string, lang: string) {
-  if (!iso) return "";
-  try { return new Date(iso).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; }
-}
-type DiffRow = { i: number; comp: string; status: "added" | "removed" | "changed" | "replaced" | "same"; fields?: string[] };
-// block-level diff of a snapshot (prev) vs the current canvas (curr) — no Strapi EE needed
-function diffBlocks(prev: any[], curr: any[]): { added: number; removed: number; changed: number; rows: DiffRow[] } {
-  prev = prev || []; curr = curr || [];
-  const rows: DiffRow[] = []; let added = 0, removed = 0, changed = 0;
-  const n = Math.max(prev.length, curr.length);
-  for (let i = 0; i < n; i++) {
-    const a = prev[i], b = curr[i];
-    if (a && !b) { rows.push({ i, comp: a.__component, status: "removed" }); removed++; continue; }
-    if (!a && b) { rows.push({ i, comp: b.__component, status: "added" }); added++; continue; }
-    if (a.__component !== b.__component) { rows.push({ i, comp: b.__component, status: "replaced" }); changed++; continue; }
-    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => k !== "__component" && k !== "id"));
-    const fields: string[] = [];
-    keys.forEach((k) => { if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) fields.push(k); });
-    if (fields.length) { rows.push({ i, comp: b.__component, status: "changed", fields }); changed++; }
-    else rows.push({ i, comp: b.__component, status: "same" });
-  }
-  return { added, removed, changed, rows };
-}
+// A saved version vs the canvas: lib/versionHistory.ts (compareVersions).
 // The block-type catalog (TYPES/ORST_TYPES/ROYALSOCIETY_TYPES/GENERIC_TYPES/
 // BLOCK_CATEGORIES/ALL_TYPES/metaOf) moved to lib/blockCatalog.ts (Phase 8)
 // so the agent's own page-building tools (lib/agent/tools.ts) can share it —
@@ -281,6 +261,7 @@ export default function VisualBuilder() {
   const [schedOpen, setSchedOpen] = useState(false);
   const [sched, setSched] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const [cmpId, setCmpId] = useState<any>(null);
+  const [verRename, setVerRename] = useState<{ id: any; text: string } | null>(null);
   const [editing, setEditing] = useState<"A" | "B">("A");
   const [otherBlocks, setOtherBlocks] = useState<Block[]>([]);
   const [abEnabled, setAbEnabled] = useState(false);
@@ -835,6 +816,15 @@ export default function VisualBuilder() {
   useEffect(() => { setSelComp((c) => (c && c.i === active ? c : null)); }, [active]);
   const activeComp = selComp && selComp.i === active ? selComp.key : null;
   const onComponent = useCallback((i: number, key: string | null) => setSelComp(key ? { i, key } : null), []);
+  // Layers panel: the active block's layers (reported by the preview) and the ones switched off with the eye.
+  // Hidden only while editing — never saved, and cleared when another page is opened.
+  const isHarness = isWpPage && (template === "orst" || template === "royalsociety");
+  const [layers, setLayers] = useState<{ i: number; list: Layer[] }>({ i: -1, list: [] });
+  const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
+  const [layerFocus, setLayerFocus] = useState<"background" | undefined>(undefined);
+  const onLayers = useCallback((i: number, list: Layer[]) => setLayers({ i, list }), []);
+  const toggleLayer = useCallback((id: string) => setHiddenLayers((h) => (h.includes(id) ? h.filter((x) => x !== id) : [...h, id])), []);
+  useEffect(() => { setHiddenLayers([]); setLayers({ i: -1, list: [] }); }, [sel?.docId]);
   // The "on this page" row in the colour picker: whatever this page's blocks
   // are already styled with, so a second heading can be matched to the first
   // without anyone copying a hex code by eye.
@@ -1153,6 +1143,17 @@ export default function VisualBuilder() {
       const { data } = await cms.entries.list<any>(PV_UID, { sort: "createdAt:DESC", pageSize: 50, filter });
       setVersions(data.map((e: any) => ({ id: e.documentId ?? e.id, label: e.label, createdAt: e.createdAt, data: e.data })));
     } catch {}
+  }
+  async function renameVersion(v: any, label: string) {
+    const name = label.trim().slice(0, 120);
+    setVerRename(null);
+    if (!name || name === v.label) return;
+    try {
+      await cms.entries.update(PV_UID, v.id, { label: name });
+      setVersions((vs) => vs.map((x) => (x.id === v.id ? { ...x, label: name } : x)));
+    } catch (e) {
+      setMsg({ t: t("vb.ver.renamefail") + (e instanceof CmsError ? " (HTTP " + e.status + ")" : ""), ok: false });
+    }
   }
   function restore(v: any) {
     const b = v?.data?.blocks;
@@ -1514,9 +1515,14 @@ export default function VisualBuilder() {
               <button key={d} className={device === d ? "on" : ""} onClick={() => setDevice(d)} title={d}><Icon name={d} /></button>
             ))}
           </div>
-          <div className="seg">
-            <button onClick={undo} disabled={!undoStack.length} title={t("vb.undo") + " (Ctrl+Z)"}><Icon name="undo" /></button>
-            <button onClick={redo} disabled={!redoStack.length} title={t("vb.redo") + " (Ctrl+Shift+Z)"}><Icon name="redo" /></button>
+          {/* Undo / redo with their names and how many steps are there, so they are easy to find and to trust. */}
+          <div className="vb-undo" role="group" aria-label={t("vb.undo") + " / " + t("vb.redo")}>
+            <button type="button" onClick={undo} disabled={!undoStack.length} title={t("vb.undo") + " · Ctrl+Z"} data-testid="vb-undo">
+              <Icon name="undo" /><span>{t("vb.undo")}</span>{undoStack.length > 0 && <b>{undoStack.length}</b>}
+            </button>
+            <button type="button" onClick={redo} disabled={!redoStack.length} title={t("vb.redo") + " · Ctrl+Y / Ctrl+Shift+Z"} data-testid="vb-redo">
+              <Icon name="redo" /><span>{t("vb.redo")}</span>{redoStack.length > 0 && <b>{redoStack.length}</b>}
+            </button>
           </div>
           {isDirty && <span className="badge b-warn" title={t("vb.unsavedwarn")}><span className="dot" />{t("vb.unsaved")}</span>}
           {sel && !previewMode && <>
@@ -1658,6 +1664,28 @@ export default function VisualBuilder() {
                         — hand-editing items on a source-bound block would
                         silently vanish on the next publish, which is worse
                         than not offering the control at all. */}
+                    {wpMeta && isHarness && (
+                      <LayersPanel index={i} layers={layers.i === i ? layers.list : []} hidden={hiddenLayers} selected={activeComp} t={t}
+                        onToggle={toggleLayer}
+                        onShowAll={() => setHiddenLayers((h) => h.filter((x) => !x.startsWith(i + "|")))}
+                        onPick={(k, kind) => {
+                          setSelComp({ i, key: k });
+                          setLayerFocus(kind === "bg" ? "background" : undefined);
+                          // The style opens right under the Layers panel: bring it into view.
+                          requestAnimationFrame(() => document.querySelector('[data-testid="layer-style"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+                        }} />
+                    )}
+                    {/* With the Layers panel, the picked layer's style sits right under it (the background, a picture,
+                        a heading …) instead of at the bottom of the block's fields, where it was out of sight. */}
+                    {wpMeta && isHarness && isA && activeComp && (
+                      <div className="ly-style" data-testid="layer-style">
+                        <div className="ly-style-h">
+                          <b>{layerName({ kind: "comp", key: activeComp }, t)}</b>
+                          <button type="button" className="ly-all" onClick={() => setSelComp(null)}>{t("a11y.close")}</button>
+                        </div>
+                        <ComponentStyle key={`${i}:${activeComp}:${layerFocus || ""}`} {...styleProps(i, b, activeComp)} focus={activeComp === "section" ? layerFocus : undefined} />
+                      </div>
+                    )}
                     {wpMeta && <BlockComponents block={b} meta={bm!} template={template} customIcons={customIcons} onIconsChanged={loadIcons}
                       styleSlot={(key) => (
                         <ComponentStyle key={`${i}:${key}`} {...styleProps(i, b, key)} />
@@ -1693,7 +1721,7 @@ export default function VisualBuilder() {
                     )}
                     {/* A list's own items (items.0) are styled inside that list's editor, so they are left out here;
                         an item's parts (itemTitle.0, itemBody.0, itemIcon.0 …) are components of their own and show here. */}
-                    {wpMeta && isA && activeComp && !(/\.\d+$/.test(activeComp) && !/^item(Title|Body|Icon|Tag|Meta)\./.test(activeComp)) && (
+                    {wpMeta && !isHarness && isA && activeComp && !(/\.\d+$/.test(activeComp) && !/^item(Title|Body|Icon|Tag|Meta)\./.test(activeComp)) && (
                       <ComponentStyle key={`${i}:${activeComp}`} {...styleProps(i, b, activeComp)} />
                     )}
                     {/* Generic repeatable-list editor — one `items` descriptor per
@@ -2216,7 +2244,12 @@ export default function VisualBuilder() {
                   blockDialect.ts. */}
               <RealPreview blocks={wireBlocks} tenant={tenantKey || template} harness={template} customIcons={Object.fromEntries(customIcons.map((c) => [c.key, c]))}
                 labels={blockLabels} active={active} onSelect={setActive}
-                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} onNavigate={navigateTo} onUndo={(isRedo) => (isRedo ? redo() : undo())} />
+                device={device} comp={activeComp} onComponent={onComponent} onBox={setBox} hidden={hiddenLayers} onLayers={onLayers}
+                onImgPos={(i, key, pos, zoom) => {
+                  // Position and zoom together, as one step of undo. Zoom back at 100% is dropped, not stored.
+                  updateBlock(i, (b) => setPath(setPath(b, ["styles", key, "bgPosition"], pos), ["styles", key, "imgZoom"], zoom && zoom > 1 ? zoom : undefined));
+                  setSelComp({ i, key });
+                }} onNavigate={navigateTo} onUndo={(isRedo) => (isRedo ? redo() : undo())} />
             </div>
           ) : previewMode ? (
             <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.previewunsupported")}</div>
@@ -2343,30 +2376,66 @@ export default function VisualBuilder() {
             </div>
             <div className="vb-vers">
               {versions.length === 0 && <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>{t("vb.nohistory")}</div>}
-              {versions.map((v) => {
+              {versions.map((v, vi) => {
                 const open = cmpId === v.id;
-                const d = open ? diffBlocks(v.data?.blocks, blocks) : null;
-                const changed = d ? d.rows.filter((r) => r.status !== "same") : [];
+                const d = open ? compareVersions(v.data?.blocks, blocks) : null;
+                const name = versionName(v.label, t);
+                const day = dayHeading(v.createdAt, lang);
+                const newDay = vi === 0 || dayHeading(versions[vi - 1].createdAt, lang) !== day;
+                const isRenaming = verRename?.id === v.id;
                 return (
-                  <div className="vb-vergrp" key={v.id}>
-                    <div className="vb-ver">
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <b>{v.label || "—"}</b>
-                        <div className="muted" style={{ fontSize: 11 }}>{fmtTime(v.createdAt, lang)} · {(v.data?.blocks?.length ?? 0)} {t("vb.blocks_n")}</div>
+                  <div className="vb-vergrp" key={v.id} data-testid="vb-version">
+                    {newDay && <div className="vb-verday">{day}</div>}
+                    <div className={"vb-ver" + (open ? " open" : "")}>
+                      <div className="vb-vertime" title={fullDate(v.createdAt, lang)}>
+                        <b>{clockTime(v.createdAt).slice(0, 5)}<small>{clockTime(v.createdAt).slice(5)}</small></b>
+                        <span>{ago(v.createdAt, lang)}</span>
                       </div>
-                      <button className="vb-cmp" onClick={() => setCmpId(open ? null : v.id)}>{open ? t("vb.hidediff") : t("vb.compare")}</button>
-                      <button className="btn btn--g" onClick={() => restore(v)}><Icon name="undo" />{t("vb.restore")}</button>
+                      <div className="vb-vermain">
+                        {isRenaming ? (
+                          <input className="vb-vername-in" autoFocus value={verRename?.text ?? ""} maxLength={120} data-testid="vb-version-name-input"
+                            placeholder={name.text}
+                            onChange={(e) => setVerRename({ id: v.id, text: e.target.value })}
+                            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.stopPropagation(); setVerRename(null); } }}
+                            onBlur={(e) => renameVersion(v, e.currentTarget.value)} />
+                        ) : (
+                          <button type="button" className={"vb-vername" + (name.auto ? " auto" : "")} title={t("vb.ver.rename")} data-testid="vb-version-name"
+                            onClick={() => setVerRename({ id: v.id, text: name.auto ? "" : name.text })}>
+                            <span>{name.text}</span><Icon name="pencil" />
+                          </button>
+                        )}
+                        <div className="muted" style={{ fontSize: 11 }}>{(v.data?.blocks?.length ?? 0)} {t("vb.blocks_n")}</div>
+                      </div>
+                      <div className="vb-veracts">
+                        <button className="btn btn--g vb-cmpbtn" onClick={() => setCmpId(open ? null : v.id)} aria-expanded={open} data-testid="vb-version-compare">
+                          <Icon name={open ? "close" : "eye"} />{open ? t("vb.hidediff") : t("vb.compare")}
+                        </button>
+                        <button className="btn btn--g" onClick={() => restore(v)}><Icon name="undo" />{t("vb.restore")}</button>
+                      </div>
                     </div>
                     {open && d && (
-                      <div className="vb-diff">
-                        {changed.length === 0 ? <div className="muted" style={{ fontSize: 12, padding: "2px 2px 4px" }}>{t("vb.nochanges")}</div> :
-                          changed.map((r, ix) => (
-                            <div className={"vb-diff-row " + r.status} key={ix}>
-                              <span className="vb-diff-tag">{t("vb.diff" + r.status)}</span>
-                              <span className="vb-diff-name">{compName(r.comp)} #{r.i + 1}</span>
-                              {r.fields && r.fields.length > 0 && <span className="muted" style={{ fontSize: 11 }}>· {r.fields.join(", ")}</span>}
-                            </div>
-                          ))}
+                      <div className="vb-diff" data-testid="vb-version-diff">
+                        {d.length === 0 ? <div className="muted" style={{ fontSize: 12, padding: "2px 2px 4px" }}>{t("vb.nochanges")}</div> : (
+                          <>
+                            <div className="vb-diff-legend"><span className="was">{t("vb.ver.then")}</span><span className="now">{t("vb.ver.now")}</span></div>
+                            {d.map((r, ix) => (
+                              <div className={"vb-diff-blk " + r.status} key={ix}>
+                                <div className="vb-diff-row">
+                                  <span className="vb-diff-tag">{t("vb.diff" + r.status)}</span>
+                                  <span className="vb-diff-name">{r.fromComp ? compName(r.fromComp) + " → " : ""}{compName(r.comp)}</span>
+                                  <span className="muted" style={{ fontSize: 11 }}>· {t("vb.ver.block")} {r.n}</span>
+                                </div>
+                                {r.changes.map((c, ci) => (
+                                  <div className="vb-diff-f" key={ci}>
+                                    <div className="vb-diff-fk">{c.field}</div>
+                                    <div className="vb-diff-was">{c.before || <i>{t("vb.ver.empty")}</i>}</div>
+                                    <div className="vb-diff-now">{c.after || <i>{t("vb.ver.empty")}</i>}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

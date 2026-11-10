@@ -86,6 +86,7 @@ export async function runAgent(input: RunInput, emit: (e: AgentEvent) => void): 
     model: input.policy.model, runId: cp.runId, threadId: input.threadId, lang: input.lang,
     ref: cp.ref, signal: input.signal, dialect: input.policy.dialect, engine: input.policy.engine,
     publishMode: input.publishMode === "auto" ? "auto" : "review",
+    ...(input.image ? { attachedImage: input.image } : {}),
   };
   ctx.openTitle = await withAgentActor(ctx.runId, () => openEditorTitle(ctx));
 

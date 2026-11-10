@@ -14,6 +14,16 @@
 //                   webx:harness:component { index, key | null }         (a component picked inside the active block)
 //                   webx:harness:box       { index, key, device, box }   (a finished move/resize — the parent stores it)
 //                   webx:harness:navigate  { path }                      (a header/footer link — the parent opens that page)
+//                   webx:harness:layers    { index, layers }             (the active block's layers, outermost first, for the Layers panel)
+//                   webx:harness:imgpos    { index, key, pos }           (a picture dragged to show another part of it: "x% y%")
+//
+// Picture position: double-click a picture in the active block (a hero photo, a slideshow, a background picture,
+// a card's picture) and drag to choose which part of it shows; Esc, Enter or a double-click ends it. The position
+// is saved on the component that owns the picture as its `bgPosition`, which moves both its background picture
+// and the photos it shows itself (styles.ts).
+//
+// `hidden` in a render message lists layers switched off with the Layers panel's eye ("<block>|<kind>|<key>"). They are
+// hidden here only, while editing: nothing about them is saved or reaches the real page.
 //
 // Selection highlight: each block renders inside its own `display: contents`
 // wrapper (no box of its own, so the template's layout/CSS is untouched —
@@ -36,6 +46,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import { deviceForWidth, type Box as SavedBox, type Device } from "./boxes";
+import { imgPositionDecls } from "./styles";
 import type { IconLibrary } from "./resolveIcons";
 
 // Same-origin in dev (both on localhost); in production this must be the
@@ -47,7 +58,80 @@ const ALLOWED_PARENT_ORIGINS = (process.env.NEXT_PUBLIC_STUDIO_ORIGIN || "http:/
 // `icons` — the workspace's saved icon library, keyed by the value a block stores
 // in its `icon` field. The harness has no backend of its own, so without it a
 // custom icon's key would reach BlockIcon as a bare string and draw nothing.
-export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null; icons?: IconLibrary };
+export type PreviewMessage = { type: "webx:builder:render"; blocks: any[]; active?: number; labels?: string[]; scroll?: boolean; comp?: string | null; icons?: IconLibrary; hidden?: string[] };
+
+// A layer of the active block: a tagged component (vc()), a picture or shade a template marks with data-vb-layer, or
+// "bg" — the section's own background (colour, picture, gradient).
+export type Layer = { kind: "comp" | "layer" | "bg"; key: string; depth: number };
+const LAYER_KEY = /^[A-Za-z][A-Za-z0-9_.-]{0,60}$/;
+/** "<block>|<kind>|<key>" entries from the parent, as CSS that hides each one (visibility, so the layout stays put). */
+export function hiddenCss(hidden: unknown): string {
+  if (!Array.isArray(hidden)) return "";
+  const out: string[] = [];
+  for (const h of hidden.slice(0, 400)) {
+    const m = typeof h === "string" ? /^(\d{1,4})\|(comp|layer|bg)\|([A-Za-z][A-Za-z0-9_.-]{0,60})$/.exec(h) : null;
+    if (!m) continue;
+    const [, i, kind, key] = m;
+    const scope = `[data-vb-index="${i}"]`;
+    if (kind === "comp") out.push(`${scope} [data-vb-s="${i}"][data-vb-c="${key}"]{visibility:hidden!important}`);
+    else if (kind === "layer") out.push(`${scope} [data-vb-layer="${key}"]{visibility:hidden!important}`);
+    else out.push(`${scope} [data-vb-s="${i}"][data-vb-c="section"]{background:none!important}${scope} [data-vb-s="${i}"][data-vb-c="section"]::before,${scope} [data-vb-s="${i}"][data-vb-c="section"]::after{background:none!important}`);
+  }
+  return out.join("\n");
+}
+// ---- Picture position (double-click a picture, then drag) ----
+type Pan = { el: HTMLElement; kind: "img" | "bg"; key: string; nw: number; nh: number; x: number; y: number; z: number };
+const ZOOM_MAX = 4;
+/** The zoom a computed transform carries (the "a" of its matrix); 1 when there is none. */
+export function zoomOf(transform: string | null | undefined): number {
+  const m = /^matrix\(([-\d.e]+),/.exec(transform || "");
+  const z = m ? Number(m[1]) : 1;
+  return Number.isFinite(z) && z >= 1 ? Math.min(ZOOM_MAX, Math.round(z * 100) / 100) : 1;
+}
+/** A zoomed picture's box as it was before the zoom (the scale grows it about the origin), in viewport pixels. */
+function unscaledRect(el: HTMLElement, z: number, ox: number, oy: number) {
+  const r = el.getBoundingClientRect();
+  if (z <= 1) return { left: r.left, top: r.top, width: r.width, height: r.height };
+  const w = el.offsetWidth || r.width / z, h = el.offsetHeight || r.height / z;
+  const px = r.left + (ox / 100) * r.width, py = r.top + (oy / 100) * r.height;
+  return { left: px - (ox / 100) * w, top: py - (oy / 100) * h, width: w, height: h };
+}
+/** "x% y%" of a computed object-position / background-position; the centre when it is not in percent. */
+export function parsePos(v: string | null | undefined): [number, number] {
+  const m = /^\s*(-?[\d.]+)%\s+(-?[\d.]+)%\s*$/.exec(v || "");
+  return m ? [clampPct(Number(m[1])), clampPct(Number(m[2]))] : [50, 50];
+}
+const clampPct = (n: number) => Math.max(0, Math.min(100, Math.round(n * 10) / 10));
+/**
+ * How far the picture can travel, in pixels, along each axis: the part of a "cover"-sized picture that does not fit
+ * in its box. Zero when the whole picture already shows (nothing to drag).
+ */
+export function overflowOf(boxW: number, boxH: number, nw: number, nh: number, fit: string): [number, number] {
+  if (!nw || !nh || !boxW || !boxH || (fit && fit !== "cover")) return [0, 0];
+  const k = Math.max(boxW / nw, boxH / nh);
+  return [Math.max(0, nw * k - boxW), Math.max(0, nh * k - boxH)];
+}
+/** The position after a drag: dragging right shows more of the left side, so the percentage goes down. */
+export function dragPos(x0: number, y0: number, dx: number, dy: number, ovX: number, ovY: number): [number, number] {
+  return [ovX ? clampPct(x0 - (dx / ovX) * 100) : x0, ovY ? clampPct(y0 - (dy / ovY) * 100) : y0];
+}
+const bgUrl = (el: Element) => /url\(["']?([^"')]+)["']?\)/.exec(getComputedStyle(el).backgroundImage || "")?.[1] || "";
+
+/** The layers inside one block's wrapper, in page order, each with how deeply it sits inside the others. */
+export function layersOf(wrap: Element, i: number): Layer[] {
+  const sel = `[data-vb-s="${i}"][data-vb-c], [data-vb-layer]`;
+  const out: Layer[] = [];
+  wrap.querySelectorAll<HTMLElement>(sel).forEach((el) => {
+    const isComp = el.hasAttribute("data-vb-c");
+    const key = isComp ? el.getAttribute("data-vb-c")! : el.getAttribute("data-vb-layer")!;
+    if (!LAYER_KEY.test(key)) return;
+    let depth = 0;
+    for (let p = el.parentElement?.closest(sel); p && wrap.contains(p); p = p.parentElement?.closest(sel)) depth++;
+    out.push({ kind: isComp ? "comp" : "layer", key, depth });
+    if (isComp && key === "section") out.push({ kind: "bg", key: "background", depth: depth + 1 });
+  });
+  return out.slice(0, 300);
+}
 
 type Rect = { top: number; left: number; width: number; height: number };
 type Dir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -83,6 +167,13 @@ const CSS = `
 [data-vb-index]{cursor:pointer}
 [data-vb-index].vbh-active [data-vb-c]{cursor:move}
 .vbh-dragging,.vbh-dragging *{cursor:grabbing!important;user-select:none!important}
+.vbh-pan{position:absolute;z-index:2147483002;box-sizing:border-box;outline:2px dashed #f59e0b;outline-offset:-2px;pointer-events:none;box-shadow:inset 0 0 0 9999px rgba(245,158,11,.06)}
+.vbh-pan-tip{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:#f59e0b;color:#111;font:600 12px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;padding:7px 11px;border-radius:8px;white-space:nowrap;max-width:94%;overflow:hidden;text-overflow:ellipsis;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+body:has(.vbh-pan) [data-vb-index]{cursor:grab}
+.vbh-pan-zoom{position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:2px;background:#f59e0b;border-radius:9px;padding:3px;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,.25);font:700 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;color:#111}
+.vbh-pan-zoom button{width:30px;height:30px;border:none;border-radius:7px;background:rgba(255,255,255,.55);color:#111;font:700 18px/1 system-ui,sans-serif;cursor:pointer}
+.vbh-pan-zoom button:disabled{opacity:.4;cursor:default}
+.vbh-pan-zoom b{min-width:48px;text-align:center}
 `;
 const DIRS: Dir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
@@ -151,6 +242,13 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
   const [parent, setParent] = useState<{ win: Window; origin: string } | null>(null);
   const [device, setDevice] = useState<Device>("desktop");
   const [dragging, setDragging] = useState(false);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [pan, setPan] = useState<Pan | null>(null);
+  const panRef = useRef<Pan | null>(null);
+  panRef.current = pan;
+  const panDrag = useRef<{ sx: number; sy: number; x0: number; y0: number } | null>(null);
+  const [panBox, setPanBox] = useState<Rect | null>(null);
+  const lastLayers = useRef("");
   const rootRef = useRef<HTMLDivElement>(null);
   const wantScroll = useRef(false);
   const gesture = useRef<Gesture | null>(null);
@@ -173,6 +271,7 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
       setActive(typeof data.active === "number" ? data.active : -1);
       setLabels(Array.isArray(data.labels) ? data.labels : []);
       if ("comp" in data && data.comp !== lastComp.current) { lastComp.current = data.comp; setComp(data.comp ?? null); }
+      setHidden(Array.isArray(data.hidden) ? data.hidden.filter((h) => typeof h === "string") : []);
       if (data.scroll) wantScroll.current = true;
       if (e.source && "postMessage" in e.source) setParent({ win: e.source as Window, origin: e.origin });
     }
@@ -215,6 +314,16 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     setBoxes((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   }, [active, hover, comp, hoverComp]);
   useLayoutEffect(() => { measure(); });
+  // Tell the parent the active block's layers whenever they change (a new block, an added item, a re-render).
+  useLayoutEffect(() => {
+    if (!parent) return;
+    const w = wrapAt(active);
+    const layers = w ? layersOf(w, active) : [];
+    const sig = active + ":" + JSON.stringify(layers);
+    if (sig === lastLayers.current) return;
+    lastLayers.current = sig;
+    post({ type: "webx:harness:layers", index: active, layers });
+  });
   useEffect(() => {
     const ro = new ResizeObserver(() => measure());
     ro.observe(document.body);
@@ -362,8 +471,129 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // ---- picture position ----
+  /** The picture under the pointer in block `i` (topmost first), and the component it belongs to. */
+  function picturesAt(x: number, y: number, i: number): { el: HTMLElement; kind: "img" | "bg"; key: string }[] {
+    const wrap = wrapAt(i);
+    if (!wrap) return [];
+    const out: { el: HTMLElement; kind: "img" | "bg"; key: string }[] = [];
+    for (const el of document.elementsFromPoint(x, y) as HTMLElement[]) {
+      if (!wrap.contains(el)) continue;
+      const kind = el.tagName === "IMG" ? "img" : bgUrl(el) ? "bg" : null;
+      if (!kind) continue;
+      const owner = el.closest(`[data-vb-s="${i}"][data-vb-c]`);
+      const key = owner?.getAttribute("data-vb-c");
+      if (key) out.push({ el, kind, key });
+    }
+    return out;
+  }
+  async function startPan(x: number, y: number): Promise<boolean> {
+    // The topmost picture that really loaded: one that failed (a missing file) is skipped for the one under it.
+    for (const hit of picturesAt(x, y, active)) {
+      let nw = 0, nh = 0;
+      if (hit.kind === "img") { nw = (hit.el as HTMLImageElement).naturalWidth; nh = (hit.el as HTMLImageElement).naturalHeight; }
+      else {
+        const img = new Image();
+        img.src = bgUrl(hit.el);
+        try { await img.decode(); } catch {}
+        nw = img.naturalWidth; nh = img.naturalHeight;
+      }
+      if (!nw || !nh) continue;
+      const cs = getComputedStyle(hit.el);
+      const [px, py] = parsePos(hit.kind === "img" ? cs.objectPosition : cs.backgroundPosition);
+      if (comp) pickComp(null);
+      window.getSelection()?.removeAllRanges(); // the double-click also selected a word under the pointer
+      setPan({ ...hit, nw, nh, x: px, y: py, z: hit.kind === "img" ? zoomOf(cs.transform) : 1 });
+      return true;
+    }
+    return false;
+  }
+  const LIVE_PROPS = ["object-position", "background-position", "transform", "transform-origin", "clip-path"];
+  function livePos(p: Pan, x: number, y: number) {
+    p.el.dataset.vbPan = "1";
+    if (p.kind === "bg") { p.el.style.setProperty("background-position", `${x}% ${y}%`, "important"); return; }
+    // The same declarations the saved style will write (styles.ts), so what is seen while dragging is what is kept.
+    for (const prop of LIVE_PROPS) p.el.style.removeProperty(prop);
+    for (const decl of imgPositionDecls(`${x}% ${y}%`, p.z).split(";")) {
+      const i = decl.indexOf(":");
+      if (i > 0) p.el.style.setProperty(decl.slice(0, i), decl.slice(i + 1).replace(/!important$/, ""), "important");
+    }
+  }
+  const sendPos = (p: Pan) => post({ type: "webx:harness:imgpos", index: active, key: p.key, pos: `${p.x}% ${p.y}%`, ...(p.kind === "img" ? { zoom: p.z } : {}) });
+  /** Zoom in (+) or out (−) one step; a zoomed photo can then be dragged sideways as well. */
+  function zoomBy(step: number) {
+    const p = panRef.current;
+    if (!p || p.kind !== "img") return;
+    const z = Math.max(1, Math.min(ZOOM_MAX, Math.round(p.z * (step > 0 ? 1.15 : 1 / 1.15) * 100) / 100));
+    if (z === p.z) return;
+    p.z = z;
+    livePos(p, p.x, p.y);
+    setPan({ ...p });
+    sendPos(p);
+  }
+  const endPan = useCallback(() => {
+    const p = panRef.current;
+    if (p) { for (const prop of ["object-position", "background-position", "transform", "transform-origin", "clip-path"]) p.el.style.removeProperty(prop); delete p.el.dataset.vbPan; }
+    panDrag.current = null;
+    setPan(null);
+    setPanBox(null);
+  }, []);
+  // A picture's box while in picture mode (it can move as the page re-lays out).
+  useLayoutEffect(() => {
+    if (!pan) return;
+    const u = unscaledRect(pan.el, pan.z, pan.x, pan.y);
+    const r = { top: u.top + window.scrollY, left: u.left + window.scrollX, width: u.width, height: u.height };
+    setPanBox((prev) => (prev && JSON.stringify(prev) === JSON.stringify(r) ? prev : r));
+  });
+  // Another block selected: picture mode ends.
+  useEffect(() => { endPan(); }, [active, endPan]);
+  useEffect(() => {
+    if (!pan) return;
+    function onMove(e: PointerEvent) {
+      const p = panRef.current, d = panDrag.current;
+      if (!p || !d) return;
+      const r = unscaledRect(p.el, p.z, p.x, p.y);
+      const cs = getComputedStyle(p.el);
+      const [cx, cy] = overflowOf(r.width, r.height, p.nw, p.nh, p.kind === "img" ? cs.objectFit : (cs.backgroundSize.includes("cover") ? "cover" : cs.backgroundSize));
+      // Zoomed in, the photo is bigger than its box by (zoom − 1) of it on each side as well.
+      const [x, y] = dragPos(d.x0, d.y0, e.clientX - d.sx, e.clientY - d.sy, cx + r.width * (p.z - 1), cy + r.height * (p.z - 1));
+      p.x = x; p.y = y;
+      livePos(p, x, y);
+    }
+    function onUp() {
+      const p = panRef.current, d = panDrag.current;
+      if (!p || !d) return;
+      panDrag.current = null;
+      setDragging(false);
+      if (p.x !== d.x0 || p.y !== d.y0) sendPos(p);
+    }
+    function onWheel(e: WheelEvent) {
+      const p = panRef.current;
+      if (!p || p.kind !== "img") return;
+      const r = unscaledRect(p.el, p.z, p.x, p.y);
+      if (e.clientX < r.left || e.clientX > r.left + r.width || e.clientY < r.top || e.clientY > r.top + r.height) return;
+      e.preventDefault();
+      zoomBy(e.deltaY < 0 ? 1 : -1);
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape" || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); endPan(); } }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); window.removeEventListener("keydown", onKey, true); window.removeEventListener("wheel", onWheel); };
+  }, [pan, active, post, endPan]);
+
   function onPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
+    if (pan) {
+      // In picture mode a press inside the picture drags it; anywhere else ends the mode.
+      const r = unscaledRect(pan.el, pan.z, pan.x, pan.y);
+      if (e.clientX < r.left || e.clientX > r.left + r.width || e.clientY < r.top || e.clientY > r.top + r.height) { endPan(); return; }
+      e.preventDefault();
+      panDrag.current = { sx: e.clientX, sy: e.clientY, x0: pan.x, y0: pan.y };
+      setDragging(true);
+      return;
+    }
     const i = indexFrom(e.target);
     if (i < 0 || i !== active) return; // first click on a block just selects the block (see onClickCapture)
     const chain = chainAt(e.target, i);
@@ -375,8 +605,13 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
   }
   function onDoubleClick(e: React.MouseEvent) {
     const i = indexFrom(e.target);
+    if (pan) { endPan(); return; }
     if (i !== active) return;
     const chain = chainAt(e.target, i);
+    // A double-click on a picture (or on the shade or empty space over one) starts picture mode. On a text or
+    // a part of its own it still drills one level in, as before.
+    const onPicture = (e.target as HTMLElement).tagName === "IMG" || !chain.length || !!(e.target as HTMLElement).closest("[data-vb-layer]");
+    if (onPicture) { void startPan(e.clientX, e.clientY).then((ok) => { if (!ok) { const at = comp ? chain.indexOf(comp) : -1; if (at > 0) pickComp(chain[at - 1]); } }); return; }
     const at = comp ? chain.indexOf(comp) : -1;
     if (at > 0) pickComp(chain[at - 1]);
   }
@@ -407,6 +642,7 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
   return (
     <>
       <style>{CSS}</style>
+      {hidden.length > 0 && <style>{hiddenCss(hidden)}</style>}
       <div ref={rootRef} className={dragging ? "vbh-dragging" : undefined}
         onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} onClickCapture={onClickCapture}
         onMouseOver={onMouseOver} onMouseLeave={() => { setHover(-1); setHoverComp(null); }}>
@@ -426,7 +662,19 @@ export default function HarnessBridge({ Blocks }: { Blocks: ComponentType<{ bloc
           {boxes.sel && (() => { const t = tagFor(active, boxes.sel!); return (
             <div className={"vbh-box sel" + (t.inside ? " inside" : "")} style={boxes.sel}><span className="vbh-tag">{t.text}</span></div>
           ); })()}
-          {boxes.hovComp && hoverComp && !dragging && (
+          {pan && panBox && (
+            <div className="vbh-pan" style={panBox} data-testid="vbh-pan">
+              <span className="vbh-pan-tip">ลากเพื่อเลื่อนรูป{pan.kind === "img" ? " · ล้อเมาส์หรือ +/− เพื่อซูม" : ""} · Esc เมื่อเสร็จ</span>
+              {pan.kind === "img" && (
+                <span className="vbh-pan-zoom">
+                  <button type="button" onClick={() => zoomBy(-1)} disabled={pan.z <= 1} aria-label="ซูมออก" data-testid="vbh-zoom-out">−</button>
+                  <b>{Math.round(pan.z * 100)}%</b>
+                  <button type="button" onClick={() => zoomBy(1)} disabled={pan.z >= ZOOM_MAX} aria-label="ซูมเข้า" data-testid="vbh-zoom-in">+</button>
+                </span>
+              )}
+            </div>
+          )}
+          {boxes.hovComp && hoverComp && !dragging && !pan && (
             <div className="vbh-c hov" style={boxes.hovComp}><span className="vbh-ctag">{hoverComp}</span></div>
           )}
           {boxes.comp && comp && (

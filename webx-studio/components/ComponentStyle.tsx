@@ -54,6 +54,8 @@ type Props = {
   /** Theme colours a colour can point at instead of a hex. Empty for a workspace without a theme. */
   tokens?: ThemeToken[];
   t: (k: string, v?: Record<string, any>) => string;
+  /** "background": opened from the Layers panel's Background — its colour, gradient and picture open first and come into view. */
+  focus?: "background";
 };
 
 const ALIGNS = [
@@ -252,12 +254,12 @@ function CssBox({ value, onCommit, t }: { value?: string; onCommit: (v: string |
 }
 
 /** A collapsible group so a panel with this many controls stays scannable. */
-function Section({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
+function Section({ title, defaultOpen = false, children, id }: { title: string; defaultOpen?: boolean; children: ReactNode; id?: string }) {
   // `defaultOpen` says how it starts. After that the editor decides: deriving it from the values on every
   // render closed a section the moment its last field was emptied.
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <details className="cs-sec" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+    <details className="cs-sec" data-cs-sec={id} open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary>{title}</summary>
       <div className="cs-sec-body">{children}</div>
     </details>
@@ -271,7 +273,14 @@ function gradPreview(s: Style, tokens: ThemeToken[]): string {
   return s.gradType === "radial" ? `radial-gradient(circle at center, ${a}, ${b})` : `linear-gradient(${s.gradAngle ?? GRAD_ANGLE.default}deg, ${a}, ${b})`;
 }
 
-export default function ComponentStyle({ style, device = "desktop", full, set: setRaw, reset, upload, replaceAll, presets, swatches, tokens = [], t }: Props) {
+export default function ComponentStyle({ style, device = "desktop", full, set: setRaw, reset, upload, replaceAll, presets, swatches, tokens = [], t, focus }: Props) {
+  const bgFocus = focus === "background";
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!bgFocus) return;
+    const id = requestAnimationFrame(() => rootRef.current?.querySelector('[data-cs-sec="bgimage"]')?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    return () => cancelAnimationFrame(id);
+  }, [bgFocus]);
   const [presetName, setPresetName] = useState("");
   const [, bumpClip] = useState(0);
   // Light or dark: dark mode has its own overrides (style.dark), only edited on the main (desktop) look.
@@ -324,7 +333,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
   const marKeys = ["marginTop", "marginRight", "marginBottom", "marginLeft"] as const;
 
   return (
-    <div className="cs">
+    <div className="cs" ref={rootRef}>
       <div className="cs-head" data-has-presets={presets ? "1" : undefined}>
         <b>{t("cs.title")}</b>
         {touched && <button type="button" className="cs-reset" onClick={darkMode ? () => setRaw("dark" as StyleKey, undefined) : reset}>{darkMode ? t("cs.dark.reset") : t("cs.reset")}</button>}
@@ -431,7 +440,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         {color("bg", t("cs.bg"))}
       </Section>
 
-      <Section title={t("cs.sec.text")} defaultOpen>
+      <Section title={t("cs.sec.text")} defaultOpen={!bgFocus}>
         <div className="cs-row">
           <label>{t("cs.font")}</label>
           <select className="cs-sel" value={s.fontFamily ?? ""} onChange={(e) => set("fontFamily", e.target.value || undefined)}>
@@ -677,7 +686,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         </div>
       </Section>
 
-      <Section title={t("cs.sec.gradient")} defaultOpen={!!(s.gradFrom || s.gradTo)}>
+      <Section id="gradient" title={t("cs.sec.gradient")} defaultOpen={bgFocus || !!(s.gradFrom || s.gradTo)}>
         {onDevice && <p className="cs-hint">{t("cs.gradient.devicehint")}</p>}
         <div className="cs-row">
           <label>{t("cs.gradtype")}</label>
@@ -710,7 +719,7 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
         <CssBox value={s.customCss} onCommit={(v) => set("customCss", v)} t={t} />
       </Section>
 
-      <Section title={t("cs.sec.bgimage")} defaultOpen={!!s.bgImage || (override && !!((full as any)?.bgImage || (style as any)?.bgImage))}>
+      <Section id="bgimage" title={t("cs.sec.bgimage")} defaultOpen={bgFocus || !!s.bgImage || (override && !!((full as any)?.bgImage || (style as any)?.bgImage))}>
         {!override && (
         <div className="cs-row cs-bgimg">
           <label>{t("cs.bgimage")}</label>
@@ -723,6 +732,23 @@ export default function ComponentStyle({ style, device = "desktop", full, set: s
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
           </div>
         </div>
+        )}
+        {/* An exact spot for the picture, set by double-clicking it in the preview and dragging. It also moves a
+            photo the block shows itself (a hero picture, a slideshow), so it shows even without a background image. */}
+        {(/^\d/.test(String(eff("bgPosition", ""))) || (s as any).imgZoom > 1) && (
+          <>
+            <div className="cs-row" data-testid="cs-imgpos">
+              <label>{t("cs.imgpos")}</label>
+              <span className="mono" style={{ fontSize: 12, flex: 1 }}>{String(eff("bgPosition", "50% 50%"))}</span>
+              <button type="button" className="cs-revert" onClick={() => { set("bgPosition", undefined); set("imgZoom" as StyleKey, undefined); }}>{t("cs.reset")}</button>
+            </div>
+            <div className="cs-row" data-testid="cs-imgzoom">
+              <label>{t("cs.imgzoom")}</label>
+              <input type="range" min={1} max={4} step={0.05} value={Number((s as any).imgZoom) || 1} style={{ flex: 1 }}
+                onChange={(e) => set("imgZoom" as StyleKey, Number(e.target.value) > 1 ? Number(e.target.value) : undefined)} aria-label={t("cs.imgzoom")} />
+              <span className="mono" style={{ fontSize: 12, minWidth: 42, textAlign: "right" }}>{Math.round((Number((s as any).imgZoom) || 1) * 100)}%</span>
+            </div>
+          </>
         )}
         {(s.bgImage || (override && ((full as any)?.bgImage || (style as any)?.bgImage))) && (
           <>

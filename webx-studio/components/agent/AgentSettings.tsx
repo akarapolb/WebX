@@ -13,6 +13,7 @@ import { useLang } from "../LangProvider";
 import { useTenant } from "../TenantProvider";
 import type { AgentLevel } from "@/lib/agent/types";
 import { modelLabel, mocksFor } from "@/lib/modelLabels";
+import AddModelDialog from "./AddModelDialog";
 
 const LEVELS: AgentLevel[] = ["off", "read", "suggest", "draft", "draft_submit"];
 const LEVEL_KEY: Record<AgentLevel, string> = {
@@ -40,8 +41,10 @@ export default function AgentSettings() {
   const [background, setBackground] = useState(false);
   const [schedules, setSchedules] = useState(false);
   const [saving, setSaving] = useState(false);
-  type GwModel = { alias: string; model: string; provider: string; host: string; kind: "chat" | "embedding" };
-  const [gw, setGw] = useState<{ models: GwModel[]; defaultModel: string; embedModel: string; reachable: boolean } | null>(null);
+  type GwModel = { alias: string; model: string; provider: string; host: string; kind: "chat" | "embedding"; custom?: boolean };
+  const [gw, setGw] = useState<{ models: GwModel[]; defaultModel: string; embedModel: string; reachable: boolean; canAdd?: boolean } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [modelMsg, setModelMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
 
   const load = useCallback(async () => {
@@ -62,11 +65,16 @@ export default function AgentSettings() {
   }, [tenant]);
   useEffect(() => { load(); }, [load]);
   // The models the AI gateway really serves, not a guess typed from memory.
-  useEffect(() => {
-    let live = true;
-    fetch("/api/ai/models").then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setGw(j); }).catch(() => {});
-    return () => { live = false; };
-  }, []);
+  const loadModels = useCallback(() => fetch("/api/ai/models").then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) setGw(j); }).catch(() => {}), []);
+  useEffect(() => { loadModels(); }, [loadModels]);
+  async function removeModel(alias: string) {
+    if (!window.confirm(t("am.confirmRemove").replace("{a}", alias))) return;
+    setModelMsg(null);
+    const r = await fetch("/api/ai/models?tenant=" + encodeURIComponent(tenant) + "&alias=" + encodeURIComponent(alias), { method: "DELETE" }).catch(() => null);
+    const j = await r?.json().catch(() => ({}));
+    if (r?.ok) { if (model === alias) setModel(""); await loadModels(); setModelMsg({ t: t("am.removed"), ok: true }); }
+    else setModelMsg({ t: j?.error || t("am.failed"), ok: false });
+  }
 
   async function save() {
     setSaving(true); setMsg(null);
@@ -88,6 +96,11 @@ export default function AgentSettings() {
 
   return (
     <div className="panel" style={{ maxWidth: 640 }}>
+      {adding && gw && (
+        <AddModelDialog tenant={tenant} canAdd={Boolean(gw.canAdd)} existingAliases={gw.models.map((m) => m.alias)}
+          onClose={() => setAdding(false)}
+          onAdded={async (a) => { setAdding(false); await loadModels(); setModelMsg({ t: t("am.added").replace("{a}", a), ok: true }); }} />
+      )}
       <h3 style={{ marginTop: 0 }}>{t("as.title")}</h3>
       <p className="muted" style={{ marginTop: -6 }}>{t("as.sub")}</p>
 
@@ -150,6 +163,7 @@ export default function AgentSettings() {
                       {m.alias === gw.defaultModel && <span className="badge b-ok"><span className="dot" />{t("as.m.default")}</span>}{" "}
                       {m.kind === "embedding" && <span className="badge b-mut"><span className="dot" />{t("as.m.embed")}</span>}{" "}
                       {mine && <span className="badge b-acc"><span className="dot" />{t("as.m.mine")}</span>}
+                      {m.custom && <button type="button" className="btn btn--g" style={{ padding: "3px 8px", marginLeft: 6 }} onClick={() => removeModel(m.alias)} aria-label={t("am.remove")} title={t("am.remove")} data-testid={"as-remove-" + m.alias}><Icon name="trash" /></button>}
                     </td>
                   </tr>
                 );
@@ -176,8 +190,9 @@ export default function AgentSettings() {
         )}
         <small className="muted">{t("as.modelHint")}</small>
         <div style={{ marginTop: 10 }}>
-          <button type="button" className="btn btn--g" disabled title={t("as.addModelWhy")} data-testid="as-add-model"><Icon name="plus" />{t("as.addModel")}</button>
-          <small className="muted" style={{ display: "block", marginTop: 6 }}>{t("as.addModelWhy")}</small>
+          <button type="button" className="btn btn--g" onClick={() => { setModelMsg(null); setAdding(true); }} data-testid="as-add-model"><Icon name="plus" />{t("as.addModel")}</button>
+          {gw && !gw.canAdd && <small className="muted" style={{ display: "block", marginTop: 6 }}>{t("as.addModelWhy")}</small>}
+          {modelMsg && <small className={modelMsg.ok ? "muted" : "auth-err"} style={{ display: "block", marginTop: 6 }}>{modelMsg.t}</small>}
         </div>
       </div>
 

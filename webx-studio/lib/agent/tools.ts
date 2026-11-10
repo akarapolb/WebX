@@ -23,6 +23,7 @@ import { auditEntry } from "./auditRules";
 import { untrustedBlock } from "./prompts";
 import { validateArgs } from "./validateArgs";
 import { resolveBackgroundImageFromUrl } from "./urlImage";
+import { imageFileFromDataUrl, isSafeBackgroundUrl } from "./attachedImage";
 import { fetchWordpressPage } from "./wordpressImport";
 import { fetchUrlPageContent } from "./pageContent";
 import { levelAtLeast, type AgentCms, type AgentRunContext, type ToolDef, type ToolMode, type AgentProposal } from "./types";
@@ -79,6 +80,7 @@ const governedCms: AgentCms = {
   publish: (uid, id, opts) => governed.publish(uid, id, opts),
   listContentTypes: (tenantKey) => listGovernableContentTypes(tenantKey),
   contentTypeSchema: (uid) => getContentTypeSchema(uid),
+  uploadMedia: (file) => governed.media.upload(file),
 };
 const cmsOf = (ctx: AgentRunContext): AgentCms => ctx.cms ?? governedCms;
 
@@ -896,9 +898,28 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "save_attached_image",
+    mode: "draft",
+    description: "Put the picture the user attached to their CURRENT message into the workspace's media library and get its address (url). Use it when the user attaches a picture and asks to use it on the site, e.g. as a background: call this first, then set_component_style with set.bgImage = the returned url. It only adds the picture to the media library; it does not change any page. If no picture is attached to this message, it says so: ask the user to attach it again.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { name: { type: "string", maxLength: 80, description: "A short English file name, e.g. \"home-hero-background\"." } },
+    },
+    async run(ctx, args) {
+      const r = imageFileFromDataUrl(ctx.attachedImage?.dataUrl, args.name);
+      if (!r.ok) throw new CmsError(r.error, 400);
+      const upload = cmsOf(ctx).uploadMedia;
+      if (!upload) throw new CmsError("Uploading to the media library is not available here.", 501);
+      const asset = await upload(r.file);
+      const url = String(asset?.url || "");
+      if (!isSafeBackgroundUrl(url)) throw new CmsError("The media library did not return a usable address for the picture.", 502);
+      return { summary: `Saved the attached picture to the media library as "${r.file.name}"`, data: { url, name: r.file.name, bytes: r.bytes } };
+    },
+  },
+  {
     name: "set_component_style",
     mode: "draft",
-    description: "Change the look of parts of ONE existing block: colours (text `color`, `iconColor` for icons, `bg` background), font size and weight, alignment, italic, underline, letter case. `components` names the parts: \"section\" (the whole block's background and colours), a field such as \"heading\" / \"lead\" / \"eyebrow\", \"items\" (the whole list), \"items.2\" (one item, 0 = first), and for card, feature and link lists the parts of each item: \"itemIcon.N\", \"itemTitle.N\", \"itemBody.N\", \"itemTag.N\", \"itemMeta.N\". Use \"*\" for every item: \"itemIcon.*\" recolours all the icons. Colours are a hex (#1a73e8) or a theme colour (@primary, @accent, @ground, @ink, @c1 … @c8); prefer theme colours so a theme change follows. Set a property to null to clear it back to the template's own. Everything not mentioned stays as it is. Call get_page_blocks first for the block's index and field names. For a WordPress page pass locale \"en\" to style its English layout.",
+    description: "Change the look of parts of ONE existing block: colours (text `color`, `iconColor` for icons, `bg` background), a background picture (`bgImage`: an https address or one returned by save_attached_image; `bgFit`: \"cover\" fills, \"contain\" shows the whole picture), font size and weight, alignment, italic, underline, letter case. `components` names the parts: \"section\" (the whole block's background and colours), a field such as \"heading\" / \"lead\" / \"eyebrow\", \"items\" (the whole list), \"items.2\" (one item, 0 = first), and for card, feature and link lists the parts of each item: \"itemIcon.N\", \"itemTitle.N\", \"itemBody.N\", \"itemTag.N\", \"itemMeta.N\". Use \"*\" for every item: \"itemIcon.*\" recolours all the icons. Colours are a hex (#1a73e8) or a theme colour (@primary, @accent, @ground, @ink, @c1 … @c8); prefer theme colours so a theme change follows. Set a property to null to clear it back to the template's own. Everything not mentioned stays as it is. Call get_page_blocks first for the block's index and field names. For a WordPress page pass locale \"en\" to style its English layout.",
     parameters: {
       type: "object", additionalProperties: false, required: ["uid", "id", "index", "components", "set"],
       properties: {
@@ -915,6 +936,8 @@ const TOOLS: ToolDef[] = [
             textDecoration: { type: ["string", "null"], enum: ["none", "underline", "line-through", null] },
             textTransform: { type: ["string", "null"], enum: ["none", "uppercase", "lowercase", "capitalize", null] },
             fontFamily: { type: ["string", "null"], enum: ["heading", "body", "mono", null] },
+            bgImage: { type: ["string", "null"], maxLength: 2000 },
+            bgFit: { type: ["string", "null"], enum: ["cover", "contain", "auto", null] },
           },
         },
       },
@@ -962,6 +985,9 @@ const TOOLS: ToolDef[] = [
         if (v === null) { patch[p] = null; continue; }
         if (p === "color" || p === "iconColor" || p === "bg") {
           if (typeof v !== "string" || !COLOUR.test(v.trim())) throw new CmsError(`"${p}" must be a hex colour like #1a73e8 or a theme colour (@primary, @accent, @ground, @ink, @c1 … @c8).`, 400);
+          patch[p] = v.trim();
+        } else if (p === "bgImage") {
+          if (!isSafeBackgroundUrl(v)) throw new CmsError(`"bgImage" must be an https address of a picture (or the url save_attached_image returned).`, 400);
           patch[p] = v.trim();
         } else if (RANGE[p]) {
           const [lo, hi] = RANGE[p];

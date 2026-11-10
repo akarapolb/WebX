@@ -894,6 +894,52 @@ describe("set_component_style (lib/agent/tools.ts)", () => {
     assert.ok(availableTools(ctx({ level: "draft" })).some((t) => t.name === "set_component_style"));
     assert.equal(availableTools(ctx({ level: "read" })).some((t) => t.name === "set_component_style"), false);
   });
+  test("a background picture on the whole section, and a refused unsafe address", async () => {
+    const fc = seed();
+    const ok = await run(fc, { components: ["section"], set: { bgImage: "https://cms.example.org/uploads/bg.jpg", bgFit: "cover" } });
+    assert.equal(ok.ok, true, ok.summary);
+    assert.deepEqual(styles(fc).section, { bgImage: "https://cms.example.org/uploads/bg.jpg", bgFit: "cover" });
+    for (const bad of ['https://x.org/a.jpg"); background:red', "javascript:alert(1)", "data:image/png;base64,xx"]) {
+      const r = await run(fc, { components: ["section"], set: { bgImage: bad } });
+      assert.equal(r.ok, false, bad);
+      assert.match(r.summary, /bgImage/);
+    }
+  });
+});
+
+// save_attached_image — the user attaches a picture in the chat and asks for it as a background.
+describe("save_attached_image (lib/agent/tools.ts)", () => {
+  const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const withUpload = () => {
+    const fc = fakeCms([PAGE_TYPE], {});
+    const uploaded: File[] = [];
+    fc.cms.uploadMedia = async (f: File) => { uploaded.push(f); return { id: 7, url: "https://cms.example.org/uploads/" + f.name }; };
+    return { fc, uploaded };
+  };
+  test("puts the attached picture in the media library and returns its address", async () => {
+    const { fc, uploaded } = withUpload();
+    const r = await executeTool(ctx({ level: "draft", cms: fc.cms, attachedImage: { dataUrl: PNG, mimeType: "image/png" } }), "save_attached_image", JSON.stringify({ name: "home hero bg" }));
+    assert.equal(r.ok, true, r.summary);
+    assert.equal(uploaded.length, 1);
+    assert.equal(uploaded[0].name, "home-hero-bg.png");
+    assert.equal((r.data as any).url, "https://cms.example.org/uploads/home-hero-bg.png");
+  });
+  test("with no picture attached it uploads nothing and says to attach it", async () => {
+    const { fc, uploaded } = withUpload();
+    const r = await executeTool(ctx({ level: "draft", cms: fc.cms }), "save_attached_image", "{}");
+    assert.equal(r.ok, false);
+    assert.match(r.summary, /attach/);
+    assert.equal(uploaded.length, 0);
+  });
+  test("an SVG (which can carry script) is refused", async () => {
+    const { fc, uploaded } = withUpload();
+    const r = await executeTool(ctx({ level: "draft", cms: fc.cms, attachedImage: { dataUrl: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=", mimeType: "image/svg+xml" } }), "save_attached_image", "{}");
+    assert.equal(r.ok, false);
+    assert.equal(uploaded.length, 0);
+  });
+  test("not offered below the draft level", () => {
+    assert.equal(availableTools(ctx({ level: "read" })).some((t) => t.name === "save_attached_image"), false);
+  });
 });
 
 // set_block_item_icons / find_icons — added after the agent answered that it could not

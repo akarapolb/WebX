@@ -57,7 +57,7 @@ export default function HeroSlider({ slides }: { slides: string[] }) {
 
   return (
     <>
-      <div className="rs-hero__slides" aria-hidden="true">
+      <div className="rs-hero__slides" data-vb-layer="slides" aria-hidden="true">
         {slides.map((src, i) => (
           <Picture
             key={src}

@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { safeLink } from "@/lib/linkUrl";
+import { autolink } from "@/lib/autolink";
 import FaqAccordion from "./FaqAccordion";
 import ContactFormBlock from "./ContactFormBlock";
 import PollBlock from "./PollBlock";
@@ -12,7 +13,7 @@ import Picture from "@/components/Picture";
 import JobApplicationForm from "@/components/JobApplicationForm";
 import type { JobPosting } from "@/lib/cms";
 import { vc, boxesCss } from "@/templates/_builder/boxes";
-import { stylesCss } from "@/templates/_builder/styles";
+import { stylesCss, isSafeImageUrl } from "@/templates/_builder/styles";
 import { resolveIcons, type IconLibrary } from "@/templates/_builder/resolveIcons";
 import { sanitizeIconSvg, safeViewBox } from "@/lib/iconSvg";
 
@@ -89,9 +90,9 @@ function SectionHead({ block }: { block: Block }) {
   return (
     <div className="section-head reveal">
       <div>
-        {block.eyebrow ? <span className="block-eyebrow" {...vc(block, "eyebrow")}>{block.eyebrow}</span> : null}
-        {block.heading ? <h2 {...vc(block, "heading")}>{block.heading}</h2> : null}
-        {block.lead ? <p {...vc(block, "lead")}>{block.lead}</p> : null}
+        {block.eyebrow ? <span className="block-eyebrow" {...vc(block, "eyebrow")}>{autolink(block.eyebrow)}</span> : null}
+        {block.heading ? <h2 {...vc(block, "heading")}>{autolink(block.heading)}</h2> : null}
+        {block.lead ? <p {...vc(block, "lead")}>{autolink(block.lead)}</p> : null}
       </div>
       {block.action?.href ? (
         <a className="view-all" href={block.action.href} {...vc(block, "action")}>
@@ -175,9 +176,9 @@ function PageHero({ b }: { b: Block }) {
             )}
           </nav>
         ) : null}
-        {b.eyebrow ? <span className="block-eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-        <h1 {...vc(b, "heading")}>{b.heading}</h1>
-        {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+        {b.eyebrow ? <span className="block-eyebrow" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+        <h1 {...vc(b, "heading")}>{autolink(b.heading)}</h1>
+        {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
         <Actions list={b.actions} b={b} />
       </div>
     </section>
@@ -200,7 +201,7 @@ function RichText({ b }: { b: Block }) {
     <Section block={b}>
       <div className={cls} {...vc(b, "paragraphs")}>
         {paragraphs.map((p, i) => (
-          <p key={i} {...vc(b, "paragraphs." + i)}>{p}</p>
+          <p key={i} {...vc(b, "paragraphs." + i)}>{autolink(p)}</p>
         ))}
       </div>
     </Section>
@@ -215,6 +216,7 @@ function CardGrid({ b }: { b: Block }) {
     <Section block={b}>
       <div className={colsClass(b.columns) + " reveal"} {...vc(b, "items")}>
         {items.map((it, i) => {
+          const to = safeLink(it.href);
           const inner = (
             <>
               {it.icon ? (
@@ -223,12 +225,11 @@ function CardGrid({ b }: { b: Block }) {
                 </span>
               ) : null}
               {it.tag ? <span className="block-tag" {...vc(b, "itemTag." + i)}>{it.tag}</span> : null}
-              <h3 {...vc(b, "itemTitle." + i)}>{it.title}</h3>
-              {it.body ? <p {...vc(b, "itemBody." + i)}>{it.body}</p> : null}
+              <h3 {...vc(b, "itemTitle." + i)}>{to ? it.title : autolink(it.title)}</h3>
+              {it.body ? <p {...vc(b, "itemBody." + i)}>{to ? it.body : autolink(it.body)}</p> : null}
               {it.meta ? <small className="block-meta" {...vc(b, "itemMeta." + i)}>{it.meta}</small> : null}
             </>
           );
-          const to = safeLink(it.href);
           return to ? (
             <a key={i} className="content-card block-card is-link" href={to} {...vc(b, "items." + i)}>
               {inner}
@@ -258,7 +259,7 @@ function FeatureList({ b }: { b: Block }) {
             </span>
             <div>
               <strong {...vc(b, "itemTitle." + i)}>{linked(it.href, it.title)}</strong>
-              {it.body ? <p {...vc(b, "itemBody." + i)}>{it.body}</p> : null}
+              {it.body ? <p {...vc(b, "itemBody." + i)}>{autolink(it.body)}</p> : null}
             </div>
           </li>
         ))}
@@ -355,7 +356,7 @@ function TableBlock({ b }: { b: Block }) {
   const rows: string[][] = b.rows || [];
   return (
     <Section block={b}>
-      <ListExport title={b.heading || "รายการ"} columns={columns} rows={rows} />
+      <div data-vb-layer="export" style={{ display: "contents" }}><ListExport title={b.heading || "รายการ"} columns={columns} rows={rows} /></div>
       <div className="block-table-wrap" {...vc(b, "rows")}>
         <table className="block-table">
           {b.caption ? <caption>{b.caption}</caption> : null}
@@ -424,7 +425,7 @@ function Steps({ b }: { b: Block }) {
             </span>
             <div>
               <strong>{linked(it.href, it.title)}</strong>
-              {it.body ? <p>{it.body}</p> : null}
+              {it.body ? <p>{autolink(it.body)}</p> : null}
             </div>
           </li>
         ))}
@@ -442,9 +443,9 @@ function TwoColumn({ b }: { b: Block }) {
     <Section block={b}>
       <div className={"block-two-col" + side}>
         <div className="block-two-col-text">
-          {b.subheading ? <h3 {...vc(b, "subheading")}>{b.subheading}</h3> : null}
+          {b.subheading ? <h3 {...vc(b, "subheading")}>{autolink(b.subheading)}</h3> : null}
           {paragraphs.map((p, i) => (
-            <p key={i} {...vc(b, "paragraphs." + i)}>{p}</p>
+            <p key={i} {...vc(b, "paragraphs." + i)}>{autolink(p)}</p>
           ))}
           <Actions list={b.actions} b={b} />
         </div>
@@ -469,8 +470,8 @@ function CtaBand({ b }: { b: Block }) {
       <span className="orst-ornament" aria-hidden="true" />
       <div className="container block-cta-inner">
         <div>
-          <h2 {...vc(b, "heading")}>{b.heading}</h2>
-          {b.body ? <p {...vc(b, "body")}>{b.body}</p> : null}
+          <h2 {...vc(b, "heading")}>{autolink(b.heading)}</h2>
+          {b.body ? <p {...vc(b, "body")}>{autolink(b.body)}</p> : null}
         </div>
         <Actions list={b.actions} b={b} />
       </div>
@@ -492,7 +493,7 @@ function Notice({ b }: { b: Block }) {
         </span>
         <div>
           {b.title ? <strong {...vc(b, "title")}>{b.title}</strong> : null}
-          <p {...vc(b, "body")}>{b.body}</p>
+          <p {...vc(b, "body")}>{autolink(b.body)}</p>
         </div>
       </div>
     </Section>
@@ -563,7 +564,7 @@ function JobListingBlock({ b, tenant }: { b: Block; tenant: string }) {
             ))}
           </div>
           <div style={{ marginTop: 32 }} {...vc(b, "form")}>
-            {b.formHeading ? <h3 {...vc(b, "formHeading")}>{b.formHeading}</h3> : null}
+            {b.formHeading ? <h3 {...vc(b, "formHeading")}>{autolink(b.formHeading)}</h3> : null}
             <JobApplicationForm tenant={tenant} jobs={jobs} />
           </div>
         </>
@@ -636,9 +637,9 @@ function ContactHero({ b }: { b: Block }) {
     <section {...vc(b, "section")} className="contact-hero" aria-labelledby="page-title">
       <div className="container contact-hero-inner">
         <div>
-          {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-          <h1 id="page-title" {...vc(b, "heading")}>{b.heading}</h1>
-          {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+          {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+          <h1 id="page-title" {...vc(b, "heading")}>{autolink(b.heading)}</h1>
+          {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
           <div className="hero-actions" {...vc(b, "actions")}>
             {b.cta1Label ? (
               <a className="btn" href={b.cta1Url || "#"} {...vc(b, "cta1Label")}>
@@ -701,13 +702,13 @@ function StatsHero({ b }: { b: Block }) {
     <section {...vc(b, "section")} className="knowledge-hero" aria-labelledby="page-title">
       <div className="container hero-inner">
         <div className="hero-copy">
-          {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-          <h1 id="page-title" {...vc(b, "heading")}>{b.heading}</h1>
-          {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+          {b.eyebrow ? <span className="eyebrow" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+          <h1 id="page-title" {...vc(b, "heading")}>{autolink(b.heading)}</h1>
+          {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
         </div>
         {stats.length ? (
           <aside className="hero-panel" aria-label={b.panelLabel || "ภาพรวม"} {...vc(b, "panel")}>
-            {b.panelHeading ? <h2 {...vc(b, "panelHeading")}>{b.panelHeading}</h2> : null}
+            {b.panelHeading ? <h2 {...vc(b, "panelHeading")}>{autolink(b.panelHeading)}</h2> : null}
             <div className="stat-list" {...vc(b, "stats")}>
               {stats.map((s, i) => (
                 <div className="stat-row" key={i} {...vc(b, "stats." + i)}>
@@ -747,19 +748,22 @@ function StatsHero({ b }: { b: Block }) {
 // alt="" and is hidden from the a11y tree unless the block supplies its own
 // imageAlt, which would make it a content image worth announcing.
 function HomeHero({ b }: { b: Block }) {
-  const image = b.image || "/assets/orst/images/hero03.png";
+  // A background picture set on the whole section (Style panel or the agent) is what people expect to see, so it
+  // replaces the hero photo instead of sitting hidden underneath it.
+  const sectionBg = b.styles?.section?.bgImage;
+  const image = (isSafeImageUrl(sectionBg) ? sectionBg : "") || b.image || "/assets/orst/images/hero03.png";
   const alt = b.imageAlt || "";
   return (
     <section {...vc(b, "section")} className="hero hero-reference orst-hero-wow" aria-labelledby="hero-title">
-      <div className="orst-hero-media" aria-hidden={alt ? undefined : "true"}>
+      <div className="orst-hero-media" data-vb-layer="photo" aria-hidden={alt ? undefined : "true"}>
         <Picture src={image} alt={alt} className="orst-hero-photo" fetchPriority="high" decoding="async" />
-        <span className="orst-hero-scrim" />
+        <span className="orst-hero-scrim" data-vb-layer="shade" />
       </div>
       <div className="container orst-hero-wrap">
         <div className="orst-hero-content">
-          {b.eyebrow ? <span className="orst-hero-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-          <h1 id="hero-title" className="orst-hero-title" {...vc(b, "heading")}>{b.heading}</h1>
-          {b.lead ? <p className="orst-hero-lead" {...vc(b, "lead")}>{b.lead}</p> : null}
+          {b.eyebrow ? <span className="orst-hero-kicker" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+          <h1 id="hero-title" className="orst-hero-title" {...vc(b, "heading")}>{autolink(b.heading)}</h1>
+          {b.lead ? <p className="orst-hero-lead" {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
           <Actions list={b.actions} b={b} />
         </div>
       </div>
@@ -819,9 +823,9 @@ function MediaTabsBlock({ b }: { b: Block }) {
       <div className="container">
         <div className="section-head knowledge-hub-head">
           <div>
-            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
-            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{autolink(b.heading)}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
           </div>
           {b.viewAllLabel ? <a className="view-all media-view-all-link" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
@@ -911,9 +915,9 @@ function NewsTabsBlock({ b }: { b: Block }) {
       <div className="container">
         <div className="section-head news-events-head">
           <div>
-            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
-            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{autolink(b.heading)}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
           </div>
           {b.viewAllLabel ? <a href={b.viewAllUrl || "#"} className="view-all" {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
@@ -998,9 +1002,9 @@ function ServiceHub({ b }: { b: Block }) {
         {hasHead ? (
         <div className="service-directory-head">
           <div>
-            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
-            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{autolink(b.heading)}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
           </div>
           {b.viewAllLabel ? <a className="view-all" href={b.viewAllUrl || "#"} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
@@ -1012,8 +1016,8 @@ function ServiceHub({ b }: { b: Block }) {
           {hasIntro ? (
           <aside className="service-directory-intro" {...vc(b, "intro")}>
             {b.introLabel ? <span className="intro-label" {...vc(b, "introLabel")}>{b.introLabel}</span> : null}
-            {b.introHeading ? <h3 {...vc(b, "introHeading")}>{b.introHeading}</h3> : null}
-            {b.introLead ? <p {...vc(b, "introLead")}>{b.introLead}</p> : null}
+            {b.introHeading ? <h3 {...vc(b, "introHeading")}>{autolink(b.introHeading)}</h3> : null}
+            {b.introLead ? <p {...vc(b, "introLead")}>{autolink(b.introLead)}</p> : null}
             {steps.length ? (
               <div className="intro-steps" aria-label="ขั้นตอนการใช้บริการ" {...vc(b, "steps")}>
                 {steps.map((s, i) => (
@@ -1034,8 +1038,8 @@ function ServiceHub({ b }: { b: Block }) {
                     {it.time ? <span className="service-time">{it.time}</span> : null}
                   </div>
                   ) : null}
-                  {it.title ? <h3>{it.title}</h3> : null}
-                  {it.body ? <p>{it.body}</p> : null}
+                  {it.title ? <h3>{autolink(it.title)}</h3> : null}
+                  {it.body ? <p>{autolink(it.body)}</p> : null}
                   {it.buttonLabel ? <a className="service-link-btn" href={it.href || "#contact-form"}>{it.buttonLabel}<span aria-hidden="true">→</span></a> : null}
                 </div>
               </article>
@@ -1073,9 +1077,9 @@ function LogoMarquee({ b }: { b: Block }) {
       <div className="container">
         <div className="network-head network-head-compact">
           <div>
-            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{b.eyebrow}</span> : null}
-            {b.heading ? <h2 {...vc(b, "heading")}>{b.heading}</h2> : null}
-            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+            {b.eyebrow ? <span className="section-kicker" {...vc(b, "eyebrow")}>{autolink(b.eyebrow)}</span> : null}
+            {b.heading ? <h2 {...vc(b, "heading")}>{autolink(b.heading)}</h2> : null}
+            {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
           </div>
           {b.viewAllLabel ? <a className="view-all" href={b.viewAllUrl || "#"} aria-label={b.viewAllLabel} {...vc(b, "viewAllLabel")}>{b.viewAllLabel}</a> : null}
         </div>
@@ -1115,7 +1119,7 @@ function FlexPanel({ b }: { b: Block }) {
           </span>
           <div>
             {b.heading ? <strong>{b.heading}</strong> : null}
-            {b.lead ? <p>{b.lead}</p> : null}
+            {b.lead ? <p>{autolink(b.lead)}</p> : null}
           </div>
         </div>
       </Section>
@@ -1149,8 +1153,8 @@ function FlexPanel({ b }: { b: Block }) {
       <section {...vc(b, "section")} className="block-cta" id={b.id}>
         <div className="container block-cta-inner">
           <div>
-            <h2 {...vc(b, "heading")}>{b.heading}</h2>
-            {b.lead ? <p {...vc(b, "lead")}>{b.lead}</p> : null}
+            <h2 {...vc(b, "heading")}>{autolink(b.heading)}</h2>
+            {b.lead ? <p {...vc(b, "lead")}>{autolink(b.lead)}</p> : null}
           </div>
           {items.length ? (
             <div className="block-actions" {...vc(b, "items")}>
@@ -1192,7 +1196,7 @@ function FlexPanel({ b }: { b: Block }) {
               </span>
               <div>
                 <strong>{it.title}</strong>
-                {it.body ? <p>{it.body}</p> : null}
+                {it.body ? <p>{autolink(it.body)}</p> : null}
               </div>
             </li>
           ))}
@@ -1213,8 +1217,8 @@ function FlexPanel({ b }: { b: Block }) {
                   <BlockIcon id={it.icon} className="icon-lg" />
                 </span>
               ) : null}
-              <h3>{it.title}</h3>
-              {it.body ? <p>{it.body}</p> : null}
+              <h3>{it.href ? it.title : autolink(it.title)}</h3>
+              {it.body ? <p>{it.href ? it.body : autolink(it.body)}</p> : null}
             </>
           );
           return it.href ? (

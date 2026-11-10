@@ -96,7 +96,7 @@ const MAX_DESKTOP_W = 1920;
 
 export default function RealPreview({
   blocks, homeData, customTypes, customIcons, collectionData, tenant, harness, labels,
-  device, comp, onComponent, onBox, onNavigate, onUndo,
+  device, comp, onComponent, onBox, onNavigate, onUndo, hidden, onLayers, onImgPos,
   active, onSelect, onFieldChange, onImagePick, onArrayAdd, onArrayRemove, onDeselect,
 }: {
   blocks: any[]; homeData?: any; customTypes?: Record<string, any>; customIcons?: Record<string, any>;
@@ -121,6 +121,12 @@ export default function RealPreview({
   onNavigate?: (path: string) => void;
   /** Ctrl/Cmd+Z (redo: true for Shift+Z / Y) pressed inside the preview itself. */
   onUndo?: (redo: boolean) => void;
+  /** Harness mode: layers switched off in the Layers panel ("<block>|<kind>|<key>"), hidden in the preview only. */
+  hidden?: string[];
+  /** Harness mode: the active block's layers, as the harness reports them. */
+  onLayers?: (i: number, layers: { kind: "comp" | "layer" | "bg"; key: string; depth: number }[]) => void;
+  /** Harness mode: a picture in component `key` of block `i` was dragged to show another part of it ("x% y%"). */
+  onImgPos?: (i: number, key: string, pos: string, zoom?: number) => void;
   active?: number;
   onSelect?: (i: number) => void;
   onFieldChange?: (i: number, path: Path, value: any) => void;
@@ -166,8 +172,8 @@ export default function RealPreview({
     const scroll = changed && (active ?? -1) >= 0 && clickedInHarness.current !== active;
     sentActive.current = active;
     clickedInHarness.current = null;
-    win.postMessage({ type: "webx:builder:render", blocks, active: active ?? -1, labels: labels || [], scroll, comp: comp ?? null, icons: harnessIcons }, PUBLIC_SITE);
-  }, [harnessPath, harnessReady, blocks, active, labels, comp, harnessIcons]);
+    win.postMessage({ type: "webx:builder:render", blocks, active: active ?? -1, labels: labels || [], scroll, comp: comp ?? null, icons: harnessIcons, hidden: hidden || [] }, PUBLIC_SITE);
+  }, [harnessPath, harnessReady, blocks, active, labels, comp, harnessIcons, hidden]);
   // Latest callbacks without re-subscribing the listener on every render.
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
@@ -179,6 +185,10 @@ export default function RealPreview({
   onNavigateRef.current = onNavigate;
   const onUndoRef = useRef(onUndo);
   onUndoRef.current = onUndo;
+  const onLayersRef = useRef(onLayers);
+  onLayersRef.current = onLayers;
+  const onImgPosRef = useRef(onImgPos);
+  onImgPosRef.current = onImgPos;
   // Fit the real-width harness into the canvas (see VIRTUAL_W).
   const wrapRef = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(0);
@@ -207,6 +217,15 @@ export default function RealPreview({
       const d = e.data;
       if (d?.type === "webx:harness:hello") setHarnessReady(true);
       else if (d?.type === "webx:harness:undo") onUndoRef.current?.(d.redo === true);
+      else if (d?.type === "webx:harness:imgpos" && Number.isInteger(d.index) && typeof d.key === "string" && /^[A-Za-z][A-Za-z0-9_.-]{0,60}$/.test(d.key)
+        && typeof d.pos === "string" && /^\d{1,3}(\.\d)?% \d{1,3}(\.\d)?%$/.test(d.pos))
+        onImgPosRef.current?.(d.index, d.key, d.pos, typeof d.zoom === "number" && d.zoom >= 1 && d.zoom <= 4 ? Math.round(d.zoom * 100) / 100 : undefined);
+      else if (d?.type === "webx:harness:layers" && Number.isInteger(d.index) && Array.isArray(d.layers)) {
+        // Another origin: keep only well-formed rows.
+        const ok = d.layers.slice(0, 300).filter((l: any) => l && ["comp", "layer", "bg"].includes(l.kind) && typeof l.key === "string" && /^[A-Za-z][A-Za-z0-9_.-]{0,60}$/.test(l.key) && Number.isInteger(l.depth) && l.depth >= 0 && l.depth < 30)
+          .map((l: any) => ({ kind: l.kind, key: l.key, depth: l.depth }));
+        onLayersRef.current?.(d.index, ok);
+      }
       else if (d?.type === "webx:harness:height" && typeof d.px === "number") setHarnessHeight(Math.max(200, d.px));
       else if (d?.type === "webx:harness:select" && Number.isInteger(d.index)) {
         clickedInHarness.current = d.index;

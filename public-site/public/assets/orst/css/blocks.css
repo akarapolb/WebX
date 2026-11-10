@@ -457,3 +457,7 @@ a.block-media-card.is-link:hover { transform: translateY(-4px); box-shadow: var(
 .block-link-stretch::after { content: ""; position: absolute; inset: 0; }
 .block-link-stretch:hover { text-decoration: underline; }
 .block-link-stretch:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* A web address or e-mail typed in a text becomes a link by itself (lib/autolink.ts). Above a card's stretched link so it stays clickable. */
+.block-autolink { color: inherit; text-decoration: underline; text-underline-offset: 2px; position: relative; z-index: 2; overflow-wrap: anywhere; }
+.block-autolink:hover { text-decoration-thickness: 2px; }

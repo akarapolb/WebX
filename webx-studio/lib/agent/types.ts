@@ -41,6 +41,8 @@ export type AgentCms = {
   publish(uid: string, id: string, opts?: { locale?: string }): Promise<void>;
   listContentTypes(tenantKey: string): Promise<{ uid: string; label: string }[]>;
   contentTypeSchema(uid: string): Promise<ContentTypeSchema | null>;
+  /** Put a file in the workspace's media library (the same upload the Visual Builder uses). */
+  uploadMedia?(file: File): Promise<{ url: string; id?: any }>;
 };
 
 export type AgentRunContext = {
@@ -68,6 +70,8 @@ export type AgentRunContext = {
   engine: "strapi" | "wordpress";
   /** Defaults to governed.* (see tools.ts). */
   cms?: AgentCms;
+  /** The picture attached to the user's message in this run, if any (save_attached_image puts it in the media library). */
+  attachedImage?: { dataUrl: string; mimeType: string };
 };
 
 // ---- SSE wire events (app/api/agent/run/route.ts emits these; the client's
