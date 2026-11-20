@@ -295,6 +295,7 @@ export interface BlockHero extends Struct.ComponentSchema {
     ctaLabel: Schema.Attribute.String;
     ctaUrl: Schema.Attribute.String & Schema.Attribute.DefaultTo<'#'>;
     heading: Schema.Attribute.String & Schema.Attribute.Required;
+    headingAccent: Schema.Attribute.String;
     image: Schema.Attribute.Media<'images'>;
     kicker: Schema.Attribute.String;
     subheading: Schema.Attribute.Text;

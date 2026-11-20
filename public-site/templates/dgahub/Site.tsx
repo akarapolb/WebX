@@ -9,6 +9,7 @@ import { localizeHref, otherLocaleHref } from "@/lib/i18n";
 import Header from "./Header";
 import Footer from "./Footer";
 import Blocks from "./Blocks";
+import { accentVars } from "./theme";
 
 export const TENANT = "dgahub";
 export const HOME_SLUG = "home-blocks";
@@ -63,7 +64,7 @@ export default async function Site({ locale, slug }: { locale: Locale; slug?: st
   };
 
   return (
-    <div className="dgahub">
+    <div className="dgahub" style={accentVars(tenant?.brand?.primaryColor) as React.CSSProperties | undefined}>
       <Header locale={locale} siteName={siteName} owner={owner} home={base(locale)} links={links} otherHref={otherLocaleHref(path, locale)} />
       <div className="prototype-note" role="note">
         {en ? "Prototype for review: content and figures are not final." : "ต้นแบบเพื่อการพิจารณา เนื้อหาและตัวเลขยังไม่ใช่ฉบับจริง"}

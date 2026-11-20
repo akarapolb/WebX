@@ -14,9 +14,10 @@ import ChartBlock from "@/components/blocks/ChartBlock";
 import DatasetDownloadBlock from "@/components/blocks/DatasetDownloadBlock";
 import AssistantBlock from "@/components/blocks/AssistantBlock";
 import FormBlock from "@/components/blocks/FormBlock";
+import EmbedBlock from "@/components/blocks/EmbedBlock";
 import { sanitizeCmsHtml, jsonForScript } from "@/lib/sanitize";
 import { fmtDate, localizeHref, type Locale } from "@/lib/i18n";
-import type { Dataset } from "@/lib/cms";
+import { mediaUrl, type Dataset } from "@/lib/cms";
 import { Icon } from "./Icon";
 
 type Ctx = { locale: Locale; tenant: string; home: string; datasets: Dataset[]; articles: any[]; faqs: any[] };
@@ -141,6 +142,35 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
       case "block.form":
         section(key, <div className="card" style={{ maxWidth: 760 }}><FormBlock b={b} tenant={ctx.tenant} locale={ctx.locale} /></div>);
         break;
+      case "block.image": {
+        const url = mediaUrl(b.image);
+        if (!url) break;
+        section(key, (
+          <figure style={{ margin: 0, maxWidth: b.full ? "none" : 900 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt={b.caption || ""} style={{ width: "100%", height: "auto", borderRadius: "var(--radius)", display: "block" }} />
+            {b.caption && <figcaption className="cite">{b.caption}</figcaption>}
+          </figure>
+        ));
+        break;
+      }
+      case "block.blockquote":
+        section(key, (
+          <figure className="dh-quote">
+            <blockquote><p>{b.quote}</p></blockquote>
+            {b.attribution && <figcaption>— {b.attribution}</figcaption>}
+          </figure>
+        ));
+        break;
+      case "block.spacer":
+        // Spacing between sections, not a section of its own (no alternating background).
+        out.push(b.style === "line"
+          ? <div key={key} className="wrap"><hr className="dh-rule" /></div>
+          : <div key={key} aria-hidden="true" style={{ height: b.size === "sm" ? 16 : b.size === "lg" ? 64 : 32 }} />);
+        break;
+      case "block.embed":
+        section(key, <EmbedBlock b={b} />);
+        break;
       default:
         // Blocks this template has no design for yet are skipped rather than
         // rendered with another template's unstyled markup.
@@ -174,7 +204,7 @@ function HomeHero({ b, stats, ctx }: { b: any; stats: any; ctx: Omit<Ctx, never>
       <div className="wrap hero-grid">
         <div>
           {b.kicker && <p className="eyebrow">{b.kicker}</p>}
-          <h1 id="hero-title"><HeroHeading text={b.heading} /></h1>
+          <h1 id="hero-title">{b.headingAccent ? <>{b.heading}<em>{b.headingAccent}</em></> : <HeroHeading text={b.heading} />}</h1>
           {b.subheading && <p className="lead">{b.subheading}</p>}
           {b.ctaLabel && (
             <div className="hero-actions">
@@ -190,16 +220,16 @@ function HomeHero({ b, stats, ctx }: { b: any; stats: any; ctx: Omit<Ctx, never>
   );
 }
 
-/** The prototype set the second half of the title in orange on its own line.
- *  Editors mark that part with a "|" in the hero heading ("รัฐบาลดิจิทัล|ของประเทศไทย");
- *  without one the heading shows as is. */
+/** The second half of the title shows in the accent colour on its own line. It
+ *  comes from the hero's headingAccent field; older content marked it with a "|"
+ *  in the heading ("รัฐบาลดิจิทัล|ของประเทศไทย"), which still works. */
 function HeroHeading({ text }: { text?: string }) {
   const [a, ...rest] = String(text || "").split("|");
   return rest.length ? <>{a}<em>{rest.join("")}</em></> : <>{a}</>;
 }
 
 function PageHead({ b, ctx }: { b: any; ctx: Ctx }) {
-  const title = String(b.heading || "").replace(/\|/g, "");
+  const title = (String(b.heading || "").replace(/\|/g, "") + (b.headingAccent ? " " + b.headingAccent : "")).trim();
   const crumbHome = ctx.locale === "en" ? "Home" : "หน้าแรก";
   return (
     <div className="page-head">

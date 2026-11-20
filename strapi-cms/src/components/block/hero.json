@@ -5,6 +5,7 @@
   "attributes": {
     "kicker": { "type": "string" },
     "heading": { "type": "string", "required": true },
+    "headingAccent": { "type": "string", "description": "Optional second line of the title, shown highlighted by templates that support it (e.g. dgahub)" },
     "subheading": { "type": "text" },
     "image": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
     "ctaLabel": { "type": "string" },

@@ -1130,3 +1130,12 @@ textarea.agj-in{resize:vertical;line-height:1.5}
 .as-level b{font-size:13px}
 .as-level small{color:var(--mut);font-size:11.5px}
 .as-level--off{opacity:.55;cursor:not-allowed}
+/* DatasetTable (no-code dataset editor) */
+.ds-grid{border-collapse:collapse;font-size:12.5px;min-width:100%}
+.ds-grid th,.ds-grid td{border-bottom:1px solid var(--line);padding:3px;vertical-align:top}
+.ds-grid th{background:var(--sunk);min-width:150px}
+.ds-grid th input,.ds-grid th select{margin-bottom:3px;font-size:12px;padding:4px 6px}
+.ds-grid td input{border:1px solid transparent;background:transparent;padding:4px 6px;font-size:12.5px;width:100%}
+.ds-grid td input:focus{border-color:var(--line2);background:var(--panel)}
+.ds-x{background:none;border:none;color:var(--mut);font-size:16px;cursor:pointer;padding:0 6px}
+.ds-x:hover{color:#e5484d}

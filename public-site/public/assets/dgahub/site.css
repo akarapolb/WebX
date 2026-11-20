@@ -326,3 +326,13 @@ p.dh-unverified { display: inline-flex; font-size: .78rem; background: var(--war
 .nav-tools { display: flex; align-items: center; gap: 8px; }
 .theme-btn { background: none; border: 1px solid #3a4252; border-radius: 6px; color: var(--hero-ink); padding: 0 8px; min-height: 26px; font: inherit; cursor: pointer; }
 .kpis-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Pull quote, rule */
+.dh-quote { margin: 0; max-width: 60ch; border-left: 4px solid var(--accent); padding: 4px 0 4px 20px; }
+.dh-quote blockquote { margin: 0; }
+.dh-quote p { font-size: 1.3rem; font-weight: 600; line-height: 1.5; margin: 0; }
+.dh-quote figcaption { color: var(--ink-3); margin-top: 8px; }
+.dh-rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+/* Brand colour from Studio → Branding (templates/dgahub/theme.ts sets --brand-*) */
+.dgahub[style*="--brand-accent"] { --accent: var(--brand-accent); --accent-ink: var(--brand-accent); --accent-soft: var(--brand-soft); --hero-accent: var(--brand-accent-light); --c1: var(--brand-accent); }
+:root[data-theme="dark"] .dgahub[style*="--brand-accent"] { --accent-ink: var(--brand-accent-light); --accent-soft: var(--brand-soft-dark); --c1: var(--brand-accent-light); }
+.dgahub[style*="--brand-accent"] .band .btn { color: var(--brand-accent); }

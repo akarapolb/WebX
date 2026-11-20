@@ -16,7 +16,7 @@
 // enough block types that a single flat grid (20+ and growing) became a
 // pure scroll-and-scan exercise — see BLOCK_CATEGORIES just below.
 export const TYPES = [
-  { comp: "block.hero", key: "vb.hero", icon: "layout", cat: "content", fields: [{ k: "kicker" }, { k: "heading" }, { k: "subheading", ta: true }, { k: "ctaLabel" }, { k: "ctaUrl" }], def: { heading: "New hero", subheading: "Describe your offer here", ctaLabel: "Get started" } },
+  { comp: "block.hero", key: "vb.hero", icon: "layout", cat: "content", fields: [{ k: "kicker" }, { k: "heading" }, { k: "headingAccent", tplOnly: ["dgahub"], label: { en: "Highlighted second line of the title", th: "บรรทัดที่สองของหัวข้อ (เน้นสี)" } }, { k: "subheading", ta: true }, { k: "ctaLabel" }, { k: "ctaUrl" }], def: { heading: "New hero", subheading: "Describe your offer here", ctaLabel: "Get started" } },
   { comp: "block.richtext", key: "vb.richtext", icon: "doc", cat: "content", fields: [{ k: "body", rich: true }], def: { body: "<p>Write something compelling…</p>" } },
   { comp: "block.cta-banner", key: "vb.cta", icon: "cta", cat: "content", fields: [{ k: "heading" }, { k: "text", ta: true }, { k: "buttonLabel" }, { k: "buttonUrl" }], def: { heading: "Ready to start?", text: "", buttonLabel: "Get started", buttonUrl: "#" } },
   { comp: "block.image", key: "vb.image", icon: "img", cat: "content", fields: [{ k: "caption" }], def: { caption: "" } },
@@ -35,15 +35,24 @@ export const TYPES = [
   // Data Hub blocks (datasets): framing config only; the numbers come from the
   // tenant's own api::dataset.dataset records at render time.
   { comp: "block.chart", key: "vb.chart", icon: "grid", cat: "data",
-    fields: [{ k: "eyebrow" }, { k: "title" }, { k: "intro", ta: true }, { k: "datasetKey" }, { k: "chartType", select: ["line", "bar"] },
-      { k: "xField" }, { k: "yField" }, { k: "seriesField" }, { k: "filter" },
-      { k: "invertY", bool: true, hint: "Smaller is better (ranks): 1 at the top" }, { k: "showTable", bool: true, dflt: true, hint: "Show the data table" }],
+    fields: [
+      { k: "eyebrow", label: { en: "Small label above the title", th: "ข้อความเล็กเหนือหัวข้อ" } }, { k: "title", label: { en: "Title", th: "หัวข้อ" } }, { k: "intro", ta: true, label: { en: "Intro text", th: "คำอธิบาย" } },
+      { k: "datasetKey", src: "dataset", label: { en: "Dataset", th: "ชุดข้อมูล" } },
+      { k: "chartType", select: ["line", "bar"], label: { en: "Chart type", th: "ชนิดกราฟ" } },
+      { k: "xField", src: "datasetField", label: { en: "Horizontal axis / bar labels", th: "แกนนอน / ป้ายแท่ง" } }, { k: "yField", src: "datasetField", label: { en: "Value to plot", th: "ค่าที่แสดง" } },
+      { k: "seriesField", src: "datasetField", optional: true, label: { en: "Split into lines by (optional)", th: "แยกเส้นตาม (ไม่บังคับ)" } },
+      { k: "filter", label: { en: "Show only rows where (e.g. country=THA,SGP)", th: "แสดงเฉพาะแถวที่ (เช่น country=THA,SGP)" } },
+      { k: "invertY", bool: true, label: { en: "Ranking scale", th: "มาตราส่วนอันดับ" }, hint: { en: "Smaller is better (ranks): 1 at the top", th: "ค่าน้อยดีกว่า (อันดับ): 1 อยู่บนสุด" } },
+      { k: "showTable", bool: true, dflt: true, label: { en: "Data table", th: "ตารางข้อมูล" }, hint: { en: "Show the data table under the chart", th: "แสดงตารางข้อมูลใต้กราฟ" } }],
     def: { title: "New chart", datasetKey: "", chartType: "line", xField: "year", yField: "score", invertY: false, showTable: true } },
   { comp: "block.dataset-download", key: "vb.datasetdownload", icon: "doc", cat: "data",
-    fields: [{ k: "eyebrow" }, { k: "title" }, { k: "intro", ta: true }, { k: "datasetKeys" }, { k: "showDictionary", bool: true, dflt: true, hint: "Show the data dictionary" }],
+    fields: [{ k: "eyebrow", label: { en: "Small label above the title", th: "ข้อความเล็กเหนือหัวข้อ" } }, { k: "title", label: { en: "Title", th: "หัวข้อ" } }, { k: "intro", ta: true, label: { en: "Intro text", th: "คำอธิบาย" } },
+      { k: "datasetKeys", label: { en: "Datasets to list (keys, comma-separated; empty = all)", th: "ชุดข้อมูลที่แสดง (รหัส คั่นด้วยจุลภาค; ว่าง = ทั้งหมด)" } },
+      { k: "showDictionary", bool: true, dflt: true, label: { en: "Data dictionary", th: "พจนานุกรมข้อมูล" }, hint: { en: "Show each dataset's data dictionary", th: "แสดงพจนานุกรมข้อมูลของแต่ละชุด" } }],
     def: { title: "Datasets", showDictionary: true } },
   { comp: "block.assistant", key: "vb.assistant", icon: "cta", cat: "data",
-    fields: [{ k: "eyebrow" }, { k: "title" }, { k: "intro", ta: true }, { k: "placeholder" }, { k: "disclaimer", ta: true }],
+    fields: [{ k: "eyebrow", label: { en: "Small label above the title", th: "ข้อความเล็กเหนือหัวข้อ" } }, { k: "title", label: { en: "Title", th: "หัวข้อ" } }, { k: "intro", ta: true, label: { en: "Intro text", th: "คำอธิบาย" } },
+      { k: "placeholder", label: { en: "Question box hint", th: "ข้อความในช่องคำถาม" } }, { k: "disclaimer", ta: true, label: { en: "AI notice (shown with generated answers)", th: "ข้อความแจ้งเรื่อง AI (แสดงกับคำตอบที่สร้างโดย AI)" } }],
     items: { key: "suggestions", scalar: true, def: "" },
     def: { eyebrow: "AI · BETA", title: "Ask about this site", suggestions: [] } },
   { comp: "block.featured-promo", key: "vb.featuredpromo", icon: "cta", cat: "promo", fields: [{ k: "eyebrow" }, { k: "title" }, { k: "description", ta: true }, { k: "primaryLabel" }, { k: "primaryUrl" }, { k: "secondaryLabel" }, { k: "secondaryUrl" }], def: { title: "New featured promo", primaryLabel: "Get started", primaryUrl: "#", items: [] } },
@@ -385,6 +394,17 @@ export const BLOCK_CATEGORIES = [
 // with "block."). metaOf is the ONLY lookup that needs to search all four —
 // iconOf/labelOf/add/addAt/compName/aMeta all call metaOf and therefore need
 // no changes.
+// Strapi public templates that render only part of the gov-portal block
+// library (public-site/templates/<name>/Blocks.tsx). The palette offers just
+// these to that template's tenants, so an editor never adds a block the live
+// site silently leaves out. Keep in step with that template's renderer.
+export const TEMPLATE_BLOCKS: Record<string, string[]> = {
+  dgahub: [
+    "block.hero", "block.richtext", "block.cta-banner", "block.image", "block.feature-grid", "block.stat-row",
+    "block.news-panel", "block.faq", "block.chart", "block.dataset-download", "block.assistant",
+    "block.embed", "block.form", "block.blockquote", "block.spacer", "block.tabs",
+  ],
+};
 export const ALL_TYPES = [...TYPES, ...GENERIC_TYPES, ...ORST_TYPES, ...ROYALSOCIETY_TYPES];
 // Explicit shape so metaOf's return type includes ORST_TYPES' optional
 // `items`/`tpl` fields without widening TYPES' own (much larger, pre-existing)
@@ -392,7 +412,7 @@ export const ALL_TYPES = [...TYPES, ...GENERIC_TYPES, ...ORST_TYPES, ...ROYALSOC
 // `when(b)` — optional per-field/per-items visibility gate, keyed off the
 // block's OWN current field values (e.g. FlexPanel's `layout` select).
 // Omitted means always visible, same as before this existed.
-export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean; bool?: boolean; dflt?: boolean; hint?: string };
+export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean; bool?: boolean; dflt?: boolean; hint?: { en: string; th: string }; label?: { en: string; th: string }; src?: "dataset" | "datasetField"; optional?: boolean; tplOnly?: string[] };
 export type BlockTypeMeta = {
   comp: string; key: string; icon: string; cat: string; fields: ItemField[]; def: any;
   items?: { key: string; fields?: ItemField[]; def: any; scalar?: boolean; when?: (b: any) => boolean };

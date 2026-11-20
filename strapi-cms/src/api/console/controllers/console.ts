@@ -51,7 +51,7 @@ location.replace(redirect);
     const sup = await isSuperAdmin(strapi, admin.id);
 
     const all = await strapi.db.query('api::tenant.tenant')
-      .findMany({ select: ['key', 'name', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat', 'footerColumns', 'engine'], limit: 200 }).catch(() => []);
+      .findMany({ select: ['key', 'name', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat', 'footerColumns', 'contact', 'engine'], limit: 200 }).catch(() => []);
     const mine = all.filter((t: any) => (t.adminEmails || []).map(lc).includes(email));
     // A Strapi admin session can't operate a WordPress-engine tenant's content
     // (different credential scheme entirely — see the Phase 6 plan), so don't
@@ -60,7 +60,7 @@ location.replace(redirect);
 
     ctx.body = {
       admin: { email: admin.email, firstname: admin.firstname || '', isSuper: sup },
-      tenants: allowed.map((t: any) => ({ key: t.key, name: t.name, brand: t.brand || {}, template: t.template || {}, watermark: t.watermark || {}, liveChat: t.liveChat || {}, footerColumns: t.footerColumns || [] })),
+      tenants: allowed.map((t: any) => ({ key: t.key, name: t.name, brand: t.brand || {}, template: t.template || {}, watermark: t.watermark || {}, liveChat: t.liveChat || {}, footerColumns: t.footerColumns || [], contact: t.contact || {} })),
     };
   },
 
@@ -72,7 +72,7 @@ location.replace(redirect);
     const sup = await isSuperAdmin(strapi, admin.id);
     const body = ctx.request.body || {};
     const all = await strapi.db.query('api::tenant.tenant')
-      .findMany({ select: ['id', 'key', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat', 'footerColumns'], limit: 200 }).catch(() => []);
+      .findMany({ select: ['id', 'key', 'adminEmails', 'brand', 'template', 'watermark', 'liveChat', 'footerColumns', 'contact'], limit: 200 }).catch(() => []);
     let target: any;
     if (sup) { const k = lc(ctx.query.tenant); target = all.find((t: any) => t.key === k); }
     else { target = all.find((t: any) => (t.adminEmails || []).map(lc).includes(email)); }
@@ -83,9 +83,10 @@ location.replace(redirect);
     if (body.watermark) data.watermark = { ...(target.watermark || {}), ...body.watermark };
     if (body.liveChat) data.liveChat = body.liveChat; // แทนที่ทั้งก้อน (รายการช่องทาง)
     if (body.footerColumns) data.footerColumns = body.footerColumns; // แทนที่ทั้งก้อน (รายการคอลัมน์)
+    if (body.contact) data.contact = { ...(target.contact || {}), ...body.contact }; // { phone, email, address:{th,en} }
     if (!Object.keys(data).length) { ctx.status = 400; ctx.body = { error: 'ไม่มีข้อมูลให้อัปเดต' }; return; }
     await strapi.db.query('api::tenant.tenant').update({ where: { id: target.id }, data });
-    ctx.body = { ok: true, tenant: target.key, brand: data.brand, template: data.template, watermark: data.watermark, liveChat: data.liveChat, footerColumns: data.footerColumns };
+    ctx.body = { ok: true, tenant: target.key, brand: data.brand, template: data.template, watermark: data.watermark, liveChat: data.liveChat, footerColumns: data.footerColumns, contact: data.contact };
   },
 
   /** ส่งออกข้อมูลฟอร์มเป็น Excel (TOR ข้อ 17.9) — admin-only, scope ตาม tenant

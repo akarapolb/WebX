@@ -6,6 +6,7 @@ import { useLang } from "./LangProvider";
 import { cms, CmsError } from "@/lib/cms";
 import type { MediaAsset } from "@/lib/cms";
 import MediaLibrary from "./MediaLibrary";
+import DatasetTable, { type DsField, type DsRow } from "./DatasetTable";
 import { useAgentContext } from "./agent/useAgentContext";
 import type { AgentProposal } from "@/lib/agent/types";
 
@@ -69,6 +70,11 @@ export default function EntryEditor({
   const [delAck, setDelAck] = useState(false);
   const [releases, setReleases] = useState<any[]>([]);
   const [fp, setFp] = useState<{ hidden: Set<string>; readonly: Set<string> }>({ hidden: new Set(), readonly: new Set() });
+  // Dataset entries: fields/rows/verified edited as a table (DatasetTable), not as JSON.
+  const isDataset = uid === "api::dataset.dataset";
+  const [ds, setDs] = useState<{ fields: DsField[]; rows: DsRow[]; verified: boolean } | null>(null);
+  const [dsInitial, setDsInitial] = useState("");
+  const dsChanged = !!ds && JSON.stringify(ds) !== dsInitial;
   const typer = useRef<ReturnType<typeof setInterval> | null>(null);
   const locOpt = locale ? { locale } : undefined;
 
@@ -108,11 +114,19 @@ export default function EntryEditor({
           if (SYS.has(k) || k === "localizations" || mk.includes(k)) continue;
           const v = e[k];
           if (v && typeof v === "object" && !Array.isArray(v) && typeof v.url === "string") { m.push({ key: k, url: v.url, mime: v.mime, name: v.name }); }
-          else if (Array.isArray(v) && v.length && typeof v[0] === "object") {
-            rs.push({ key: k, items: v.slice(0, 12).map((o: any) => o.title || o.name || o.label || ("#" + (o.documentId ?? o.id))) });
+          // Only arrays of real records are relations. A JSON field holding an
+          // array of objects (e.g. a dataset's rows) is not, and its items'
+          // label may be an object ({th,en}) that React can't render as text.
+          else if (Array.isArray(v) && v.length && v[0] && typeof v[0] === "object" && (v[0].documentId != null || v[0].id != null)) {
+            const str = (x: any) => (typeof x === "string" || typeof x === "number" ? String(x) : x && typeof x === "object" ? (x.th || x.en || "") : "");
+            rs.push({ key: k, items: v.slice(0, 12).map((o: any) => str(o.title) || str(o.name) || str(o.label) || ("#" + (o.documentId ?? o.id))) });
           }
         }
         setMedia(m); setRels(rs);
+        if (isDataset) {
+          const d = { fields: Array.isArray(e.fields) ? e.fields : [], rows: Array.isArray(e.rows) ? e.rows : [], verified: e.verified !== false };
+          setDs(d); setDsInitial(JSON.stringify(d));
+        }
         try {
           const { data } = await cms.entries.list<any>("api::review.review", { pageSize: 1, sort: "updatedAt:DESC", filter: [{ field: "documentRef", op: "eq", value: docId }] });
           setReview(data[0] || null);
@@ -259,14 +273,16 @@ export default function EntryEditor({
   async function save() {
     const changed = fields.filter((f) => f.value !== f.initial);
     const mediaChanged = media.filter((m) => m.newId);
-    if (changed.length === 0 && mediaChanged.length === 0) { setMsg({ t: t("e.nochange"), ok: false }); return; }
+    if (changed.length === 0 && mediaChanged.length === 0 && !dsChanged) { setMsg({ t: t("e.nochange"), ok: false }); return; }
     setBusy("save"); setMsg(null);
     const payload: Record<string, any> = {};
     changed.forEach((f) => (payload[f.key] = f.value));
     mediaChanged.forEach((m) => (payload[m.key] = m.newId));
+    if (dsChanged && ds) Object.assign(payload, ds);
     try {
       await cms.entries.update(uid, docId, payload, locOpt);
       setFields((f) => f.map((x) => ({ ...x, initial: x.value })));
+      if (ds) setDsInitial(JSON.stringify(ds));
       setMsg({ t: t("e.savedDraft"), ok: true }); onSaved(); setTimeout(onClose, 700);
     } catch (err) {
       if (err instanceof CmsError) setMsg({ t: "Save failed (HTTP " + err.status + ")", ok: false });
@@ -285,12 +301,14 @@ export default function EntryEditor({
       // live post still said "Untitled Post" with no content).
       const changed = fields.filter((f) => f.value !== f.initial);
       const mediaChanged = media.filter((m) => m.newId);
-      if (changed.length > 0 || mediaChanged.length > 0) {
+      if (changed.length > 0 || mediaChanged.length > 0 || dsChanged) {
         const payload: Record<string, any> = {};
         changed.forEach((f) => (payload[f.key] = f.value));
         mediaChanged.forEach((m) => (payload[m.key] = m.newId));
+        if (dsChanged && ds) Object.assign(payload, ds);
         await cms.entries.update(uid, docId, payload, locOpt);
         setFields((f) => f.map((x) => ({ ...x, initial: x.value })));
+        if (ds) setDsInitial(JSON.stringify(ds));
       }
       await cms.publish.publish(uid, docId, locOpt);
       setMsg({ t: t("e.publishedOk"), ok: true }); onSaved(); setTimeout(onClose, 800);
@@ -441,6 +459,11 @@ export default function EntryEditor({
               </div>
             );
           })}
+
+          {isDataset && ds && (
+            <DatasetTable fields={ds.fields} rows={ds.rows} verified={ds.verified} onChange={setDs}
+              readOnly={fp.readonly.has("rows")} />
+          )}
 
           {media.map((m) => (
             <div className="fld" key={m.key}>

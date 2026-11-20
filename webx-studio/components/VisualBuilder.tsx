@@ -18,7 +18,7 @@ import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
 import { toBuilder, toWire, GENERIC_WP_TYPES, dialectOf, type Dialect } from "@/lib/blockDialect";
-import { TYPES, ORST_TYPES, ROYALSOCIETY_TYPES, GENERIC_TYPES, BLOCK_CATEGORIES, ALL_TYPES, metaOf } from "@/lib/blockCatalog";
+import { TYPES, ORST_TYPES, ROYALSOCIETY_TYPES, GENERIC_TYPES, BLOCK_CATEGORIES, ALL_TYPES, TEMPLATE_BLOCKS, metaOf } from "@/lib/blockCatalog";
 import { useAgentOptional, useAgent } from "./agent/AgentProvider";
 import { useAgentContext } from "./agent/useAgentContext";
 import type { AgentProposal } from "@/lib/agent/types";
@@ -225,6 +225,9 @@ export default function VisualBuilder() {
   const [uploadingI, setUploadingI] = useState<number>(-1);
   const [aiPrompt, setAiPrompt] = useState("");
   const [customTypes, setCustomTypes] = useState<BlockType[]>([]);
+  // The tenant's datasets, so chart/dataset blocks pick a dataset and its
+  // columns from a list instead of typing internal keys.
+  const [datasets, setDatasets] = useState<{ key: string; title: string; fields: { key: string; label?: { th?: string; en?: string } }[] }[]>([]);
   const [showTypeEditor, setShowTypeEditor] = useState(false);
   const [customIcons, setCustomIcons] = useState<CustomIcon[]>([]);
   const [showIconManager, setShowIconManager] = useState(false);
@@ -300,6 +303,8 @@ export default function VisualBuilder() {
   // to keep `template` non-null for the brief window before the real value
   // resolves; templateReady below is what actually gates any use of it.
   const [template, setTemplate] = useState<Dialect>(uid === WP_PAGE_UID ? "orst" : "gov-portal");
+  // The raw publicTemplate (e.g. "dgahub"), for TEMPLATE_BLOCKS; `template` is its block dialect.
+  const [publicTpl, setPublicTpl] = useState("");
   // Two WordPress templates (ORST, RoyalSociety) now share this pipeline, so
   // a wrong initial guess is no longer harmless (toBuilder/toWire would
   // namespace-translate with the WRONG prefix, corrupting the loaded blocks
@@ -340,6 +345,14 @@ export default function VisualBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gpSupported, clSig]);
   const tenantKey = currentKey && currentKey !== "workspace" ? currentKey : "";
+  useEffect(() => {
+    if (!tenantKey || isWpPage) { setDatasets([]); return; }
+    let cancelled = false;
+    cms.entries.list<any>("api::dataset.dataset", { pageSize: 100, sort: "key:asc", filter: [{ field: "tenant.key", op: "eq", value: tenantKey }] })
+      .then(({ data }) => { if (!cancelled) setDatasets(data.map((d: any) => ({ key: d.key, title: d.title || d.key, fields: Array.isArray(d.fields) ? d.fields : [] }))); })
+      .catch(() => { if (!cancelled) setDatasets([]); });
+    return () => { cancelled = true; };
+  }, [tenantKey, isWpPage]);
 
   // Workspace switches re-run loadPages while an earlier run (for the previous
   // tenant) may still be in flight; only the latest run may touch state.
@@ -523,7 +536,7 @@ export default function VisualBuilder() {
         try {
           const { data: tenants } = await cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: p.tenantKey }] });
           const resolved = tenants[0]?.publicTemplate as string | undefined;
-          if (resolved) { pageTemplate = dialectOf(resolved); setTemplate(pageTemplate); }
+          if (resolved) { pageTemplate = dialectOf(resolved); setTemplate(pageTemplate); setPublicTpl(resolved); }
         } catch {}
       }
       // toBuilder is the identity function for template === "gov-portal"
@@ -1011,7 +1024,7 @@ export default function VisualBuilder() {
       try {
         const { data: tenants } = await cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: tenantKey }] });
         const tpl = (tenants[0]?.publicTemplate || "gov-portal") as string;
-        if (!cancelled) { setTemplate(dialectOf(tpl)); setTemplateReady(true); }
+        if (!cancelled) { setTemplate(dialectOf(tpl)); setPublicTpl(tpl); setTemplateReady(true); }
         // RealPreview reproduces the gov-portal design only; a tenant on another
         // Strapi template (e.g. dgahub) edits on the mockup canvas instead.
         if (tpl !== "gov-portal") return;
@@ -1233,7 +1246,9 @@ export default function VisualBuilder() {
   // filtered out at this one point, so the three render sites below (the
   // insert-between popup, the search results, and the categorized grid)
   // never need their own template check.
-  const paletteTypes = ALL_TYPES.filter((ty: any) => (ty.tpl || "gov-portal") === template || (ty.generic && (template === "orst" || template === "royalsociety")));
+  const allowed = TEMPLATE_BLOCKS[publicTpl];
+  const paletteTypes = ALL_TYPES.filter((ty: any) => ((ty.tpl || "gov-portal") === template || (ty.generic && (template === "orst" || template === "royalsociety")))
+    && (!allowed || allowed.includes(ty.comp)));
 
   function ins(index: number) {
     return (
@@ -1397,17 +1412,31 @@ export default function VisualBuilder() {
                     {b.__component === "block.form" && (
                       <div className="notice" style={{ marginBottom: 9 }}><Icon name="shield" />{t("vb.formwarn")}</div>
                     )}
-                    {(bm?.fields || []).filter((f: any) => !f.when || f.when(b)).map((f: any) => (
+                    {(bm?.fields || []).filter((f: any) => (!f.when || f.when(b)) && (!f.tplOnly || f.tplOnly.includes(publicTpl))).map((f: any) => (
                       <div className="fld" key={f.k} style={{ marginBottom: 9 }}>
-                        <label style={{ fontSize: 11 }}>{f.k}</label>
-                        {f.rich
+                        <label style={{ fontSize: 11 }}>{f.label ? (lang === "th" ? f.label.th : f.label.en) || f.k : f.k}</label>
+                        {f.src === "dataset" || f.src === "datasetField"
+                          ? (() => {
+                              const opts = f.src === "dataset"
+                                ? datasets.map((d) => ({ v: d.key, l: d.title + " (" + d.key + ")" }))
+                                : (datasets.find((d) => d.key === b.datasetKey)?.fields || []).map((x) => ({ v: x.key, l: ((lang === "th" ? x.label?.th : x.label?.en) || x.key) + " (" + x.key + ")" }));
+                              const cur = b[f.k] || "";
+                              return (
+                                <select value={cur} onChange={(e) => setField(i, f.k, e.target.value)}>
+                                  <option value="">{f.optional ? "—" : t("vb.pick")}</option>
+                                  {opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+                                  {cur && !opts.some((o) => o.v === cur) && <option value={cur}>{cur}</option>}
+                                </select>
+                              );
+                            })()
+                        : f.rich
                           ? <RichText value={b[f.k] || ""} onChange={(h) => setField(i, f.k, h)} />
                           : f.code
                             ? <textarea value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} style={{ minHeight: 140, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 12.5 }} spellCheck={false} />
                             : f.bool
                               ? <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
                                   <input type="checkbox" checked={b[f.k] ?? !!f.dflt} onChange={(e) => setField(i, f.k, e.target.checked)} style={{ width: "auto" }} />
-                                  {f.hint || f.k}
+                                  {f.hint ? (lang === "th" ? f.hint.th : f.hint.en) : f.k}
                                 </label>
                             : f.select
                               ? <select value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)}>
