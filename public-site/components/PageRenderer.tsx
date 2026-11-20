@@ -3,24 +3,25 @@ import Footer from "./Footer";
 import BlockRenderer from "./blocks/BlockRenderer";
 import { brandCssVars } from "@/lib/brandColor";
 import type { NavItem, Tenant } from "@/lib/cms";
+import type { Locale } from "@/lib/i18n";
 
 // Renders any block-driven sub-page (app/(gov-portal)/[tenant]/[slug]/page.tsx)
 // — the same Header/main/Footer wrapper HomePage.tsx uses for its own
 // block-driven branch, reused rather than duplicated. `homeData` is threaded
 // through unchanged so live-query blocks (news-panel, awards, etc.) work
 // identically to how they work on the homepage.
-export default function PageRenderer({ tenant, tenantKey, blocks, homeData, navItems }: { tenant: Tenant; tenantKey: string; blocks: any[]; homeData: any; navItems?: NavItem[] }) {
-  const orgName = tenant.brand?.orgName?.th || tenant.name;
+export default function PageRenderer({ tenant, tenantKey, blocks, homeData, navItems, locale = "th", path }: { tenant: Tenant; tenantKey: string; blocks: any[]; homeData: any; navItems?: NavItem[]; locale?: Locale; path?: string }) {
+  const orgName = tenant.brand?.orgName?.[locale] || tenant.brand?.orgName?.th || tenant.name;
   const primary = tenant.brand?.primaryColor;
 
   return (
     <>
       {primary && <style dangerouslySetInnerHTML={{ __html: brandCssVars(primary) }} />}
-      <Header tenant={tenant} logoAlt={orgName} navItems={navItems} />
+      <Header tenant={tenant} logoAlt={orgName} navItems={navItems} locale={locale} path={path} />
       <main id="main">
-        <BlockRenderer blocks={blocks} tenant={tenantKey} homeData={homeData} />
+        <BlockRenderer blocks={blocks} tenant={tenantKey} homeData={homeData} locale={locale} />
       </main>
-      <Footer tenant={tenant} />
+      <Footer tenant={tenant} locale={locale} />
     </>
   );
 }

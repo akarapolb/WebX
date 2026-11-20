@@ -106,7 +106,7 @@
     },
     "publicTemplate": {
       "type": "enumeration",
-      "enum": ["gov-portal", "orst", "royalsociety"],
+      "enum": ["gov-portal", "orst", "royalsociety", "dgahub"],
       "default": "gov-portal",
       "description": "Phase 8 — which public-site React component tree + page set to render for this tenant. NOT the same as the `template` field above, which is an unrelated preset/background setting for the gov-portal design itself."
     },

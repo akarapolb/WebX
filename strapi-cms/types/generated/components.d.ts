@@ -1,5 +1,22 @@
 import type { Schema, Struct } from '@strapi/strapi';
 
+export interface BlockAssistant extends Struct.ComponentSchema {
+  collectionName: 'components_block_assistants';
+  info: {
+    description: "\u0E0A\u0E48\u0E2D\u0E07\u0E16\u0E32\u0E21\u2013\u0E15\u0E2D\u0E1A AI \u0E17\u0E35\u0E48\u0E15\u0E2D\u0E1A\u0E08\u0E32\u0E01\u0E40\u0E19\u0E37\u0E49\u0E2D\u0E2B\u0E32\u0E02\u0E2D\u0E07\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E41\u0E2B\u0E25\u0E48\u0E07\u0E2D\u0E49\u0E32\u0E07\u0E2D\u0E34\u0E07 / Ask box answering from this site's own content, with sources";
+    displayName: 'Block: AI assistant';
+    icon: 'message';
+  };
+  attributes: {
+    disclaimer: Schema.Attribute.Text;
+    eyebrow: Schema.Attribute.String;
+    intro: Schema.Attribute.Text;
+    placeholder: Schema.Attribute.String;
+    suggestions: Schema.Attribute.JSON;
+    title: Schema.Attribute.String;
+  };
+}
+
 export interface BlockAwards extends Struct.ComponentSchema {
   collectionName: 'components_block_awards';
   info: {
@@ -24,6 +41,29 @@ export interface BlockBlockquote extends Struct.ComponentSchema {
   attributes: {
     attribution: Schema.Attribute.String;
     quote: Schema.Attribute.Text & Schema.Attribute.Required;
+  };
+}
+
+export interface BlockChart extends Struct.ComponentSchema {
+  collectionName: 'components_block_charts';
+  info: {
+    description: '\u0E01\u0E23\u0E32\u0E1F\u0E08\u0E32\u0E01\u0E0A\u0E38\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 (Dataset) \u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E15\u0E32\u0E23\u0E32\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E42\u0E1B\u0E23\u0E41\u0E01\u0E23\u0E21\u0E2D\u0E48\u0E32\u0E19\u0E2B\u0E19\u0E49\u0E32\u0E08\u0E2D / Chart from a dataset, always with a data table';
+    displayName: 'Block: Chart';
+    icon: 'chartLine';
+  };
+  attributes: {
+    chartType: Schema.Attribute.Enumeration<['line', 'bar']> &
+      Schema.Attribute.DefaultTo<'line'>;
+    datasetKey: Schema.Attribute.String & Schema.Attribute.Required;
+    eyebrow: Schema.Attribute.String;
+    filter: Schema.Attribute.String;
+    intro: Schema.Attribute.Text;
+    invertY: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    seriesField: Schema.Attribute.String;
+    showTable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    title: Schema.Attribute.String;
+    xField: Schema.Attribute.String & Schema.Attribute.Required;
+    yField: Schema.Attribute.String & Schema.Attribute.Required;
   };
 }
 
@@ -123,6 +163,22 @@ export interface BlockCustom extends Struct.ComponentSchema {
   attributes: {
     props: Schema.Attribute.JSON;
     typeKey: Schema.Attribute.String;
+  };
+}
+
+export interface BlockDatasetDownload extends Struct.ComponentSchema {
+  collectionName: 'components_block_dataset_downloads';
+  info: {
+    description: '\u0E14\u0E32\u0E27\u0E19\u0E4C\u0E42\u0E2B\u0E25\u0E14\u0E0A\u0E38\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E40\u0E1B\u0E47\u0E19 CSV/JSON \u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E1E\u0E08\u0E19\u0E32\u0E19\u0E38\u0E01\u0E23\u0E21\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 / Open-data downloads with a data dictionary';
+    displayName: 'Block: Dataset download';
+    icon: 'download';
+  };
+  attributes: {
+    datasetKeys: Schema.Attribute.String;
+    eyebrow: Schema.Attribute.String;
+    intro: Schema.Attribute.Text;
+    showDictionary: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    title: Schema.Attribute.String;
   };
 }
 
@@ -532,13 +588,16 @@ export interface HomeStat extends Struct.ComponentSchema {
 declare module '@strapi/strapi' {
   export module Public {
     export interface ComponentSchemas {
+      'block.assistant': BlockAssistant;
       'block.awards': BlockAwards;
       'block.blockquote': BlockBlockquote;
+      'block.chart': BlockChart;
       'block.collection-list': BlockCollectionList;
       'block.comparison': BlockComparison;
       'block.comparison-column': BlockComparisonColumn;
       'block.cta-banner': BlockCtaBanner;
       'block.custom': BlockCustom;
+      'block.dataset-download': BlockDatasetDownload;
       'block.embed': BlockEmbed;
       'block.faq': BlockFaq;
       'block.feature-grid': BlockFeatureGrid;

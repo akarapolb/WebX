@@ -32,6 +32,20 @@ export const TYPES = [
   { comp: "block.video-channel", key: "vb.videochannel", icon: "img", cat: "live", fields: [{ k: "title" }], def: { title: "DGA Channel" } },
   { comp: "block.awards", key: "vb.awards", icon: "grid", cat: "live", fields: [{ k: "eyebrow" }, { k: "title" }, { k: "subtitle", ta: true }], def: { eyebrow: "ความภาคภูมิใจของเรา", title: "DGA Auditorium", subtitle: "" } },
   { comp: "block.faq", key: "vb.faq", icon: "doc", cat: "live", fields: [{ k: "eyebrow" }, { k: "title" }], def: { eyebrow: "ถาม–ตอบ", title: "คำถามที่พบบ่อย" } },
+  // Data Hub blocks (datasets): framing config only; the numbers come from the
+  // tenant's own api::dataset.dataset records at render time.
+  { comp: "block.chart", key: "vb.chart", icon: "grid", cat: "data",
+    fields: [{ k: "eyebrow" }, { k: "title" }, { k: "intro", ta: true }, { k: "datasetKey" }, { k: "chartType", select: ["line", "bar"] },
+      { k: "xField" }, { k: "yField" }, { k: "seriesField" }, { k: "filter" },
+      { k: "invertY", bool: true, hint: "Smaller is better (ranks): 1 at the top" }, { k: "showTable", bool: true, dflt: true, hint: "Show the data table" }],
+    def: { title: "New chart", datasetKey: "", chartType: "line", xField: "year", yField: "score", invertY: false, showTable: true } },
+  { comp: "block.dataset-download", key: "vb.datasetdownload", icon: "doc", cat: "data",
+    fields: [{ k: "eyebrow" }, { k: "title" }, { k: "intro", ta: true }, { k: "datasetKeys" }, { k: "showDictionary", bool: true, dflt: true, hint: "Show the data dictionary" }],
+    def: { title: "Datasets", showDictionary: true } },
+  { comp: "block.assistant", key: "vb.assistant", icon: "cta", cat: "data",
+    fields: [{ k: "eyebrow" }, { k: "title" }, { k: "intro", ta: true }, { k: "placeholder" }, { k: "disclaimer", ta: true }],
+    items: { key: "suggestions", scalar: true, def: "" },
+    def: { eyebrow: "AI · BETA", title: "Ask about this site", suggestions: [] } },
   { comp: "block.featured-promo", key: "vb.featuredpromo", icon: "cta", cat: "promo", fields: [{ k: "eyebrow" }, { k: "title" }, { k: "description", ta: true }, { k: "primaryLabel" }, { k: "primaryUrl" }, { k: "secondaryLabel" }, { k: "secondaryUrl" }], def: { title: "New featured promo", primaryLabel: "Get started", primaryUrl: "#", items: [] } },
   // Webflow-style Embed escape hatch — raw HTML/CSS/JS, for cases the block
   // library can't cover. `html` runs as-is on the live site (see
@@ -357,6 +371,7 @@ export const BLOCK_CATEGORIES = [
   { key: "content", labelKey: "vb.cat.content" },
   { key: "grids", labelKey: "vb.cat.grids" },
   { key: "live", labelKey: "vb.cat.live" },
+  { key: "data", labelKey: "vb.cat.data" },
   { key: "promo", labelKey: "vb.cat.promo" },
   // Shared WP-dialect vocabulary shows first, then each tenant's own types.
   { key: "wp-shared", labelKey: "vb.cat.wpshared" },
@@ -377,7 +392,7 @@ export const ALL_TYPES = [...TYPES, ...GENERIC_TYPES, ...ORST_TYPES, ...ROYALSOC
 // `when(b)` — optional per-field/per-items visibility gate, keyed off the
 // block's OWN current field values (e.g. FlexPanel's `layout` select).
 // Omitted means always visible, same as before this existed.
-export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean };
+export type ItemField = { k: string; ta?: boolean; select?: string[]; icon?: boolean; when?: (b: any) => boolean; bool?: boolean; dflt?: boolean; hint?: string };
 export type BlockTypeMeta = {
   comp: string; key: string; icon: string; cat: string; fields: ItemField[]; def: any;
   items?: { key: string; fields?: ItemField[]; def: any; scalar?: boolean; when?: (b: any) => boolean };

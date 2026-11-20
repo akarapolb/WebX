@@ -1,0 +1,78 @@
+/* Data Hub blocks (block.chart, block.dataset-download, block.assistant) for the
+   gov-portal template. Built on design-system.css tokens so a tenant's
+   brand colour (brandCssVars → --c-primary) carries through. Series colours
+   pass 3:1 against the light and dark surfaces; the focus series is also
+   thicker and solid, the others dashed/dotted, so colour is never the only cue. */
+:root {
+  --dh-c1: var(--c-primary);
+  --dh-c2: #1d4ed8;
+  --dh-c3: #047857;
+  --dh-c4: #7c3aed;
+  --dh-c5: #b45309;
+  --dh-c6: #475569;
+}
+[data-theme="dark"] {
+  --dh-c2: #7aa2ff;
+  --dh-c3: #4cc79a;
+  --dh-c4: #b69cff;
+  --dh-c5: #f0b25a;
+  --dh-c6: #a7b3c4;
+}
+
+.dh-block .dh-intro { color: var(--c-text-muted); margin: 8px 0 0; max-width: 70ch; }
+.dh-empty, .dh-meta { color: var(--c-text-muted); font-size: .9rem; }
+.dh-unverified { color: var(--c-warning); font-size: .875rem; }
+
+/* chart */
+.dh-figure { margin: 0; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px; }
+.dh-svg { width: 100%; height: auto; display: block; }
+.dh-svg text { fill: var(--c-text-muted); font-size: 12px; font-family: inherit; }
+.dh-svg text.dh-pt { fill: var(--c-text); font-weight: 700; }
+.dh-svg .dh-grid { stroke: var(--c-border); }
+.dh-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; padding: 0; margin: 10px 0 0; font-size: .875rem; }
+.dh-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.dh-sw { display: inline-block; width: 22px; border-top: 2px solid; }
+.dh-sw.is-focus { border-top-width: 4px; }
+.dh-sw.is-dash { border-top-style: dashed; }
+.dh-sw.is-dot { border-top-style: dotted; }
+.dh-caption { margin-top: 10px; font-size: .85rem; color: var(--c-text-muted); }
+.dh-caption a { color: inherit; }
+
+.dh-bars { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.dh-bars li { display: grid; grid-template-columns: minmax(90px, 160px) 1fr auto; gap: 10px; align-items: center; }
+.dh-bar-track { height: 12px; background: var(--c-sunken); border-radius: 6px; overflow: hidden; }
+.dh-bar-track > span { display: block; height: 100%; background: var(--dh-c6); border-radius: 6px; }
+.dh-bars li.is-focus .dh-bar-track > span { background: var(--dh-c1); }
+.dh-bars li.is-focus .dh-bar-label { font-weight: 700; }
+.dh-bar-val { font-variant-numeric: tabular-nums; }
+
+/* tables (chart data + data dictionary) */
+.dh-table { margin-top: 12px; }
+.dh-table summary { cursor: pointer; color: var(--c-primary); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
+.dh-table-scroll { overflow-x: auto; }
+.dh-table table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+.dh-table th, .dh-table td { border-bottom: 1px solid var(--c-border); padding: 8px 10px; text-align: left; }
+.dh-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* downloads */
+.dh-datasets { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.dh-dataset { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px; padding: 18px; }
+.dh-dataset h3 { margin: 0 0 6px; font-size: 1.15rem; }
+.dh-dataset p { margin: 6px 0; }
+.dh-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px !important; }
+
+/* assistant */
+.dh-ask .dh-ask-form { display: flex; gap: 10px; }
+.dh-ask .dh-ask-form .input { flex: 1; min-width: 0; }
+.dh-suggest { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+.dh-suggest .btn { font-size: .875rem; }
+.dh-answer { margin-top: 14px; background: var(--c-sunken); border-radius: 12px; padding: 16px 18px; }
+.dh-answer-text { white-space: pre-line; margin: 0; }
+.dh-sources-h { font-size: 1rem; margin: 14px 0 4px; }
+.dh-sources { margin: 0; padding-left: 1.3em; }
+
+@media (max-width: 560px) {
+  .dh-ask .dh-ask-form { flex-direction: column; }
+  .dh-bars li { grid-template-columns: 1fr auto; }
+  .dh-bar-track { grid-column: 1 / -1; grid-row: 2; }
+}

@@ -1,4 +1,4 @@
-import HomePage from "@/components/HomePage";
+import HomePage, { homeMetadata } from "@/components/HomePage";
 import { listTenants } from "@/lib/cms";
 
 // One static page per gov-portal-template tenant, generated at build time —
@@ -12,6 +12,10 @@ export async function generateStaticParams() {
   return tenants
     .filter((t) => t.key !== "dga" && (t.publicTemplate || "gov-portal") === "gov-portal")
     .map((t) => ({ tenant: t.key }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ tenant: string }> }) {
+  return homeMetadata((await params).tenant, "th");
 }
 
 export default async function Page({ params }: { params: Promise<{ tenant: string }> }) {

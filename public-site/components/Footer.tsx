@@ -1,13 +1,14 @@
 import type { Tenant } from "@/lib/cms";
+import { homeHref, localizeHref, t, type Locale } from "@/lib/i18n";
 
 // Same fields tenant.js patches into the DOM client-side after load (brand,
 // contact, footerColumns) — rendered directly into the static HTML here
 // instead, per tenant, at build time. This is the concrete thing replacing
 // the old client-side re-brand-after-load / cms-cloak flash-prevention hack.
-export default function Footer({ tenant }: { tenant: Tenant }) {
-  const orgName = tenant.brand?.orgName?.th || tenant.name;
+export default function Footer({ tenant, locale = "th" }: { tenant: Tenant; locale?: Locale }) {
+  const orgName = tenant.brand?.orgName?.[locale] || tenant.brand?.orgName?.th || tenant.name;
   const logo = tenant.brand?.logoUrl || "/assets/image/logo-dga.webp";
-  const address = tenant.contact?.address?.th;
+  const address = tenant.contact?.address?.[locale] || tenant.contact?.address?.th;
   const phone = tenant.contact?.phone;
   const columns = tenant.footerColumns || [];
 
@@ -15,7 +16,7 @@ export default function Footer({ tenant }: { tenant: Tenant }) {
     <footer className="site-footer">
       <div className="wrap">
         <div className="footer-brand">
-          <a className="brand" href="/" aria-label={orgName + " — หน้าแรก"}>
+          <a className="brand" href={homeHref(tenant.key, locale)} aria-label={orgName + " — " + t("home", locale)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="logo" src={logo} alt={orgName} width={150} height={46} />
           </a>
@@ -34,17 +35,17 @@ export default function Footer({ tenant }: { tenant: Tenant }) {
                 <svg className="footer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" aria-hidden="true">
                   <path d="M3 5c0 9 7 16 16 16l3-3-4-3-2 2c-3-1-6-4-7-7l2-2-3-4z" />
                 </svg>
-                โทร {phone}
+                {t("phone", locale)} {phone}
               </a>
             )}
           </address>
         </div>
         {columns.map((col, i) => (
           <div key={i}>
-            <h3>{col.heading?.th}</h3>
+            <h3>{col.heading?.[locale] || col.heading?.th}</h3>
             <ul>
               {(col.links || []).map((l, j) => (
-                <li key={j}><a href={l.url || "#"}>{l.label?.th}</a></li>
+                <li key={j}><a href={localizeHref(l.url || "#", locale)}>{l.label?.[locale] || l.label?.th}</a></li>
               ))}
             </ul>
           </div>
@@ -52,9 +53,9 @@ export default function Footer({ tenant }: { tenant: Tenant }) {
       </div>
       <div className="footer-bottom">
         <div className="wrap">
-          <span>© 2569 {orgName}</span>
+          <span>© {locale === "en" ? "2026" : "2569"} {orgName}</span>
           <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <a href="/console.html" style={{ color: "inherit" }}>เข้าระบบผู้ดูแล</a>
+            <a href="/console.html" style={{ color: "inherit" }}>{t("adminLogin", locale)}</a>
           </span>
         </div>
       </div>

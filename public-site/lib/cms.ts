@@ -27,9 +27,9 @@ export function mediaUrl(m: any): string {
   return u.indexOf("http") === 0 ? u : STRAPI + u;
 }
 
-async function get<T = any>(path: string, tenant: string): Promise<T | null> {
+async function get<T = any>(path: string, tenant: string, locale: "th" | "en" = "th"): Promise<T | null> {
   const sep = path.includes("?") ? "&" : "?";
-  const url = STRAPI + "/api/" + path + sep + "tenant=" + encodeURIComponent(tenant) + "&locale=th";
+  const url = STRAPI + "/api/" + path + sep + "tenant=" + encodeURIComponent(tenant) + "&locale=" + locale;
   try {
     // No cache: "no-store" here — static export needs the DEFAULT
     // Server-Component fetch behavior (fetch once at build time, bake the
@@ -45,7 +45,7 @@ async function get<T = any>(path: string, tenant: string): Promise<T | null> {
   }
 }
 
-export type PublicTemplate = "gov-portal" | "orst" | "royalsociety";
+export type PublicTemplate = "gov-portal" | "orst" | "royalsociety" | "dgahub";
 
 export type Tenant = {
   key: string;
@@ -400,19 +400,19 @@ export async function getWpPage(tenant: string, slug: string): Promise<WpEntry |
   }
 }
 
-export async function getHomeData(tenant: string, engine?: "strapi" | "wordpress") {
+export async function getHomeData(tenant: string, engine?: "strapi" | "wordpress", locale: Locale = "th") {
   if (engine === "wordpress") {
     const articles = await getWpArticles(tenant);
     return { home: null, services: [], banners: [], articles, videos: [], awards: [], faqs: [] };
   }
   const [home, services, banners, articles, videos, awards, faqs] = await Promise.all([
-    get<any[]>("home-pages?populate[hero][populate]=*&populate[featuredPromo][populate]=*&populate[stats]=true&pagination[pageSize]=1", tenant),
-    get<any[]>("services?sort=order:asc&pagination[pageSize]=100", tenant),
-    get<any[]>("banners?sort=order:asc&populate=image&filters[active][$eq]=true&pagination[pageSize]=100", tenant),
-    get<any[]>("articles?sort=publishDate:desc&populate=coverImage&pagination[pageSize]=100", tenant),
-    get<any[]>("videos?sort=date:desc&populate=thumbnail&populate=videoFile&pagination[pageSize]=100", tenant),
-    get<any[]>("awards?sort=order:asc&populate=image&pagination[pageSize]=100", tenant),
-    get<any[]>("faqs?sort=order:asc&pagination[pageSize]=100", tenant),
+    get<any[]>("home-pages?populate[hero][populate]=*&populate[featuredPromo][populate]=*&populate[stats]=true&pagination[pageSize]=1", tenant, locale),
+    get<any[]>("services?sort=order:asc&pagination[pageSize]=100", tenant, locale),
+    get<any[]>("banners?sort=order:asc&populate=image&filters[active][$eq]=true&pagination[pageSize]=100", tenant, locale),
+    get<any[]>("articles?sort=publishDate:desc&populate=coverImage&pagination[pageSize]=100", tenant, locale),
+    get<any[]>("videos?sort=date:desc&populate=thumbnail&populate=videoFile&pagination[pageSize]=100", tenant, locale),
+    get<any[]>("awards?sort=order:asc&populate=image&pagination[pageSize]=100", tenant, locale),
+    get<any[]>("faqs?sort=order:asc&pagination[pageSize]=100", tenant, locale),
   ]);
   return {
     home: (home && home[0]) || null,
@@ -429,10 +429,11 @@ export async function getHomeData(tenant: string, engine?: "strapi" | "wordpress
 // `tenant` query param on `get()` already scopes the read, so a tenant with
 // no matching row just gets null back (HomePage.tsx falls through to legacy
 // rendering for the homepage slug; the [tenant]/[slug] route 404s otherwise).
-export async function getPage(tenant: string, slug: string) {
+export async function getPage(tenant: string, slug: string, locale: Locale = "th") {
   const rows = await get<any[]>(
     "pages?filters[slug][$eq]=" + encodeURIComponent(slug) + "&populate[blocks][populate]=*&pagination[pageSize]=1",
-    tenant
+    tenant,
+    locale
   );
   return (rows && rows[0]) || null;
 }
@@ -440,8 +441,8 @@ export async function getPage(tenant: string, slug: string) {
 // For generateStaticParams() on the [tenant]/[slug] route — output:"export"
 // requires every route enumerated at build time, so this has to be a real
 // list, not just an existence check per-slug the way getPage() is used.
-export async function listPageSlugs(tenant: string): Promise<string[]> {
-  const rows = await get<any[]>("pages?fields[0]=slug&pagination[pageSize]=100", tenant);
+export async function listPageSlugs(tenant: string, locale: Locale = "th"): Promise<string[]> {
+  const rows = await get<any[]>("pages?fields[0]=slug&pagination[pageSize]=100", tenant, locale);
   return (rows || []).map((r) => r.slug).filter(Boolean);
 }
 
@@ -583,6 +584,7 @@ export type NavMegaMenu = {
 };
 export type NavItem = { label: string; url: string; openNewTab: boolean; order: number; megaMenu?: NavMegaMenu | null };
 export async function getNavItems(tenant: string, locale: Locale = "th"): Promise<NavItem[]> {
+  // menu-item isn't localized (labelEn is a field), so always read it as th.
   const rows = await get<any[]>("menu-items?sort=order:asc&pagination[pageSize]=50", tenant);
   return (rows || [])
     .filter((r) => !r.column)
@@ -593,4 +595,23 @@ export async function getNavItems(tenant: string, locale: Locale = "th"): Promis
       url: r.url || "#", openNewTab: !!r.openNewTab, order: r.order ?? 0,
       megaMenu: r.megaMenu && Array.isArray(r.megaMenu.groups) ? (r.megaMenu as NavMegaMenu) : undefined,
     }));
+}
+
+// Datasets (Data Hub): tabular records behind block.chart / block.dataset-download
+// and the open-data downloads. `rows` and `fields` are the same in every locale;
+// title/description/source are localized.
+export type DatasetField = { key: string; label?: { th?: string; en?: string }; type?: "string" | "number" | "integer"; unit?: string; valueLabels?: Record<string, { th?: string; en?: string }> };
+export type Dataset = {
+  documentId: string; key: string; title: string; description?: string; sourceName?: string; sourceUrl?: string;
+  license?: string; fields: DatasetField[]; rows: Record<string, any>[]; verified?: boolean; updatedOn?: string; updateCycle?: string;
+};
+
+export async function getDatasets(tenant: string, locale: Locale = "th"): Promise<Dataset[]> {
+  const rows = await get<any[]>("datasets?sort=key:asc&pagination[pageSize]=100", tenant, locale);
+  return (rows || []).map((d) => ({ ...d, fields: Array.isArray(d.fields) ? d.fields : [], rows: Array.isArray(d.rows) ? d.rows : [] }));
+}
+
+/** Public URL of a tenant's REST dataset endpoint (the open-data API). */
+export function datasetApiUrl(tenant: string, key: string, locale: Locale): string {
+  return STRAPI + "/api/datasets?tenant=" + encodeURIComponent(tenant) + "&locale=" + locale + "&filters[key][$eq]=" + encodeURIComponent(key);
 }

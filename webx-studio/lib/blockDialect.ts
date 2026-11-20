@@ -14,6 +14,19 @@ export type Dialect = "gov-portal" | "orst" | "royalsociety";
 
 export const isTemplateDialect = (d: Dialect): boolean => d !== "gov-portal";
 
+/**
+ * The block dialect a tenant's pages are stored in, from its publicTemplate.
+ * Only the WordPress templates (orst, royalsociety) have their own dialect.
+ * Every Strapi template — gov-portal, and templates that render the same
+ * Strapi "block.*" components in their own design, such as dgahub — stores
+ * standard blocks, so it edits as "gov-portal". Without this, an unknown
+ * template name was taken as a dialect: the palette came up empty and saving
+ * would have prefixed every block with the template name.
+ */
+export function dialectOf(publicTemplate?: string | null): Dialect {
+  return publicTemplate === "orst" || publicTemplate === "royalsociety" ? publicTemplate : "gov-portal";
+}
+
 // Block type NAMES (the bare `type` string already stored on disk — see
 // toBuilder below) that every WP-dialect tenant's own Blocks.tsx renders
 // identically enough for ONE editor-side definition to serve all of them,

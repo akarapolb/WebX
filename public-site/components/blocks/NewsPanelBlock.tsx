@@ -5,9 +5,10 @@
 // fetch, not from the block's own record.
 import { useState } from "react";
 import { Icon } from "../IconSprite";
-import { fmtDateTh, fmtViewsTh, mediaUrl } from "@/lib/cms";
+import { fmtViewsTh, mediaUrl } from "@/lib/cms";
+import { fmtDate, t, type Locale } from "@/lib/i18n";
 
-function NewsCard({ a, feature }: { a: any; feature?: boolean }) {
+function NewsCard({ a, feature, locale }: { a: any; feature?: boolean; locale: Locale }) {
   const img = mediaUrl(a.coverImage);
   return (
     <article className={"news-card" + (feature ? " news-card--feature" : "")}>
@@ -22,15 +23,15 @@ function NewsCard({ a, feature }: { a: any; feature?: boolean }) {
       </a>
       <div className="nc-body">
         <h3 className="nc-title"><a href="#">{a.title}</a></h3>
-        <p className="news-meta"><span><Icon id="i-cal" />{fmtDateTh(a.publishDate)}</span><span><Icon id="i-eye" />{fmtViewsTh(a.views)}</span></p>
+        <p className="news-meta"><span><Icon id="i-cal" />{fmtDate(a.publishDate, locale)}</span><span><Icon id="i-eye" />{fmtViewsTh(a.views)}</span></p>
         {feature && a.excerpt && <p className="nc-excerpt">{a.excerpt}</p>}
-        <a className="news-more" href="#">อ่านต่อ <Icon id="i-arrow" /></a>
+        <a className="news-more" href="#">{t("readMore", locale)} <Icon id="i-arrow" /></a>
       </div>
     </article>
   );
 }
 
-export default function NewsPanelBlock({ articles, newsTabLabel, articleTabLabel }: { articles: any[]; newsTabLabel?: string; articleTabLabel?: string }) {
+export default function NewsPanelBlock({ articles, newsTabLabel, articleTabLabel, locale = "th" }: { articles: any[]; newsTabLabel?: string; articleTabLabel?: string; locale?: Locale }) {
   const list = articles || [];
   const news = list.filter((a) => a.kind === "news");
   const arts = list.filter((a) => a.kind === "article");
@@ -39,12 +40,12 @@ export default function NewsPanelBlock({ articles, newsTabLabel, articleTabLabel
 
   return (
     <section className="block" id="news" aria-labelledby="pgb-news-h">
-      <h2 id="pgb-news-h" className="visually-hidden">ข่าวและบทความ</h2>
+      <h2 id="pgb-news-h" className="visually-hidden">{t("newsHeading", locale)}</h2>
       <div className="news-toolbar">
-        <div className="news-tabs" role="tablist" aria-label="หมวดข่าว">
+        <div className="news-tabs" role="tablist" aria-label={t("newsTabs", locale)}>
           <button className="news-tab" role="tab" aria-selected={tab === "news"} onClick={() => setTab("news")}>{newsTabLabel || "DGA News"}</button>
           {arts.length > 0 && (
-            <button className="news-tab" role="tab" aria-selected={tab === "article"} onClick={() => setTab("article")}>{articleTabLabel || "บทความ"}</button>
+            <button className="news-tab" role="tab" aria-selected={tab === "article"} onClick={() => setTab("article")}>{articleTabLabel || t("articleTab", locale)}</button>
           )}
         </div>
       </div>
@@ -52,7 +53,7 @@ export default function NewsPanelBlock({ articles, newsTabLabel, articleTabLabel
       <div className="news-panel" role="tabpanel">
         <div className="news-items">
           {order(tab === "news" ? news : arts).map((a, i) => (
-            <NewsCard key={a.documentId || i} a={a} feature={i === 0} />
+            <NewsCard key={a.documentId || i} a={a} feature={i === 0} locale={locale} />
           ))}
         </div>
       </div>

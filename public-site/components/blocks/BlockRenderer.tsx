@@ -5,7 +5,11 @@
 // actually feeds this `block.hero`/`block.feature-grid`, but all 6 are
 // implemented so this is a genuine renderer, not a two-case special case.
 import { Icon } from "../IconSprite";
-import { mediaUrl, fmtDateTh, fmtViewsTh, getCollectionEntries, SLUGGED_PLURALS } from "@/lib/cms";
+import { mediaUrl, fmtDateTh, fmtViewsTh, getCollectionEntries, getDatasets, SLUGGED_PLURALS, type Dataset } from "@/lib/cms";
+import { t, type Locale } from "@/lib/i18n";
+import ChartBlock from "./ChartBlock";
+import DatasetDownloadBlock from "./DatasetDownloadBlock";
+import AssistantBlock from "./AssistantBlock";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import NewsPanelBlock from "./NewsPanelBlock";
 import FaqBlock from "./FaqBlock";
@@ -149,11 +153,11 @@ function FeatureGridBlock({ b, customIcons }: { b: any; customIcons?: Record<str
 
 // Verbatim port of components/Highlights.tsx — reads the live `homeData.banners`
 // fetch (same tenant's active, order-sorted banners), block itself has no fields.
-function HighlightsBlock({ items }: { items: any[] }) {
+function HighlightsBlock({ items, locale = "th" }: { items: any[]; locale?: Locale }) {
   const list = items || [];
   if (!list.length) return null;
   return (
-    <section className="hl" aria-label="ไฮไลต์ประชาสัมพันธ์">
+    <section className="hl" aria-label={t("highlights", locale)}>
       <div className="hl-wrap">
         <div className="hl-track" style={{ overflowX: "auto", scrollSnapType: "x mandatory" }}>
           {list.map((bn, i) => {
@@ -175,11 +179,11 @@ function HighlightsBlock({ items }: { items: any[] }) {
 
 // Verbatim port of components/Stats.tsx, but the 4 items now come from the
 // block's own (static) fields instead of a hardcoded array.
-function StatRowBlock({ b, customIcons }: { b: any; customIcons?: Record<string, CustomIconDef> }) {
+function StatRowBlock({ b, customIcons, locale = "th" }: { b: any; customIcons?: Record<string, CustomIconDef>; locale?: Locale }) {
   const items: any[] = Array.isArray(b.items) ? b.items : [];
   if (!items.length) return null;
   return (
-    <section className="stats-band" aria-label="สถิติการให้บริการ">
+    <section className="stats-band" aria-label={t("stats", locale)}>
       <div className="wrap">
         {items.map((s, i) => (
           <div className="stat-item" key={i}>
@@ -497,18 +501,20 @@ function CustomBlock({ b, types }: { b: any; types: Record<string, BlockTypeDef>
 // the "live-query" blocks below (highlights/news-panel/video-channel/
 // awards/faq) show exactly the same collection data the legacy components
 // would, with the same sort/filter/pageSize.
-export default async function BlockRenderer({ blocks, tenant, homeData }: { blocks: any[]; tenant: string; homeData?: any }) {
+export default async function BlockRenderer({ blocks, tenant, homeData, locale = "th" }: { blocks: any[]; tenant: string; homeData?: any; locale?: Locale }) {
   const list = Array.isArray(blocks) ? blocks : [];
   const needsCustomTypes = list.some((b) => b.__component === "block.custom");
   const needsIcons = list.some((b) => b.__component === "block.feature-grid" || b.__component === "block.stat-row");
   const clIdxs: number[] = [];
   list.forEach((b, i) => { if (b.__component === "block.collection-list" && b.pluralName) clIdxs.push(i); });
-  const [customTypes, customIcons, clResults] = await Promise.all([
+  const needsDatasets = list.some((b) => b.__component === "block.chart" || b.__component === "block.dataset-download");
+  const [customTypes, customIcons, clResults, datasets] = await Promise.all([
     needsCustomTypes ? loadCustomTypes(tenant) : Promise.resolve({}),
     needsIcons ? loadCustomIcons(tenant) : Promise.resolve({}),
     Promise.all(clIdxs.map((i) => getCollectionEntries(tenant, list[i].pluralName, {
       sortField: list[i].sortField, sortDir: list[i].sortDir, pageSize: list[i].pageSize, populateField: list[i].imageField,
     }))),
+    needsDatasets ? getDatasets(tenant, locale) : Promise.resolve([] as Dataset[]),
   ]);
   const clByIdx = new Map<number, any[]>(clIdxs.map((i, k) => [i, clResults[k]]));
   const hd = homeData || {};
@@ -522,16 +528,16 @@ export default async function BlockRenderer({ blocks, tenant, homeData }: { bloc
           case "block.cta-banner": return <CtaBannerBlock key={i} b={b} />;
           case "block.feature-grid": return <FeatureGridBlock key={i} b={b} customIcons={customIcons} />;
           case "block.custom": return <CustomBlock key={i} b={b} types={customTypes} />;
-          case "block.highlights": return <HighlightsBlock key={i} items={hd.banners} />;
-          case "block.stat-row": return <StatRowBlock key={i} b={b} customIcons={customIcons} />;
-          case "block.news-panel": return <NewsPanelBlock key={i} articles={hd.articles} newsTabLabel={b.newsTabLabel} articleTabLabel={b.articleTabLabel} />;
+          case "block.highlights": return <HighlightsBlock key={i} items={hd.banners} locale={locale} />;
+          case "block.stat-row": return <StatRowBlock key={i} b={b} customIcons={customIcons} locale={locale} />;
+          case "block.news-panel": return <NewsPanelBlock key={i} articles={hd.articles} newsTabLabel={b.newsTabLabel} articleTabLabel={b.articleTabLabel} locale={locale} />;
           case "block.video-channel": return <VideoChannelBlock key={i} b={b} items={hd.videos} />;
           case "block.awards": return <AwardsBlock key={i} b={b} items={hd.awards} />;
-          case "block.faq": return <FaqBlock key={i} faqs={hd.faqs} eyebrow={b.eyebrow} title={b.title} />;
+          case "block.faq": return <FaqBlock key={i} faqs={hd.faqs} eyebrow={b.eyebrow} title={b.title} locale={locale} />;
           case "block.featured-promo": return <FeaturedPromoBlock key={i} b={b} />;
           case "block.embed": return <EmbedBlock key={i} b={b} />;
           case "block.collection-list": return <CollectionListBlock key={i} b={b} items={clByIdx.get(i) || []} tenant={tenant} />;
-          case "block.form": return <FormBlock key={i} b={b} tenant={tenant} />;
+          case "block.form": return <FormBlock key={i} b={b} tenant={tenant} locale={locale} />;
           case "block.testimonials": return <TestimonialsBlock key={i} b={b} />;
           case "block.logo-cloud": return <LogoCloudBlock key={i} b={b} />;
           case "block.team-grid": return <TeamGridBlock key={i} b={b} />;
@@ -539,6 +545,9 @@ export default async function BlockRenderer({ blocks, tenant, homeData }: { bloc
           case "block.spacer": return <SpacerBlock key={i} b={b} />;
           case "block.tabs": return <TabsAccordionBlock key={i} b={b} />;
           case "block.comparison": return <ComparisonBlock key={i} b={b} />;
+          case "block.chart": return <ChartBlock key={i} b={b} dataset={(datasets as Dataset[]).find((d) => d.key === b.datasetKey)} locale={locale} />;
+          case "block.dataset-download": return <DatasetDownloadBlock key={i} b={b} datasets={datasets as Dataset[]} tenant={tenant} locale={locale} />;
+          case "block.assistant": return <AssistantBlock key={i} b={b} tenant={tenant} locale={locale} />;
           default: return null;
         }
       })}

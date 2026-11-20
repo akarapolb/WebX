@@ -48,6 +48,7 @@ export async function ensurePublicPermissions(strapi: any) {
     "api::video.video": ["find", "findOne"],
     "api::award.award": ["find", "findOne"],
     "api::faq.faq": ["find", "findOne"],
+    "api::dataset.dataset": ["find", "findOne"],
     "api::job.job": ["find", "findOne"],
     // ฟอร์มสาธารณะ: เปิดเฉพาะ create (ไม่เปิด find/findOne เพื่อกันข้อมูลรั่ว/PDPA)
     // การติดตามสถานะใช้ route /track/:ref แบบ auth:false แยกต่างหาก

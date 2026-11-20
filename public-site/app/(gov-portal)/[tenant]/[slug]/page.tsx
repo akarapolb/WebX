@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import PageRenderer from "@/components/PageRenderer";
 import { listTenants, listPageSlugs, getTenant, getPage, getHomeData, getNavItems } from "@/lib/cms";
+import { pageHref } from "@/lib/i18n";
 
 // Every OTHER page besides a tenant's homepage — see [tenant]/page.tsx for
 // that one (dga's own lives at the root "/" instead, app/(gov-portal)/page.tsx).
@@ -26,7 +27,11 @@ export async function generateMetadata({ params }: { params: Promise<{ tenant: s
   const { tenant, slug } = await params;
   const page = await getPage(tenant, slug);
   if (!page) return {};
-  return { title: page.title, description: page.seoDescription || undefined };
+  return {
+    title: page.title,
+    description: page.seoDescription || undefined,
+    alternates: { canonical: pageHref(tenant, "th", slug), languages: { th: pageHref(tenant, "th", slug), en: pageHref(tenant, "en", slug) } },
+  };
 }
 
 export default async function Page({ params }: { params: Promise<{ tenant: string; slug: string }> }) {
@@ -37,5 +42,5 @@ export default async function Page({ params }: { params: Promise<{ tenant: strin
   const data = await getHomeData(tenantKey, tenantData?.engine);
   const navItems = await getNavItems(tenantKey);
   const tenant = tenantData || { key: tenantKey, name: tenantKey };
-  return <PageRenderer tenant={tenant} tenantKey={tenantKey} blocks={page.blocks} homeData={data} navItems={navItems} />;
+  return <PageRenderer tenant={tenant} tenantKey={tenantKey} blocks={page.blocks} homeData={data} navItems={navItems} path={pageHref(tenantKey, "th", slug)} />;
 }

@@ -12,6 +12,7 @@ import Featured from "./Featured";
 import BlockRenderer from "./blocks/BlockRenderer";
 import { getHomeData, getNavItems, getPage, getTenant } from "@/lib/cms";
 import { brandCssVars } from "@/lib/brandColor";
+import { homeHref, t, type Locale } from "@/lib/i18n";
 
 // One designated slug per tenant renders AT the homepage route instead of
 // as a sub-page under [tenant]/[slug] — see that route for the rest of a
@@ -23,7 +24,18 @@ const BLOCK_PAGE_SLUG = "home-blocks";
 // time — see generateStaticParams there). This is the actual proof: the
 // same CMS-driven sections cms.js renders client-side today, rendered here
 // server-side/at-build-time instead, with real per-tenant data baked in.
-export default async function HomePage({ tenantKey }: { tenantKey: string }) {
+/** <title>, description and TH/EN alternates for a tenant homepage (from its home-blocks page, else the tenant name). */
+export async function homeMetadata(tenantKey: string, locale: Locale = "th") {
+  const tenant = await getTenant(tenantKey);
+  const page = tenant.engine !== "wordpress" ? await getPage(tenantKey, BLOCK_PAGE_SLUG, locale) : null;
+  return {
+    title: page?.title || tenant.brand?.orgName?.[locale] || tenant.name,
+    description: page?.seoDescription || undefined,
+    alternates: { canonical: homeHref(tenantKey, locale), languages: { th: homeHref(tenantKey, "th"), en: homeHref(tenantKey, "en") } },
+  };
+}
+
+export default async function HomePage({ tenantKey, locale = "th" }: { tenantKey: string; locale?: Locale }) {
   // Sequential, not Promise.all: getHomeData needs to know the tenant's own
   // engine (Phase 6) before it knows which backend to fetch content from.
   // Build-time static generation, not a user-facing request — fine to pay
@@ -33,26 +45,26 @@ export default async function HomePage({ tenantKey }: { tenantKey: string }) {
   // a completely different agency's site under DGA's own name/logo/colors
   // during a transient outage, with the build still reporting success.
   const tenantData = await getTenant(tenantKey);
-  const data = await getHomeData(tenantKey, tenantData.engine);
+  const data = await getHomeData(tenantKey, tenantData.engine, locale);
   // Strapi-only for now (page.page has no WordPress equivalent) — a
   // wordpress-engine tenant just never matches and falls through below.
-  const page = tenantData.engine !== "wordpress" ? await getPage(tenantKey, BLOCK_PAGE_SLUG) : null;
-  const navItems = await getNavItems(tenantKey);
+  const page = tenantData.engine !== "wordpress" ? await getPage(tenantKey, BLOCK_PAGE_SLUG, locale) : null;
+  const navItems = await getNavItems(tenantKey, locale);
   const tenant = tenantData;
-  const orgName = tenant.brand?.orgName?.th || tenant.name;
+  const orgName = tenant.brand?.orgName?.[locale] || tenant.brand?.orgName?.th || tenant.name;
   const primary = tenant.brand?.primaryColor;
 
   return (
     <>
       {primary && <style dangerouslySetInnerHTML={{ __html: brandCssVars(primary) }} />}
-      <Header tenant={tenant} logoAlt={orgName + " — หน้าแรก"} navItems={navItems} />
+      <Header tenant={tenant} logoAlt={orgName + " — " + t("home", locale)} navItems={navItems} locale={locale} path={homeHref(tenantKey, locale)} />
       {page?.blocks?.length ? (
         // <main> carries no layout-relevant CSS for this template (verified),
         // so nesting the full stack here — where the legacy path splits
         // Highlights (inside <main>) from Stats-through-Featured (outside
         // it) — renders identically while keeping this branch a single call.
         <main id="main">
-          <BlockRenderer blocks={page.blocks} tenant={tenantKey} homeData={data} />
+          <BlockRenderer blocks={page.blocks} tenant={tenantKey} homeData={data} locale={locale} />
         </main>
       ) : (
         <>
@@ -69,7 +81,7 @@ export default async function HomePage({ tenantKey }: { tenantKey: string }) {
           <Featured home={data.home} />
         </>
       )}
-      <Footer tenant={tenant} />
+      <Footer tenant={tenant} locale={locale} />
     </>
   );
 }

@@ -10,6 +10,8 @@ export type FormFieldKind = "text" | "email" | "tel" | "textarea" | "select" | "
 export type FormField = {
   key: string;
   label: string;
+  /** English label for /en pages; falls back to `label`. */
+  labelEn?: string;
   kind: FormFieldKind;
   required: boolean;
   options?: { value: string; label: string }[];
@@ -43,11 +45,11 @@ export const FORM_FIELD_DEFS: Record<string, FormTypeDef> = {
     resultKey: "id",
     submitEndpoint: "/api/contact-messages",
     fields: [
-      { key: "name", label: "ชื่อ-นามสกุล", kind: "text", required: true },
-      { key: "email", label: "อีเมล", kind: "email", required: true },
-      { key: "phone", label: "โทรศัพท์", kind: "tel", required: false },
-      { key: "subject", label: "หัวข้อ", kind: "text", required: true },
-      { key: "message", label: "ข้อความ", kind: "textarea", required: true },
+      { key: "name", label: "ชื่อ-นามสกุล", labelEn: "Full name", kind: "text", required: true },
+      { key: "email", label: "อีเมล", labelEn: "E-mail", kind: "email", required: true },
+      { key: "phone", label: "โทรศัพท์", labelEn: "Phone", kind: "tel", required: false },
+      { key: "subject", label: "หัวข้อ", labelEn: "Subject", kind: "text", required: true },
+      { key: "message", label: "ข้อความ", labelEn: "Message", kind: "textarea", required: true },
     ],
   },
 

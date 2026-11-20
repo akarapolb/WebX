@@ -1,12 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Icon } from "./IconSprite";
+import { pathLocale } from "@/lib/i18n";
 
 export default function ThemeToggle() {
   const [dark, setDark] = useState(false);
+  const [en, setEn] = useState(false);
 
   useEffect(() => {
     setDark(document.documentElement.getAttribute("data-theme") === "dark");
+    setEn(pathLocale() === "en");
   }, []);
 
   function toggle() {
@@ -17,7 +20,7 @@ export default function ThemeToggle() {
   }
 
   return (
-    <button className="btn btn--ghost btn--icon" aria-pressed={dark} aria-label="สลับโหมดมืด" onClick={toggle}>
+    <button className="btn btn--ghost btn--icon" aria-pressed={dark} aria-label={en ? "Dark mode" : "สลับโหมดมืด"} onClick={toggle}>
       <Icon id={dark ? "i-sun" : "i-moon"} />
     </button>
   );

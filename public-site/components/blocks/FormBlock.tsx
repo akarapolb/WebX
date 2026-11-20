@@ -7,29 +7,30 @@
 import { useState, type FormEvent } from "react";
 import { useCaptcha, STRAPI } from "@/lib/useCaptcha";
 import { FORM_FIELD_DEFS, STAGE_LABELS, todayTH, maskNid, type FormTypeDef } from "@/lib/formFieldDefs";
+import { t, type Locale } from "@/lib/i18n";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
-function CopyRef({ value }: { value: string }) {
+function CopyRef({ value, locale }: { value: string; locale: Locale }) {
   const [copied, setCopied] = useState(false);
   return (
     <button type="button" className="btn btn--ghost" style={{ marginLeft: 8 }}
       onClick={() => { navigator.clipboard?.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
-      {copied ? "คัดลอกแล้ว" : "คัดลอก"}
+      {copied ? t("copied", locale) : t("copy", locale)}
     </button>
   );
 }
 
-function CaptchaField({ captcha }: { captcha: { question: string } | null }) {
+function CaptchaField({ captcha, locale }: { captcha: { question: string } | null; locale: Locale }) {
   return (
     <div className="field field--wide">
-      <label htmlFor="fb-captcha">แบบยืนยันตัวตน: {captcha ? captcha.question : "กำลังโหลด…"} *</label>
+      <label htmlFor="fb-captcha">{t("captcha", locale)}: {captcha ? captcha.question : t("loading", locale)} *</label>
       <input id="fb-captcha" name="captchaAnswer" type="text" inputMode="numeric" autoComplete="off" required disabled={!captcha} />
     </div>
   );
 }
 
-function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: any }) {
+function SubmitForm({ def, tenant, b, locale }: { def: FormTypeDef; tenant: string; b: any; locale: Locale }) {
   const { captcha, refreshCaptcha } = useCaptcha();
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
@@ -40,7 +41,7 @@ function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: a
     e.preventDefault();
     const form = e.currentTarget;
     if (!form.checkValidity()) { form.reportValidity(); return; }
-    if (!captcha) { setStatus("error"); setError("กำลังเตรียมแบบยืนยันตัวตน กรุณาลองใหม่อีกครั้งในอีกสักครู่"); return; }
+    if (!captcha) { setStatus("error"); setError(t("captchaWait", locale)); return; }
 
     const fd = new FormData(form);
     const payload: Record<string, any> = {};
@@ -58,7 +59,7 @@ function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: a
     if (file) {
       const fDef = def.fields.find((f) => f.kind === "file");
       if (fDef?.maxFileMB && file.size > fDef.maxFileMB * 1024 * 1024) {
-        setStatus("error"); setError(`ไฟล์ต้องมีขนาดไม่เกิน ${fDef.maxFileMB}MB`); return;
+        setStatus("error"); setError(t("fileTooBig", locale, fDef.maxFileMB)); return;
       }
     }
 
@@ -84,8 +85,8 @@ function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: a
         const wrongCaptcha = body?.error?.name === "CaptchaError";
         setStatus("error");
         setError(wrongCaptcha
-          ? "คำตอบยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่"
-          : "ไม่สามารถส่งข้อมูลได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง");
+          ? t("captchaWrong", locale)
+          : t("sendFail", locale));
         void refreshCaptcha();
         return;
       }
@@ -97,7 +98,7 @@ function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: a
       void refreshCaptcha();
     } catch {
       setStatus("error");
-      setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง");
+      setError(t("netFail", locale));
       void refreshCaptcha();
     }
   }
@@ -105,11 +106,11 @@ function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: a
   if (status === "sent") {
     return (
       <div className="fb-note fb-note--success" role="status" aria-live="polite">
-        ✓ {b.successMessage || "ส่งข้อมูลเรียบร้อยแล้ว"}
+        ✓ {b.successMessage || t("sent", locale)}
         {def.resultKey !== "id" && result && (
           <div style={{ marginTop: 8 }}>
-            {def.resultKey === "username" ? "ชื่อผู้ใช้งาน" : "เลขอ้างอิง"}: <b>{result}</b>
-            <CopyRef value={result} />
+            {def.resultKey === "username" ? t("username", locale) : t("ref", locale)}: <b>{result}</b>
+            <CopyRef value={result} locale={locale} />
           </div>
         )}
       </div>
@@ -124,22 +125,22 @@ function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: a
           const wide = f.kind === "textarea" || f.kind === "select" || f.kind === "file";
           return (
             <div className={"field" + (wide ? " field--wide" : "")} key={f.key}>
-              <label htmlFor={"fb-" + f.key}>{f.label}{f.required ? " *" : ""}</label>
+              <label htmlFor={"fb-" + f.key}>{(locale === "en" && f.labelEn) || f.label}{f.required ? " *" : ""}</label>
               {f.kind === "textarea" ? (
                 <textarea id={"fb-" + f.key} name={f.key} className="textarea" required={f.required} />
               ) : f.kind === "select" ? (
                 <select id={"fb-" + f.key} name={f.key} className="select" required={f.required} defaultValue="">
-                  <option value="" disabled>— เลือก —</option>
+                  <option value="" disabled>{t("choose", locale)}</option>
                   {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               ) : f.kind === "file" ? (
                 <>
                   <input id={"fb-" + f.key} name={f.key} className="input" type="file" />
-                  {f.maxFileMB && <small className="field__hint">ขนาดไม่เกิน {f.maxFileMB}MB</small>}
+                  {f.maxFileMB && <small className="field__hint">{t("maxSize", locale, f.maxFileMB)}</small>}
                 </>
               ) : f.kind === "nid" ? (
                 <input id={"fb-" + f.key} name={f.key} className="input" type="text" inputMode="numeric" maxLength={13}
-                  pattern="\d{13}" title="กรอกเลขประจำตัวประชาชน 13 หลัก" required={f.required} />
+                  pattern="\d{13}" title={t("nidHint", locale)} required={f.required} />
               ) : (
                 <input id={"fb-" + f.key} name={f.key} className="input" type={f.kind} required={f.required} />
               )}
@@ -148,21 +149,21 @@ function SubmitForm({ def, tenant, b }: { def: FormTypeDef; tenant: string; b: a
         })}
         {def.isAnonymousToggleable && (
           <label className="fb-consent field--wide">
-            <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} /> ไม่ประสงค์ออกนาม
+            <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} /> {t("anonymous", locale)}
           </label>
         )}
-        <CaptchaField captcha={captcha} />
+        <CaptchaField captcha={captcha} locale={locale} />
       </div>
       <label className="fb-consent"><input type="checkbox" required /> {b.consentText}</label>
       {status === "error" && <p className="fb-note fb-note--error" role="alert">⚠ {error}</p>}
       <button className="btn btn--primary" type="submit" disabled={status === "sending"}>
-        {status === "sending" ? "กำลังส่ง…" : (b.submitLabel || "ส่งข้อมูล")}
+        {status === "sending" ? t("sending", locale) : (b.submitLabel || t("submit", locale))}
       </button>
     </form>
   );
 }
 
-function TrackForm({ def, tenant, heading }: { def: FormTypeDef; tenant: string; heading?: string }) {
+function TrackForm({ def, tenant, heading, locale }: { def: FormTypeDef; tenant: string; heading?: string; locale: Locale }) {
   const [status, setStatus] = useState<"idle" | "loading" | "found" | "notfound" | "error">("idle");
   const [rec, setRec] = useState<any>(null);
 
@@ -189,19 +190,19 @@ function TrackForm({ def, tenant, heading }: { def: FormTypeDef; tenant: string;
     <div>
       <form onSubmit={handleTrack} className="fb-grid">
         <div className="field field--wide">
-          <label htmlFor="fb-track-ref">เลขอ้างอิง</label>
+          <label htmlFor="fb-track-ref">{t("ref", locale)}</label>
           <input id="fb-track-ref" name="ref" className="input" placeholder="DGA-XXX-YYYY-NNNNNN" required />
         </div>
         <button className="btn btn--primary" type="submit" disabled={status === "loading"}>
-          {status === "loading" ? "กำลังค้นหา…" : "ติดตามสถานะ"}
+          {status === "loading" ? t("searching", locale) : t("track", locale)}
         </button>
       </form>
-      {status === "notfound" && <p className="fb-note fb-note--error">ไม่พบข้อมูลตามเลขอ้างอิงนี้</p>}
-      {status === "error" && <p className="fb-note fb-note--error">ไม่สามารถตรวจสอบสถานะได้ในขณะนี้</p>}
+      {status === "notfound" && <p className="fb-note fb-note--error">{t("notFound", locale)}</p>}
+      {status === "error" && <p className="fb-note fb-note--error">{t("trackFail", locale)}</p>}
       {status === "found" && rec && (
         <div className="fb-track-result">
           <p><b>{rec.ref}</b> — {rec.type || rec.position}</p>
-          {rec.date && <p className="fb-note">วันที่ยื่นเรื่อง: {rec.date}</p>}
+          {rec.date && <p className="fb-note">{t("filedOn", locale)}: {rec.date}</p>}
           <div className="fb-stage-row">
             {STAGE_LABELS.map((label, i) => (
               <span key={i} className={"badge " + (i === rec.stage ? "badge--success fb-stage-badge--active" : "badge--neutral")}>{label}</span>
@@ -218,14 +219,14 @@ function TrackForm({ def, tenant, heading }: { def: FormTypeDef; tenant: string;
   );
 }
 
-export default function FormBlock({ b, tenant }: { b: any; tenant: string }) {
+export default function FormBlock({ b, tenant, locale = "th" }: { b: any; tenant: string; locale?: Locale }) {
   const def = FORM_FIELD_DEFS[b.contentTypeUid];
   if (!def) return null;
   const mode = b.mode === "track" && def.hasTracking ? "track" : "submit";
   return (
     <section className="block fb-block">
       {b.heading && <h2 className="fb-heading">{b.heading}</h2>}
-      {mode === "track" ? <TrackForm def={def} tenant={tenant} heading={b.heading} /> : <SubmitForm def={def} tenant={tenant} b={b} />}
+      {mode === "track" ? <TrackForm def={def} tenant={tenant} heading={b.heading} locale={locale} /> : <SubmitForm def={def} tenant={tenant} b={b} locale={locale} />}
     </section>
   );
 }

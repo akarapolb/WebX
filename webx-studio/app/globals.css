@@ -742,6 +742,8 @@ html[data-theme="dark"] .vbk-custom{color:#d6d8e0}
 .seg button{padding:5px 12px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--mut);background:none;border:none;transition:all var(--t)}
 .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .seg button:disabled{opacity:.35;cursor:not-allowed}
+.seg a{padding:5px 12px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--mut);text-decoration:none;transition:all var(--t)}
+.seg a.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .cbar .cinput{flex:1;min-width:180px;max-width:340px;display:flex;align-items:center;gap:8px;background:var(--sunk);border:1px solid var(--line2);border-radius:9px;padding:7px 11px}
 .cbar .cinput svg{width:14px;height:14px;color:var(--mut)}
 .cbar .cinput input{flex:1;background:none;border:none;color:var(--ink);font-size:13px;font-family:inherit}

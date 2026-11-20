@@ -1305,6 +1305,114 @@ export interface ApiCustomRoleCustomRole extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiDatasetDataset extends Struct.CollectionTypeSchema {
+  collectionName: 'datasets';
+  info: {
+    description: '\u0E0A\u0E38\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E15\u0E32\u0E23\u0E32\u0E07 (rows) \u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E01\u0E23\u0E32\u0E1F \u0E15\u0E32\u0E23\u0E32\u0E07 \u0E41\u0E25\u0E30\u0E14\u0E32\u0E27\u0E19\u0E4C\u0E42\u0E2B\u0E25\u0E14 Open Data \u2014 \u0E40\u0E0A\u0E48\u0E19 \u0E14\u0E31\u0E0A\u0E19\u0E35\u0E2A\u0E32\u0E01\u0E25. Tabular data for chart/table blocks and open-data downloads.';
+    displayName: 'Dataset';
+    pluralName: 'datasets';
+    singularName: 'dataset';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  pluginOptions: {
+    i18n: {
+      localized: true;
+    };
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    fields: Schema.Attribute.JSON &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    key: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    license: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<'CC BY 4.0'>;
+    locale: Schema.Attribute.String;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::dataset.dataset'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    rows: Schema.Attribute.JSON &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    sourceName: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    sourceUrl: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'> &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    title: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    updateCycle: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: true;
+        };
+      }>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    updatedOn: Schema.Attribute.Date &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }>;
+    verified: Schema.Attribute.Boolean &
+      Schema.Attribute.SetPluginOptions<{
+        i18n: {
+          localized: false;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<false>;
+  };
+}
+
 export interface ApiDocEmbeddingDocEmbedding
   extends Struct.CollectionTypeSchema {
   collectionName: 'doc_embeddings';
@@ -1644,37 +1752,6 @@ export interface ApiHomePageHomePage extends Struct.CollectionTypeSchema {
           localized: false;
         };
       }>;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-  };
-}
-
-export interface ApiIconIcon extends Struct.CollectionTypeSchema {
-  collectionName: 'icons';
-  info: {
-    description: '\u0E44\u0E2D\u0E04\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E40\u0E2D\u0E07 (no-code) \u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A Feature grid / Stat row \u0E43\u0E19 Visual Builder';
-    displayName: 'Icon';
-    pluralName: 'icons';
-    singularName: 'icon';
-  };
-  options: {
-    draftAndPublish: false;
-  };
-  attributes: {
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    image: Schema.Attribute.Media<'images'> & Schema.Attribute.Required;
-    key: Schema.Attribute.String &
-      Schema.Attribute.Required &
-      Schema.Attribute.Unique;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'api::icon.icon'> &
-      Schema.Attribute.Private;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
-    publishedAt: Schema.Attribute.DateTime;
-    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2176,6 +2253,9 @@ export interface ApiPagePage extends Struct.CollectionTypeSchema {
         'block.team-grid',
         'block.tabs',
         'block.comparison',
+        'block.chart',
+        'block.dataset-download',
+        'block.assistant',
       ]
     > &
       Schema.Attribute.SetPluginOptions<{
@@ -2631,7 +2711,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     plan: Schema.Attribute.Enumeration<['free', 'pro', 'enterprise']> &
       Schema.Attribute.DefaultTo<'free'>;
     publicTemplate: Schema.Attribute.Enumeration<
-      ['gov-portal', 'orst', 'royalsociety']
+      ['gov-portal', 'orst', 'royalsociety', 'dgahub']
     > &
       Schema.Attribute.DefaultTo<'gov-portal'>;
     publishedAt: Schema.Attribute.DateTime;
@@ -3348,6 +3428,7 @@ declare module '@strapi/strapi' {
       'api::consent-log.consent-log': ApiConsentLogConsentLog;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
       'api::custom-role.custom-role': ApiCustomRoleCustomRole;
+      'api::dataset.dataset': ApiDatasetDataset;
       'api::doc-embedding.doc-embedding': ApiDocEmbeddingDocEmbedding;
       'api::download.download': ApiDownloadDownload;
       'api::ebook.ebook': ApiEbookEbook;
@@ -3356,7 +3437,6 @@ declare module '@strapi/strapi' {
       'api::field-policy.field-policy': ApiFieldPolicyFieldPolicy;
       'api::gallery.gallery': ApiGalleryGallery;
       'api::home-page.home-page': ApiHomePageHomePage;
-      'api::icon.icon': ApiIconIcon;
       'api::job.job': ApiJobJob;
       'api::landing.landing': ApiLandingLanding;
       'api::location.location': ApiLocationLocation;

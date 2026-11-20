@@ -57,7 +57,10 @@
         "block.blockquote",
         "block.team-grid",
         "block.tabs",
-        "block.comparison"
+        "block.comparison",
+        "block.chart",
+        "block.dataset-download",
+        "block.assistant"
       ]
     },
     "tenant": {

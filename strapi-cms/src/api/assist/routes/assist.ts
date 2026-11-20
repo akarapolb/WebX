@@ -8,5 +8,6 @@ export default {
     { method: 'POST', path: '/assist/simplify', handler: 'assist.simplify', config: { auth: false } },
     { method: 'POST', path: '/assist/translate', handler: 'assist.translate', config: { auth: false } },
     { method: 'POST', path: '/assist/find', handler: 'assist.find', config: { auth: false } },
+    { method: 'POST', path: '/assist/ask', handler: 'assist.ask', config: { auth: false } },
   ],
 };

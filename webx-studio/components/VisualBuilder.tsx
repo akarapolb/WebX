@@ -17,7 +17,7 @@ import { useTenant } from "./TenantProvider";
 import { cms, CmsError, type ContentTypeInfo } from "@/lib/cms";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
 import { FORM_FIELD_DEFS } from "@/lib/formFieldDefs";
-import { toBuilder, toWire, GENERIC_WP_TYPES, type Dialect } from "@/lib/blockDialect";
+import { toBuilder, toWire, GENERIC_WP_TYPES, dialectOf, type Dialect } from "@/lib/blockDialect";
 import { TYPES, ORST_TYPES, ROYALSOCIETY_TYPES, GENERIC_TYPES, BLOCK_CATEGORIES, ALL_TYPES, metaOf } from "@/lib/blockCatalog";
 import { useAgentOptional, useAgent } from "./agent/AgentProvider";
 import { useAgentContext } from "./agent/useAgentContext";
@@ -341,12 +341,17 @@ export default function VisualBuilder() {
   }, [gpSupported, clSig]);
   const tenantKey = currentKey && currentKey !== "workspace" ? currentKey : "";
 
+  // Workspace switches re-run loadPages while an earlier run (for the previous
+  // tenant) may still be in flight; only the latest run may touch state.
+  const loadSeq = useRef(0);
   const loadPages = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       const { data } = await cms.entries.list<any>(uid, {
         page: 1, pageSize: 50, sort: "updatedAt:DESC",
         ...(tenantKey ? { filter: [{ field: "tenant.key", op: "eq" as const, value: tenantKey }] } : {}),
       });
+      if (seq !== loadSeq.current) return;
       const list = data.map((e: any) => ({ docId: String(e.documentId ?? e.id), locale: e.locale, title: e.title || "#" + (e.documentId ?? e.id), tenantKey: e.tenantKey || undefined }));
       setPages(list);
       // Only auto-select a default page the FIRST time — a re-run of this
@@ -354,8 +359,13 @@ export default function VisualBuilder() {
       // changing `template`, which this callback depends on) must refresh
       // the list without yanking the user back to page 1 if they've already
       // opened something else. See selRef's own comment.
-      if (list[0] && !selRef.current) open(list[0]);
-    } catch { setPages([]); }
+      // ...unless the open page belongs to another workspace: the session
+      // starts on its default tenant and switches after mount, and an earlier
+      // run could already have opened that tenant's first page, leaving the
+      // editor on a page of the wrong site while the picker lists this one's.
+      const foreign = !!tenantKey && !!selRef.current && !list.some((p) => p.docId === selRef.current!.docId);
+      if (list[0] && (!selRef.current || foreign)) open(list[0]);
+    } catch { if (seq === loadSeq.current) setPages([]); }
     // `template` is a real dependency, not just an exhaustive-deps nag:
     // `open` is a plain (non-memoized) function redefined every render, so
     // its closure only has the CURRENT render's `template`. loadPages must
@@ -512,8 +522,8 @@ export default function VisualBuilder() {
       if (!tenantKey && p.tenantKey) {
         try {
           const { data: tenants } = await cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: p.tenantKey }] });
-          const resolved = tenants[0]?.publicTemplate as Dialect | undefined;
-          if (resolved) { pageTemplate = resolved; setTemplate(resolved); }
+          const resolved = tenants[0]?.publicTemplate as string | undefined;
+          if (resolved) { pageTemplate = dialectOf(resolved); setTemplate(pageTemplate); }
         } catch {}
       }
       // toBuilder is the identity function for template === "gov-portal"
@@ -1000,8 +1010,10 @@ export default function VisualBuilder() {
       setPreviewLoading(true); setGpSupported(false); setPreviewHomeData(null);
       try {
         const { data: tenants } = await cms.entries.list<any>("api::tenant.tenant", { pageSize: 1, filter: [{ field: "key", op: "eq", value: tenantKey }] });
-        const tpl = (tenants[0]?.publicTemplate || "gov-portal") as Dialect;
-        if (!cancelled) { setTemplate(tpl); setTemplateReady(true); }
+        const tpl = (tenants[0]?.publicTemplate || "gov-portal") as string;
+        if (!cancelled) { setTemplate(dialectOf(tpl)); setTemplateReady(true); }
+        // RealPreview reproduces the gov-portal design only; a tenant on another
+        // Strapi template (e.g. dgahub) edits on the mockup canvas instead.
         if (tpl !== "gov-portal") return;
         if (!cancelled) setGpSupported(true);
         // tenantFilter is required, not optional — an unscoped caller (e.g.
@@ -1075,6 +1087,31 @@ export default function VisualBuilder() {
           <InlineText as="p" value={b.text || ""} onChange={(v) => setField(i, "text", v)} placeholder="Text…" />
         </div>
         <InlineText as="span" className="vbk-btn" value={b.buttonLabel || ""} onChange={(v) => setField(i, "buttonLabel", v)} placeholder="Button" />
+      </div>
+    );
+    if (c === "block.chart") return (
+      <div className="vbk-rich">
+        <span className="muted" style={{ fontSize: 11 }}>{b.eyebrow || t("vb.chart")}</span>
+        <strong style={{ display: "block" }}>{b.title || t("vb.chart")}</strong>
+        <svg viewBox="0 0 120 36" width="100%" height="48" preserveAspectRatio="none" aria-hidden="true" style={{ display: "block", margin: "6px 0" }}>
+          {b.chartType === "bar"
+            ? [30, 22, 14].map((w, k) => <rect key={k} x="0" y={k * 12 + 2} width={w * 3.6} height="8" rx="3" fill="currentColor" opacity={k ? 0.35 : 0.8} />)
+            : <polyline points="2,30 30,24 60,12 90,14 118,6" fill="none" stroke="currentColor" strokeWidth="2.5" />}
+        </svg>
+        <span className="muted" style={{ fontSize: 11 }}>{(b.datasetKey || "—") + " · " + (b.xField || "?") + " → " + (b.yField || "?")}</span>
+      </div>
+    );
+    if (c === "block.dataset-download") return (
+      <div className="vbk-rich">
+        <strong>{b.title || t("vb.datasetdownload")}</strong>
+        <span className="muted" style={{ display: "block", fontSize: 11 }}>CSV · JSON · {b.datasetKeys || "*"}</span>
+      </div>
+    );
+    if (c === "block.assistant") return (
+      <div className="vbk-rich">
+        <span className="muted" style={{ fontSize: 11 }}>{b.eyebrow || "AI"}</span>
+        <strong style={{ display: "block" }}>{b.title || t("vb.assistant")}</strong>
+        <div style={{ border: "1px solid currentColor", opacity: 0.4, borderRadius: 8, padding: "6px 10px", margin: "6px 0", fontSize: 12 }}>{b.placeholder || "…"}</div>
       </div>
     );
     if (c === "block.richtext") return <div className="vbk-rich" dangerouslySetInnerHTML={{ __html: b.body ? sanitizeCmsHtml(b.body) : "<p style='color:#999'>Rich text… (edit in panel)</p>" }} />;
@@ -1236,7 +1273,17 @@ export default function VisualBuilder() {
           against the viewport rather than a fixed ancestor. */}
       <div className={fullscreen ? "vb-full" : undefined}>
       <div className="vh">
-        <div><h1>{t("nav.builder")}</h1>{!fullscreen && <p>{t("vb.sub")}</p>}</div>
+        <div><h1>{t("nav.builder")}</h1>{!fullscreen && <p>{t("vb.sub")}</p>}
+          {/* Strapi has two block-page types: landing pages and site pages
+              (api::page.page, e.g. a tenant's /<slug> pages). This builder
+              edits both; the switch was only reachable by URL before. */}
+          {!fullscreen && !isWpPage && (
+            <div className="seg" role="group" aria-label={t("vb.kind")} style={{ marginTop: 8, display: "inline-flex" }}>
+              <a href="/builder" aria-current={isLanding ? "page" : undefined} className={isLanding ? "on" : undefined}>{t("vb.kind.landing")}</a>
+              <a href="/builder?uid=api::page.page" aria-current={!isLanding ? "page" : undefined} className={!isLanding ? "on" : undefined}>{t("vb.kind.page")}</a>
+            </div>
+          )}
+        </div>
         <div className="vh-act">
           {pages.length > 0 && (
             <select className="vb-sel" value={sel?.docId || ""} onChange={(e) => {
@@ -1357,6 +1404,11 @@ export default function VisualBuilder() {
                           ? <RichText value={b[f.k] || ""} onChange={(h) => setField(i, f.k, h)} />
                           : f.code
                             ? <textarea value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)} style={{ minHeight: 140, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 12.5 }} spellCheck={false} />
+                            : f.bool
+                              ? <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                                  <input type="checkbox" checked={b[f.k] ?? !!f.dflt} onChange={(e) => setField(i, f.k, e.target.checked)} style={{ width: "auto" }} />
+                                  {f.hint || f.k}
+                                </label>
                             : f.select
                               ? <select value={b[f.k] || ""} onChange={(e) => setField(i, f.k, e.target.value)}>
                                   {f.select.map((opt: string) => <option key={opt} value={opt}>{opt || "—"}</option>)}

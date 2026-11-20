@@ -10,6 +10,7 @@ export default function GovPortalLayout({ children }: { children: React.ReactNod
       <link rel="stylesheet" href="/assets/templates.css" />
       <link rel="stylesheet" href="/assets/leaflet.css" />
       <link rel="stylesheet" href="/assets/home.css" />
+      <link rel="stylesheet" href="/assets/datahub.css" />
       {children}
     </>
   );

@@ -56,6 +56,7 @@ import {
 import { planLimit, seatLimitExceeded, tokenBudgetExceeded, agentUsagePercent } from "../plans";
 import { generateSecret, otpauthUri, verifyTOTP, generateRecoveryCodes, hashRecoveryCode } from "../totp";
 import { keycloakAdminToken, listEnabledKeycloakEmails, realmFromIssuerUrl } from "../keycloakAdmin";
+import { dialectOf } from "../blockDialect";
 
 // trueOwnerOf()/tenantGuard() below are the dedicated cross-tenant write
 // guard for every SCOPED update/delete/publish reaching Strapi through a
@@ -1745,7 +1746,7 @@ export async function resolveAgentPolicy(user: CurrentUser): Promise<AgentPolicy
   // conservative rather than defaulting an unscoped, cross-tenant-reach
   // session to some ambient autonomy level.
   if (!eff) return { ...empty, reason: "unscoped" };
-  const dialect = eff.publicTemplate || "gov-portal";
+  const dialect = dialectOf(eff.publicTemplate);
   const engine = eff.engine || "strapi";
   if (eff.plan === "free" || !eff.plan) return { ...empty, tenantKey: eff.key, dialect, engine, reason: "plan" };
 

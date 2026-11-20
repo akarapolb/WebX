@@ -10,6 +10,7 @@
 // (strapi-cms/src/seed/seed.ts's ensurePublicPermissions).
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { pathLocale } from "@/lib/i18n";
 
 const STORAGE_KEY = "webx_consent";
 const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
@@ -21,7 +22,11 @@ const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/
  * from, so the banner (a client component) derives it from the URL like any
  * other client-side code in this app already has to. */
 function tenantFromPath(pathname: string): string {
-  const seg = pathname.split("/").filter(Boolean)[0];
+  // English pages live under /en (/en, /en/orst, /en/<tenant>): skip that
+  // prefix, or every English visitor's consent was filed under a tenant
+  // named "en", which Strapi then resolves to its default tenant.
+  const segs = pathname.split("/").filter(Boolean);
+  const seg = segs[0] === "en" ? segs[1] : segs[0];
   if (!seg) return "dga";
   if (seg === "orst" || seg === "royalsociety") return seg;
   return seg; // gov-portal's own [tenant] segment (pea, nbtc, ...)
@@ -72,11 +77,12 @@ export default function CookieConsent() {
   }
 
   if (!visible) return null;
+  const en = pathLocale(pathname || "/") === "en";
 
   return (
     <div
       role="region"
-      aria-label="การใช้คุกกี้"
+      aria-label={en ? "Cookies" : "การใช้คุกกี้"}
       style={{
         position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 9999,
         background: "#14171f", color: "#f2f3f6",
@@ -95,9 +101,10 @@ export default function CookieConsent() {
           rule is — so this notice rendered dark-grey on the near-black
           banner at 2.36:1. Caught by a real Lighthouse audit. */}
       <p style={{ margin: 0, flex: "1 1 380px", maxWidth: 680, color: "#f2f3f6" }}>
-        เว็บไซต์นี้ใช้คุกกี้เพื่อพัฒนาประสบการณ์การใช้งานและวิเคราะห์การเข้าชม
-        คุณสามารถเลือกยอมรับทั้งหมดหรือเฉพาะคุกกี้ที่จำเป็นได้ (
-        <a href="/privacy" style={{ color: "#9fd3ff", textDecoration: "underline" }}>นโยบายความเป็นส่วนตัว</a>
+        {en
+          ? "This site uses cookies to improve your experience and to measure visits. You can accept all cookies or only the necessary ones ("
+          : "เว็บไซต์นี้ใช้คุกกี้เพื่อพัฒนาประสบการณ์การใช้งานและวิเคราะห์การเข้าชม คุณสามารถเลือกยอมรับทั้งหมดหรือเฉพาะคุกกี้ที่จำเป็นได้ ("}
+        <a href="/privacy" style={{ color: "#9fd3ff", textDecoration: "underline" }}>{en ? "privacy policy" : "นโยบายความเป็นส่วนตัว"}</a>
         )
       </p>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -108,7 +115,7 @@ export default function CookieConsent() {
             borderRadius: 8, padding: "9px 16px", fontSize: 13.5, cursor: "pointer",
           }}
         >
-          เฉพาะที่จำเป็น
+          {en ? "Necessary only" : "เฉพาะที่จำเป็น"}
         </button>
         <button
           onClick={() => save("accept_all", { necessary: true, analytics: true, marketing: true })}
@@ -120,7 +127,7 @@ export default function CookieConsent() {
             borderRadius: 8, padding: "9px 18px", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
           }}
         >
-          ยอมรับทั้งหมด
+          {en ? "Accept all" : "ยอมรับทั้งหมด"}
         </button>
       </div>
     </div>

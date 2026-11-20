@@ -1,0 +1,12 @@
+{
+  "collectionName": "components_block_dataset_downloads",
+  "info": { "displayName": "Block: Dataset download", "icon": "download", "description": "ดาวน์โหลดชุดข้อมูลเป็น CSV/JSON พร้อมพจนานุกรมข้อมูล / Open-data downloads with a data dictionary" },
+  "options": {},
+  "attributes": {
+    "eyebrow": { "type": "string" },
+    "title": { "type": "string" },
+    "intro": { "type": "text" },
+    "datasetKeys": { "type": "string", "description": "Comma-separated dataset keys; empty = every dataset of this tenant" },
+    "showDictionary": { "type": "boolean", "default": true }
+  }
+}
