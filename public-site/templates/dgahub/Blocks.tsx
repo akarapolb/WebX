@@ -24,6 +24,25 @@ type Ctx = { locale: Locale; tenant: string; home: string; datasets: Dataset[]; 
 
 const kind = (b: any) => String(b?.__component || "");
 
+// The AI assistant and the feedback form call the CMS from the visitor's
+// browser. A public copy of the site built against a CMS on this machine
+// (localhost) can't reach it, so those blocks show a short note instead.
+const isLocal = (u: string) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(u);
+const CMS_REACHABLE = !(isLocal(process.env.STRAPI_URL || "http://localhost:1337") && !isLocal(process.env.PUBLIC_SITE_URL || "http://localhost:3100"));
+
+function Offline({ locale, what }: { locale: Locale; what: "assistant" | "form" }) {
+  const en = locale === "en";
+  const name = what === "assistant" ? (en ? "The AI assistant" : "ผู้ช่วย AI") : (en ? "The feedback form" : "แบบฟอร์มความคิดเห็น");
+  return (
+    <div className="card dh-offline" role="note">
+      <h3>{name}</h3>
+      <p className="muted" style={{ margin: 0 }}>{en
+        ? "This public preview runs without the CMS, so this feature is switched off. It works on the full WebX installation."
+        : "ตัวอย่างสาธารณะนี้ไม่ได้เชื่อมต่อระบบ CMS จึงปิดฟังก์ชันนี้ไว้ ใช้งานได้บนระบบ WebX เต็มรูปแบบ"}</p>
+    </div>
+  );
+}
+
 export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHome: boolean } & Ctx) {
   const out: React.ReactNode[] = [];
   let alt = false;
@@ -57,7 +76,14 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
       case "block.chart":
       case "block.assistant": {
         const pair = (kind(b) === "block.chart" && kind(next) === "block.assistant") || (kind(b) === "block.assistant" && kind(next) === "block.chart");
-        if (pair) {
+        // Two or more charts in a row form one dashboard-style grid section.
+        let run = 0;
+        while (kind(blocks[i + run]) === "block.chart") run++;
+        if (run >= 2) {
+          const charts = blocks.slice(i, i + run);
+          i += run - 1;
+          section(key, <div className="grid g2 dh-dash">{charts.map((c, j) => <div key={j}>{dataBlock(c, ctx)}</div>)}</div>);
+        } else if (pair) {
           i++;
           section(key, <div className="grid g2" style={{ alignItems: "start" }}>{dataBlock(b, ctx)}{dataBlock(next, ctx)}</div>);
         } else {
@@ -85,11 +111,12 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
               {items.map((a: any) => (
                 <li key={a.documentId || a.id}>
                   <time dateTime={a.publishDate}>{fmtDate(a.publishDate, ctx.locale)}</time>
-                  <span>{a.title}{a.excerpt && !String(a.excerpt).startsWith(String(a.title)) ? <span className="muted small"><br />{a.excerpt}</span> : null}</span>
+                  <span>{a.slug ? <a href={`${ctx.home}/news/${a.slug}`}>{a.title}</a> : a.title}{a.excerpt && !String(a.excerpt).startsWith(String(a.title)) ? <span className="muted small"><br />{a.excerpt}</span> : null}</span>
                 </li>
               ))}
             </ul>
           ) : <p className="muted">{ctx.locale === "en" ? "No news yet." : "ยังไม่มีข่าว"}</p>}
+          {items.length > 0 && <p style={{ marginTop: 20 }}><a className="dh-more" href={`${ctx.home}/news`}>{ctx.locale === "en" ? "All news" : "ข่าวทั้งหมด"} →</a></p>}
         </>, hid);
         break;
       }
@@ -137,10 +164,11 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
         section(key, <div className="prose" dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(b.body || "") }} />);
         break;
       case "block.dataset-download":
-        section(key, <DatasetDownloadBlock b={b} datasets={ctx.datasets} tenant={ctx.tenant} locale={ctx.locale} />);
+        section(key, <DatasetDownloadBlock b={b} datasets={ctx.datasets} tenant={ctx.tenant} locale={ctx.locale}
+          links={{ csv: (d) => `${ctx.home}/data/${d.key}.csv`, json: (d) => `${ctx.home}/data/${d.key}.json` }} />);
         break;
       case "block.form":
-        section(key, <div className="card" style={{ maxWidth: 760 }}><FormBlock b={b} tenant={ctx.tenant} locale={ctx.locale} /></div>);
+        section(key, CMS_REACHABLE ? <div className="card" style={{ maxWidth: 760 }}><FormBlock b={b} tenant={ctx.tenant} locale={ctx.locale} /></div> : <div style={{ maxWidth: 760 }}><Offline locale={ctx.locale} what="form" /></div>);
         break;
       case "block.image": {
         const url = mediaUrl(b.image);
@@ -181,7 +209,7 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
 }
 
 function dataBlock(b: any, ctx: Ctx) {
-  if (kind(b) === "block.assistant") return <AssistantBlock key="a" b={b} tenant={ctx.tenant} locale={ctx.locale} />;
+  if (kind(b) === "block.assistant") return CMS_REACHABLE ? <AssistantBlock key="a" b={b} tenant={ctx.tenant} locale={ctx.locale} /> : <Offline key="a" locale={ctx.locale} what="assistant" />;
   return (
     <div className="card" key="c">
       <ChartBlock b={b} dataset={ctx.datasets.find((d) => d.key === b.datasetKey)} locale={ctx.locale} />

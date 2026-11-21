@@ -7,7 +7,7 @@ import { datasetApiUrl, type Dataset } from "@/lib/cms";
 import { fmtDate, t, type Locale } from "@/lib/i18n";
 import { fieldLabel } from "./ChartBlock";
 
-function toCsv(d: Dataset): string {
+export function toCsv(d: Dataset): string {
   const cols = d.fields.length ? d.fields.map((f) => f.key) : Object.keys(d.rows[0] || {});
   const q = (v: any) => {
     const s = v == null ? "" : String(v);
@@ -16,7 +16,12 @@ function toCsv(d: Dataset): string {
   return "﻿" + [cols.join(","), ...d.rows.map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
 }
 
-export default function DatasetDownloadBlock({ b, datasets, tenant, locale }: { b: any; datasets: Dataset[]; tenant: string; locale: Locale }) {
+/** `links` lets a template serve the files itself (dgahub: static files written
+ *  at export time) instead of a data: URL and the CMS's live REST API. */
+export default function DatasetDownloadBlock({ b, datasets, tenant, locale, links }: {
+  b: any; datasets: Dataset[]; tenant: string; locale: Locale;
+  links?: { csv: (d: Dataset) => string; json: (d: Dataset) => string };
+}) {
   const wanted = String(b.datasetKeys || "").split(",").map((s) => s.trim()).filter(Boolean);
   const list = wanted.length ? wanted.map((k) => datasets.find((d) => d.key === k)).filter(Boolean) as Dataset[] : datasets;
   if (!list.length) return null;
@@ -44,10 +49,10 @@ export default function DatasetDownloadBlock({ b, datasets, tenant, locale }: { 
             </p>
             {d.verified === false && <p className="dh-unverified">{t("unverified", locale)}</p>}
             <p className="dh-actions">
-              <a className="btn btn--primary" href={"data:text/csv;charset=utf-8," + encodeURIComponent(toCsv(d))} download={d.key + ".csv"}>
+              <a className="btn btn--primary" href={links ? links.csv(d) : "data:text/csv;charset=utf-8," + encodeURIComponent(toCsv(d))} download={d.key + ".csv"}>
                 {t("download", locale)} CSV<span className="visually-hidden">: {d.title}</span>
               </a>
-              <a className="btn btn--ghost" href={datasetApiUrl(tenant, d.key, locale)} rel="noopener">
+              <a className="btn btn--ghost" href={links ? links.json(d) : datasetApiUrl(tenant, d.key, locale)} rel="noopener">
                 {t("api", locale)}<span className="visually-hidden">: {d.title}</span>
               </a>
             </p>

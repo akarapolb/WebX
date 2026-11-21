@@ -15,7 +15,7 @@ export default function Footer({ tenant, locale, updated }: { tenant: Tenant; lo
       <div className="wrap">
         <div className="grid g4">
           <div>
-            <h2>{owner}</h2>
+            <h2 className="f-org">{owner}</h2>
             {tenant.contact?.address && <p className="small">{L(tenant.contact.address)}</p>}
             <p className="small">
               {phone && <>{en ? "Tel." : "โทร"} <a href={`tel:${phone.replace(/\s/g, "")}`}>{phone}</a><br /></>}
