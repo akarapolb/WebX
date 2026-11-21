@@ -53,6 +53,7 @@ Public-site build (CI job environment):
 | `STRAPI_URL` | Internal CMS address the build reads, e.g. `http://strapi:1337` |
 | `PUBLIC_SITE_URL` | `https://www.<domain>` (canonical links, sitemap, open-data catalogue) |
 | `PUBLIC_CMS_URL` | `https://cms-api.<domain>` for assistant, forms, consent and search analytics; `off` for a fully static copy |
+| `WORDPRESS_URL` / `PUBLIC_WORDPRESS_URL` | WordPress tenants only: the address the build reads, and the one browsers call (polls, banner, site search, captcha, forms); same rule as `PUBLIC_CMS_URL` |
 | `NEXT_PUBLIC_STUDIO_ORIGIN` | `https://studio.<domain>` (allowed to drive the draft preview) |
 | `CHECK_LINKS` | `dgahub` (default) or `*`: which tenants' internal links must resolve |
 

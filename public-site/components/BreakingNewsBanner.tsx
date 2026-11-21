@@ -16,8 +16,9 @@
 // site rebuild) and every open tab picks it up within one poll interval —
 // seconds, not minutes — with zero rebuild involved at all.
 import { useEffect, useState } from "react";
+import { PUBLIC_WP } from "@/lib/publicCms";
 
-const WORDPRESS = (process.env.NEXT_PUBLIC_WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
+const WORDPRESS = PUBLIC_WP; // "" on a copy with no reachable WordPress: no banner
 const POLL_MS = 30_000;
 
 type Alert = { id: number; message: string; severity: "info" | "warning" | "critical"; url?: string; linkLabel?: string };
@@ -44,6 +45,7 @@ export default function BreakingNewsBanner({ tenant }: { tenant: string }) {
   useEffect(() => {
     let cancelled = false;
     async function poll() {
+      if (!WORDPRESS) return;
       try {
         const termId = await wtenantId(tenant);
         if (termId == null) return;

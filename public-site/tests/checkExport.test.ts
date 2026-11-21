@@ -42,6 +42,7 @@ test("broken pages, links, JSON and leaked CMS addresses are reported", () => {
     "dgahub/links.html": page("Links", '<main><a href="/dgahub/missing">x</a></main>'),
     "dgahub/data/bad.json": "{nope",
     "_next/static/chunks/b.js": 'fetch("http://localhost:1337/api/consent-logs")',
+    "_next/static/chunks/c.js": 'fetch("http://localhost:8081/wp-json/wp/v2/poll/1")',
   });
   try {
     const p = checkExport(dir, env).join("\n");
@@ -50,6 +51,7 @@ test("broken pages, links, JSON and leaked CMS addresses are reported", () => {
     assert.match(p, /\/dgahub\/links\.html: broken link \/dgahub\/missing/);
     assert.match(p, /\/dgahub\/data\/bad\.json: invalid JSON/);
     assert.match(p, /b\.js: contains the build machine's CMS address localhost:1337/);
+    assert.match(p, /c\.js: contains the build machine's CMS address localhost:8081/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

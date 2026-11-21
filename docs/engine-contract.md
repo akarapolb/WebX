@@ -156,7 +156,8 @@ level deep, media expanded). WordPress tenants are read through
 
 Called with `PUBLIC_CMS_URL` (empty means switched off, see
 `public-site/lib/publicCms.ts`). All take `?tenant=<key>`, are anonymous and
-rate-limited per IP.
+rate-limited per IP. WordPress tenants call their own routes through
+`PUBLIC_WORDPRESS_URL` under the same rule (`lib/publicCmsRule.mjs`).
 
 | Route | Body → response |
 |---|---|

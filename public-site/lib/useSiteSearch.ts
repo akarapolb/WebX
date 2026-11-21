@@ -18,13 +18,12 @@
 // extract-text.ts already provides for the Strapi engine's ebook/download
 // types — run it again after adding or changing a document's File URL).
 import { useEffect, useState } from "react";
+import { PUBLIC_WP } from "@/lib/publicCms";
 
-// Same default/shape as lib/cms.ts's own WORDPRESS_URL — already includes
-// the /wp-json suffix. That one runs server-side only (build time); this is
-// the first client-side WordPress call this app makes, so next.config.mjs's
-// `env` block now inlines this var into the client bundle too (STRAPI_URL
-// already worked the same way for useCaptcha.ts).
-const WP_BASE = (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
+// Browser-facing WordPress REST base (includes /wp-json), "" when the
+// published copy has no reachable WordPress — search then reports "error"
+// (lib/publicCms.ts). lib/cms.ts's WORDPRESS_URL is the build's address.
+const WP_BASE = PUBLIC_WP;
 
 export type SearchResult = { id: number; title: string; url: string; type: string; subtype: string };
 
@@ -35,6 +34,7 @@ export function useSiteSearch(tenant: string, query: string) {
   useEffect(() => {
     const q = query.trim();
     if (!q) { setResults([]); setStatus("idle"); return; }
+    if (!WP_BASE) { setResults([]); setStatus("error"); return; }
     let cancelled = false;
     setStatus("loading");
     const url = `${WP_BASE}/wp/v2/search?search=${encodeURIComponent(q)}&wtenant=${encodeURIComponent(tenant)}&per_page=20`;

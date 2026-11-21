@@ -15,3 +15,10 @@ export const PUBLIC_CMS: string = (process.env.PUBLIC_CMS_URL || "").replace(/\/
  *  the browser (assistant, form) show components/site/OfflineNote instead, and
  *  cookie-consent logging, captcha and contact lookups are skipped. */
 export const CMS_REACHABLE = PUBLIC_CMS !== "";
+
+/** Browser-facing WordPress REST base (…/wp-json), "" when the published site
+ *  has no reachable WordPress (same rule, lib/publicCmsRule.mjs). Used by the
+ *  WordPress tenants' polls, breaking-news banner, site search, captcha and
+ *  forms; each skips its call or shows its "unavailable" state when "". */
+export const PUBLIC_WP: string = (process.env.PUBLIC_WORDPRESS_URL || "").replace(/\/$/, "");
+export const WP_REACHABLE = PUBLIC_WP !== "";

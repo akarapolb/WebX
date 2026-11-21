@@ -7,14 +7,15 @@
 //   - internal links on pages of the tenants in CHECK_LINKS (default "dgahub";
 //     "*" for all) point at a file that exists in the export
 //   - when the site is published somewhere public (PUBLIC_SITE_URL not
-//     localhost), no JS chunk contains the build machine's CMS address
-//     (STRAPI_URL, default http://localhost:1337)
+//     localhost), no JS chunk contains the build machine's CMS addresses
+//     (STRAPI_URL, default http://localhost:1337; WORDPRESS_URL, default
+//     http://localhost:8081/wp-json)
 //
 // Usage: node scripts/check-export.mjs [exportDir]   (default: $NEXT_DIST_DIR or out)
 // Runs as the last step of `npm run build`.
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { isLocalUrl } from "../lib/publicCmsRule.mjs";
+import { isLocalUrl, DEFAULT_STRAPI_URL, DEFAULT_WORDPRESS_URL } from "../lib/publicCmsRule.mjs";
 
 /** @param {string} dir @param {Record<string, string | undefined>} [env] @returns {string[]} */
 export function checkExport(dir, env = process.env) {
@@ -69,12 +70,17 @@ export function checkExport(dir, env = process.env) {
   }
 
   const site = env.PUBLIC_SITE_URL || "http://localhost:3100";
-  const cms = (env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
-  if (!isLocalUrl(site) && isLocalUrl(cms)) {
-    const needle = cms.replace(/^https?:\/\//, "");
+  if (!isLocalUrl(site)) {
+    // host:port only, so "http://localhost:8081" and "localhost:8081/wp-json" both match
+    const needles = [env.STRAPI_URL || DEFAULT_STRAPI_URL, env.WORDPRESS_URL || DEFAULT_WORDPRESS_URL]
+      .filter(isLocalUrl)
+      .map((u) => u.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
     for (const f of files) {
-      if (!f.endsWith(".js")) continue;
-      if (readFileSync(f, "utf8").includes(needle)) problems.push(`${rel(f)}: contains the build machine's CMS address ${needle}`);
+      if (!f.endsWith(".js") || !needles.length) continue;
+      const js = readFileSync(f, "utf8");
+      for (const needle of needles) {
+        if (js.includes(needle)) problems.push(`${rel(f)}: contains the build machine's CMS address ${needle}`);
+      }
     }
   }
   return [...new Set(problems)];

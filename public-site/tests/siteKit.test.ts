@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { defineSite } from "@/lib/site/config";
 import { queryTerms, searchDocs, snippetParts, type SearchDoc } from "@/lib/site/search";
 import { blockWords } from "@/lib/site/searchIndex";
-import { publicCmsUrl } from "@/lib/publicCmsRule.mjs";
+import { publicCmsUrl, publicWordpressUrl } from "@/lib/publicCmsRule.mjs";
 
 test("defineSite gives the TH/EN URL scheme", () => {
   const s = defineSite({ tenant: "hub", homeSlug: "home-blocks" });
@@ -51,4 +51,10 @@ test("public CMS rule: local CMS on a public site is switched off", () => {
   assert.equal(publicCmsUrl({ STRAPI_URL: "https://cms.example.org/", PUBLIC_SITE_URL: "https://hub.example.org" }), "https://cms.example.org");
   assert.equal(publicCmsUrl({ PUBLIC_CMS_URL: "https://api.example.org", PUBLIC_SITE_URL: "https://hub.example.org" }), "https://api.example.org");
   assert.equal(publicCmsUrl({ PUBLIC_CMS_URL: "off" }), "");
+  // WordPress tenants: same rule
+  assert.equal(publicWordpressUrl({}), "http://localhost:8081/wp-json", "local dev keeps working");
+  assert.equal(publicWordpressUrl({ PUBLIC_SITE_URL: "https://orst.example.org" }), "", "no localhost:8081 in a public build");
+  assert.equal(publicWordpressUrl({ WORDPRESS_URL: "https://wp.example.org/wp-json/", PUBLIC_SITE_URL: "https://orst.example.org" }), "https://wp.example.org/wp-json");
+  assert.equal(publicWordpressUrl({ NEXT_PUBLIC_WORDPRESS_URL: "https://wp.example.org/wp-json", PUBLIC_SITE_URL: "https://orst.example.org" }), "https://wp.example.org/wp-json", "older variable still honoured");
+  assert.equal(publicWordpressUrl({ PUBLIC_WORDPRESS_URL: "off", NEXT_PUBLIC_WORDPRESS_URL: "https://wp.example.org/wp-json" }), "");
 });
