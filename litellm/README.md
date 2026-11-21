@@ -19,6 +19,39 @@ LITELLM_MODEL=webx-default
 LITELLM_EMBED_MODEL=webx-embed
 ```
 
+## Public site assistant (Strapi `POST /api/assist/ask`)
+
+The "ask this site" block (Assistant) is answered by **Strapi**, not Studio, so
+its settings go in `strapi-cms/.env` (restart Strapi after changing them):
+
+```
+LITELLM_URL=http://localhost:4000      # unset = no LLM: answers quote the best passage
+LITELLM_KEY=sk-webx-...                # master or a per-tenant virtual key
+LITELLM_MODEL=webx-default             # used by simplify / translate / find
+LITELLM_ASK_MODEL=webx-thai            # optional: model for the assistant only
+LITELLM_TIMEOUT_MS=20000               # optional: give up and quote after this long
+```
+
+How an answer is made (`strapi-cms/src/utils/answer.ts`):
+
+1. The retriever (`src/utils/retrieval.ts`) picks up to 5 passages from the
+   tenant's **published** pages, FAQ, news, services and datasets in the
+   visitor's language. Nothing found: no answer, no sources.
+2. With `LITELLM_URL` set, the model gets only those numbered passages and must
+   cite them as `[1]`, `[2]`; citations to numbers that don't exist are removed.
+   The passages are marked as content, not instructions.
+3. If the model fails, times out or returns nothing — or no LLM is configured —
+   the answer **quotes** the best passage instead and says so. It never makes
+   up text of its own.
+4. **Every** answer returns its sources (title + link); the site shows them
+   under the answer and turns `[n]` into links to them.
+
+`GET /api/assist/status` returns `{ "llm": true|false }` (no addresses or keys),
+so a site or monitor can see which mode is live. `npm --prefix strapi-cms test`
+checks the whole flow against a mock OpenAI-compatible server (no real model or
+account needed). For a PDPA-sensitive deployment set `LITELLM_ASK_MODEL=webx-local`
+(Ollama/vLLM on-prem), so no content leaves the perimeter.
+
 ## Per-tenant model + budgets
 Mint a virtual key per tenant (own model allow-list + monthly budget) via
 `POST /key/generate` on the proxy, and store it as that tenant's `LITELLM_KEY`.

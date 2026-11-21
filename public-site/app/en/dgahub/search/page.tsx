@@ -1,9 +1,9 @@
-import { Shell, siteMetadata, searchPath } from "@/templates/dgahub/Site";
+import { Shell, site, searchPath } from "@/templates/dgahub/Site";
 import Search from "@/templates/dgahub/Search";
+import { searchMetadata } from "@/lib/site/metadata";
 
-export async function generateMetadata() {
-  const m = await siteMetadata("en", "search");
-  return { ...m, title: "Search · " + String(m.openGraph?.siteName || ""), robots: { index: false } };
+export function generateMetadata() {
+  return searchMetadata(site, "en");
 }
 
 export default function Page() {

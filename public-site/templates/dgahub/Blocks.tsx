@@ -19,33 +19,29 @@ import { sanitizeCmsHtml, jsonForScript } from "@/lib/sanitize";
 import { fmtDate, localizeHref, type Locale } from "@/lib/i18n";
 import { mediaUrl, type Dataset } from "@/lib/cms";
 import { Icon } from "./Icon";
+import OfflineNote from "@/components/site/OfflineNote";
+import { CMS_REACHABLE } from "@/lib/publicCms";
 
 type Ctx = { locale: Locale; tenant: string; home: string; datasets: Dataset[]; articles: any[]; faqs: any[] };
 
 const kind = (b: any) => String(b?.__component || "");
 
 // The AI assistant and the feedback form call the CMS from the visitor's
-// browser. A public copy of the site built against a CMS on this machine
-// (localhost) can't reach it, so those blocks show a short note instead.
-const isLocal = (u: string) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(u);
-const CMS_REACHABLE = !(isLocal(process.env.STRAPI_URL || "http://localhost:1337") && !isLocal(process.env.PUBLIC_SITE_URL || "http://localhost:3100"));
+// browser; on a public copy with no reachable CMS they show the site kit's
+// offline note instead (lib/publicCms.ts).
+const Offline = ({ locale, what }: { locale: Locale; what: "assistant" | "form" }) =>
+  <OfflineNote locale={locale} what={what} className="card dh-offline" />;
 
-function Offline({ locale, what }: { locale: Locale; what: "assistant" | "form" }) {
-  const en = locale === "en";
-  const name = what === "assistant" ? (en ? "The AI assistant" : "ผู้ช่วย AI") : (en ? "The feedback form" : "แบบฟอร์มความคิดเห็น");
-  return (
-    <div className="card dh-offline" role="note">
-      <h3>{name}</h3>
-      <p className="muted" style={{ margin: 0 }}>{en
-        ? "This public preview runs without the CMS, so this feature is switched off. It works on the full WebX installation."
-        : "ตัวอย่างสาธารณะนี้ไม่ได้เชื่อมต่อระบบ CMS จึงปิดฟังก์ชันนี้ไว้ ใช้งานได้บนระบบ WebX เต็มรูปแบบ"}</p>
-    </div>
-  );
-}
+/** Studio's editing canvas (PreviewBridge, mark=true): each block's output is
+ *  wrapped in a box-less element carrying its index, so a click can select it.
+ *  `display: contents` keeps the layout and CSS exactly as published. */
+const Mark = ({ i, children }: { i: number; children: React.ReactNode }) =>
+  <div data-wx-block={i} style={{ display: "contents" }}>{children}</div>;
 
-export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHome: boolean } & Ctx) {
+export default function Blocks({ blocks, isHome, mark = false, ...ctx }: { blocks: any[]; isHome: boolean; mark?: boolean } & Ctx) {
   const out: React.ReactNode[] = [];
   let alt = false;
+  const mk = (i: number, node: React.ReactNode) => (mark ? <Mark key={"m" + i} i={i}>{node}</Mark> : node);
   const section = (key: string, body: React.ReactNode, label?: string) => {
     out.push(
       <section key={key} className={"section" + (alt ? " alt" : "")} aria-labelledby={label}>
@@ -59,6 +55,7 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
     const b = blocks[i];
     const next = blocks[i + 1];
     const key = `${kind(b)}-${i}`;
+    const cur = i, start = out.length;
     switch (kind(b)) {
       case "block.hero": {
         if (isHome) {
@@ -82,10 +79,10 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
         if (run >= 2) {
           const charts = blocks.slice(i, i + run);
           i += run - 1;
-          section(key, <div className="grid g2 dh-dash">{charts.map((c, j) => <div key={j}>{dataBlock(c, ctx)}</div>)}</div>);
+          section(key, <div className="grid g2 dh-dash">{charts.map((c, j) => <div key={j}>{mk(cur + j, dataBlock(c, ctx))}</div>)}</div>);
         } else if (pair) {
           i++;
-          section(key, <div className="grid g2" style={{ alignItems: "start" }}>{dataBlock(b, ctx)}{dataBlock(next, ctx)}</div>);
+          section(key, <div className="grid g2" style={{ alignItems: "start" }}>{mk(cur, dataBlock(b, ctx))}{mk(cur + 1, dataBlock(next, ctx))}</div>);
         } else {
           section(key, dataBlock(b, ctx));
         }
@@ -204,6 +201,7 @@ export default function Blocks({ blocks, isHome, ...ctx }: { blocks: any[]; isHo
         // rendered with another template's unstyled markup.
         break;
     }
+    if (mark) for (let k = start; k < out.length; k++) out[k] = <Mark key={"b" + k} i={cur}>{out[k]}</Mark>;
   }
   return <>{out}</>;
 }

@@ -28,6 +28,7 @@ export const SCOPED = new Set([
   'api::menu-item.menu-item', 'api::contact-message.contact-message',
   'api::breaking-news.breaking-news',
   'api::dataset.dataset',
+  'api::search-stat.search-stat',
   // block-type, icon, release, review: each carries a `tenant` relation
   // (same shape as everything else above) but was missing from this set —
   // found in a full-codebase audit (2026-09-12). Since this middleware

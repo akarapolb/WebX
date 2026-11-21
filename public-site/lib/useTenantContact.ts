@@ -11,13 +11,14 @@
 // both through the same fetch is what keeps them from ever disagreeing again.
 import { useEffect, useState } from "react";
 
-const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
+import { PUBLIC_CMS as STRAPI } from "@/lib/publicCms";
 
 export type TenantContact = { phone?: string; email?: string; address?: { th?: string; en?: string } };
 
 export function useTenantContact(tenantKey: string): TenantContact | null {
   const [contact, setContact] = useState<TenantContact | null>(null);
   useEffect(() => {
+    if (!STRAPI) return; // no CMS behind this copy: callers use their default copy
     let cancelled = false;
     fetch(`${STRAPI}/api/tenants/resolve?tenant=${encodeURIComponent(tenantKey)}&locale=th`)
       .then((r) => (r.ok ? r.json() : null))

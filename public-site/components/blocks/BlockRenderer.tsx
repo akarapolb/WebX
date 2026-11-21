@@ -15,6 +15,8 @@ import NewsPanelBlock from "./NewsPanelBlock";
 import FaqBlock from "./FaqBlock";
 import EmbedBlock from "./EmbedBlock";
 import FormBlock from "./FormBlock";
+import OfflineNote from "@/components/site/OfflineNote";
+import { CMS_REACHABLE } from "@/lib/publicCms";
 import LocationMap from "../LocationMap";
 import TabsAccordionBlock from "./TabsAccordionBlock";
 
@@ -537,7 +539,7 @@ export default async function BlockRenderer({ blocks, tenant, homeData, locale =
           case "block.featured-promo": return <FeaturedPromoBlock key={i} b={b} />;
           case "block.embed": return <EmbedBlock key={i} b={b} />;
           case "block.collection-list": return <CollectionListBlock key={i} b={b} items={clByIdx.get(i) || []} tenant={tenant} />;
-          case "block.form": return <FormBlock key={i} b={b} tenant={tenant} locale={locale} />;
+          case "block.form": return CMS_REACHABLE ? <FormBlock key={i} b={b} tenant={tenant} locale={locale} /> : <OfflineNote key={i} locale={locale} what="form" />;
           case "block.testimonials": return <TestimonialsBlock key={i} b={b} />;
           case "block.logo-cloud": return <LogoCloudBlock key={i} b={b} />;
           case "block.team-grid": return <TeamGridBlock key={i} b={b} />;
@@ -547,7 +549,7 @@ export default async function BlockRenderer({ blocks, tenant, homeData, locale =
           case "block.comparison": return <ComparisonBlock key={i} b={b} />;
           case "block.chart": return <ChartBlock key={i} b={b} dataset={(datasets as Dataset[]).find((d) => d.key === b.datasetKey)} locale={locale} />;
           case "block.dataset-download": return <DatasetDownloadBlock key={i} b={b} datasets={datasets as Dataset[]} tenant={tenant} locale={locale} />;
-          case "block.assistant": return <AssistantBlock key={i} b={b} tenant={tenant} locale={locale} />;
+          case "block.assistant": return CMS_REACHABLE ? <AssistantBlock key={i} b={b} tenant={tenant} locale={locale} /> : <OfflineNote key={i} locale={locale} what="assistant" />;
           default: return null;
         }
       })}

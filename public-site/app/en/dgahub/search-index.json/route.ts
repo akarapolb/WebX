@@ -1,8 +1,6 @@
-import { buildSearchIndex } from "@/templates/dgahub/searchIndex";
+import { site } from "@/templates/dgahub/Site";
+import { searchIndexRoute } from "@/lib/site/routes";
 
-// Static file at export time: the hub's search index (en).
+// Static file at export time: the hub's search index (en), WebX site kit.
 export const dynamic = "force-static";
-
-export async function GET() {
-  return Response.json(await buildSearchIndex("en"));
-}
+export const GET = searchIndexRoute(site, "en");

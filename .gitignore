@@ -23,10 +23,12 @@ site/DGA-Website/bid/deck-assets/
 
 # Next.js / WebX Studio (env + build handled by webx-studio/.gitignore too)
 webx-studio/.next/
+webx-studio/.next-*/
 webx-studio/.env.local
 
 # Next.js / public-site (static export output + env)
 public-site/.next/
+public-site/.next-*/
 public-site/out/
 public-site/.env.local
 

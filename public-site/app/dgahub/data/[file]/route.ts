@@ -1,13 +1,10 @@
-import { dataFiles, dataFile } from "@/templates/dgahub/openData";
+import { site } from "@/templates/dgahub/Site";
+import { dataRoute } from "@/lib/site/routes";
 
-// Static open-data files (th), written at export time (see openData.ts).
+// Static open-data files (th), written at export time (lib/site/openData.ts).
 export const dynamic = "force-static";
 export const dynamicParams = false;
 
-export async function generateStaticParams() {
-  return (await dataFiles("th")).map((file) => ({ file }));
-}
-
-export async function GET(_req: Request, { params }: { params: Promise<{ file: string }> }) {
-  return dataFile("th", (await params).file);
-}
+const r = dataRoute(site, "th");
+export const generateStaticParams = r.generateStaticParams;
+export const GET = r.GET;

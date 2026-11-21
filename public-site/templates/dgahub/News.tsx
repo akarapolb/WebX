@@ -1,36 +1,18 @@
-// dgahub template — news: an index (/dgahub/news) and one page per item
-// (/dgahub/news/<slug>). Items are the tenant's WebX articles, so editors write
-// and publish them in Studio; nothing here is hard-coded.
+// dgahub template — news pages' design. Data, metadata and static params come
+// from the WebX site kit (lib/site/news.ts); items are the tenant's articles,
+// so editors write and publish them in Studio.
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getHomeData, mediaUrl, type Locale } from "@/lib/cms";
+import { mediaUrl, type Locale } from "@/lib/cms";
 import { fmtDate } from "@/lib/i18n";
 import { sanitizeCmsHtml } from "@/lib/sanitize";
-import { TENANT, base, siteMetadata } from "./Site";
+import { newsArticles, newsParams, newsMetadata as kitNewsMetadata } from "@/lib/site/news";
+import { site, base } from "./Site";
 
-export const newsPath = (locale: Locale, slug?: string) => base(locale) + "/news" + (slug ? "/" + slug : "");
-
-async function articles(locale: Locale): Promise<any[]> {
-  const { articles } = await getHomeData(TENANT, "strapi", locale);
-  return (articles || []).filter((a: any) => a?.slug);
-}
-
-export async function newsSlugs(locale: Locale) {
-  return (await articles(locale)).map((a) => ({ slug: String(a.slug) }));
-}
-
-export async function newsMetadata(locale: Locale, slug?: string): Promise<Metadata> {
-  const m = await siteMetadata(locale, "news");
-  const site = String(m.openGraph?.siteName || "");
-  const a = slug ? (await articles(locale)).find((x) => x.slug === slug) : null;
-  const title = a ? a.title : locale === "en" ? "News" : "ข่าว";
-  const th = newsPath("th", slug), en = newsPath("en", slug);
-  return {
-    ...m, title: `${title} · ${site}`, description: a?.excerpt || undefined,
-    alternates: { canonical: locale === "en" ? en : th, languages: { th, en } },
-    openGraph: { ...m.openGraph, type: a ? "article" : "website", title },
-  };
-}
+export const newsPath = site.newsPath;
+const articles = (locale: Locale) => newsArticles(site, locale);
+export const newsSlugs = (locale: Locale) => newsParams(site, locale);
+export const newsMetadata = (locale: Locale, slug?: string): Promise<Metadata> => kitNewsMetadata(site, locale, slug);
 
 function Head({ locale, title, lead, crumbs }: { locale: Locale; title: string; lead?: string; crumbs: { label: string; href?: string }[] }) {
   return (

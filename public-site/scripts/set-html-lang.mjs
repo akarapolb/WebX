@@ -9,7 +9,9 @@
 import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-const root = join(process.cwd(), "out", "en");
+// The export folder: out/, or NEXT_DIST_DIR when set (see next.config.mjs).
+const OUT = join(process.cwd(), process.env.NEXT_DIST_DIR || "out");
+const root = join(OUT, "en");
 let n = 0;
 function walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -23,7 +25,7 @@ function walk(dir) {
   }
 }
 // out/en.html is the /en page itself (sits beside the out/en/ folder).
-const enPage = join(process.cwd(), "out", "en.html");
+const enPage = join(OUT, "en.html");
 if (existsSync(enPage)) {
   const s = readFileSync(enPage, "utf8");
   const out = s.replace(/<html lang="th"/, '<html lang="en"');

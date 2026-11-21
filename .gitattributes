@@ -1,0 +1,5 @@
+# Strapi rewrites these on every restart with LF line endings. Pinning them to
+# LF stops them showing as modified on Windows (core.autocrlf=true) when the
+# content is unchanged. They stay tracked: commit them whenever a schema
+# changes, so the types always match the content types.
+strapi-cms/types/generated/*.d.ts text eol=lf

@@ -11,7 +11,9 @@
 // unaffected by this.
 import { useEffect, useState, useCallback } from "react";
 
-export const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
+import { PUBLIC_CMS } from "@/lib/publicCms";
+/** Browser-facing CMS URL ("" when the published site has no CMS; lib/publicCms.ts). */
+export const STRAPI = PUBLIC_CMS;
 export const WORDPRESS = (process.env.NEXT_PUBLIC_WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
 
 export type Captcha = { id: string; question: string };
@@ -24,6 +26,7 @@ function captchaUrl(engine: CaptchaEngine): string {
 export function useCaptcha(engine: CaptchaEngine = "strapi") {
   const [captcha, setCaptcha] = useState<Captcha | null>(null);
   const refreshCaptcha = useCallback(async () => {
+    if (engine === "strapi" && !STRAPI) return; // no CMS behind this copy
     try {
       const r = await fetch(captchaUrl(engine), { cache: "no-store" });
       if (!r.ok) return;

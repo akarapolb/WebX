@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import { pathLocale } from "@/lib/i18n";
 
 const STORAGE_KEY = "webx_consent";
-const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
+import { PUBLIC_CMS as STRAPI } from "@/lib/publicCms";
 
 /** Every template segment's own tenant, mirrored from the app/ route
  * structure (app/orst, app/royalsociety, app/(gov-portal)/[tenant] with "/"
@@ -35,6 +35,9 @@ function tenantFromPath(pathname: string): string {
 type Consent = { necessary: true; analytics: boolean; marketing: boolean };
 
 async function logConsent(tenant: string, action: string, categories: Consent) {
+  // No CMS behind this copy of the site: the choice is still saved in the
+  // browser, only the server-side consent log is skipped.
+  if (!STRAPI) return;
   try {
     await fetch(`${STRAPI}/api/consent-logs?tenant=${encodeURIComponent(tenant)}`, {
       method: "POST",

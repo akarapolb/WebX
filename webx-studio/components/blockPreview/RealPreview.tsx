@@ -82,10 +82,14 @@ const SHELL = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8" />
 // branch below never wires up onSelect/onFieldChange/etc. Sidebar-form
 // editing (already built for wp:page) is unaffected — this only upgrades
 // what the READ-ONLY canvas looks like while editing happens in the sidebar.
-const HARNESS_PATH: Record<string, string> = { orst: "/orst/preview", royalsociety: "/royalsociety/preview" };
+const HARNESS_PATH: Record<string, string> = {
+  orst: "/orst/preview", royalsociety: "/royalsociety/preview",
+  // dgahub: the Visual Builder's Preview mode (draft on the real template, TH/EN).
+  dgahub: "/dgahub/preview", "dgahub-en": "/en/dgahub/preview",
+};
 
 export default function RealPreview({
-  blocks, homeData, customTypes, customIcons, collectionData, tenant, harness,
+  blocks, homeData, customTypes, customIcons, collectionData, tenant, harness, harnessExtra, onHarnessSelect,
   active, onSelect, onFieldChange, onImagePick, onArrayAdd, onArrayRemove, onDeselect,
 }: {
   blocks: any[]; homeData?: any; customTypes?: Record<string, any>; customIcons?: Record<string, any>;
@@ -96,6 +100,11 @@ export default function RealPreview({
    * gov-portal srcDoc/portal mechanism to an actual cross-origin `src=`
    * iframe driven by postMessage. */
   harness?: string;
+  /** Extra fields sent with each render message to the harness (e.g. dgahub's isHome). */
+  harnessExtra?: Record<string, unknown>;
+  /** Harness canvases that support selection (dgahub): a click on a block
+   * inside the iframe reports its index here. */
+  onHarnessSelect?: (index: number) => void;
   active?: number;
   onSelect?: (i: number) => void;
   onFieldChange?: (i: number, path: Path, value: any) => void;
@@ -110,6 +119,8 @@ export default function RealPreview({
   const harnessPath = harness ? HARNESS_PATH[harness] : undefined;
 
   const [harnessReady, setHarnessReady] = useState(false);
+  const selectRef = useRef(onHarnessSelect);
+  selectRef.current = onHarnessSelect;
   const [harnessHeight, setHarnessHeight] = useState<number>(600);
   // Re-sends on every blocks change AND once harnessReady flips true (the
   // child may announce readiness before this effect's first run captured
@@ -119,14 +130,15 @@ export default function RealPreview({
     if (!harnessPath) return;
     const win = iframeRef.current?.contentWindow;
     if (!win || !harnessReady) return;
-    win.postMessage({ type: "webx:builder:render", blocks }, PUBLIC_SITE);
-  }, [harnessPath, harnessReady, blocks]);
+    win.postMessage({ ...harnessExtra, type: "webx:builder:render", blocks }, PUBLIC_SITE);
+  }, [harnessPath, harnessReady, blocks, harnessExtra]);
   useEffect(() => {
     if (!harnessPath) return;
     function onMessage(e: MessageEvent) {
       if (e.origin !== PUBLIC_SITE) return; // only ever trust the harness's own origin
       if (e.data?.type === "webx:harness:hello") setHarnessReady(true);
       else if (e.data?.type === "webx:harness:height" && typeof e.data.px === "number") setHarnessHeight(Math.max(200, e.data.px));
+      else if (e.data?.type === "webx:harness:select" && typeof e.data.index === "number") selectRef.current?.(e.data.index);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

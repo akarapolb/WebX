@@ -1,0 +1,6 @@
+{
+  // Used by `npm test` (tsx): same settings as the app, but JSX compiled with
+  // React's automatic runtime so components render under plain Node.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "jsx": "react-jsx" }
+}

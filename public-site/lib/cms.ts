@@ -3,8 +3,18 @@
 // boot(), just called at build time (generateStaticParams / the page's async
 // component) instead of from the browser after load. Thai locale only for
 // this proof — see the Phase 4 plan for what's deliberately out of scope.
-const STRAPI = (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
-const WORDPRESS = (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "");
+import { PUBLIC_CMS } from "./publicCms";
+
+// Build time (server): the CMS the build reads. In the browser (client
+// components importing mediaUrl etc.): the public CMS address, so the build
+// machine's own address (e.g. localhost:1337) never ships in a JS chunk — the
+// bundler drops the server branch from client code (`typeof window`).
+const STRAPI = typeof window === "undefined"
+  ? (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "")
+  : PUBLIC_CMS;
+const WORDPRESS = typeof window === "undefined"
+  ? (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "")
+  : "";
 
 const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 

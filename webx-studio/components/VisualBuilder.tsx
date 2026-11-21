@@ -32,6 +32,7 @@ type Page = { docId: string; locale?: string; title: string; tenantKey?: string 
 type Device = "desktop" | "tablet" | "mobile";
 
 const LANDING_UID = "api::landing.landing";
+const PUBLIC_SITE_HOST = (process.env.NEXT_PUBLIC_PUBLIC_SITE_URL || "http://localhost:3100").replace(/^https?:\/\//, "").replace(/\/$/, "");
 const PAGE_UID = "api::page.page";
 // A WordPress-hosted page (ORST/RoyalSociety) — see wordpress.ts's
 // POST_TYPES/ACF_JSON_FIELDS and wordpress/mu-plugins/acf-fields.php's
@@ -265,6 +266,11 @@ export default function VisualBuilder() {
   // switching pages / creating a new page / closing the tab can warn
   // instead of silently discarding work (see confirmDiscardIfDirty below).
   const savedSnapshotRef = useRef<string>("");
+  // Bumped whenever savedSnapshotRef changes, so isDirty (a memo) re-evaluates:
+  // a ref alone doesn't re-render, which left "Unsaved changes" showing after
+  // a successful Save page / Publish until the next edit.
+  const [savedTick, setSavedTick] = useState(0);
+  const markSaved = (snap: string) => { savedSnapshotRef.current = snap; setSavedTick((n) => n + 1); };
   const [abOpen, setAbOpen] = useState(false);
   useEffect(() => {
     if (!fullscreen) return;
@@ -305,6 +311,8 @@ export default function VisualBuilder() {
   const [template, setTemplate] = useState<Dialect>(uid === WP_PAGE_UID ? "orst" : "gov-portal");
   // The raw publicTemplate (e.g. "dgahub"), for TEMPLATE_BLOCKS; `template` is its block dialect.
   const [publicTpl, setPublicTpl] = useState("");
+  // Slug of the open page (site pages), for the real-template preview harness.
+  const [selSlug, setSelSlug] = useState("");
   // Two WordPress templates (ORST, RoyalSociety) now share this pipeline, so
   // a wrong initial guess is no longer harmless (toBuilder/toWire would
   // namespace-translate with the WRONG prefix, corrupting the loaded blocks
@@ -506,6 +514,9 @@ export default function VisualBuilder() {
       // WordPress's own adapter ignores a 3rd (opts) argument entirely (it
       // has no per-locale-entry concept) — safe to pass unconditionally.
       const data: any = await cms.entries.get(uid, p.docId, p.locale ? { locale: p.locale } : undefined);
+      // The editor may have opened another page while this one was loading;
+      // a late response must not overwrite that page's canvas.
+      if (selRef.current !== p) return;
       // A Strapi page whose documentId exists but has no row in the
       // requested locale yet comes back 200 OK with an empty body (`{}`,
       // no documentId/id) — not a 404 — confirmed by reading
@@ -515,7 +526,7 @@ export default function VisualBuilder() {
       if (!isWpPage && p.locale && !data?.documentId && !data?.id) {
         setLocaleMissing(true); setBlocks([]); setActive(-1);
         setOtherBlocks([]); setEditing("A"); setAbEnabled(false); setAbSplit(50);
-        savedSnapshotRef.current = snapshotOf([], [], "A", false, 50, template);
+        markSaved(snapshotOf([], [], "A", false, 50, template));
         return;
       }
       // For a session with no single home tenant (the shared wpadmin/
@@ -538,6 +549,7 @@ export default function VisualBuilder() {
           const resolved = tenants[0]?.publicTemplate as string | undefined;
           if (resolved) { pageTemplate = dialectOf(resolved); setTemplate(pageTemplate); setPublicTpl(resolved); }
         } catch {}
+        if (selRef.current !== p) return;
       }
       // toBuilder is the identity function for template === "gov-portal"
       // (every existing Strapi tenant), so this is safe to call
@@ -547,6 +559,7 @@ export default function VisualBuilder() {
       const rawBlocks = isWpPage && p.locale === "en" ? (data.blocks_en ?? []) : (data.blocks ?? []);
       const bl = toBuilder(rawBlocks as any[], pageTemplate) as Block[];
       setBlocks(bl); setActive(bl.length ? 0 : -1);
+      setSelSlug(String(data?.slug || ""));
       let variantBlocks: Block[] = [];
       let ab = false, split = 50;
       if (isLanding) {
@@ -563,8 +576,12 @@ export default function VisualBuilder() {
       // Snapshot from the freshly-fetched data, not React state (which
       // hasn't committed the setBlocks/etc. calls above yet). open() always
       // resets to editing "A" above, so that's the side to snapshot against.
-      savedSnapshotRef.current = snapshotOf(bl, variantBlocks, "A", ab, split, pageTemplate);
-    } catch {} finally { setLoading(false); }
+      markSaved(snapshotOf(bl, variantBlocks, "A", ab, split, pageTemplate));
+    } catch {
+      // Load failed: the canvas is empty, so that is the saved state too
+      // (otherwise the previous page's snapshot made it look edited).
+      if (selRef.current === p) markSaved(snapshotOf([], [], "A", false, 50, template));
+    } finally { if (selRef.current === p) setLoading(false); }
   }
 
   // ---- in-session undo/redo ----
@@ -832,8 +849,14 @@ export default function VisualBuilder() {
     const bBlocks = editingSide === "B" ? bl : variantBl;
     return JSON.stringify({ blocks: aBlocks.map(serialize), variantBlocks: bBlocks, abEnabled: ab, abSplit: split });
   }
-  const isDirty = useMemo(() => !!sel && snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit) !== savedSnapshotRef.current,
-    [blocks, otherBlocks, editing, abEnabled, abSplit, sel]);
+  // Not dirty while a page is loading: `sel` already points at the new page
+  // but the saved snapshot is set only once its blocks arrive.
+  // Address shown on the canvas frame: the tenant's real public-site path.
+  const frameUrl = PUBLIC_SITE_HOST + "/" + (tenantKey || "");
+  const dgahubPreviewExtra = useMemo(() => ({ isHome: selSlug === "home-blocks" }), [selSlug]);
+  const dgahubEditExtra = useMemo(() => ({ ...dgahubPreviewExtra, edit: true, active }), [dgahubPreviewExtra, active]);
+  const isDirty = useMemo(() => !loading && !!sel && snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit) !== savedSnapshotRef.current,
+    [blocks, otherBlocks, editing, abEnabled, abSplit, sel, loading, savedTick]);
   // Gate for any action that would discard the canvas (switch page, create a
   // new page, navigate away) — a no-op confirm when there's nothing unsaved.
   function confirmDiscardIfDirty(): boolean {
@@ -897,7 +920,7 @@ export default function VisualBuilder() {
     setSaving(true); setMsg(null);
     try {
       await cms.entries.update(uid, sel.docId, pageBody(), sel.locale ? { locale: sel.locale } : undefined);
-      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit);
+      markSaved(snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit));
       setMsg({ t: t("vb.saved"), ok: true });
     } catch (e) {
       if (e instanceof CmsError) setMsg({ t: "Save failed (HTTP " + e.status + ")", ok: false });
@@ -912,7 +935,7 @@ export default function VisualBuilder() {
     const opts = sel.locale ? { locale: sel.locale } : undefined;
     try {
       await cms.entries.update(uid, sel.docId, pageBody(), opts);
-      savedSnapshotRef.current = snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit);
+      markSaved(snapshotOf(blocks, otherBlocks, editing, abEnabled, abSplit));
     } catch (e) {
       setMsg(e instanceof CmsError ? { t: "Save failed (HTTP " + e.status + ")", ok: false } : { t: "Cannot reach the backend.", ok: false });
       setSaving(false); return;
@@ -1962,10 +1985,23 @@ export default function VisualBuilder() {
                 <Icon name="plus" />{creatingLocale ? t("vb.creatinglocale") : t("vb.createlocale")}
               </button>
             </div>
+          ) : publicTpl === "dgahub" && !isLanding ? (
+            // The hub's REAL template, both as the editing canvas and in
+            // Preview: public-site's /dgahub/preview (or /en/...) renders these
+            // unsaved blocks with templates/dgahub's own Blocks, header,
+            // footer and CSS. While editing, a click on a block selects it in
+            // the sidebar (where its fields are edited) and the selected
+            // block is outlined; Preview shows the page exactly as published.
+            <div className="vb-frame" style={{ maxWidth: DEVW[device], margin: device === "desktop" ? undefined : "0 auto" }}>
+              <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{frameUrl + (sel.locale === "en" ? " · EN" : "")}</span><span className="vb-dev-tag">{previewMode ? t("vb.preview") : device}</span></div>
+              <RealPreview blocks={stripAgentMarks(blocks)} harness={sel.locale === "en" ? "dgahub-en" : "dgahub"}
+                harnessExtra={previewMode ? dgahubPreviewExtra : dgahubEditExtra}
+                onHarnessSelect={previewMode ? undefined : setActive} />
+            </div>
           ) : gpSupported ? (
             previewLoading ? <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.loading")}</div> :
             <div className="vb-frame" style={{ maxWidth: DEVW[device], margin: device === "desktop" ? undefined : "0 auto" }}>
-              {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th"}</span><span className="vb-dev-tag">{device}</span></div>}
+              {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{frameUrl}</span><span className="vb-dev-tag">{device}</span></div>}
               {/* no "|| dga" fallback — RealPreview's tenant prop is already
                   optional; substituting a DIFFERENT real tenant risked
                   rendering a wrong-agency preview for an unscoped session. */}
@@ -1987,7 +2023,7 @@ export default function VisualBuilder() {
             // click-to-edit isn't possible across that boundary; all editing
             // for these pages happens in the sidebar.
             <div className="vb-frame" style={{ maxWidth: DEVW[device], margin: device === "desktop" ? undefined : "0 auto" }}>
-              {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th"}</span><span className="vb-dev-tag">{device}</span></div>}
+              {device !== "desktop" && <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{frameUrl}</span><span className="vb-dev-tag">{device}</span></div>}
               {/* The harness renders via the template's OWN Blocks.tsx,
                   which reads `type` — the wire dialect, not the Builder's
                   internal `__component` one blocks is stored in here. Same
@@ -1999,7 +2035,7 @@ export default function VisualBuilder() {
             <div className="muted" style={{ padding: 40, textAlign: "center" }}>{t("vb.previewunsupported")}</div>
           ) : (
             <div className="vb-frame">
-              <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{(tenantKey || "site") + ".go.th/" + (sel.title || "").slice(0, 14)}</span><span className="vb-dev-tag">{device}</span></div>
+              <div className="vb-frame-bar"><i /><i /><i /><span className="psite-url">{frameUrl}</span><span className="vb-dev-tag">{device}</span></div>
               <div className={"vb-canvas" + (dragNew || dragBlock >= 0 ? " dragging" : "")} style={{ maxWidth: DEVW[device] }}>
                 <div className="vbk-nav"><b>{current?.name || "WebX"}</b><span>Home</span><span>Services</span><span>News</span></div>
                 {blocks.length === 0 && <div className="muted" style={{ padding: 50, textAlign: "center" }}>{t("vb.noblocks")}</div>}

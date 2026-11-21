@@ -1,2 +1,3 @@
 import Analytics from "@/components/Analytics";
-export default function Page() { return <Analytics />; }
+import SearchInsights from "@/components/SearchInsights";
+export default function Page() { return <><Analytics /><SearchInsights /></>; }

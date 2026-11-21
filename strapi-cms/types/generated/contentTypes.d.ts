@@ -2476,6 +2476,40 @@ export interface ApiReviewReview extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiSearchStatSearchStat extends Struct.CollectionTypeSchema {
+  collectionName: 'search_stats';
+  info: {
+    description: 'What visitors search on the public site: one row per tenant, language and normalised query, with a count and the last result count. No IP, user agent or cookie is stored.';
+    displayName: 'Search Stat';
+    pluralName: 'search-stats';
+    singularName: 'search-stat';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    count: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    lastAt: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::search-stat.search-stat'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    query: Schema.Attribute.String & Schema.Attribute.Required;
+    results: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    zeroCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
 export interface ApiServiceService extends Struct.CollectionTypeSchema {
   collectionName: 'services';
   info: {
@@ -3450,6 +3484,7 @@ declare module '@strapi/strapi' {
       'api::registration.registration': ApiRegistrationRegistration;
       'api::release.release': ApiReleaseRelease;
       'api::review.review': ApiReviewReview;
+      'api::search-stat.search-stat': ApiSearchStatSearchStat;
       'api::service.service': ApiServiceService;
       'api::sitemap-node.sitemap-node': ApiSitemapNodeSitemapNode;
       'api::sso-credential.sso-credential': ApiSsoCredentialSsoCredential;

@@ -9,7 +9,16 @@ import { STRAPI } from "@/lib/useCaptcha";
 import { t, type Locale } from "@/lib/i18n";
 
 type Source = { n: number; kind: string; title: string; url: string | null };
-type Answer = { answer: string | null; mode: "llm" | "extractive" | "none"; sources: Source[] };
+type Answer = { answer: string | null; mode: "llm" | "extractive" | "none"; sources: Source[]; cited?: number[] };
+
+/** An LLM answer's inline citations ([1], [2]) become links to the numbered sources below it. */
+export function withCitations(text: string, sources: Source[], idPrefix: string) {
+  return text.split(/(\[\d+\])/).map((part, i) => {
+    const n = /^\[(\d+)\]$/.exec(part)?.[1];
+    const src = n ? sources.find((s) => s.n === Number(n)) : undefined;
+    return src ? <a key={i} href={"#" + idPrefix + src.n} className="dh-cite" title={src.title}>{part}</a> : part;
+  });
+}
 
 export default function AssistantBlock({ b, tenant, locale }: { b: any; tenant: string; locale: Locale }) {
   const [q, setQ] = useState("");
@@ -67,14 +76,14 @@ export default function AssistantBlock({ b, tenant, locale }: { b: any; tenant: 
               ? <p>{t("noAnswer", locale)}</p>
               : <>
                   {res.mode === "extractive" && <p className="dh-meta">{t("quoted", locale)}</p>}
-                  <p className="dh-answer-text">{res.answer}</p>
+                  <p className="dh-answer-text">{res.mode === "llm" ? withCitations(res.answer, res.sources, hid + "-src-") : res.answer}</p>
                 </>}
             {res.sources.length > 0 && (
               <>
                 <h3 className="dh-sources-h">{t("sources", locale)}</h3>
                 <ol className="dh-sources">
                   {res.sources.map((s) => (
-                    <li key={s.n}>{s.url ? <a href={s.url}>{s.title}</a> : s.title}</li>
+                    <li key={s.n} id={hid + "-src-" + s.n}>{s.url ? <a href={s.url}>{s.title}</a> : s.title}</li>
                   ))}
                 </ol>
               </>

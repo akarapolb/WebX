@@ -139,9 +139,14 @@ export default function ChartBlock({ b, dataset, locale }: { b: any; dataset?: D
             <g key={k}>
               <path d={d} fill="none" stroke={c} strokeWidth={emph ? 3.5 : 2} strokeDasharray={emph ? undefined : i % 2 ? "6 4" : "2 3"} />
               {pts.map((p) => <circle key={p.x} cx={xPos(p.x)} cy={yPos(p.y)} r={emph ? 5 : 3.5} fill={c} />)}
-              {emph && pts.map((p) => (
-                <text key={"l" + p.x} className="dh-pt" x={xPos(p.x)} y={yPos(p.y) - 10} textAnchor="middle">{fmtY(p.y)}</text>
-              ))}
+              {emph && pts.map((p, j) => {
+                // The last point's label is anchored inwards so it never runs
+                // past the plot's right edge (e.g. the latest score).
+                const edge = pts.length > 1 && j === pts.length - 1 ? "end" : "middle";
+                return (
+                  <text key={"l" + p.x} className="dh-pt" x={xPos(p.x) + (edge === "end" ? 6 : 0)} y={yPos(p.y) - 10} textAnchor={edge}>{fmtY(p.y)}</text>
+                );
+              })}
             </g>
           );
         })}
