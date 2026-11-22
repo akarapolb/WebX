@@ -31,6 +31,11 @@ export function cellText(f: DatasetField | undefined, v: any, locale: Locale): s
 }
 const decimals = (f?: DatasetField) => (f?.unit === "score" || f?.key === "score" ? 4 : undefined);
 
+/** A 0–1 score series: the field is a score (unit "score" or key "score"), not a rank, and every value is within 0–1. */
+export function isScoreAxis(f: DatasetField | undefined, key: string, vals: number[], invert: boolean): boolean {
+  return !invert && (f?.unit === "score" || (f?.key ?? key) === "score") && vals.every((v) => v >= 0 && v <= 1);
+}
+
 function niceRange(vals: number[], invert: boolean): [number, number] {
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (lo === hi) { lo -= 1; hi += 1; }
@@ -82,13 +87,17 @@ export default function ChartBlock({ b, dataset, locale }: { b: any; dataset?: D
 
   const W = 640, H = 300, P = { l: 56, r: 16, t: 24, b: 36 };
   const yVals = rows.map((r) => Number(r[b.yField]));
-  const [yMin, yMax] = niceRange(yVals, invert);
+  // 0–1 index scores (EGDI and its sub-indices, GTMI, OECD DGI) get a fixed
+  // 0–1.0 axis, so no tick ever reads above the maximum score. Ranks
+  // (invertY) and other units keep the fitted range.
+  const scoreAxis = isScoreAxis(yF, b.yField, yVals, invert);
+  const [yMin, yMax] = scoreAxis ? [0, 1] : niceRange(yVals, invert);
   const yPos = (v: number) => {
     const f = (v - yMin) / (yMax - yMin);
     return invert ? P.t + f * (H - P.t - P.b) : H - P.b - f * (H - P.t - P.b);
   };
-  const ticks = Array.from({ length: 5 }, (_, i) => yMin + ((yMax - yMin) * i) / 4);
-  const tickText = (v: number) => (yF?.type === "integer" ? String(Math.round(v)) : fmtNumber(v, locale, Math.abs(yMax - yMin) < 2 ? 2 : 0));
+  const ticks = scoreAxis ? [0, 0.2, 0.4, 0.6, 0.8, 1] : Array.from({ length: 5 }, (_, i) => yMin + ((yMax - yMin) * i) / 4);
+  const tickText = (v: number) => (yF?.type === "integer" ? String(Math.round(v)) : fmtNumber(v, locale, scoreAxis ? 1 : Math.abs(yMax - yMin) < 2 ? 2 : 0));
 
   let plot: React.ReactNode;
   let desc: string;
@@ -101,7 +110,7 @@ export default function ChartBlock({ b, dataset, locale }: { b: any; dataset?: D
       <ul className="dh-bars" aria-hidden="true">
         {sorted.map((r, i) => {
           const v = Number(r[b.yField]);
-          const pct = invert ? (Math.min(...yVals) / v) * 100 : (v / max) * 100;
+          const pct = invert ? (Math.min(...yVals) / v) * 100 : scoreAxis ? v * 100 : (v / max) * 100;
           const isFocus = focus && String(r[b.xField]) === focus;
           return (
             <li key={i} className={isFocus ? "is-focus" : undefined}>

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import Blocks from "@/templates/dgahub/Blocks";
-import ChartBlock, { rowFilter, cellText } from "@/components/blocks/ChartBlock";
+import ChartBlock, { rowFilter, cellText, isScoreAxis } from "@/components/blocks/ChartBlock";
 import { egdi } from "./fixtures";
 
 const ctx = { locale: "en" as const, tenant: "dgahub", home: "/en/dgahub", datasets: [egdi], articles: [], faqs: [] };
@@ -68,6 +68,18 @@ test("line chart: accessible SVG, data table, focus series first, last label anc
   assert.equal(last[3], "0.7732");
   assert.equal(last[2], "end", "last value label is anchored at its end so it stays inside the 640px plot");
   assert.ok(Number(last[1]) <= 640);
+});
+
+test("score charts use a fixed 0–1.0 axis; rank charts keep their fitted axis", () => {
+  const ticks = (html: string) => [...html.matchAll(/<text x="48" y="[\d.]+" text-anchor="end">([^<]+)</g)].map((m) => m[1]);
+  const score = renderToStaticMarkup(<ChartBlock b={{ id: 2, datasetKey: "egdi", xField: "year", yField: "score", seriesField: "country" }} dataset={egdi} locale="en" />);
+  assert.deepEqual(ticks(score), ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"]);
+  const ranked = { ...egdi, fields: [...egdi.fields, { key: "rank", type: "integer" }], rows: egdi.rows.map((r, i) => ({ ...r, rank: 40 + i * 3 })) } as any;
+  const rank = renderToStaticMarkup(<ChartBlock b={{ id: 3, datasetKey: "egdi", xField: "year", yField: "rank", seriesField: "country", invertY: true }} dataset={ranked} locale="en" />);
+  assert.ok(!ticks(rank).includes("1.0") && ticks(rank).length === 5, "rank axis is not capped");
+  const bars = renderToStaticMarkup(<ChartBlock b={{ id: 4, datasetKey: "egdi", chartType: "bar", xField: "country", yField: "score", filter: "year=2026" }} dataset={egdi} locale="en" />);
+  assert.ok(!bars.includes('width:100%'), "score bars are scaled to 1.0, not to the largest value");
+  assert.equal(isScoreAxis({ key: "score", type: "number", unit: "score" } as any, "score", [0.4, 1.2], false), false, "values above 1 are not a 0–1 score");
 });
 
 test("chart with no matching rows says so instead of drawing an empty plot", () => {
