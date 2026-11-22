@@ -20,7 +20,15 @@ const only = oi > 0 ? process.argv[oi + 1] : null;
 if (!a || !b) { console.error("usage: build-diff.mjs <strapi-export> <engine-export> [--only tenant]"); process.exit(2); }
 
 const KNOWN = new Set(["chunks", "media", "css"]);
-const buildId = (dir) => readdirSync(join(dir, "_next", "static")).find((n) => !KNOWN.has(n));
+// The id appears twice: as written in pages (<!--id--> right after the
+// doctype) and as the folder under _next/static, where Next turns "_" into "-".
+// Both forms are replaced.
+function buildIds(dir) {
+  const folder = readdirSync(join(dir, "_next", "static")).find((n) => !KNOWN.has(n));
+  const page = /^<!DOCTYPE html><!--([^>]+?)-->/.exec(readFileSync(join(dir, "404.html"), "latin1"))?.[1];
+  return [...new Set([page, folder].filter(Boolean))];
+}
+const unId = (t, ids) => ids.reduce((s, id) => s.split(id).join("BUILD_ID"), t);
 
 function walk(dir, out = []) {
   for (const n of readdirSync(dir)) {
@@ -38,12 +46,12 @@ function inScope(rel) {
 }
 
 function files(dir) {
-  const id = buildId(dir);
+  const ids = buildIds(dir);
   const map = new Map();
   for (const f of walk(dir)) {
     const rel = relative(dir, f);
     if (!inScope(rel)) continue;
-    map.set(rel.split(id).join("BUILD_ID"), { f, id });
+    map.set(unId(rel, ids), { f, ids });
   }
   return map;
 }
@@ -97,8 +105,8 @@ for (const [k, x] of A) {
   if (!y) continue;
   const ca = readFileSync(x.f), cb = readFileSync(y.f);
   if (ca.equals(cb)) { same++; continue; }
-  const ta = ca.toString("latin1").split(x.id).join("BUILD_ID");
-  const tb = cb.toString("latin1").split(y.id).join("BUILD_ID");
+  const ta = unId(ca.toString("latin1"), x.ids);
+  const tb = unId(cb.toString("latin1"), y.ids);
   if (ta === tb) { same++; continue; }
   if (/\.(html|txt)$/.test(k) && rscEqual(k, ta, tb)) { flightOrder++; continue; }
   let i = 0;

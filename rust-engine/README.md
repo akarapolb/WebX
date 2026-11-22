@@ -60,7 +60,11 @@ as Strapi answered them. `/api/<plural>/<documentId>` returns one entry.
 ```sh
 cargo test                                   # query parsing, filters, trimming (unit)
 
-# contract + build test (needs a running Strapi on 1337):
+# contract + build test, all steps in one command (needs a running Strapi
+# with content on 1337 and the release binary); CI runs exactly this:
+node tools/build-test.mjs
+
+# the same steps by hand:
 node tools/record-proxy.mjs &                # records every build read, :1338 -> :1337
 (cd ../public-site && STRAPI_URL=http://localhost:1338 NEXT_DIST_DIR=.next-ref npm run build)
 curl localhost:1338/__save                   # write fixtures/requests.json; then stop the proxy
@@ -77,12 +81,32 @@ the order of Next's React Server Components rows inside pages: that order
 changes between any two builds, even two against the same engine. Pages must
 otherwise match exactly; a one-word change is reported.
 
-Last run (2026-11-22): contract 192/192 identical; build 596 files, 0
-differences (411 byte-identical, 185 differing only in Next's row order).
+Next keeps its fetch cache in `public-site/.next/cache` whatever
+`NEXT_DIST_DIR` says, keyed by URL, so by hand delete
+`../public-site/.next/cache/fetch-cache` before each build, or the second
+build gets the first build's answers. `build-test.mjs` does that, and also
+runs the engine build through the recording proxy (engine one port up) and
+fails unless it read the same paths as the reference build.
+
+Last run (2026-11-22, `build-test.mjs`, cold cache): contract 192/192
+identical; the engine build read the same 192 paths; build 596 files, 0
+differences (506 byte-identical, 90 differing only in Next's row order); per
+tenant `dga` 437, `pea` 289, `dgahub` 368 files, 0 differences.
 
 ## Not covered (yet)
 
 - WordPress tenants (ORST, Royal Society) read WordPress, not this engine.
 - Live mode (reading Strapi's Postgres directly) is milestone 6 of the plan,
   optional.
-- No CI job yet: the build test needs a Strapi with content to record from.
+
+## CI
+
+`.github/workflows/rust-engine.yml` runs `cargo test`, then boots a freshly
+seeded Strapi (throwaway sqlite DB and secrets, as in `ci.yml`) and runs
+`tools/build-test.mjs`: contract test plus build diff for the whole site and
+for each Strapi tenant (`dga` and `pea` on the gov-portal template, `dgahub`).
+It runs only when the engine, public-site's Strapi reading code
+(`lib/cms.ts`, `lib/publicCms*`, `next.config.mjs`) or Strapi's content types,
+components or API settings change, or by hand (workflow_dispatch). There is no
+WordPress in CI; the ORST and Royal Society pages build from their fallbacks
+in both builds, so they are compared too but say nothing about WordPress.

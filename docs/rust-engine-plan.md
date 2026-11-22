@@ -1,21 +1,34 @@
 # Plan: read-only Rust engine for the public-site build
 
-Status: milestones 1–4 built and passing (2026-11-22, code in
-`rust-engine/`, see its README); 5–6 not started. Off the DGA critical path:
-the hub ships on Strapi whatever happens here.
+Status: milestones 1–5 built and passing (2026-11-22, code in
+`rust-engine/`, see its README; CI in `.github/workflows/rust-engine.yml`);
+6 (optional) not started. Off the DGA critical path: the hub ships on Strapi
+whatever happens here.
 
 ## Results so far (2026-11-22)
+
+All steps run as one command, `node tools/build-test.mjs`, the same locally
+and in CI.
 
 - **Contract test:** a full public-site build made 192 distinct read
   requests (all tenants, both locales). Replayed against the engine: 192/192
   return the same status and byte-identical JSON (key order included).
 - **Build test:** public-site built against the engine (`STRAPI_URL` on the
-  same address the Strapi reference used): 596 exported files; 411
-  byte-identical, the other 185 identical once Next's own React Server
-  Components row order is ignored, 0 differences; `check-export` passes.
-  Two builds against the *same* engine snapshot also differ in that row order
-  (34 files), so it is Next's, not the engine's; `tools/build-diff.mjs`
-  compares those rows as a set and still catches a one-word content change.
+  same address the Strapi reference used), from a cold cache, and recorded on
+  the way: it read the same 192 paths from the engine as the reference build
+  read from Strapi. 596 exported files, 0 differences (506 byte-identical, 90
+  identical once Next's own React Server Components row order is ignored);
+  per Strapi tenant: `dga` 437 files and `pea` 289 (both gov-portal),
+  `dgahub` 368, all 0 differences; `check-export` passes on both builds.
+  Two builds against the *same* engine snapshot also differ in that row order,
+  so it is Next's, not the engine's; `tools/build-diff.mjs` compares those
+  rows as a set and still catches a one-word content change.
+- **Correction to the first build test (milestone 4):** Next keeps its fetch
+  cache in `public-site/.next/cache` whatever `NEXT_DIST_DIR` says, keyed by
+  URL, and both builds use the same URL, so that first engine build may have
+  been served partly from cached Strapi answers. `build-test.mjs` now clears
+  the cache before each build and fails unless the engine build read the same
+  paths from the engine; the results above are from that run.
 - **Footprint:** release binary 1.8 MB, about 12 MB of memory serving the
   snapshot (Strapi's process: about 186 MB, and minutes to start). Exporting
   the snapshot takes about 5 seconds; a public-site build against the engine
@@ -108,7 +121,7 @@ The built site must come out identical:
 | 2 | Snapshot exporter from Strapi (published, per tenant/locale) — **done** (`tools/export-snapshot.mjs`) | 1–2 days |
 | 3 | Rust server: tenants, pages, slugs, menu, articles, FAQ, services, datasets, home-pages; contract test green — **done** (all collections the build reads) | 4–6 days |
 | 4 | Media passthrough; build test identical for `dgahub` — **done** (all Strapi tenants) | 1–2 days |
-| 5 | gov-portal tenant identical; CI job; docs | 2–3 days |
+| 5 | gov-portal tenant identical; CI job; docs — **done** (`dga` and `pea` identical; `tools/build-test.mjs`; `.github/workflows/rust-engine.yml`, not yet run on GitHub) | 2–3 days |
 | 6 | (Optional) live Postgres mode with per-upgrade tests | 3–5 days |
 
 Risks: Strapi's populate output has quirks (nested component ids, media
