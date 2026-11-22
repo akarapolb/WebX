@@ -1,8 +1,31 @@
 # Plan: read-only Rust engine for the public-site build
 
-Status: plan only, no code. Off the DGA critical path: the hub ships on
-Strapi whatever happens here. Start only after the user agrees (WebX
-improvement list, step 7).
+Status: milestones 1–4 built and passing (2026-11-22, code in
+`rust-engine/`, see its README); 5–6 not started. Off the DGA critical path:
+the hub ships on Strapi whatever happens here.
+
+## Results so far (2026-11-22)
+
+- **Contract test:** a full public-site build made 192 distinct read
+  requests (all tenants, both locales). Replayed against the engine: 192/192
+  return the same status and byte-identical JSON (key order included).
+- **Build test:** public-site built against the engine (`STRAPI_URL` on the
+  same address the Strapi reference used): 596 exported files; 411
+  byte-identical, the other 185 identical once Next's own React Server
+  Components row order is ignored, 0 differences; `check-export` passes.
+  Two builds against the *same* engine snapshot also differ in that row order
+  (34 files), so it is Next's, not the engine's; `tools/build-diff.mjs`
+  compares those rows as a set and still catches a one-word content change.
+- **Footprint:** release binary 1.8 MB, about 12 MB of memory serving the
+  snapshot (Strapi's process: about 186 MB, and minutes to start). Exporting
+  the snapshot takes about 5 seconds; a public-site build against the engine
+  took 31–35 seconds.
+- **Safety:** only published, publicly readable content is exported
+  (Strapi's own permissions decide; 22 private types were refused); the
+  engine answers `POST` with 405 and unknown query parameters or operators
+  (e.g. `status=draft`, `$containsi`) with 400.
+- **One Strapi quirk reproduced on purpose:** in a sorted list Strapi puts
+  the sort fields first in each entry; the engine does the same.
 
 ## Why
 
@@ -81,10 +104,10 @@ The built site must come out identical:
 
 | # | Milestone | Effort |
 |---|---|---|
-| 1 | Fixture recorder: a public-site build mode that saves every read request + response | 1 day |
-| 2 | Snapshot exporter from Strapi (published, per tenant/locale) | 1–2 days |
-| 3 | Rust server: tenants, pages, slugs, menu, articles, FAQ, services, datasets, home-pages; contract test green | 4–6 days |
-| 4 | Media passthrough; build test identical for `dgahub` | 1–2 days |
+| 1 | Fixture recorder (built as a recording proxy, `tools/record-proxy.mjs`, so public-site needs no change) — **done** | 1 day |
+| 2 | Snapshot exporter from Strapi (published, per tenant/locale) — **done** (`tools/export-snapshot.mjs`) | 1–2 days |
+| 3 | Rust server: tenants, pages, slugs, menu, articles, FAQ, services, datasets, home-pages; contract test green — **done** (all collections the build reads) | 4–6 days |
+| 4 | Media passthrough; build test identical for `dgahub` — **done** (all Strapi tenants) | 1–2 days |
 | 5 | gov-portal tenant identical; CI job; docs | 2–3 days |
 | 6 | (Optional) live Postgres mode with per-upgrade tests | 3–5 days |
 

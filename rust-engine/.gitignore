@@ -1,0 +1,5 @@
+/target/
+# Content exported from a running Strapi: data, not code (tools/export-snapshot.mjs)
+/snapshot/
+# Recorded build requests (tools/record-proxy.mjs) and test reports
+/fixtures/

@@ -210,9 +210,12 @@ An engine conforms when, for the same content:
    reference Strapi engine. A recorded fixture set (one tenant, both locales)
    is the test.
 2. **Built site:** `npm run build` of public-site against it produces an `out/`
-   folder byte-identical to the build against Strapi (HTML, JSON, CSV,
-   `search-index.json`, `sitemap.xml`), apart from Next's build id and hashed
-   chunk names, and passes `scripts/check-export.mjs`.
+   folder identical to the build against Strapi (HTML, JSON, CSV,
+   `search-index.json`, `sitemap.xml`), apart from Next's build id and the
+   order of Next's own React Server Components rows, which changes between
+   any two builds; and passes `scripts/check-export.mjs`. The read-only engine
+   in `rust-engine/` passes 1 and 2 (`tools/contract-test.mjs`,
+   `tools/build-diff.mjs`).
 3. **Write API (only for a full engine):** the e2e `studio-roundtrip` and
    `user-management` tests pass against it (Studio's own unit tests in
    `webx-studio/tests/` cover the agent, not the adapters; an adapter
