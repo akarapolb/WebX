@@ -109,6 +109,6 @@ jobs:
       # engine's build with Strapi's.
       - name: Build test (record, export, contract test, build, diff)
         working-directory: rust-engine
-        run: node tools/build-test.mjs --strapi http://localhost:1337 --no-check-export
+        run: node tools/build-test.mjs --strapi http://localhost:1337 --store db --no-check-export
       - if: failure()
         run: tail -n 200 /tmp/strapi.log

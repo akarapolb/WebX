@@ -3,7 +3,7 @@
 // same locally and in CI (.github/workflows/rust-engine.yml). Needs a running
 // Strapi with content and a built engine (cargo build --release).
 //
-//   node tools/build-test.mjs [--strapi http://localhost:1337] [--port 1338] [--no-check-export]
+//   node tools/build-test.mjs [--strapi http://localhost:1337] [--port 1338] [--store snapshot|db] [--no-check-export]
 //
 // 1. record: public-site build through tools/record-proxy.mjs (-> .next-ref,
 //    fixtures/requests.json)
@@ -28,6 +28,8 @@ const arg = (name, def) => {
 };
 const STRAPI = arg("strapi", process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
 const PORT = arg("port", "1338");
+const STORE = arg("store", "snapshot"); // "snapshot" (file) or "db" (the engine's own SQLite store)
+if (!["snapshot", "db"].includes(STORE)) throw new Error(`--store must be "snapshot" or "db", got "${STORE}"`);
 const LOCAL = `http://localhost:${PORT}`;
 const exe = join(root, "target", "release", process.platform === "win32" ? "webx-read-engine.exe" : "webx-read-engine");
 
@@ -87,7 +89,14 @@ try {
   // the engine listens one port up; the build reaches it through the proxy on
   // PORT, so its URLs match the reference build and its reads are recorded
   const ENGINE = `http://localhost:${Number(PORT) + 1}`;
-  const engine = start(exe, ["--port", String(Number(PORT) + 1), "--snapshot", "snapshot/snapshot.json", "--uploads", "../strapi-cms/public/uploads"], { cwd: root });
+  // --store db: import the snapshot into the engine's own SQLite store and run
+  // the engine from that, so the contract and the build are tested against it
+  let source = ["--snapshot", "snapshot/snapshot.json"];
+  if (STORE === "db") {
+    await run(exe, ["import", "--snapshot", "snapshot/snapshot.json", "--db", "snapshot/engine.db"], { cwd: root });
+    source = ["--db", "snapshot/engine.db"];
+  }
+  const engine = start(exe, ["--port", String(Number(PORT) + 1), ...source, "--uploads", "../strapi-cms/public/uploads"], { cwd: root });
   try {
     await waitFor(`${ENGINE}/_health`, "engine");
     await run(process.execPath, [join(here, "contract-test.mjs"), "--engine", ENGINE], { cwd: root });

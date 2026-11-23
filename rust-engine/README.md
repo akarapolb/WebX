@@ -32,6 +32,26 @@ cd ../public-site && STRAPI_URL=http://localhost:1338 npm run build
 `snapshot/` and `fixtures/` are git-ignored: they are content, not code.
 Export again after content changes (a publish), then rebuild.
 
+### Own database (SQLite)
+
+The engine has its own durable store, so it can start without an export file
+(track R2 of `../docs/target-architecture.md`):
+
+```sh
+target/release/webx-read-engine import --snapshot snapshot/snapshot.json --db snapshot/engine.db
+target/release/webx-read-engine --db snapshot/engine.db --port 1338
+```
+
+`import` replaces the database with the snapshot's content, one row per entry
+(table `entries`: type, tenant, locale, seq, document id, the entry's JSON
+verbatim so key order is kept), plus the schema, the special answers and the
+shape of every collection, so an empty collection is still a 200 with an empty
+list. Reads are identical to snapshot mode: the document is rebuilt from the
+database at start and served from memory. The database file has a version
+(`PRAGMA user_version`); the engine refuses another version. The write API
+(R3) will write to this same store. SQLite is built into the binary, which is
+why it is about 3.5 MB instead of 1.8 MB.
+
 ## How it decides what to return
 
 Each entry is exported with "one level inside" populated (media, relations,
@@ -92,6 +112,12 @@ Last run (2026-11-22, `build-test.mjs`, cold cache): contract 192/192
 identical; the engine build read the same 192 paths; build 596 files, 0
 differences (506 byte-identical, 90 differing only in Next's row order); per
 tenant `dga` 437, `pea` 289, `dgahub` 368 files, 0 differences.
+
+Database mode (`build-test.mjs --store db`, 2026-11-23, second run): contract 193/193
+identical; the same 193 paths read; build 584 files, 0 differences. One earlier
+run differed in 56 JavaScript chunk file names (same size and code, only
+webpack module ids differ): Next bundling variance between two builds, not
+engine data; it did not repeat. If CI shows it, rerun before suspecting the engine.
 
 ## Not covered (yet)
 

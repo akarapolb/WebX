@@ -3,9 +3,15 @@
 //! by tools/export-snapshot.mjs and answers the requests listed in
 //! docs/engine-contract.md, section 6. No writes, no admin, no auth.
 //!
-//!   webx-read-engine [--snapshot snapshot/snapshot.json] [--port 1338] [--uploads ../strapi-cms/public/uploads]
+//!   webx-read-engine [--snapshot snapshot/snapshot.json | --db snapshot/engine.db] [--port 1338] [--uploads ../strapi-cms/public/uploads]
+//!   webx-read-engine import [--snapshot snapshot/snapshot.json] [--db snapshot/engine.db]
+//!
+//! `import` writes the snapshot into the engine's own SQLite store (store.rs,
+//! docs/target-architecture.md track R2); `--db` then starts the engine from
+//! that store instead of the export file. Reads are identical either way.
 
 mod query;
+mod store;
 
 use axum::{
     extract::{Path, RawQuery, State},
@@ -27,7 +33,10 @@ pub struct Snapshot {
 
 impl Snapshot {
     pub fn load(text: &str) -> Result<Self, String> {
-        let doc: Value = serde_json::from_str(text).map_err(|e| format!("snapshot: {e}"))?;
+        Self::from_doc(serde_json::from_str(text).map_err(|e| format!("snapshot: {e}"))?)
+    }
+
+    pub fn from_doc(doc: Value) -> Result<Self, String> {
         if doc.get("format") != Some(&json!(1)) { return Err("snapshot: unsupported format (expected 1)".into()); }
         let tenants: Vec<String> = doc["tenants"].as_array().map(|a| a.iter().filter_map(|t| t.as_str().map(str::to_string)).collect()).unwrap_or_default();
         let default_tenant = doc["defaultTenant"].as_str().unwrap_or("dga").to_string();
@@ -173,15 +182,32 @@ fn arg(name: &str, default: &str) -> String {
     args.iter().position(|a| a == &format!("--{name}")).and_then(|i| args.get(i + 1).cloned()).unwrap_or_else(|| default.to_string())
 }
 
-#[tokio::main]
-async fn main() {
+/// `webx-read-engine import`: snapshot file -> the engine's own SQLite store.
+fn import_command() {
     let path = arg("snapshot", "snapshot/snapshot.json");
-    let port: u16 = arg("port", "1338").parse().expect("--port");
-    let uploads = arg("uploads", "../strapi-cms/public/uploads");
+    let db = arg("db", "snapshot/engine.db");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
     let snap = Snapshot::load(&text).unwrap_or_else(|e| panic!("{e}"));
+    let n = store::import(&snap.doc, &db).unwrap_or_else(|e| panic!("{e}"));
+    eprintln!("[webx-read-engine] imported {n} entries from {path} into {db}");
+}
+
+#[tokio::main]
+async fn main() {
+    if std::env::args().nth(1).as_deref() == Some("import") { import_command(); return; }
+    let db = arg("db", "");
+    let port: u16 = arg("port", "1338").parse().expect("--port");
+    let uploads = arg("uploads", "../strapi-cms/public/uploads");
+    let (snap, from) = if db.is_empty() {
+        let path = arg("snapshot", "snapshot/snapshot.json");
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
+        (Snapshot::load(&text).unwrap_or_else(|e| panic!("{e}")), format!("snapshot {path}"))
+    } else {
+        let doc = store::load(&db).unwrap_or_else(|e| panic!("{e}"));
+        (Snapshot::from_doc(doc).unwrap_or_else(|e| panic!("{e}")), format!("database {db}"))
+    };
     let n: usize = snap.doc["data"].as_object().map(|m| m.len()).unwrap_or(0);
-    eprintln!("[webx-read-engine] {n} collection(s), {} tenant(s), exported {} from {}", snap.tenants.len(),
+    eprintln!("[webx-read-engine] from {from}: {n} collection(s), {} tenant(s), exported {} from {}", snap.tenants.len(),
         snap.doc["exportedAt"].as_str().unwrap_or("?"), snap.doc["source"].as_str().unwrap_or("?"));
 
     let app = Router::new()
