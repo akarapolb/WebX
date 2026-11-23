@@ -181,3 +181,28 @@ npm run test:isolation
 ## Config
 
 `WP_ADMIN_USER`, `PUBLIC_SITE_URL`, `WEBX_STUDIO_URL`, `STRAPI_URL`, `WORDPRESS_URL`, `DGA_EDITOR_EMAIL`, `PEA_EDITOR_EMAIL`, `MOCK_LITELLM_PORT` are all overridable via env vars (see `tests/_helpers.ts`) — the defaults match this repo's standard local dev ports and seeded accounts.
+
+## Suite 8 — audit log in the control plane
+
+`audit-control-plane.spec.ts` (track C3, `docs/target-architecture.md`). With
+`WEBX_CONTROL_URL` and `WEBX_CONTROL_SERVICE_TOKEN` set on webx-studio, the audit
+log lives in `webx-control`, not Strapi. It signs in as the seeded `dga` and `pea`
+editors, makes governed changes (two updates of a `dga` service, put back
+afterwards) and checks that the rows are in the control plane, attributed to the
+editor and workspace; that the Audit Log screen's API shows `dga` its own rows
+and `pea` none of them; that an audit row cannot be edited or deleted through
+Studio; and that Strapi's own audit table received nothing.
+
+Runs in CI as the `e2e-audit-control-plane` job. By hand: start Strapi and
+webx-control (`WEBX_CONTROL_SERVICE_TOKEN=... webx-control --db x.db --port
+1400`), start webx-studio with the two variables above, then:
+
+```sh
+AUDIT_CONTROL_URL=http://localhost:1400 AUDIT_CONTROL_TOKEN=<the service token> \
+STRAPI_SCHEDULER_PASSWORD=... DGA_EDITOR_PASSWORD=... PEA_EDITOR_PASSWORD=... \
+  npx playwright test tests/audit-control-plane.spec.ts
+```
+
+Studio rate-limits sign-ins (429 after several in a short time), so restart it
+between repeated local runs. Creates are avoided because a workspace at its plan
+item limit refuses them (403), which has nothing to do with audit.

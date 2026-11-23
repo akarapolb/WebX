@@ -192,6 +192,90 @@ jobs:
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
         run: npx playwright test tests/cross-tenant-isolation.spec.ts
 
+  # Track C3: with the audit log in webx-control, a real editor's governed changes
+  # land there (scoped, append-only), and none reach Strapi's own audit table.
+  e2e-audit-control-plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: strapi-cms/package-lock.json
+      - working-directory: strapi-cms
+        run: npm ci
+      - name: Build webx-control
+        working-directory: webx-control
+        run: cargo build --release --locked
+      - name: Boot a freshly-seeded Strapi (ephemeral secrets, throwaway DB)
+        working-directory: strapi-cms
+        env:
+          DATABASE_FILENAME: .tmp/ci.db
+          APP_KEYS: ci-key-a,ci-key-b
+          API_TOKEN_SALT: ci-api-token-salt
+          ADMIN_JWT_SECRET: ci-admin-jwt-secret
+          TRANSFER_TOKEN_SALT: ci-transfer-token-salt
+          JWT_SECRET: ci-jwt-secret
+          ENCRYPTION_KEY: ci-encryption-key
+          PII_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
+          DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
+          PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
+          MFA_ENABLED: "false"
+        run: npx strapi develop > /tmp/strapi.log 2>&1 &
+      - name: Start webx-control with its service token
+        working-directory: webx-control
+        env:
+          WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
+        run: ./target/release/webx-control --db /tmp/control.db --port 1400 > /tmp/control.log 2>&1 &
+      - name: Wait for Strapi to finish booting and seeding
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:1337/api/tenants/keys > /dev/null; then echo "Strapi is up"; exit 0; fi
+            sleep 10
+          done
+          echo "Strapi did not become ready in time"; cat /tmp/strapi.log; exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webx-studio/package-lock.json
+      - working-directory: webx-studio
+        run: npm ci
+      - name: Boot webx-studio with the audit log in the control plane
+        working-directory: webx-studio
+        env:
+          STRAPI_URL: http://localhost:1337
+          STRAPI_SCHEDULER_EMAIL: scheduler@webx.local
+          STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
+          WEBX_CONTROL_URL: http://localhost:1400
+          WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
+        run: npm run dev > /tmp/webx-studio.log 2>&1 &
+      - name: Wait for webx-studio to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/login > /dev/null; then echo "webx-studio is up"; exit 0; fi
+            sleep 5
+          done
+          echo "webx-studio did not become ready in time"; cat /tmp/webx-studio.log; exit 1
+      - working-directory: e2e
+        run: npm ci
+      - working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - working-directory: e2e
+        env:
+          AUDIT_CONTROL_URL: http://localhost:1400
+          AUDIT_CONTROL_TOKEN: ci-audit-service-token
+          STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
+          DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
+          PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
+        run: npx playwright test tests/audit-control-plane.spec.ts
+      - if: failure()
+        run: |
+          tail -n 100 /tmp/webx-studio.log
+          tail -n 50 /tmp/control.log
+
   # NOT wired into CI, deliberately — this is the honest half of the same
   # 2026-09-12 fix: the rest of e2e/'s suites (SSO/agent/wp-admin/user-
   # management) need a live WordPress + Keycloak + a real LLM key, which is
