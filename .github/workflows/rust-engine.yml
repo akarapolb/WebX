@@ -14,6 +14,8 @@ on:
     branches: [main, "phase-*"]
     paths:
       - "rust-engine/**"
+      - "webx-studio/lib/cms/rust.ts"
+      - "webx-studio/tests/conformance/**"
       - "public-site/lib/cms.ts"
       - "public-site/lib/publicCms*"
       - "public-site/next.config.mjs"
@@ -71,9 +73,12 @@ jobs:
           cache-dependency-path: |
             strapi-cms/package-lock.json
             public-site/package-lock.json
+            webx-studio/package-lock.json
       - working-directory: strapi-cms
         run: npm ci
       - working-directory: public-site
+        run: npm ci
+      - working-directory: webx-studio
         run: npm ci
       # Same throwaway setup as ci.yml's Strapi jobs: ephemeral sqlite DB and
       # secrets, seeded from empty (slow the first time, ~8 minutes).
@@ -110,5 +115,14 @@ jobs:
       - name: Build test (record, export, contract test, build, diff)
         working-directory: rust-engine
         run: node tools/build-test.mjs --strapi http://localhost:1337 --store db --no-check-export
+      # R3: the write API, end to end on the binary (uses the snapshot the
+      # build test just exported)
+      - name: Write API test
+        working-directory: rust-engine
+        run: node tools/write-test.mjs
+      # R3: Studio's conformance suite through the Rust adapter (rust.ts)
+      - name: Conformance suite against the Rust engine
+        working-directory: rust-engine
+        run: node tools/conformance.mjs
       - if: failure()
         run: tail -n 200 /tmp/strapi.log

@@ -215,6 +215,14 @@ SSO are layered in Studio), keeps the token server-side, and sends
 `X-WebX-Governed` and `X-Internal-Secret` so the engine trusts governance's own
 audit writes and MFA exemption.
 
+### Rust engine's write API
+
+The Rust engine (`rust-engine/`, started with `--db`) exposes the same
+operations as `/write/<plural>[/<documentId>[/publish|unpublish]]` instead of
+Strapi's admin paths, with a per-tenant bearer token instead of an admin login;
+see `rust-engine/README.md`. An adapter for it maps the `CmsAdapter` calls above
+onto these; media and users are not in it yet (R4 and the control plane, C2).
+
 ## 9. Conformance
 
 An engine conforms when, for the same content:

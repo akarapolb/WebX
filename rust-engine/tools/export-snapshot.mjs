@@ -56,6 +56,10 @@ for (const api of readdirSync(join(CMS_SRC, "api"))) {
       uid: `api::${api}.${ct}`,
       i18n: !!s.pluginOptions?.i18n?.localized,
       attrs: attrMap(s.attributes),
+      // every attribute (name, type, required), for the write API's type listing
+      fields: Object.fromEntries(Object.entries(s.attributes || {}).map(([n, a]) => [n, { type: a.type, ...(a.required ? { required: true } : {}) }])),
+      // fields the write API requires before it publishes (docs/engine-contract.md, section 8)
+      required: Object.entries(s.attributes || {}).filter(([, a]) => a.required).map(([n]) => n),
     };
   }
 }

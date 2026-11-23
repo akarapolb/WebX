@@ -52,6 +52,38 @@ database at start and served from memory. The database file has a version
 (R3) will write to this same store. SQLite is built into the binary, which is
 why it is about 3.5 MB instead of 1.8 MB.
 
+### Write API (R3)
+
+Started with `--db`, the engine also takes writes under `/write`, to the same
+store. Each call carries `Authorization: Bearer <token>`; a token belongs to one
+tenant and every call is scoped to it (another tenant's entries are 404, and
+`?tenant` is ignored). Mint one, shown once (only its hash is stored):
+
+```sh
+target/release/webx-read-engine token --db snapshot/engine.db --tenant dga --label studio
+```
+
+| Call | Meaning |
+|---|---|
+| `GET /write/<plural>?locale&status=draft|published|modified&page&pageSize` | the drafts, each with a `status` |
+| `GET /write/<plural>/<documentId>?locale` | one draft; a locale never written resolves with `data: null` |
+| `POST /write/<plural>?locale` body `{"data": {...}}` | create a draft (new documentId) |
+| `PUT /write/<plural>/<documentId>?locale` | change the draft; creates a missing locale |
+| `DELETE /write/<plural>/<documentId>[?locale]` | remove draft and published version of that locale; with no `locale`, of every locale (as Strapi) |
+| `POST /write/<plural>/<documentId>/publish|unpublish?locale` | copy the draft to the published version the read API serves, or remove it and keep the draft |
+
+`publish` answers 400 when a field listed in the type's `required` (in the schema
+map) is missing; the exporter does not write that list yet, it comes with the
+content model (R1). `/api` serves only published entries, so a draft is never
+public. After a publish the caller triggers the site rebuild, as for Strapi.
+Without `--db` the engine stays read-only and `/write` answers 405.
+`tools/write-test.mjs` checks all of this on the real binary, including
+isolation between tenants and a restart, and `tools/conformance.mjs` runs
+Studio's engine conformance suite (`webx-studio/tests/conformance`) against it
+through the Studio adapter `webx-studio/lib/cms/rust.ts` (11 of 11 cases; CI runs
+both). `GET /write/_types` lists the content types for that adapter; the list
+call also takes `filters`, `sort`, `_q`, `page` and `pageSize`.
+
 ## How it decides what to return
 
 Each entry is exported with "one level inside" populated (media, relations,

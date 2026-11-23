@@ -14,6 +14,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tower-http = { version = "0.5", features = ["fs"] }
 # the engine's own durable store (docs/target-architecture.md, track R2); bundled = no system SQLite needed
 rusqlite = { version = "0.32", features = ["bundled"] }
+# R3 write API: random ids and tokens, token hashes
+sha2 = "0.10"
+getrandom = "0.2"
 
 [profile.release]
 opt-level = 3

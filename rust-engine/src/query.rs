@@ -32,6 +32,9 @@ pub enum Filter {
 pub enum Op {
     Eq(String),
     Ne(String),
+    /// substring / prefix, ASCII case-insensitive like SQLite's LIKE
+    Contains(String),
+    StartsWith(String),
     Null(bool),
     NotNull(bool),
 }
@@ -50,7 +53,7 @@ pub struct Query {
 
 // ---- query string -> nested tree (like the `qs` package Strapi uses) ----
 
-fn percent_decode(s: &str) -> String {
+pub fn percent_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -252,6 +255,8 @@ fn parse_field_filter(path: Vec<String>, v: &Value) -> Result<Filter, String> {
                 let op = match k.as_str() {
                     "$eq" => Op::Eq(text(val)?),
                     "$ne" => Op::Ne(text(val)?),
+                    "$contains" => Op::Contains(text(val)?),
+                    "$startsWith" => Op::StartsWith(text(val)?),
                     "$null" => Op::Null(bool_text(&text(val)?)),
                     "$notNull" => Op::NotNull(bool_text(&text(val)?)),
                     k if k.starts_with('$') => return Err(format!("unsupported filter operator `{k}`")),
@@ -300,6 +305,8 @@ pub fn matches(f: &Filter, doc: &Value) -> bool {
             match op {
                 Op::Eq(s) => equals(v, s),
                 Op::Ne(s) => !equals(v, s),
+                Op::Contains(s) => v.and_then(Value::as_str).is_some_and(|x| x.to_ascii_lowercase().contains(&s.to_ascii_lowercase())),
+                Op::StartsWith(s) => v.and_then(Value::as_str).is_some_and(|x| x.to_ascii_lowercase().starts_with(&s.to_ascii_lowercase())),
                 Op::Null(want) => v.is_none() == *want,
                 Op::NotNull(want) => v.is_some() == *want,
             }
@@ -356,6 +363,16 @@ mod tests {
         assert!(parse("filters[title][$containsi]=x").is_err());
         assert!(parse("status=draft").is_err());
         assert!(parse("sort=tenant.key:asc").is_err());
+    }
+
+    #[test]
+    fn contains_and_starts_with_ignore_ascii_case() {
+        let doc: Value = serde_json::json!({"slug": "About-Us", "order": 3});
+        let m = |q: &str| matches(&parse(q).unwrap().filters.unwrap(), &doc);
+        assert!(m("filters[slug][$contains]=out-u"));
+        assert!(m("filters[slug][$startsWith]=about"));
+        assert!(!m("filters[slug][$startsWith]=us"));
+        assert!(!m("filters[order][$contains]=3"), "only text fields match");
     }
 
     #[test]

@@ -1,7 +1,8 @@
 //! webx-read-engine: a read-only stand-in for Strapi's public REST API, for
 //! public-site builds (docs/rust-engine-plan.md). It serves a snapshot written
 //! by tools/export-snapshot.mjs and answers the requests listed in
-//! docs/engine-contract.md, section 6. No writes, no admin, no auth.
+//! docs/engine-contract.md, section 6. Started with --db it also has a write API
+//! (write.rs, /write/*, one bearer token per tenant); otherwise no writes.
 //!
 //!   webx-read-engine [--snapshot snapshot/snapshot.json | --db snapshot/engine.db] [--port 1338] [--uploads ../strapi-cms/public/uploads]
 //!   webx-read-engine import [--snapshot snapshot/snapshot.json] [--db snapshot/engine.db]
@@ -12,17 +13,19 @@
 
 mod query;
 mod store;
+mod write;
 
 use axum::{
+    body::Bytes,
     extract::{Path, RawQuery, State},
-    http::StatusCode,
+    http::{HeaderMap, Method, StatusCode},
     response::{IntoResponse, Json, Response},
-    routing::get,
+    routing::{any, get},
     Router,
 };
 use query::{Populate, Query};
 use serde_json::{json, Map, Value};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 use tower_http::services::ServeDir;
 
 pub struct Snapshot {
@@ -126,14 +129,21 @@ fn sort_fields_first(v: Value, sort: &[&str]) -> Value {
     Value::Object(out)
 }
 
-type Shared = Arc<Snapshot>;
+/// The served content plus, with --db, the store the write API saves to.
+pub struct App {
+    eng: RwLock<write::Engine>,
+    conn: Option<Mutex<rusqlite::Connection>>,
+}
+type Shared = Arc<App>;
 
 fn error(status: StatusCode, name: &str, message: &str) -> Response {
     (status, Json(json!({"data": null, "error": {"status": status.as_u16(), "name": name, "message": message, "details": {}}}))).into_response()
 }
 fn not_found() -> Response { error(StatusCode::NOT_FOUND, "NotFoundError", "Not Found") }
 
-async fn api(State(s): State<Shared>, Path(rest): Path<String>, RawQuery(raw): RawQuery) -> Response {
+async fn api(State(app): State<Shared>, Path(rest): Path<String>, RawQuery(raw): RawQuery) -> Response {
+    let guard = app.eng.read().unwrap();
+    let s = &guard.snap;
     let q = match query::parse(raw.as_deref().unwrap_or("")) {
         Ok(q) => q,
         Err(msg) => return error(StatusCode::BAD_REQUEST, "ValidationError", &format!("webx-read-engine: {msg}")),
@@ -177,6 +187,65 @@ async fn api(State(s): State<Shared>, Path(rest): Path<String>, RawQuery(raw): R
     }
 }
 
+fn werr(e: write::WErr) -> Response { error(StatusCode::from_u16(e.status).unwrap(), e.name, &e.message) }
+
+/// The write API, /write/<plural>[/<documentId>[/publish|unpublish]], every call
+/// scoped to the tenant of the bearer token (docs/engine-contract.md, section 8).
+async fn write_api(State(app): State<Shared>, method: Method, headers: HeaderMap, Path(rest): Path<String>, RawQuery(raw): RawQuery, body: Bytes) -> Response {
+    let Some(conn) = &app.conn else { return error(StatusCode::METHOD_NOT_ALLOWED, "MethodNotAllowedError", "webx-read-engine: started without --db, the write API is off") };
+    let token = headers.get("authorization").and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer "));
+    let tenant = match token.and_then(|t| store::token_tenant(&conn.lock().unwrap(), &write::sha256_hex(t))) {
+        Some(t) => t,
+        None => return error(StatusCode::UNAUTHORIZED, "UnauthorizedError", "Missing or invalid token"),
+    };
+    let q: std::collections::HashMap<&str, &str> = raw.as_deref().unwrap_or("").split('&').filter_map(|p| p.split_once('=')).collect();
+    // what is not a plain parameter (filters[...], sort) goes through the read API's query parser
+    let rest_query = raw.as_deref().unwrap_or("").split('&').filter(|p| !["page=", "pageSize=", "status=", "_q=", "locale="].iter().any(|k| p.starts_with(k))).collect::<Vec<_>>().join("&");
+    let parsed = match query::parse(&rest_query) { Ok(p) => p, Err(m) => return error(StatusCode::BAD_REQUEST, "ValidationError", &format!("webx-read-engine: {m}")) };
+    let search = q.get("_q").map(|v| query::percent_decode(v));
+    let locale = q.get("locale").copied().unwrap_or("th");
+    let num = |k: &str, d: usize| q.get(k).and_then(|v| v.parse::<usize>().ok()).filter(|n| *n >= 1).unwrap_or(d);
+    let json_body: Value = if body.is_empty() { Value::Null } else {
+        match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON") }
+    };
+    let parts: Vec<&str> = rest.trim_end_matches('/').split('/').collect();
+    let mut eng = app.eng.write().unwrap();
+    let result: Result<(Value, Vec<write::Persist>), write::WErr> = match (method.as_str(), parts.as_slice()) {
+        ("GET", ["_types"]) => Ok((eng.types(), vec![])),
+        ("GET", [p]) => eng.list(p, &tenant, locale, q.get("status").copied(), parsed.filters.as_ref(), &parsed.sort, search.as_deref(), num("page", 1), num("pageSize", 25).min(100)).map(|v| (v, vec![])),
+        ("GET", [p, id]) => eng.get(p, &tenant, locale, id).map(|v| (v, vec![])),
+        ("POST", [p]) => eng.create(p, &tenant, locale, &json_body),
+        ("PUT", [p, id]) => eng.update(p, &tenant, locale, id, &json_body),
+        ("DELETE", [p, id]) => (if q.contains_key("locale") { eng.remove(p, &tenant, locale, id) } else { eng.remove_all(p, &tenant, id) }).map(|ps| (json!({"data": null, "meta": {}}), ps)),
+        ("POST", [p, id, "publish"]) => eng.publish(p, &tenant, locale, id),
+        ("POST", [p, id, "unpublish"]) => eng.unpublish(p, &tenant, locale, id),
+        _ => return error(StatusCode::NOT_FOUND, "NotFoundError", "Not Found"),
+    };
+    let (out, persist) = match result { Ok(x) => x, Err(e) => return werr(e) };
+    let mut c = conn.lock().unwrap();
+    for op in persist {
+        let r = match op {
+            write::Persist::SaveDraft { plural, tenant, locale, doc_id, data } => store::save_draft(&c, &plural, &tenant, &locale, &doc_id, &data),
+            write::Persist::DeleteDraft { plural, tenant, locale, doc_id } => store::delete_draft(&c, &plural, &tenant, &locale, &doc_id),
+            write::Persist::Published { plural, tenant, locale } => store::rewrite_published(&mut c, &plural, &tenant, &locale, &eng.published_rows(&plural, &tenant, &locale)),
+        };
+        if let Err(m) = r { return error(StatusCode::INTERNAL_SERVER_ERROR, "InternalServerError", &m); }
+    }
+    Json(out).into_response()
+}
+
+/// `webx-read-engine token --db <path> --tenant <key> [--label <text>]`: prints a new
+/// write token for the tenant once; only its hash is stored.
+fn token_command() {
+    let db = arg("db", "snapshot/engine.db");
+    let tenant = arg("tenant", "");
+    if tenant.is_empty() { panic!("--tenant <key> is required"); }
+    let conn = store::open_rw(&db).unwrap_or_else(|e| panic!("{e}"));
+    let token = write::random_hex(32);
+    store::add_token(&conn, &write::sha256_hex(&token), &tenant, &arg("label", ""), &write::now_iso()).unwrap_or_else(|e| panic!("{e}"));
+    println!("{token}");
+}
+
 fn arg(name: &str, default: &str) -> String {
     let args: Vec<String> = std::env::args().collect();
     args.iter().position(|a| a == &format!("--{name}")).and_then(|i| args.get(i + 1).cloned()).unwrap_or_else(|| default.to_string())
@@ -194,7 +263,11 @@ fn import_command() {
 
 #[tokio::main]
 async fn main() {
-    if std::env::args().nth(1).as_deref() == Some("import") { import_command(); return; }
+    match std::env::args().nth(1).as_deref() {
+        Some("import") => { import_command(); return; }
+        Some("token") => { token_command(); return; }
+        _ => {}
+    }
     let db = arg("db", "");
     let port: u16 = arg("port", "1338").parse().expect("--port");
     let uploads = arg("uploads", "../strapi-cms/public/uploads");
@@ -210,15 +283,21 @@ async fn main() {
     eprintln!("[webx-read-engine] from {from}: {n} collection(s), {} tenant(s), exported {} from {}", snap.tenants.len(),
         snap.doc["exportedAt"].as_str().unwrap_or("?"), snap.doc["source"].as_str().unwrap_or("?"));
 
+    // with --db the engine is writable: drafts and tokens live in the store
+    let conn = if db.is_empty() { None } else { Some(Mutex::new(store::open_rw(&db).unwrap_or_else(|e| panic!("{e}")))) };
+    let mut eng = write::Engine::new(snap);
+    if let Some(c) = &conn { eng.load_drafts(store::load_drafts(&c.lock().unwrap()).unwrap_or_else(|e| panic!("{e}"))); }
+    let writable = conn.is_some();
     let app = Router::new()
-        .route("/_health", get(|| async { Json(json!({"ok": true, "engine": "webx-read-engine", "readOnly": true})) }))
+        .route("/_health", get(move || async move { Json(json!({"ok": true, "engine": "webx-read-engine", "readOnly": !writable})) }))
         .route("/api/*rest", get(api))
+        .route("/write/*rest", any(write_api))
         .nest_service("/uploads", ServeDir::new(&uploads))
         .fallback(|| async { not_found() })
-        .with_state(Arc::new(snap));
+        .with_state(Arc::new(App { eng: RwLock::new(eng), conn }));
 
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
-    eprintln!("[webx-read-engine] http://localhost:{port} (read-only; uploads from {uploads})");
+    eprintln!("[webx-read-engine] http://localhost:{port} ({}; uploads from {uploads})", if writable { "writable: /write needs a token" } else { "read-only" });
     axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();
 }
 

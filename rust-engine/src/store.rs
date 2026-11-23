@@ -17,7 +17,16 @@
 use rusqlite::{params, Connection};
 use serde_json::{Map, Value};
 
-const VERSION: i64 = 1;
+/// 1 = reads only (R2); 2 adds drafts and write tokens (R3). `open_rw` upgrades 1 to 2.
+const VERSION: i64 = 2;
+const OLDEST: i64 = 1;
+const DDL2: &str = "
+CREATE TABLE IF NOT EXISTS drafts(
+  type TEXT NOT NULL, tenant TEXT NOT NULL, locale TEXT NOT NULL, document_id TEXT NOT NULL, data TEXT NOT NULL,
+  PRIMARY KEY(type, tenant, locale, document_id)
+);
+CREATE TABLE IF NOT EXISTS tokens(hash TEXT PRIMARY KEY, tenant TEXT NOT NULL, label TEXT NOT NULL, created_at TEXT NOT NULL);
+";
 
 const DDL: &str = "
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -49,6 +58,7 @@ fn shape_of(v: &Value) -> Value {
 pub fn write_doc(conn: &mut Connection, doc: &Value) -> Result<usize, String> {
     let tx = conn.transaction().map_err(e)?;
     tx.execute_batch(DDL).map_err(e)?;
+    tx.execute_batch(DDL2).map_err(e)?;
     tx.execute_batch(&format!("PRAGMA user_version = {VERSION};")).map_err(e)?;
 
     let obj = doc.as_object().ok_or("store: the snapshot is not an object")?;
@@ -96,7 +106,7 @@ pub fn write_doc(conn: &mut Connection, doc: &Value) -> Result<usize, String> {
 /// Rebuild the snapshot document from the database.
 pub fn read_doc(conn: &Connection) -> Result<Value, String> {
     let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(e)?;
-    if v != VERSION { return Err(format!("store: unsupported database version {v} (expected {VERSION}); run `import` again")); }
+    if !(OLDEST..=VERSION).contains(&v) { return Err(format!("store: unsupported database version {v} (expected {OLDEST} to {VERSION}); run `import` again")); }
     let parse = |s: String| -> Result<Value, String> { serde_json::from_str(&s).map_err(e) };
 
     let mut doc = Map::new();
@@ -154,6 +164,57 @@ pub fn load(path: &str) -> Result<Value, String> {
     if !std::path::Path::new(path).exists() { return Err(format!("store: no database at {path}; run `import` first")); }
     let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(e)?;
     read_doc(&conn)
+}
+
+/// Open for writing; a version 1 database gets the R3 tables and becomes version 2.
+pub fn open_rw(path: &str) -> Result<Connection, String> {
+    if !std::path::Path::new(path).exists() { return Err(format!("store: no database at {path}; run `import` first")); }
+    let conn = Connection::open(path).map_err(e)?;
+    let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(e)?;
+    if !(OLDEST..=VERSION).contains(&v) { return Err(format!("store: unsupported database version {v}")); }
+    conn.execute_batch(DDL2).map_err(e)?;
+    conn.execute_batch(&format!("PRAGMA user_version = {VERSION};")).map_err(e)?;
+    Ok(conn)
+}
+
+/// Every draft: (type, tenant, locale, entry JSON).
+pub fn load_drafts(conn: &Connection) -> Result<Vec<(String, String, String, Value)>, String> {
+    let mut st = conn.prepare("SELECT type, tenant, locale, data FROM drafts ORDER BY rowid").map_err(e)?;
+    let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?))).map_err(e)?;
+    let mut out = Vec::new();
+    for r in rows { let (a, b, c, d) = r.map_err(e)?; out.push((a, b, c, serde_json::from_str(&d).map_err(e)?)); }
+    Ok(out)
+}
+
+pub fn save_draft(conn: &Connection, plural: &str, tenant: &str, locale: &str, doc_id: &str, data: &Value) -> Result<(), String> {
+    conn.execute("INSERT OR REPLACE INTO drafts(type, tenant, locale, document_id, data) VALUES (?1,?2,?3,?4,?5)", params![plural, tenant, locale, doc_id, data.to_string()]).map_err(e)?;
+    Ok(())
+}
+
+pub fn delete_draft(conn: &Connection, plural: &str, tenant: &str, locale: &str, doc_id: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM drafts WHERE type=?1 AND tenant=?2 AND locale=?3 AND document_id=?4", params![plural, tenant, locale, doc_id]).map_err(e)?;
+    Ok(())
+}
+
+/// Replace the published rows of one (type, tenant, locale) with `rows`.
+pub fn rewrite_published(conn: &mut Connection, plural: &str, tenant: &str, locale: &str, rows: &[Value]) -> Result<(), String> {
+    let tx = conn.transaction().map_err(e)?;
+    tx.execute("DELETE FROM entries WHERE type=?1 AND tenant=?2 AND locale=?3", params![plural, tenant, locale]).map_err(e)?;
+    for (seq, row) in rows.iter().enumerate() {
+        tx.execute("INSERT INTO entries(type, tenant, locale, seq, document_id, data) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![plural, tenant, locale, seq as i64, row["documentId"].as_str(), row.to_string()]).map_err(e)?;
+    }
+    tx.commit().map_err(e)
+}
+
+pub fn add_token(conn: &Connection, hash: &str, tenant: &str, label: &str, now: &str) -> Result<(), String> {
+    conn.execute("INSERT INTO tokens(hash, tenant, label, created_at) VALUES (?1,?2,?3,?4)", params![hash, tenant, label, now]).map_err(e)?;
+    Ok(())
+}
+
+/// Tenant a token (by hash) may write to.
+pub fn token_tenant(conn: &Connection, hash: &str) -> Option<String> {
+    conn.query_row("SELECT tenant FROM tokens WHERE hash=?1", params![hash], |r| r.get(0)).ok()
 }
 
 #[cfg(test)]
