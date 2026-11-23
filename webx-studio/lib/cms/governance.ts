@@ -30,6 +30,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./wordpress";
 import { CmsError } from "./types";
+import { controlAuditConfig, createControlAuditAdapter } from "./audit-store";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
 import { parseCheckpoint } from "@/lib/agent/engine/checkpoint";
@@ -152,6 +153,13 @@ const WP_SCOPED = new Set([
 const TENANT_UID = "api::tenant.tenant";
 const FIELD_POLICY_UID = "api::field-policy.field-policy";
 const AUDIT_UID = "api::audit-log.audit-log";
+// one adapter per control-plane address and token, not one per call
+let controlAuditCache: { key: string; adapter: CmsAdapter } | null = null;
+function controlAuditAdapter(cfg: { baseUrl: string; token: string }): CmsAdapter {
+  const key = cfg.baseUrl + " " + cfg.token;
+  if (controlAuditCache?.key !== key) controlAuditCache = { key, adapter: createControlAuditAdapter(cfg) };
+  return controlAuditCache.adapter;
+}
 const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
 const SSO_CREDENTIAL_UID = "api::sso-credential.sso-credential";
@@ -1657,7 +1665,7 @@ export function withAgentActor<T>(runId: string, fn: () => Promise<T>): Promise<
 async function writeAudit(action: string, uid: string, entryId: any, user: CurrentUser, tenantKey: string | null): Promise<void> {
   const agent = agentActorStore.getStore();
   try {
-    await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
+    await withContentAdapter(AUDIT_UID, (a) => a.entries.create(AUDIT_UID, {
       action: agent ? "agent_" + action : action, contentType: uid, entryId: entryId ?? null,
       adminEmail: user.email, tenantKey, at: new Date().toISOString(),
       ...(agent ? { actor: "agent", targetRef: agent.runId } : {}),
@@ -1842,7 +1850,7 @@ async function enforceAgentRunLimit(eff: Tenant | null): Promise<void> {
   const monthStart = new Date();
   monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0);
   try {
-    const { total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AUDIT_UID, {
+    const { total } = await withContentAdapter(AUDIT_UID, (a) => a.entries.list<any>(AUDIT_UID, {
       pageSize: 1,
       filter: [
         { field: "tenantKey", op: "eq", value: eff.key },
@@ -1878,7 +1886,7 @@ async function sumMonthlyField(uid: string, tenantKey: string, monthStart: Date,
   let page = 1;
   const pageSize = 500;
   for (;;) {
-    const { data, total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(uid, {
+    const { data, total } = await withContentAdapter(uid, (a) => a.entries.list<any>(uid, {
       page, pageSize,
       filter: [
         { field: "tenantKey", op: "eq", value: tenantKey },
@@ -1989,7 +1997,7 @@ export async function getAgentUsageSummary(user: CurrentUser): Promise<AgentUsag
 export async function recordAgentRunStart(user: CurrentUser, runId: string): Promise<void> {
   const eff = await resolveEffectiveTenant(user.email);
   try {
-    await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
+    await withContentAdapter(AUDIT_UID, (a) => a.entries.create(AUDIT_UID, {
       action: "agent_run", contentType: "agent", entryId: runId,
       adminEmail: user.email, tenantKey: eff?.key ?? null, at: new Date().toISOString(),
       actor: "agent", targetRef: runId,
@@ -2009,7 +2017,7 @@ export async function recordAgentRunUsage(user: CurrentUser, runId: string, toke
   if (!(tokens > 0)) return;
   const eff = await resolveEffectiveTenant(user.email);
   try {
-    await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
+    await withContentAdapter(AUDIT_UID, (a) => a.entries.create(AUDIT_UID, {
       action: "agent_run_usage", contentType: "agent", entryId: runId,
       adminEmail: user.email, tenantKey: eff?.key ?? null, at: new Date().toISOString(),
       actor: "agent", targetRef: runId, tokens: Math.round(tokens),
@@ -2596,7 +2604,7 @@ export async function processAgentScheduleTick(): Promise<TickReport> {
     },
     async onDisabled(s, reason) {
       try {
-        await strapiBookkeeping(() => strapiAdapter.entries.create(AUDIT_UID, {
+        await withContentAdapter(AUDIT_UID, (a) => a.entries.create(AUDIT_UID, {
           action: "agent_schedule_auto_disable", contentType: AGENT_SCHEDULE_UID, entryId: s.documentId,
           adminEmail: s.ownerEmail, tenantKey: s.tenantKey, at: new Date().toISOString(), actor: "system", targetRef: reason,
         }));
@@ -2771,6 +2779,12 @@ async function enforceItemLimit(eff: Tenant | null, uid: string): Promise<void> 
  * same way for a WordPress-session admin as for a Strapi one. Everything
  * else uses this session's own resolved engine. */
 async function withContentAdapter<T>(uid: string, fn: (adapter: CmsAdapter) => Promise<T>): Promise<T> {
+  // The audit log lives in the control plane once it is configured (track C3);
+  // every audit read and write goes through here, so the scoping around them is unchanged.
+  if (uid === AUDIT_UID) {
+    const cfg = controlAuditConfig();
+    if (cfg) return fn(controlAuditAdapter(cfg));
+  }
   if (BOOKKEEPING_UIDS.has(uid)) return strapiBookkeeping(() => fn(strapiAdapter));
   return fn(await activeAdapter());
 }

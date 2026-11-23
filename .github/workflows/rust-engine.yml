@@ -132,6 +132,9 @@ jobs:
         run: cargo build --release --locked
       - name: Tenant registry parity with Strapi
         run: node webx-control/tools/parity-test.mjs --reference http://localhost:1337
+      # C3: the audit log in the control plane, and Studio's adapter for it
+      - name: Audit log in webx-control
+        run: node webx-control/tools/audit-test.mjs
       - name: Write API test
         working-directory: rust-engine
         run: node tools/write-test.mjs

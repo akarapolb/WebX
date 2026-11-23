@@ -52,6 +52,35 @@ admin API is off (503). Only a hash of the token is held in memory.
 `GET /_health` reports `served`, the number of public tenant requests answered,
 so a test can tell the service was really used.
 
+## Audit log (C3, first part)
+
+The audit trail (who did what in which workspace, when; also the agent's run
+and token counts that the plan limits read) is stored here, append-only, in
+the shape of Strapi's `audit-log` rows. It is behind a service token:
+`WEBX_CONTROL_SERVICE_TOKEN` (the `/internal` API is off without it; the admin
+token does not open it).
+
+| Call | Meaning |
+|---|---|
+| `POST /internal/audit` body `{data: {action, tenantKey, adminEmail, ...}}` | append a row (`action` required) |
+| `GET /internal/audit?filter=field:op:value&q=&sort=at:desc&page=&pageSize=` | list; ops `eq ne contains gte lte`; fields are the row's; `pageSize` up to 500 |
+| `GET /internal/audit/<documentId>` | one row |
+| `POST /internal/audit/import` body `[row, ...]` | migration: rows keep their `documentId` and times; ones already there are skipped |
+
+There is no update or delete. **Studio** (`webx-studio/lib/cms/audit-store.ts`)
+switches every audit read and write to this when `WEBX_CONTROL_URL` and
+`WEBX_CONTROL_SERVICE_TOKEN` are both set; its tenant scoping, the Audit Log
+screen and the monthly agent limits work unchanged. Until then audit stays in
+Strapi. To move the history first:
+
+```sh
+STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL=... WEBX_CONTROL_SERVICE_TOKEN=...   node tools/migrate-audit.mjs [--dry-run]
+```
+
+`node tools/audit-test.mjs` checks the API on the real binary and runs Studio's
+adapter tests against it. The other 12 bookkeeping types (releases, reviews,
+custom roles, agent jobs and so on) are still in Strapi.
+
 ## Tests
 
 ```sh
