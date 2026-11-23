@@ -1,0 +1,16 @@
+[package]
+name = "webx-control"
+version = "0.1.0"
+edition = "2021"
+description = "WebX control plane: tenant registry first (docs/target-architecture.md, track C2)"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 3
+strip = true

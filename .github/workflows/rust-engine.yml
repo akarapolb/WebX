@@ -14,6 +14,7 @@ on:
     branches: [main, "phase-*"]
     paths:
       - "rust-engine/**"
+      - "webx-control/**"
       - "content-model/**"
       - "webx-studio/lib/cms/rust.ts"
       - "webx-studio/tests/conformance/**"
@@ -27,6 +28,7 @@ on:
   pull_request:
     paths:
       - "rust-engine/**"
+      - "webx-control/**"
       - "content-model/**"
       - "public-site/lib/cms.ts"
       - "public-site/lib/publicCms*"
@@ -51,8 +53,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             rust-engine/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('rust-engine/Cargo.lock') }}
+            webx-control/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('rust-engine/Cargo.lock', 'webx-control/Cargo.lock') }}
       - run: cargo test --locked
+      - name: webx-control unit tests
+        working-directory: webx-control
+        run: cargo test --locked
 
   build-identical:
     needs: unit
@@ -119,6 +125,13 @@ jobs:
         run: node tools/build-test.mjs --strapi http://localhost:1337 --store db --no-check-export
       # R3: the write API, end to end on the binary (uses the snapshot the
       # build test just exported)
+      # C2: webx-control answers the tenant routes exactly as Strapi does, and a
+      # build that reads tenants from it is identical to one that does not
+      - name: Build webx-control
+        working-directory: webx-control
+        run: cargo build --release --locked
+      - name: Tenant registry parity with Strapi
+        run: node webx-control/tools/parity-test.mjs --reference http://localhost:1337
       - name: Write API test
         working-directory: rust-engine
         run: node tools/write-test.mjs
@@ -126,5 +139,7 @@ jobs:
       - name: Conformance suite against the Rust engine
         working-directory: rust-engine
         run: node tools/conformance.mjs
+      - name: Build reading tenants from webx-control
+        run: node webx-control/tools/build-test.mjs --no-check-export
       - if: failure()
         run: tail -n 200 /tmp/strapi.log

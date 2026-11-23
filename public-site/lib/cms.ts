@@ -12,6 +12,14 @@ import { PUBLIC_CMS } from "./publicCms";
 const STRAPI = typeof window === "undefined"
   ? (process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "")
   : PUBLIC_CMS;
+// Where the build reads the tenant list and each tenant's identity (name,
+// brand, contact, footer): the WebX control plane (webx-control) when
+// WEBX_CONTROL_URL is set, otherwise the content engine, as before
+// (docs/target-architecture.md, track C2). The browser keeps using the public
+// CMS address for its own tenant lookups until the runtime routes move (C5).
+const TENANTS = typeof window === "undefined"
+  ? (process.env.WEBX_CONTROL_URL || "").replace(/\/$/, "") || STRAPI
+  : STRAPI;
 const WORDPRESS = typeof window === "undefined"
   ? (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "")
   : "";
@@ -101,7 +109,7 @@ const FALLBACK_TENANTS: TenantKeyInfo[] = [
 export async function listTenants(): Promise<TenantKeyInfo[]> {
   let r: Response;
   try {
-    r = await fetch(STRAPI + "/api/tenants/keys", { headers: { Accept: "application/json" } });
+    r = await fetch(TENANTS + "/api/tenants/keys", { headers: { Accept: "application/json" } });
   } catch (e) {
     throw new Error("[cms] listTenants: Strapi unreachable at " + STRAPI + " — " + (e as Error).message);
   }
@@ -131,7 +139,7 @@ export async function listTenants(): Promise<TenantKeyInfo[]> {
  * unknown-tenant case into a broken build, because that case was never
  * routed through here to begin with. */
 export async function getTenant(key: string): Promise<Tenant> {
-  const url = STRAPI + "/api/tenants/resolve?tenant=" + encodeURIComponent(key) + "&locale=th";
+  const url = TENANTS + "/api/tenants/resolve?tenant=" + encodeURIComponent(key) + "&locale=th";
   let r: Response;
   try {
     r = await fetch(url, { headers: { Accept: "application/json" } });
