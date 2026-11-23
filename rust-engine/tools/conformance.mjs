@@ -34,7 +34,7 @@ try {
   sh(["import", "--snapshot", "snapshot/snapshot.json", "--db", db]);
   const main = sh(["token", "--db", db, "--tenant", MAIN]);
   const other = sh(["token", "--db", db, "--tenant", OTHER]);
-  engine = spawn(exe, ["--port", PORT, "--db", db], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
+  engine = spawn(exe, ["--port", PORT, "--db", db, "--uploads", join(dir, "uploads")], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
   engine.done = new Promise((ok) => engine.on("exit", ok));
   for (let n = 0; ; n++) {
     try { if ((await fetch(`http://localhost:${PORT}/_health`)).ok) break; } catch {}

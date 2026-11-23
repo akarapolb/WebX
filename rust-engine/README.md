@@ -84,6 +84,25 @@ through the Studio adapter `webx-studio/lib/cms/rust.ts` (11 of 11 cases; CI run
 both). `GET /write/_types` lists the content types for that adapter; the list
 call also takes `filters`, `sort`, `_q`, `page` and `pageSize`.
 
+### Media (R4)
+
+The media library is under `/write/_media`, with the same tokens and the same
+tenant scoping. Files go to the uploads folder (`--uploads`, the one `/uploads`
+serves), one folder per tenant, as `<random>-<safe name>`; the file name can
+never carry a path. Metadata is in the store's `media` table.
+
+| Call | Meaning |
+|---|---|
+| `POST /write/_media?name=<file name>`, body = the file, `Content-Type` = its mime | upload (limit 64 MB); returns the asset |
+| `GET /write/_media?search&page&pageSize` | the tenant's library, newest first; search matches name, caption, alt text and tags |
+| `GET /write/_media/<documentId>` | one asset |
+| `PUT /write/_media/<documentId>` body `{caption, alt, tags}` | a key left out stays; `null` clears it |
+| `DELETE /write/_media/<documentId>` | removes the row and the file |
+
+An asset is `{id, documentId, url, thumbnailUrl, mime, name, size, caption, alt, tags}`
+with a relative `url` (`/uploads/<tenant>/...`). Width, height and resized
+thumbnails are not produced yet (`thumbnailUrl` is the file itself).
+
 ## How it decides what to return
 
 Each entry is exported with "one level inside" populated (media, relations,

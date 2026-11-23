@@ -11,6 +11,7 @@
 //! docs/target-architecture.md track R2); `--db` then starts the engine from
 //! that store instead of the export file. Reads are identical either way.
 
+mod media;
 mod query;
 mod store;
 mod write;
@@ -133,6 +134,8 @@ fn sort_fields_first(v: Value, sort: &[&str]) -> Value {
 pub struct App {
     eng: RwLock<write::Engine>,
     conn: Option<Mutex<rusqlite::Connection>>,
+    /// where uploaded files go (the same folder /uploads serves)
+    uploads: String,
 }
 type Shared = Arc<App>;
 
@@ -199,6 +202,8 @@ async fn write_api(State(app): State<Shared>, method: Method, headers: HeaderMap
         None => return error(StatusCode::UNAUTHORIZED, "UnauthorizedError", "Missing or invalid token"),
     };
     let q: std::collections::HashMap<&str, &str> = raw.as_deref().unwrap_or("").split('&').filter_map(|p| p.split_once('=')).collect();
+    let parts: Vec<&str> = rest.trim_end_matches('/').split('/').collect();
+    if parts[0] == "_media" { return media_api(&app, conn, &method, &tenant, &parts[1..], &q, &headers, &body); }
     // what is not a plain parameter (filters[...], sort) goes through the read API's query parser
     let rest_query = raw.as_deref().unwrap_or("").split('&').filter(|p| !["page=", "pageSize=", "status=", "_q=", "locale="].iter().any(|k| p.starts_with(k))).collect::<Vec<_>>().join("&");
     let parsed = match query::parse(&rest_query) { Ok(p) => p, Err(m) => return error(StatusCode::BAD_REQUEST, "ValidationError", &format!("webx-read-engine: {m}")) };
@@ -208,7 +213,6 @@ async fn write_api(State(app): State<Shared>, method: Method, headers: HeaderMap
     let json_body: Value = if body.is_empty() { Value::Null } else {
         match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON") }
     };
-    let parts: Vec<&str> = rest.trim_end_matches('/').split('/').collect();
     let mut eng = app.eng.write().unwrap();
     let result: Result<(Value, Vec<write::Persist>), write::WErr> = match (method.as_str(), parts.as_slice()) {
         ("GET", ["_types"]) => Ok((eng.types(), vec![])),
@@ -232,6 +236,52 @@ async fn write_api(State(app): State<Shared>, method: Method, headers: HeaderMap
         if let Err(m) = r { return error(StatusCode::INTERNAL_SERVER_ERROR, "InternalServerError", &m); }
     }
     Json(out).into_response()
+}
+
+/// R4, /write/_media: upload (raw body, ?name=), library list, edit, delete. Tenant-scoped.
+#[allow(clippy::too_many_arguments)]
+fn media_api(app: &App, conn: &Mutex<rusqlite::Connection>, method: &Method, tenant: &str, rest: &[&str], q: &std::collections::HashMap<&str, &str>, headers: &HeaderMap, body: &Bytes) -> Response {
+    let c = conn.lock().unwrap();
+    let fail = |m: String| error(StatusCode::INTERNAL_SERVER_ERROR, "InternalServerError", &m);
+    let dir = std::path::Path::new(&app.uploads).join(media::safe(tenant));
+    let num = |k: &str, d: usize| q.get(k).and_then(|v| v.parse::<usize>().ok()).filter(|n| *n >= 1).unwrap_or(d);
+    match (method.as_str(), rest) {
+        ("POST", []) => {
+            if body.is_empty() { return error(StatusCode::BAD_REQUEST, "ValidationError", "the body is the file; it is empty"); }
+            let name = q.get("name").map(|n| query::percent_decode(n)).filter(|n| !n.is_empty()).unwrap_or_else(|| "file".into());
+            let mime = headers.get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("application/octet-stream").to_string();
+            let file = format!("{}-{}", write::random_hex(6), media::safe(&name));
+            if let Err(e) = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(&file), body)) { return fail(format!("cannot save the file: {e}")); }
+            match media::insert(&c, tenant, &write::random_hex(12), &name, &mime, &file, body.len() as i64, &write::now_iso()) {
+                Ok(a) => Json(json!({"data": media::to_json(tenant, &a), "meta": {}})).into_response(),
+                Err(m) => { let _ = std::fs::remove_file(dir.join(&file)); fail(m) }
+            }
+        }
+        ("GET", []) => {
+            let (page, size) = (num("page", 1), num("pageSize", 25).min(100));
+            let search = q.get("search").map(|v| query::percent_decode(v));
+            match media::list(&c, tenant, search.as_deref(), page, size) {
+                Ok((rows, total)) => Json(json!({"data": rows.iter().map(|a| media::to_json(tenant, a)).collect::<Vec<_>>(),
+                    "meta": {"pagination": {"page": page, "pageSize": size, "pageCount": total.div_ceil(size), "total": total}}})).into_response(),
+                Err(m) => fail(m),
+            }
+        }
+        ("GET", [id]) => match media::get(&c, tenant, id) { Ok(Some(a)) => Json(json!({"data": media::to_json(tenant, &a), "meta": {}})).into_response(), Ok(None) => not_found(), Err(m) => fail(m) },
+        ("PUT", [id]) => {
+            let patch: Value = match serde_json::from_slice(body) { Ok(v) => v, Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON") };
+            match media::update(&c, tenant, id, &patch) {
+                Ok(Some(a)) => Json(json!({"data": media::to_json(tenant, &a), "meta": {}})).into_response(),
+                Ok(None) => not_found(),
+                Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
+            }
+        }
+        ("DELETE", [id]) => match media::remove(&c, tenant, id) {
+            Ok(Some(a)) => { let _ = std::fs::remove_file(dir.join(&a.file)); Json(json!({"data": null, "meta": {}})).into_response() }
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        _ => not_found(),
+    }
 }
 
 /// `webx-read-engine token --db <path> --tenant <key> [--label <text>]`: prints a new
@@ -291,10 +341,10 @@ async fn main() {
     let app = Router::new()
         .route("/_health", get(move || async move { Json(json!({"ok": true, "engine": "webx-read-engine", "readOnly": !writable})) }))
         .route("/api/*rest", get(api))
-        .route("/write/*rest", any(write_api))
+        .route("/write/*rest", any(write_api).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)))
         .nest_service("/uploads", ServeDir::new(&uploads))
         .fallback(|| async { not_found() })
-        .with_state(Arc::new(App { eng: RwLock::new(eng), conn }));
+        .with_state(Arc::new(App { eng: RwLock::new(eng), conn, uploads: uploads.clone() }));
 
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
     eprintln!("[webx-read-engine] http://localhost:{port} ({}; uploads from {uploads})", if writable { "writable: /write needs a token" } else { "read-only" });

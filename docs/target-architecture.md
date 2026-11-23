@@ -119,7 +119,7 @@ No users, login or runtime routes: the control plane provides those.
 | R1 | `content-model/` as the source of truth (D5); Strapi's copies generated; CI check | 2 days |
 | R2 (done 2026-11-23) | Store and database mode for reads: snapshot imported into the store; today's build test identical against the database mode | 5–7 days |
 | R3 (done 2026-11-23 as engine write API, per-tenant tokens and adapter `rust.ts`, conformance 11/11; not yet done: unique slug rule, wiring `engine: "rust"` into governance and the tenant type, which wait for C2) | Content write API: entries, drafts and publish, locales, validation against the content model, unique slug per tenant and locale, tenant isolation, service-credential auth; Studio adapter `rust.ts`; `engine: "rust"` in the tenant type and in Studio's engine resolution | 8–12 days |
-| R4 | Media: upload, the same resized formats and object shape as Strapi (`thumbnail`, `small`, `medium`, `large`), list, update, remove; local folder, S3-compatible later | 4–6 days |
+| R4 (done 2026-11-23: upload, library, edit, delete per tenant; image resizing and dimensions not yet) | Media: upload, the same resized formats and object shape as Strapi (`thumbnail`, `small`, `medium`, `large`), list, update, remove; local folder, S3-compatible later | 4–6 days |
 | R5 | First Rust tenant (D8): Strapi-to-Rust content migration tool (drafts and media included); conformance suite (C1) and e2e `studio-roundtrip` pass for it | 4–6 days |
 
 Snapshot mode stays: an engine of any kind can export a snapshot for an

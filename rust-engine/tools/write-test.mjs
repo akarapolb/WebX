@@ -22,6 +22,7 @@ if (!existsSync(exe)) throw new Error(`no engine binary at ${exe}: cargo build -
 
 const dir = mkdtempSync(join(tmpdir(), "webx-write-"));
 const db = join(dir, "engine.db");
+const uploads = join(dir, "uploads");
 let failures = 0;
 const check = (name, ok, extra = "") => {
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " " + extra}`);
@@ -39,7 +40,7 @@ const pea = sh(["token", "--db", db, "--tenant", "pea"]);
 
 let engine;
 async function up() {
-  engine = spawn(exe, ["--port", PORT, "--db", db], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
+  engine = spawn(exe, ["--port", PORT, "--db", db, "--uploads", uploads], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
   engine.done = new Promise((ok) => engine.on("exit", ok));
   for (let n = 0; n < 100; n++) {
     try { if ((await fetch(`${BASE}/_health`)).ok) return; } catch {}
@@ -106,12 +107,37 @@ try {
   check("body must carry data: 400", (await call("POST", "/write/faqs", dga, { question: "x" })).status === 400);
   check("engine fields cannot be set: 400", (await call("POST", "/write/faqs", dga, { data: { documentId: "x" } })).status === 400);
 
+  // media (R4)
+  const png = Buffer.from("89504e470d0a1a0a", "hex");
+  const upRes = await fetch(`${BASE}/write/_media?name=${encodeURIComponent("my logo.png")}`, { method: "POST", headers: { authorization: `Bearer ${dga}`, "content-type": "image/png" }, body: png });
+  const upj = await upRes.json();
+  check("media upload: 200 with url and mime", upRes.status === 200 && upj.data.mime === "image/png" && upj.data.url.startsWith("/uploads/dga/") && upj.data.name === "my logo.png", JSON.stringify(upj));
+  const file = await fetch(`${BASE}${upj.data.url}`);
+  check("the file is served from /uploads, byte for byte", file.status === 200 && Buffer.from(await file.arrayBuffer()).equals(png));
+  const mid = upj.data.documentId;
+  check("media upload without a token: 401", (await fetch(`${BASE}/write/_media?name=x`, { method: "POST", body: png })).status === 401);
+  check("empty upload: 400", (await fetch(`${BASE}/write/_media?name=x`, { method: "POST", headers: { authorization: `Bearer ${dga}` } })).status === 400);
+  const mu = await call("PUT", `/write/_media/${mid}`, dga, { caption: "Our logo", tags: "brand" });
+  check("media edit", mu.status === 200 && mu.json.data.caption === "Our logo" && mu.json.data.alt === null);
+  check("media search finds it", (await call("GET", "/write/_media?search=brand", dga)).json.meta.pagination.total === 1);
+  check("media search misses", (await call("GET", "/write/_media?search=zzz", dga)).json.meta.pagination.total === 0);
+  check("other tenant: list is empty", (await call("GET", "/write/_media", pea)).json.data.length === 0);
+  check("other tenant cannot read, edit or delete it", (await call("GET", `/write/_media/${mid}`, pea)).status === 404 && (await call("PUT", `/write/_media/${mid}`, pea, { caption: "x" })).status === 404 && (await call("DELETE", `/write/_media/${mid}`, pea)).status === 404);
+  const evil = await fetch(`${BASE}/write/_media?name=${encodeURIComponent("../../evil.txt")}`, { method: "POST", headers: { authorization: `Bearer ${pea}` }, body: "x" });
+  const evilj = await evil.json();
+  check("a path in the file name stays inside the tenant folder", evil.status === 200 && evilj.data.url.startsWith("/uploads/pea/") && !evilj.data.url.slice(13).includes("/"), evilj.data?.url);
+
   // restart: drafts, published rows and tokens persist
   await down();
   await up();
   check("token still valid after restart", (await call("GET", `/write/faqs/${id}?locale=th`, dga)).status === 200);
   check("published entry survived restart", (await published("dga")).find((r) => r.documentId === id)?.question === "edited");
   check("english draft survived restart", (await call("GET", `/write/faqs/${id}?locale=en`, dga)).json.data?.question === "english");
+
+  check("media survived restart", (await call("GET", `/write/_media/${mid}`, dga)).json.data?.caption === "Our logo");
+  const md = await call("DELETE", `/write/_media/${mid}`, dga);
+  check("media delete: 200, file gone", md.status === 200 && (await fetch(`${BASE}${upj.data.url}`)).status === 404);
+  check("deleted media: 404", (await call("GET", `/write/_media/${mid}`, dga)).status === 404);
 
   const un = await call("POST", `/write/faqs/${id}/unpublish?locale=th`, dga);
   check("unpublish: draft kept", un.status === 200 && un.json.data.status === "draft");

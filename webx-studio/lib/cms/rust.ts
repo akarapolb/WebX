@@ -1,12 +1,13 @@
 // CmsAdapter for the Rust engine's write API (rust-engine/, README "Write API",
 // docs/engine-contract.md section 8). Content only: schema, entries, publish.
-// Media and users are not in the engine yet (R4, and identity in the control
-// plane, C2), so those calls refuse with 501 instead of pretending.
+// Media (the tenant's library) is in the engine too (R4). Users are not
+// (identity is in the control plane, C2), so auth calls refuse with 501 instead
+// of pretending.
 //
 // The engine scopes every call to the tenant of the bearer token, so there is
 // one adapter per tenant. `token` is a function so the caller can fetch it
 // from wherever tenant credentials live when the call is made.
-import type { CmsAdapter, ContentTypeInfo, EntryList, EntryQuery } from "./types";
+import type { CmsAdapter, ContentTypeInfo, EntryList, EntryQuery, MediaAsset } from "./types";
 import { CmsError } from "./types";
 
 export type RustAdapterConfig = {
@@ -20,11 +21,11 @@ export function createRustAdapter(cfg: RustAdapterConfig): CmsAdapter {
   const base = cfg.baseUrl.replace(/\/$/, "");
   let types: Promise<ContentTypeInfo[]> | undefined;
 
-  async function call(method: string, path: string, body?: unknown): Promise<any> {
+  async function call(method: string, path: string, body?: unknown, raw?: { body: Blob; type: string }): Promise<any> {
     const r = await fetch(`${base}/write/${path}`, {
       method,
-      headers: { Authorization: `Bearer ${await cfg.token()}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers: { Authorization: `Bearer ${await cfg.token()}`, ...(raw ? { "Content-Type": raw.type } : body !== undefined ? { "Content-Type": "application/json" } : {}) },
+      body: raw ? raw.body : body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",
     });
     let j: any = null;
@@ -59,6 +60,12 @@ export function createRustAdapter(cfg: RustAdapterConfig): CmsAdapter {
     }
     return parts.length ? "?" + parts.join("&") : "";
   }
+
+  /** the engine's asset JSON -> MediaAsset (null fields become undefined) */
+  const asset = (a: any): MediaAsset => ({
+    id: a.id, documentId: a.documentId, url: a.url, mime: a.mime, name: a.name, thumbnailUrl: a.thumbnailUrl || a.url,
+    caption: a.caption || undefined, alt: a.alt || undefined, tags: a.tags || undefined,
+  });
 
   const unsupported = (what: string) => (): never => {
     throw new CmsError(`${what} is not available on the Rust engine yet`, 501);
@@ -95,10 +102,26 @@ export function createRustAdapter(cfg: RustAdapterConfig): CmsAdapter {
       },
     },
     media: {
-      upload: unsupported("media upload"),
-      list: unsupported("the media library"),
-      update: unsupported("media editing"),
-      remove: unsupported("media removal"),
+      // the engine scopes to the token's tenant, so tenantKey is not needed
+      async upload(file: File): Promise<MediaAsset> {
+        const j = await call("POST", "_media?name=" + encodeURIComponent(file.name), undefined, { body: file, type: file.type || "application/octet-stream" });
+        return asset(j.data);
+      },
+      async list(opts?: { search?: string; page?: number; pageSize?: number }) {
+        const p: string[] = [];
+        if (opts?.search?.trim()) p.push("search=" + encodeURIComponent(opts.search.trim()));
+        if (opts?.page) p.push("page=" + opts.page);
+        if (opts?.pageSize) p.push("pageSize=" + opts.pageSize);
+        const j = await call("GET", "_media" + (p.length ? "?" + p.join("&") : ""));
+        const pg = j.meta?.pagination;
+        return { data: (j.data as any[]).map(asset), total: pg?.total ?? j.data.length, page: pg?.page ?? 1, pageSize: pg?.pageSize ?? j.data.length };
+      },
+      async update(id: string, patch: { caption?: string | null; alt?: string | null; tags?: string | null }): Promise<MediaAsset> {
+        return asset((await call("PUT", "_media/" + encodeURIComponent(id), patch)).data);
+      },
+      async remove(id: string): Promise<void> {
+        await call("DELETE", "_media/" + encodeURIComponent(id));
+      },
     },
     auth: {
       me: unsupported("sign-in against the engine (identity is in the control plane)"),
