@@ -75,13 +75,11 @@ export function createMemoryEngine(o: MemoryOptions) {
         async get<T = any>(uid: string, id: string, opts?: { locale?: string }): Promise<T | null> {
           const d = find(tenant, uid, id);
           const locale = opts?.locale ?? defaultLocale;
-          if (!d.versions.has(locale)) throw new CmsError("Not Found", 404);
+          if (!d.versions.has(locale)) return null; // a missing locale is an empty result, not an error
           return entry(d, locale) as T;
         },
         async create<T = any>(uid: string, data: Record<string, any>, opts?: { locale?: string }): Promise<T> {
-          for (const r of o.required) {
-            if (data[r] === undefined || data[r] === null || data[r] === "") throw new CmsError(`create failed: ${r} must be a string`, 400);
-          }
+          // Like Strapi: an incomplete draft can be saved; required fields are checked at publish.
           counter += 1;
           const locale = opts?.locale ?? defaultLocale;
           const d: Doc = { uid, documentId: `doc${counter.toString().padStart(20, "0")}`, tenant, id: counter, versions: new Map() };
@@ -110,6 +108,9 @@ export function createMemoryEngine(o: MemoryOptions) {
         async publish(uid: string, id: string, opts?: { locale?: string }): Promise<void> {
           const v = find(tenant, uid, id).versions.get(opts?.locale ?? defaultLocale);
           if (!v) throw new CmsError("Not Found", 404);
+          for (const r of o.required) {
+            if (v.draft[r] === undefined || v.draft[r] === null || v.draft[r] === "") throw new CmsError(`publish failed: ${r} must be a string`, 400);
+          }
           v.published = { ...v.draft }; // the draft is copied over the published version
         },
         async unpublish(uid: string, id: string, opts?: { locale?: string }): Promise<void> {

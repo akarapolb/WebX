@@ -143,10 +143,15 @@ export function conformanceSuite(h: Harness, opts: { skip?: string } = {}): void
       assert.ok(!textsOf(await published(L1)).includes(`${run}-locale-${L2}`), "a read is in one locale only");
     });
 
-    it("locales: a locale that was never written is a 404, not an empty entry", async () => {
+    it("locales: a locale that was never written reads as no entry (not an error, never a row)", async () => {
+      // Contract section 3: a missing locale is an empty result, not an error.
+      // Strapi answers 200 with no body data and its adapter hands that back as
+      // an object without a documentId; other engines may return null. Callers
+      // (VisualBuilder) test for the missing documentId.
       const e = await create("one-locale", 1, L1);
-      const err = await rejection(get(e.documentId, L2), `get(${L2}) of a ${L1}-only entry`);
-      assert.equal(err.status, 404);
+      const got = await get(e.documentId, L2);
+      assert.ok(got == null || !got.documentId, `expected no entry for ${L2}, got ${JSON.stringify(got)}`);
+      assert.ok(!textsOf(await published(L2)).includes(`${run}-one-locale`), "and the read API has no row for it either");
     });
 
     it("list: filters (eq, ne, contains), sorts and paginates, with total and pageCount", async () => {
@@ -195,8 +200,20 @@ export function conformanceSuite(h: Harness, opts: { skip?: string } = {}): void
       assert.equal((await rejection(m.as(() => m.adapter.entries.remove(h.uid, missing)), "remove")).status, 404);
     });
 
-    it("validation: a missing required field is rejected with 400", async () => {
-      const err = await rejection(m.as(() => m.adapter.entries.create(h.uid, { [h.numberField]: 1 })), "create without the required field");
+    it("validation: an entry missing a required field can never be published (400 at create or at publish)", async () => {
+      // Strapi saves an incomplete draft and rejects it at publish; an engine
+      // may instead refuse the create. Either is conforming; publishing an
+      // incomplete entry is not.
+      let id: string;
+      try {
+        const e: any = await m.as(() => m.adapter.entries.create(h.uid, { [h.numberField]: 1 }));
+        id = e.documentId;
+        created.push(id);
+      } catch (e) {
+        assert.equal(status(e), 400, "create without the required field must fail with 400 if it fails");
+        return;
+      }
+      const err = await rejection(publish(id), "publish without the required field");
       assert.equal(err.status, 400);
     });
 
