@@ -103,6 +103,17 @@ An asset is `{id, documentId, url, thumbnailUrl, mime, name, size, caption, alt,
 with a relative `url` (`/uploads/<tenant>/...`). Width, height and resized
 thumbnails are not produced yet (`thumbnailUrl` is the file itself).
 
+### A tenant that lives on this engine (R5)
+
+A tenant with a token is a tenant of the engine: the read API serves its rows
+instead of falling back to the default tenant. `tools/rust-tenant-test.mjs`
+runs the whole story: the hub tenant `dgahub` gets its pages (Thai and English),
+FAQs and a news article through `/write` only, is registered in
+`../webx-control` with engine `rust`, and a public-site build (tenants from
+webx-control, content from this engine) must show what was written. public-site
+takes `WEBX_CONTROL_URL` for the tenant routes and, for a tenant whose content is
+on another engine than `STRAPI_URL`, `WEBX_ENGINE_URLS='{"tenant":"http://engine"}'`.
+
 ## How it decides what to return
 
 Each entry is exported with "one level inside" populated (media, relations,

@@ -20,6 +20,17 @@ const STRAPI = typeof window === "undefined"
 const TENANTS = typeof window === "undefined"
   ? (process.env.WEBX_CONTROL_URL || "").replace(/\/$/, "") || STRAPI
   : STRAPI;
+// Tenants whose content lives on a different engine than STRAPI_URL (the first
+// Rust tenant, docs/target-architecture.md R5): WEBX_ENGINE_URLS is a JSON map
+// of tenant key -> engine base URL, e.g. {"rusthub":"http://localhost:1338"}.
+// Any engine of kind strapi or rust answers the same read API. Media URLs of
+// such a tenant are not rewritten yet (mediaUrl does not know the tenant).
+const ENGINE_URLS: Record<string, string> = (() => {
+  if (typeof window !== "undefined" || !process.env.WEBX_ENGINE_URLS) return {};
+  const m = JSON.parse(process.env.WEBX_ENGINE_URLS) as Record<string, string>;
+  return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, String(v).replace(/\/$/, "")]));
+})();
+const engineBase = (tenant: string): string => ENGINE_URLS[tenant] || STRAPI;
 const WORDPRESS = typeof window === "undefined"
   ? (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "")
   : "";
@@ -47,7 +58,7 @@ export function mediaUrl(m: any): string {
 
 async function get<T = any>(path: string, tenant: string, locale: "th" | "en" = "th"): Promise<T | null> {
   const sep = path.includes("?") ? "&" : "?";
-  const url = STRAPI + "/api/" + path + sep + "tenant=" + encodeURIComponent(tenant) + "&locale=" + locale;
+  const url = engineBase(tenant) + "/api/" + path + sep + "tenant=" + encodeURIComponent(tenant) + "&locale=" + locale;
   try {
     // No cache: "no-store" here — static export needs the DEFAULT
     // Server-Component fetch behavior (fetch once at build time, bake the
@@ -73,12 +84,12 @@ export type Tenant = {
   footerColumns?: { heading: { th?: string; en?: string }; links: { label: { th?: string; en?: string }; url?: string }[] }[];
   social?: { label?: string; url?: string }[];
   /** Which CmsAdapter this tenant's own content lives in (Phase 6, default "strapi"). */
-  engine?: "strapi" | "wordpress";
+  engine?: "strapi" | "wordpress" | "rust";
   /** Which public-site component tree + page set to render (Phase 8, default "gov-portal"). */
   publicTemplate?: PublicTemplate;
 };
 
-export type TenantKeyInfo = { key: string; engine?: "strapi" | "wordpress"; publicTemplate?: PublicTemplate };
+export type TenantKeyInfo = { key: string; engine?: "strapi" | "wordpress" | "rust"; publicTemplate?: PublicTemplate };
 // A genuinely empty response (a fresh install with zero tenants seeded yet)
 // is the only case this falls back for — a real bootstrap default, not the
 // bug this fallback used to also cover. See listTenants()'s own comment for
@@ -418,7 +429,7 @@ export async function getWpPage(tenant: string, slug: string): Promise<WpEntry |
   }
 }
 
-export async function getHomeData(tenant: string, engine?: "strapi" | "wordpress", locale: Locale = "th") {
+export async function getHomeData(tenant: string, engine?: "strapi" | "wordpress" | "rust", locale: Locale = "th") {
   if (engine === "wordpress") {
     const articles = await getWpArticles(tenant);
     return { home: null, services: [], banners: [], articles, videos: [], awards: [], faqs: [] };
@@ -631,5 +642,5 @@ export async function getDatasets(tenant: string, locale: Locale = "th"): Promis
 
 /** Public URL of a tenant's REST dataset endpoint (the open-data API). */
 export function datasetApiUrl(tenant: string, key: string, locale: Locale): string {
-  return STRAPI + "/api/datasets?tenant=" + encodeURIComponent(tenant) + "&locale=" + locale + "&filters[key][$eq]=" + encodeURIComponent(key);
+  return engineBase(tenant) + "/api/datasets?tenant=" + encodeURIComponent(tenant) + "&locale=" + locale + "&filters[key][$eq]=" + encodeURIComponent(key);
 }

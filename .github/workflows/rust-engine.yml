@@ -141,5 +141,10 @@ jobs:
         run: node tools/conformance.mjs
       - name: Build reading tenants from webx-control
         run: node webx-control/tools/build-test.mjs --no-check-export
+      # R5: a tenant whose content is only ever written through the Rust engine's
+      # write API, registered in webx-control, built into a site
+      - name: First Rust tenant
+        working-directory: rust-engine
+        run: node tools/rust-tenant-test.mjs
       - if: failure()
         run: tail -n 200 /tmp/strapi.log

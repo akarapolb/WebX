@@ -214,6 +214,13 @@ pub fn add_token(conn: &Connection, hash: &str, tenant: &str, label: &str, now: 
     Ok(())
 }
 
+/// Every tenant that has a token: these are tenants of this engine even when the
+/// imported snapshot never had content for them (a new tenant created through the write API).
+pub fn token_tenants(conn: &Connection) -> Vec<String> {
+    let Ok(mut st) = conn.prepare("SELECT DISTINCT tenant FROM tokens ORDER BY tenant") else { return vec![] };
+    st.query_map([], |r| r.get::<_, String>(0)).map(|rows| rows.filter_map(Result::ok).collect()).unwrap_or_default()
+}
+
 /// Tenant a token (by hash) may write to.
 pub fn token_tenant(conn: &Connection, hash: &str) -> Option<String> {
     conn.query_row("SELECT tenant FROM tokens WHERE hash=?1", params![hash], |r| r.get(0)).ok()

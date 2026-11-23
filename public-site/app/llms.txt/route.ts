@@ -27,7 +27,7 @@ export async function GET() {
       lines.push(`- [${n.label}](${url})`);
     }
     // Strapi-engine tenants also expose builder pages the nav may not link.
-    if ((t.engine || "strapi") === "strapi") {
+    if ((t.engine || "strapi") !== "wordpress") { // strapi and rust answer the same read API
       const slugs = await listPageSlugs(t.key);
       for (const slug of slugs) {
         if (slug === "home-blocks") continue;

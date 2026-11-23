@@ -214,6 +214,8 @@ async fn write_api(State(app): State<Shared>, method: Method, headers: HeaderMap
         match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON") }
     };
     let mut eng = app.eng.write().unwrap();
+    // a tenant with a token is a tenant of this engine, so the read API stops falling back to the default
+    if !eng.snap.tenants.contains(&tenant) { eng.snap.tenants.push(tenant.clone()); }
     let result: Result<(Value, Vec<write::Persist>), write::WErr> = match (method.as_str(), parts.as_slice()) {
         ("GET", ["_types"]) => Ok((eng.types(), vec![])),
         ("GET", [p]) => eng.list(p, &tenant, locale, q.get("status").copied(), parsed.filters.as_ref(), &parsed.sort, search.as_deref(), num("page", 1), num("pageSize", 25).min(100)).map(|v| (v, vec![])),
@@ -336,6 +338,9 @@ async fn main() {
     // with --db the engine is writable: drafts and tokens live in the store
     let conn = if db.is_empty() { None } else { Some(Mutex::new(store::open_rw(&db).unwrap_or_else(|e| panic!("{e}")))) };
     let mut eng = write::Engine::new(snap);
+    if let Some(c) = &conn {
+        for t in store::token_tenants(&c.lock().unwrap()) { if !eng.snap.tenants.contains(&t) { eng.snap.tenants.push(t); } }
+    }
     if let Some(c) = &conn { eng.load_drafts(store::load_drafts(&c.lock().unwrap()).unwrap_or_else(|e| panic!("{e}"))); }
     let writable = conn.is_some();
     let app = Router::new()
