@@ -3,7 +3,7 @@
 // same locally and in CI (.github/workflows/rust-engine.yml). Needs a running
 // Strapi with content and a built engine (cargo build --release).
 //
-//   node tools/build-test.mjs [--strapi http://localhost:1337] [--port 1338]
+//   node tools/build-test.mjs [--strapi http://localhost:1337] [--port 1338] [--no-check-export]
 //
 // 1. record: public-site build through tools/record-proxy.mjs (-> .next-ref,
 //    fixtures/requests.json)
@@ -55,10 +55,18 @@ async function stop(p) { p.kill("SIGTERM"); await p.done; }
 // Next keeps its fetch cache in public-site/.next/cache whatever NEXT_DIST_DIR
 // says, keyed by URL; both builds use the same URL, so without clearing it the
 // second build would be served the first build's (Strapi's) answers.
-const build = (dist) => {
+// --no-check-export: build without public-site's check-export step. For a
+// Strapi with no DGA hub content (CI): the hub routes then render "not found"
+// pages and fall back to other tenants' rows, which check-export rightly
+// rejects. The comparison with Strapi's build is what this test is for.
+const NO_CHECK = process.argv.includes("--no-check-export");
+const build = async (dist) => {
   rmSync(join(site, dist), { recursive: true, force: true });
   rmSync(join(site, ".next", "cache", "fetch-cache"), { recursive: true, force: true });
-  return run("npm", ["run", "build"], { cwd: site, env: { ...process.env, STRAPI_URL: LOCAL, NEXT_DIST_DIR: dist } });
+  const opts = { cwd: site, env: { ...process.env, STRAPI_URL: LOCAL, NEXT_DIST_DIR: dist } };
+  if (!NO_CHECK) return run("npm", ["run", "build"], opts);
+  await run("npm", ["exec", "--", "next", "build"], opts);
+  return run(process.execPath, [join(site, "scripts", "set-html-lang.mjs")], opts);
 };
 
 try {
