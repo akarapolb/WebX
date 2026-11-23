@@ -29,7 +29,12 @@ export const { base, pathOf, searchPath } = site;
 const RESERVED = new Set([HOME_SLUG, "preview", "search", "news", "data", "404"]);
 
 export async function slugs(locale: Locale) {
-  return (await listPageSlugs(TENANT, locale)).filter((s) => !RESERVED.has(s)).map((slug) => ({ slug }));
+  const s = (await listPageSlugs(TENANT, locale)).filter((x) => !RESERVED.has(x)).map((slug) => ({ slug }));
+  // Next's static export treats an empty list as "missing generateStaticParams",
+  // so a build with no hub content (no hub tenant, or a locale with no pages)
+  // would fail. One "_" placeholder keeps it building; it renders notFound(),
+  // as in news/[slug] and the gov-portal routes (check-export knows it).
+  return s.length ? s : [{ slug: "_" }];
 }
 
 /** Draft preview for WebX Studio (PreviewBridge.tsx): the hub's real header,
