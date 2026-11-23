@@ -154,6 +154,12 @@ jobs:
         working-directory: webx-studio
         env:
           STRAPI_URL: http://localhost:1337
+          # Login looks up the editor's MFA enrollment with the seeded scheduler
+          # service account and refuses the login if it can't (a fail-closed
+          # fix, 2026-09-12): without these two the job's login got a 503. Same
+          # account and password as Strapi's STRAPI_SCHEDULER_PASSWORD above.
+          STRAPI_SCHEDULER_EMAIL: scheduler@webx.local
+          STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
           # No STRAPI_INTERNAL_SECRET needed here — Strapi's MFA_ENABLED is
           # off for this job (see the boot step above), so admin-mfa.ts's
           # internal-secret exemption never comes into play either side.
