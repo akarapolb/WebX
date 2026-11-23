@@ -1,0 +1,13 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sitemap_nodes",
+  "info": { "singularName": "sitemap-node", "pluralName": "sitemap-nodes", "displayName": "Sitemap Node", "description": "โครงสร้างแผนผังเว็บไซต์ (TOR ภาคผนวก ก ข้อ 25)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "label": { "type": "string", "required": true },
+    "url": { "type": "string" },
+    "group": { "type": "string", "required": true },
+    "order": { "type": "integer", "default": 0 },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}

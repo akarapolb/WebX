@@ -1,0 +1,11 @@
+{
+  "collectionName": "components_block_team_items",
+  "info": { "displayName": "Block: Team item", "icon": "users", "description": "สมาชิกทีมหนึ่งคน" },
+  "options": {},
+  "attributes": {
+    "photo": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "name": { "type": "string", "required": true },
+    "role": { "type": "string" },
+    "bio": { "type": "text" }
+  }
+}

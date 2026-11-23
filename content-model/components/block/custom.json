@@ -1,0 +1,17 @@
+{
+  "collectionName": "components_block_customs",
+  "info": {
+    "displayName": "Custom",
+    "icon": "puzzle",
+    "description": "บล็อกที่อ้างอิงนิยามจาก Block Type (no-code)"
+  },
+  "options": {},
+  "attributes": {
+    "typeKey": {
+      "type": "string"
+    },
+    "props": {
+      "type": "json"
+    }
+  }
+}

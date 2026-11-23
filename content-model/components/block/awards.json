@@ -1,0 +1,10 @@
+{
+  "collectionName": "components_block_awards",
+  "info": { "displayName": "Block: Awards", "icon": "star", "description": "แถวรางวัล (ดึงจากคอลเลกชัน awards ของ tenant นี้แบบ live)" },
+  "options": {},
+  "attributes": {
+    "eyebrow": { "type": "string" },
+    "title": { "type": "string" },
+    "subtitle": { "type": "string" }
+  }
+}

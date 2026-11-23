@@ -1,0 +1,22 @@
+{
+  "kind": "collectionType",
+  "collectionName": "search_stats",
+  "info": {
+    "singularName": "search-stat",
+    "pluralName": "search-stats",
+    "displayName": "Search Stat",
+    "description": "What visitors search on the public site: one row per tenant, language and normalised query, with a count and the last result count. No IP, user agent or cookie is stored."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "query": { "type": "string", "required": true },
+    "locale": { "type": "string" },
+    "count": { "type": "integer", "default": 0 },
+    "results": { "type": "integer", "default": 0 },
+    "zeroCount": { "type": "integer", "default": 0 },
+    "lastAt": { "type": "datetime" }
+  }
+}

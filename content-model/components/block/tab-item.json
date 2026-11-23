@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_tab_items",
+  "info": { "displayName": "Block: Tab item", "icon": "doc", "description": "แผงเนื้อหาหนึ่งรายการ (หัวข้อ + เนื้อหา)" },
+  "options": {},
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "body": { "type": "richtext" }
+  }
+}

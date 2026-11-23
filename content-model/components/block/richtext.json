@@ -1,0 +1,8 @@
+{
+  "collectionName": "components_block_richtexts",
+  "info": { "displayName": "Block: Rich text", "icon": "align-left", "description": "เนื้อหาข้อความ" },
+  "options": {},
+  "attributes": {
+    "body": { "type": "richtext" }
+  }
+}

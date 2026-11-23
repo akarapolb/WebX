@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "weblinks",
+  "info": { "singularName": "weblink", "pluralName": "weblinks", "displayName": "Web Link", "description": "จัดการเว็บลิงก์ (TOR ภาคผนวก ก ข้อ 23)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "url": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "thumbnail": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "displayType": { "type": "enumeration", "enum": ["image", "text", "button"], "default": "button" },
+    "openNewTab": { "type": "boolean", "default": true },
+    "category": { "type": "string" },
+    "order": { "type": "integer", "default": 0 },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}

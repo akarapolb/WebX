@@ -1,0 +1,13 @@
+{
+  "collectionName": "components_block_embeds",
+  "info": {
+    "displayName": "Block: Custom Code",
+    "icon": "code",
+    "description": "โค้ด HTML/CSS/JS ดิบ — สำหรับกรณีที่บล็อกสำเร็จรูปทำไม่ได้ (เช่น widget จากภายนอก)"
+  },
+  "options": {},
+  "attributes": {
+    "label": { "type": "string", "description": "บันทึกช่วยจำสำหรับแอดมิน ไม่แสดงบนเว็บจริง" },
+    "html": { "type": "text" }
+  }
+}

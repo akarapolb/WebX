@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_news_panels",
+  "info": { "displayName": "Block: News panel", "icon": "layout", "description": "แท็บข่าว/บทความ (ดึงจากคอลเลกชัน articles ของ tenant นี้แบบ live)" },
+  "options": {},
+  "attributes": {
+    "newsTabLabel": { "type": "string", "default": "DGA News" },
+    "articleTabLabel": { "type": "string", "default": "บทความ" }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_comparisons",
+  "info": { "displayName": "Block: Comparison / Pricing", "icon": "grid", "description": "การ์ดเปรียบเทียบตัวเลือกหรือแพ็กเกจราคาแบบเคียงข้างกัน" },
+  "options": {},
+  "attributes": {
+    "heading": { "type": "string" },
+    "columns": { "type": "component", "repeatable": true, "component": "block.comparison-column" }
+  }
+}

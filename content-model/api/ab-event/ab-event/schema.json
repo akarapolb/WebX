@@ -1,0 +1,18 @@
+{
+  "kind": "collectionType",
+  "collectionName": "ab_events",
+  "info": {
+    "singularName": "ab-event",
+    "pluralName": "ab-events",
+    "displayName": "AB Event",
+    "description": "Anonymous A/B test impression & conversion counters (no personal data)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "documentRef": { "type": "string", "required": true },
+    "variant": { "type": "string" },
+    "kind": { "type": "string" }
+  }
+}

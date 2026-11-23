@@ -1,0 +1,15 @@
+{
+  "kind": "collectionType",
+  "collectionName": "catalogs",
+  "info": { "singularName": "catalog", "pluralName": "catalogs", "displayName": "Catalog (e-catalog)", "description": "แคตตาล็อกอิเล็กทรอนิกส์ (TOR ภาคผนวก ก ข้อ 19)" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "category": { "type": "string" },
+    "coverImage": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "file": { "type": "media", "multiple": false, "allowedTypes": ["files", "images"] },
+    "order": { "type": "integer", "default": 0 },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}

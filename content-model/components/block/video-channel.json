@@ -1,0 +1,8 @@
+{
+  "collectionName": "components_block_video_channels",
+  "info": { "displayName": "Block: Video channel", "icon": "play", "description": "กริดวิดีโอ (ดึงจากคอลเลกชัน videos ของ tenant นี้แบบ live)" },
+  "options": {},
+  "attributes": {
+    "title": { "type": "string", "default": "DGA Channel" }
+  }
+}

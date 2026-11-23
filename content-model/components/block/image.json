@@ -1,0 +1,10 @@
+{
+  "collectionName": "components_block_images",
+  "info": { "displayName": "Block: Image", "icon": "picture", "description": "รูปภาพ + คำบรรยาย" },
+  "options": {},
+  "attributes": {
+    "image": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "caption": { "type": "string" },
+    "full": { "type": "boolean", "default": false }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "collectionName": "components_home_heroes",
+  "info": {
+    "displayName": "Hero",
+    "icon": "picture",
+    "description": "ส่วนหัวหน้าแรก: หัวเรื่อง คำโปรย ช่องค้นหา และสไลด์ภาพพื้นหลัง"
+  },
+  "options": {},
+  "attributes": {
+    "kicker": {
+      "type": "string"
+    },
+    "headingLine1": {
+      "type": "string"
+    },
+    "headingAccent": {
+      "type": "string"
+    },
+    "lead": {
+      "type": "text"
+    },
+    "searchPlaceholder": {
+      "type": "string"
+    },
+    "typewriterPhrases": {
+      "type": "json"
+    },
+    "popularTags": {
+      "type": "component",
+      "repeatable": true,
+      "component": "home.link"
+    },
+    "slides": {
+      "type": "media",
+      "multiple": true,
+      "required": false,
+      "allowedTypes": ["images"]
+    }
+  }
+}

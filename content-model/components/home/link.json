@@ -1,0 +1,18 @@
+{
+  "collectionName": "components_home_links",
+  "info": {
+    "displayName": "Link",
+    "icon": "link",
+    "description": "ลิงก์ป้ายกำกับ (label + url) เช่น แท็กค้นหายอดนิยม"
+  },
+  "options": {},
+  "attributes": {
+    "label": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "default": "#"
+    }
+  }
+}

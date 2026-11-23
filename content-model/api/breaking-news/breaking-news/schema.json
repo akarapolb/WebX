@@ -1,0 +1,19 @@
+{
+  "kind": "collectionType",
+  "collectionName": "breaking_news_alerts",
+  "info": {
+    "singularName": "breaking-news",
+    "pluralName": "breaking-news-alerts",
+    "displayName": "Breaking News Alert",
+    "description": "ประกาศด่วน (TOR — a fast-publish path that skips the public-site static rebuild entirely: the banner is fetched live by the browser, not baked into build output, so toggling it live is a normal Strapi publish, not a 20s-debounced multi-minute site rebuild). At most one row per tenant by convention, enforced by the editor UI, not the schema."
+  },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "active": { "type": "boolean", "default": false, "description": "Whether the banner is currently shown on the public site." },
+    "severity": { "type": "enumeration", "enum": ["info", "warning", "critical"], "default": "warning" },
+    "message": { "type": "text", "required": true },
+    "url": { "type": "string", "description": "Optional \"read more\" link — left blank shows text only." },
+    "linkLabel": { "type": "string", "default": "อ่านเพิ่มเติม" }
+  }
+}

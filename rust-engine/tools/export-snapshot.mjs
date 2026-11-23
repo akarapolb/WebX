@@ -13,8 +13,8 @@
 // relations, and components / dynamic zones with `populate=*` inside them.
 // That is the deepest shape public-site asks for; the engine trims it down to
 // whatever a request's `populate` names. The schema map (which attributes are
-// media, relations, components or dynamic zones) comes from strapi-cms's own
-// schema files, so the engine knows what to trim.
+// media, relations, components or dynamic zones) comes from content-model/ (the
+// source of the content types, decision D5), so the engine knows what to trim.
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,8 @@ const arg = (name, def) => {
 };
 const STRAPI = arg("strapi", process.env.STRAPI_URL || "http://localhost:1337").replace(/\/$/, "");
 const OUT = resolve(arg("out", join(here, "..", "snapshot", "snapshot.json")));
-const CMS_SRC = resolve(arg("cms-src", join(here, "..", "..", "strapi-cms", "src")));
+// the content model (../content-model, decision D5): api/<api>/<type>/schema.json, components/<category>/<name>.json
+const MODEL = resolve(arg("model", join(here, "..", "..", "content-model")));
 const LOCALES = ["th", "en"];
 const PAGE = 100; // Strapi's maxLimit (config/api.ts)
 
@@ -44,8 +45,8 @@ function attrMap(attributes) {
 }
 
 const types = {};
-for (const api of readdirSync(join(CMS_SRC, "api"))) {
-  const ctDir = join(CMS_SRC, "api", api, "content-types");
+for (const api of readdirSync(join(MODEL, "api"))) {
+  const ctDir = join(MODEL, "api", api);
   if (!existsSync(ctDir)) continue;
   for (const ct of readdirSync(ctDir)) {
     const f = join(ctDir, ct, "schema.json");
@@ -64,10 +65,10 @@ for (const api of readdirSync(join(CMS_SRC, "api"))) {
   }
 }
 const components = {};
-for (const cat of readdirSync(join(CMS_SRC, "components"))) {
-  for (const f of readdirSync(join(CMS_SRC, "components", cat))) {
+for (const cat of readdirSync(join(MODEL, "components"))) {
+  for (const f of readdirSync(join(MODEL, "components", cat))) {
     if (!f.endsWith(".json")) continue;
-    const s = JSON.parse(readFileSync(join(CMS_SRC, "components", cat, f), "utf8"));
+    const s = JSON.parse(readFileSync(join(MODEL, "components", cat, f), "utf8"));
     components[`${cat}.${f.replace(/\.json$/, "")}`] = { attrs: attrMap(s.attributes) };
   }
 }

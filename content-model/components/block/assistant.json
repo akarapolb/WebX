@@ -1,0 +1,13 @@
+{
+  "collectionName": "components_block_assistants",
+  "info": { "displayName": "Block: AI assistant", "icon": "message", "description": "ช่องถาม–ตอบ AI ที่ตอบจากเนื้อหาของเว็บไซต์นี้พร้อมแหล่งอ้างอิง / Ask box answering from this site's own content, with sources" },
+  "options": {},
+  "attributes": {
+    "eyebrow": { "type": "string" },
+    "title": { "type": "string" },
+    "intro": { "type": "text" },
+    "placeholder": { "type": "string" },
+    "suggestions": { "type": "json", "description": "Example questions: [\"...\", \"...\"]" },
+    "disclaimer": { "type": "text" }
+  }
+}

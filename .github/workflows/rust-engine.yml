@@ -14,6 +14,7 @@ on:
     branches: [main, "phase-*"]
     paths:
       - "rust-engine/**"
+      - "content-model/**"
       - "webx-studio/lib/cms/rust.ts"
       - "webx-studio/tests/conformance/**"
       - "public-site/lib/cms.ts"
@@ -26,6 +27,7 @@ on:
   pull_request:
     paths:
       - "rust-engine/**"
+      - "content-model/**"
       - "public-site/lib/cms.ts"
       - "public-site/lib/publicCms*"
       - "public-site/next.config.mjs"

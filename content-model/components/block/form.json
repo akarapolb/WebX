@@ -1,0 +1,17 @@
+{
+  "collectionName": "components_block_forms",
+  "info": {
+    "displayName": "Block: Form",
+    "icon": "inbox",
+    "description": "แบบฟอร์มสาธารณะ (ติดต่อเรา/ร้องเรียน/สมัครงาน/ลงทะเบียน) — ผูกกับประเภทเนื้อหาที่กำหนดไว้ล่วงหน้า, no-code"
+  },
+  "options": {},
+  "attributes": {
+    "contentTypeUid": { "type": "string", "required": true },
+    "mode": { "type": "enumeration", "enum": ["submit", "track"], "default": "submit" },
+    "heading": { "type": "string" },
+    "consentText": { "type": "text" },
+    "submitLabel": { "type": "string" },
+    "successMessage": { "type": "text" }
+  }
+}

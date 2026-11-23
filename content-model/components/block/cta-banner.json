@@ -1,0 +1,12 @@
+{
+  "collectionName": "components_block_cta_banners",
+  "info": { "displayName": "Block: CTA banner", "icon": "cursor", "description": "แถบเรียกร้องให้ทำ (ปุ่ม)" },
+  "options": {},
+  "attributes": {
+    "heading": { "type": "string" },
+    "text": { "type": "text" },
+    "buttonLabel": { "type": "string" },
+    "buttonUrl": { "type": "string", "default": "#" },
+    "theme": { "type": "enumeration", "enum": ["primary", "dark", "light"], "default": "primary" }
+  }
+}

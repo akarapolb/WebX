@@ -1,0 +1,15 @@
+{
+  "collectionName": "components_block_heroes",
+  "info": { "displayName": "Block: Hero", "icon": "picture", "description": "ส่วนหัวแบนเนอร์ของ Landing" },
+  "options": {},
+  "attributes": {
+    "kicker": { "type": "string" },
+    "heading": { "type": "string", "required": true },
+    "headingAccent": { "type": "string", "description": "Optional second line of the title, shown highlighted by templates that support it (e.g. dgahub)" },
+    "subheading": { "type": "text" },
+    "image": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "ctaLabel": { "type": "string" },
+    "ctaUrl": { "type": "string", "default": "#" },
+    "align": { "type": "enumeration", "enum": ["left", "center"], "default": "center" }
+  }
+}

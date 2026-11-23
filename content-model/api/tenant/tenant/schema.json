@@ -1,0 +1,122 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tenants",
+  "info": {
+    "singularName": "tenant",
+    "pluralName": "tenants",
+    "displayName": "Tenant",
+    "description": "หน่วยงาน/ลูกค้า (multi-tenant) + ตั้งค่าแบรนด์/เมนู/footer ต่อ tenant"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "key": {
+      "type": "uid",
+      "required": true
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "domains": {
+      "type": "json",
+      "description": "รายการโดเมนของ tenant นี้ เช่น [\"dga.or.th\",\"dga.localhost\"]"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "adminEmails": {
+      "type": "json",
+      "description": "อีเมลของ admin/editor ที่สังกัด tenant นี้ (per-tenant RBAC) เช่น [\"editor@dga.local\"]"
+    },
+    "brand": {
+      "type": "json",
+      "description": "{ logoUrl, orgName:{th,en}, primaryColor }"
+    },
+    "contact": {
+      "type": "json",
+      "description": "{ phone, address:{th,en}, mapEmbed }"
+    },
+    "social": {
+      "type": "json",
+      "description": "[{ label, url }]"
+    },
+    "footerColumns": {
+      "type": "json",
+      "description": "[{ heading:{th,en}, links:[{ label:{th,en}, url }] }]"
+    },
+    "analytics": {
+      "type": "json",
+      "description": "{ ga4: 'G-XXXX', clarity: 'xxxx', enabled: true, ga4PropertyId: '123456789' } — ga4/clarity โหลดเมื่อผู้ใช้ยินยอมคุกกี้วิเคราะห์ (สำหรับ gtag.js บนหน้าเว็บ). ga4PropertyId คือ GA4 Property ID ตัวเลข (Admin > Property details — คนละอย่างกับ ga4 measurement id ข้างต้น) ใช้ให้ analytics.summary ดึงตัวเลขจริงจาก GA4 Data API กลับมาแสดงในแดชบอร์ด (ต้องตั้ง GA4_SERVICE_ACCOUNT_EMAIL/GA4_SERVICE_ACCOUNT_KEY ในสภาพแวดล้อมด้วย — ดู utils/ga4.ts)"
+    },
+    "liveChat": {
+      "type": "json",
+      "description": "{ channels: [{ type:'line'|'messenger'|'facebook'|'phone', label, url }] } — ช่องทางแชตสด/โซเชียล"
+    },
+    "template": {
+      "type": "json",
+      "description": "{ preset:'a'|'b'|'c', background:'#hex' } — เทมเพลตสำเร็จรูป 3 แบบ + สีพื้นหลัง (no-code, TOR ภาคผนวก ก ข้อ 3)"
+    },
+    "watermark": {
+      "type": "json",
+      "description": "{ enabled:bool, text:string } — ลายน้ำบนรูปคลังภาพ (TOR ภาคผนวก ก ข้อ 6.11)"
+    },
+    "plan": {
+      "type": "enumeration",
+      "enum": ["free", "pro", "enterprise"],
+      "default": "free",
+      "description": "SaaS subscription tier"
+    },
+    "seats": {
+      "type": "integer",
+      "default": 3,
+      "description": "Editor seats included in the plan"
+    },
+    "subscriptionStatus": {
+      "type": "string",
+      "default": "active",
+      "description": "active | trialing | past_due | canceled (from billing provider)"
+    },
+    "stripeCustomerId": {
+      "type": "string",
+      "private": true,
+      "description": "Stripe Customer id (cus_...). Written only by the checkout route / Stripe webhook — never client-writable (webx-studio/lib/cms/governance.ts's lockedTenantFields)."
+    },
+    "stripeSubscriptionId": {
+      "type": "string",
+      "private": true,
+      "description": "Stripe Subscription id (sub_...). Written only by the Stripe webhook — never client-writable."
+    },
+    "stripePriceId": {
+      "type": "string",
+      "private": true,
+      "description": "The Stripe Price id this tenant's subscription is on (price_...). Written only by the Stripe webhook — never client-writable."
+    },
+    "features": {
+      "type": "json",
+      "description": "Per-tenant front-end feature toggles, e.g. { a11y:true, simplify:true, serviceFinder:true, pwa:true } — unset = all on"
+    },
+    "engine": {
+      "type": "enumeration",
+      "enum": ["strapi", "wordpress"],
+      "default": "strapi",
+      "description": "Which CmsAdapter this tenant's own content lives in (Phase 6). The tenant record itself always lives in Strapi regardless."
+    },
+    "publicTemplate": {
+      "type": "enumeration",
+      "enum": ["gov-portal", "orst", "royalsociety", "dgahub"],
+      "default": "gov-portal",
+      "description": "Phase 8 — which public-site React component tree + page set to render for this tenant. NOT the same as the `template` field above, which is an unrelated preset/background setting for the gov-portal design itself."
+    },
+    "sso": {
+      "type": "json",
+      "description": "{ enabled, issuerUrl, clientId, clientSecretEnc, realm } — Keycloak/OIDC config for this tenant. clientSecretEnc is AES-256-GCM ciphertext (see webx-studio/lib/crypto.ts), never plaintext."
+    },
+    "customRoleAssignments": {
+      "type": "json",
+      "description": "{ [email]: roleKey } — per-user custom-role assignment for this tenant (see api::custom-role.custom-role)."
+    }
+  }
+}

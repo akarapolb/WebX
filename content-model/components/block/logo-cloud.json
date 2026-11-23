@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_logo_clouds",
+  "info": { "displayName": "Block: Logo cloud", "icon": "grid", "description": "แถบโลโก้พันธมิตร/หน่วยงานที่เกี่ยวข้อง" },
+  "options": {},
+  "attributes": {
+    "heading": { "type": "string" },
+    "items": { "type": "component", "repeatable": true, "component": "block.logo-item" }
+  }
+}

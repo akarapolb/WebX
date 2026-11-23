@@ -1,0 +1,100 @@
+{
+  "kind": "collectionType",
+  "collectionName": "articles",
+  "info": {
+    "singularName": "article",
+    "pluralName": "articles",
+    "displayName": "Article",
+    "description": "ข่าวและบทความ (DGA News / บทความ)"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "title": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "title",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "kind": {
+      "type": "enumeration",
+      "enum": ["news", "article"],
+      "default": "news",
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "categoryLabel": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "excerpt": {
+      "type": "text",
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "body": {
+      "type": "customField",
+      "customField": "plugin::ckeditor5.CKEditor",
+      "options": { "preset": "defaultHtml" },
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "coverImage": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"],
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "publishDate": {
+      "type": "date",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "views": {
+      "type": "integer",
+      "default": 0,
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false,
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "tags": {
+      "type": "json",
+      "description": "แท็กสำหรับการค้นหา เช่น [\"ThaID\",\"บริการดิจิทัล\"] (TOR ข้อ 4.2)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "related": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::article.article",
+      "description": "ข่าว/บทความที่เกี่ยวข้อง (TOR ข้อ 4.3 Relate Content)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "displayStart": {
+      "type": "datetime",
+      "description": "วันเวลาเริ่มแสดงผล (TOR ข้อ 4.9)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "displayEnd": {
+      "type": "datetime",
+      "description": "วันเวลาสิ้นสุดการแสดงผล (TOR ข้อ 4.9)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    }
+  }
+}

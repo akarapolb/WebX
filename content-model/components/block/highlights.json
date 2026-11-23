@@ -1,0 +1,6 @@
+{
+  "collectionName": "components_block_highlights",
+  "info": { "displayName": "Block: Highlights", "icon": "images", "description": "แถบไฮไลต์ประชาสัมพันธ์ (ดึงจากคอลเลกชัน banners ของ tenant นี้แบบ live)" },
+  "options": {},
+  "attributes": {}
+}

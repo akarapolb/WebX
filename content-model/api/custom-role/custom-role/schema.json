@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "custom_roles",
+  "info": {
+    "singularName": "custom-role",
+    "pluralName": "custom-roles",
+    "displayName": "Custom Role",
+    "description": "WebX-owned, tenant-scoped custom role — per-content-type action + field permissions. Not a real Strapi admin::role."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "tenantKey": {
+      "type": "string",
+      "required": true
+    },
+    "roleKey": {
+      "type": "string",
+      "required": true
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "permissions": {
+      "type": "json"
+    }
+  }
+}

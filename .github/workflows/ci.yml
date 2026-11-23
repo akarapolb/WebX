@@ -24,6 +24,17 @@ jobs:
       - working-directory: webx-studio
         run: npm run build
 
+  # content-model/ is the source of the content types (docs/target-architecture.md, D5);
+  # strapi-cms's schema files are generated copies and must not drift from it.
+  content-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node content-model/sync.mjs check
+
   build-strapi-cms:
     runs-on: ubuntu-latest
     steps:

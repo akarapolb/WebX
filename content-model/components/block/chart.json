@@ -1,0 +1,18 @@
+{
+  "collectionName": "components_block_charts",
+  "info": { "displayName": "Block: Chart", "icon": "chartLine", "description": "กราฟจากชุดข้อมูล (Dataset) พร้อมตารางข้อมูลสำหรับผู้ใช้โปรแกรมอ่านหน้าจอ / Chart from a dataset, always with a data table" },
+  "options": {},
+  "attributes": {
+    "eyebrow": { "type": "string" },
+    "title": { "type": "string" },
+    "intro": { "type": "text" },
+    "datasetKey": { "type": "string", "required": true },
+    "chartType": { "type": "enumeration", "enum": ["line", "bar"], "default": "line" },
+    "xField": { "type": "string", "required": true, "description": "Field for the x axis (line) or bar labels (bar), e.g. year or country" },
+    "yField": { "type": "string", "required": true, "description": "Numeric field to plot, e.g. score or rank" },
+    "seriesField": { "type": "string", "description": "Optional field that splits rows into lines/colours, e.g. country" },
+    "filter": { "type": "string", "description": "Optional row filter, field=value[,value]; separate several with ';' e.g. index=EGDI;country=THA,SGP" },
+    "invertY": { "type": "boolean", "default": false, "description": "Smaller is better (ranks): draw 1 at the top" },
+    "showTable": { "type": "boolean", "default": true }
+  }
+}

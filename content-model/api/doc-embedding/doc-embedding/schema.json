@@ -1,0 +1,20 @@
+{
+  "kind": "collectionType",
+  "collectionName": "doc_embeddings",
+  "info": {
+    "singularName": "doc-embedding",
+    "pluralName": "doc-embeddings",
+    "displayName": "Doc Embedding",
+    "description": "Vector index of tenant content for RAG/semantic search (admin-only)"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "documentRef": { "type": "string" },
+    "contentType": { "type": "string" },
+    "title": { "type": "string" },
+    "url": { "type": "string" },
+    "text": { "type": "text" },
+    "vector": { "type": "json" },
+    "tenantKey": { "type": "string" }
+  }
+}

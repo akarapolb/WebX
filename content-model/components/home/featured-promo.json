@@ -1,0 +1,43 @@
+{
+  "collectionName": "components_home_featured_promos",
+  "info": {
+    "displayName": "Featured Promo",
+    "icon": "star",
+    "description": "แบนเนอร์โปรโมทเด่นท้ายหน้า (เช่น แอปทางรัฐ)"
+  },
+  "options": {},
+  "attributes": {
+    "eyebrow": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    },
+    "items": {
+      "type": "json"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "primaryLabel": {
+      "type": "string"
+    },
+    "primaryUrl": {
+      "type": "string",
+      "default": "#"
+    },
+    "secondaryLabel": {
+      "type": "string"
+    },
+    "secondaryUrl": {
+      "type": "string",
+      "default": "#"
+    }
+  }
+}

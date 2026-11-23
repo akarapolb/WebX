@@ -1,0 +1,9 @@
+{
+  "collectionName": "components_block_testimonials",
+  "info": { "displayName": "Block: Testimonials", "icon": "msg", "description": "คำรับรอง/รีวิวจากลูกค้าหรือผู้ใช้บริการ" },
+  "options": {},
+  "attributes": {
+    "heading": { "type": "string" },
+    "items": { "type": "component", "repeatable": true, "component": "block.testimonial-item" }
+  }
+}

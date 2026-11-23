@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "stripe_webhook_events",
+  "info": {
+    "singularName": "stripe-webhook-event",
+    "pluralName": "stripe-webhook-events",
+    "displayName": "Stripe Webhook Event",
+    "description": "Idempotency ledger for /api/webhooks/stripe — one row per processed Stripe event.id. A unique-constraint conflict on eventId at creation time is how the handler detects a redelivery and skips re-running side effects, instead of an in-memory cache that wouldn't survive a restart or multiple instances."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "eventId": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "description": "Stripe's event.id (evt_...) — the idempotency key."
+    },
+    "type": {
+      "type": "string",
+      "description": "Stripe's event.type, e.g. checkout.session.completed."
+    },
+    "receivedAt": {
+      "type": "datetime"
+    },
+    "resolved": {
+      "type": "boolean",
+      "default": false,
+      "description": "False when no tenant could be resolved for this event (logged for visibility, not retried — see the webhook handler's own comment)."
+    }
+  }
+}

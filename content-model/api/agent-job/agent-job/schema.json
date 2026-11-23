@@ -1,0 +1,63 @@
+{
+  "kind": "collectionType",
+  "collectionName": "agent_jobs",
+  "info": {
+    "singularName": "agent-job",
+    "pluralName": "agent-jobs",
+    "displayName": "Agent Job",
+    "description": "WebX Agent background job (webx-studio lib/agent/jobs). Claimed, heartbeated, checkpointed and finished only through the secret-protected /api/internal/agent-jobs/* endpoints, each a compare-and-set on the lease token; never written through the generic entries route."
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "tenantKey": { "type": "string", "required": true },
+    "ownerEmail": { "type": "string", "required": true },
+    "ownerUserId": {
+      "type": "string",
+      "required": true,
+      "description": "The owner's account id at creation. A different id for the same email later means a different person, and the job pauses."
+    },
+    "engine": { "type": "string", "default": "strapi" },
+    "threadId": { "type": "string" },
+    "scheduleId": { "type": "string" },
+    "idempotencyKey": { "type": "string" },
+    "template": { "type": "string" },
+    "title": { "type": "string", "required": true },
+    "goal": { "type": "text" },
+    "params": { "type": "json" },
+    "lang": { "type": "string", "default": "en" },
+    "requiredLevel": { "type": "string", "required": true },
+    "policySnapshot": { "type": "json" },
+    "onQuestion": { "type": "string", "default": "wait" },
+    "runState": {
+      "type": "string",
+      "default": "queued",
+      "description": "queued | running | done | failed | cancelled | paused. Named runState: Strapi 5 reserves \"status\"."
+    },
+    "outcome": { "type": "string", "description": "For done: completed | incomplete | partial_budget | partial_stuck." },
+    "stateReason": { "type": "string" },
+    "notBefore": { "type": "datetime" },
+    "priority": { "type": "integer", "default": 0 },
+    "attempts": { "type": "integer", "default": 0, "description": "Times the job's lease expired (its worker stopped responding)." },
+    "crashCount": { "type": "integer", "default": 0 },
+    "crashSeq": { "type": "integer" },
+    "cancelRequestedAt": { "type": "datetime" },
+    "pauseRequestedAt": { "type": "datetime" },
+    "pendingAnswer": { "type": "text" },
+    "startedAt": { "type": "datetime" },
+    "finishedAt": { "type": "datetime" },
+    "lastSliceAt": { "type": "datetime" },
+    "lastError": { "type": "text" },
+    "leaseOwner": { "type": "string" },
+    "leaseToken": { "type": "string" },
+    "leaseExpiresAt": { "type": "datetime" },
+    "heartbeatAt": { "type": "datetime" },
+    "checkpointSeq": { "type": "integer", "default": 0 },
+    "eventSeq": { "type": "integer", "default": 0 },
+    "budget": { "type": "json" },
+    "tokensUsed": { "type": "integer", "default": 0 },
+    "progress": { "type": "json" },
+    "checkpoint": { "type": "json", "description": "Engine RunCheckpoint, capped at ~256KB by the worker; cleared 7 days after the job finishes." },
+    "events": { "type": "json", "description": "The last 200 run events, each with a seq for polling." },
+    "result": { "type": "json" }
+  }
+}

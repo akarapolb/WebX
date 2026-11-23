@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sso_credentials",
+  "info": {
+    "singularName": "sso-credential",
+    "pluralName": "sso-credentials",
+    "displayName": "SSO Credential",
+    "description": "Per-user JIT-provisioned Strapi admin shadow password for SSO logins (Strapi CE has no native admin SSO). Encrypted at rest."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "adminEmail": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "tenantKey": {
+      "type": "string",
+      "required": true
+    },
+    "passwordEnc": {
+      "type": "text",
+      "required": true,
+      "private": true
+    },
+    "strapiUserId": {
+      "type": "string",
+      "private": true
+    }
+  }
+}

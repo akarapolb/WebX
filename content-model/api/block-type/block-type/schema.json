@@ -1,0 +1,44 @@
+{
+  "kind": "collectionType",
+  "collectionName": "block_types",
+  "info": {
+    "singularName": "block-type",
+    "pluralName": "block-types",
+    "displayName": "Block Type",
+    "description": "นิยามบล็อกที่ผู้ใช้สร้างเอง (no-code custom blocks) ใช้กับ Visual Builder"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "key": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "icon": {
+      "type": "string"
+    },
+    "fieldsSchema": {
+      "type": "json",
+      "description": "รายการฟิลด์ของบล็อก เช่น [{\"key\":\"heading\",\"label\":\"หัวข้อ\",\"type\":\"text\"}]"
+    },
+    "template": {
+      "type": "text",
+      "description": "เทมเพลต HTML ใช้ {{key}} แทนค่าฟิลด์"
+    },
+    "visualElements": {
+      "type": "json",
+      "description": "รายการ element ที่ใช้ประกอบ template แบบ drag-and-drop (Visual mode ของ BlockTypeEditor) — metadata สำหรับแก้ไขเท่านั้น ไม่มีผลต่อการ render (renderer อ่านแค่ fieldsSchema/template)"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    }
+  }
+}

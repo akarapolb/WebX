@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "field_policies",
+  "info": {
+    "singularName": "field-policy",
+    "pluralName": "field-policies",
+    "displayName": "Field Policy",
+    "description": "Per-role field access (hidden / read-only) for content types"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "role": { "type": "string", "required": true },
+    "contentType": { "type": "string", "required": true },
+    "hidden": { "type": "json" },
+    "readonly": { "type": "json" }
+  }
+}

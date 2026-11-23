@@ -1,0 +1,78 @@
+{
+  "kind": "collectionType",
+  "collectionName": "videos",
+  "info": {
+    "singularName": "video",
+    "pluralName": "videos",
+    "displayName": "Video",
+    "description": "วิดีโอ DGA Channel"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "title": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": { "i18n": { "localized": true } }
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"],
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "videoUrl": {
+      "type": "string",
+      "description": "ลิงก์วิดีโอภายนอก (YouTube/Vimeo ฯลฯ) — ใช้อย่างใดอย่างหนึ่งกับ videoFile",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "videoFile": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["videos"],
+      "description": "ไฟล์วิดีโอที่อัปโหลดโดยตรง — ใช้อย่างใดอย่างหนึ่งกับ videoUrl",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "duration": {
+      "type": "string",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "categoryKey": {
+      "type": "enumeration",
+      "enum": ["std", "event", "talk"],
+      "default": "std",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "date": {
+      "type": "date",
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "views": {
+      "type": "integer",
+      "default": 0,
+      "pluginOptions": { "i18n": { "localized": false } }
+    },
+    "subtitles": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["files"],
+      "description": "ไฟล์คำบรรยาย .vtt (TOR ภาคผนวก ก ข้อ 7.8)",
+      "pluginOptions": { "i18n": { "localized": false } }
+    }
+  }
+}

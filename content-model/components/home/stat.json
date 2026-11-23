@@ -1,0 +1,22 @@
+{
+  "collectionName": "components_home_stats",
+  "info": {
+    "displayName": "Stat",
+    "icon": "chartBubble",
+    "description": "สถิติการให้บริการ (ตัวเลข + ป้ายกำกับ)"
+  },
+  "options": {},
+  "attributes": {
+    "icon": {
+      "type": "enumeration",
+      "enum": ["users", "grid", "shield", "clock", "data", "build"],
+      "default": "users"
+    },
+    "value": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    }
+  }
+}

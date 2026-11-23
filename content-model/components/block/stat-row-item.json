@@ -1,0 +1,10 @@
+{
+  "collectionName": "components_block_stat_row_items",
+  "info": { "displayName": "Block: Stat row item", "icon": "chartBubble", "description": "หนึ่งตัวเลขสถิติ" },
+  "options": {},
+  "attributes": {
+    "icon": { "type": "string", "default": "users" },
+    "value": { "type": "string" },
+    "label": { "type": "string" }
+  }
+}

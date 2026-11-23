@@ -1,0 +1,26 @@
+{
+  "collectionName": "components_block_collection_lists",
+  "info": {
+    "displayName": "Block: Collection list",
+    "icon": "card",
+    "description": "การ์ดกริดจากคอลเลกชันใด ๆ ในระบบ (Webflow-style Collection List) — no-code"
+  },
+  "options": {},
+  "attributes": {
+    "heading": { "type": "string" },
+    "contentTypeUid": { "type": "string" },
+    "pluralName": { "type": "string" },
+    "titleField": { "type": "string" },
+    "imageField": { "type": "string" },
+    "excerptField": { "type": "string" },
+    "dateField": { "type": "string" },
+    "linkField": { "type": "string" },
+    "bodyField": { "type": "string", "description": "ฟิลด์เนื้อหาเต็มสำหรับหน้ารายละเอียด (Collection Page)" },
+    "linkToDetail": { "type": "boolean", "default": false, "description": "true = การ์ดลิงก์ไปหน้ารายละเอียดที่สร้างอัตโนมัติ แทนการใช้ linkField" },
+    "layout": { "type": "enumeration", "enum": ["grid", "map"], "default": "grid", "description": "grid = การ์ด (ค่าเริ่มต้น), map = แผนที่ (เฉพาะ api::location.location)" },
+    "videoUrlField": { "type": "string", "description": "ฟิลด์ลิงก์วิดีโอ (YouTube ฯลฯ) — แสดงเป็นวิดีโอฝังแทนรูปภาพหลักในหน้ารายละเอียด" },
+    "sortField": { "type": "string", "default": "createdAt" },
+    "sortDir": { "type": "enumeration", "enum": ["asc", "desc"], "default": "desc" },
+    "pageSize": { "type": "integer", "default": 12, "min": 1, "max": 100 }
+  }
+}

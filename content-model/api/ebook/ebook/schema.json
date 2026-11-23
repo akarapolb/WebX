@@ -1,0 +1,19 @@
+{
+  "kind": "collectionType",
+  "collectionName": "ebooks",
+  "info": { "singularName": "ebook", "pluralName": "ebooks", "displayName": "E-book", "description": "หนังสืออิเล็กทรอนิกส์ / สิ่งพิมพ์" },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" },
+    "title": { "type": "string", "required": true },
+    "author": { "type": "string" },
+    "description": { "type": "text" },
+    "cover": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
+    "file": { "type": "media", "multiple": false, "allowedTypes": ["files"] },
+    "year": { "type": "string" },
+    "order": { "type": "integer", "default": 0 },
+    "contentText": { "type": "text", "description": "ข้อความที่สกัดจากไฟล์ (Full-text Search) — ระบบเติมอัตโนมัติ" },
+    "reference": { "type": "string", "description": "แหล่งที่มา/อ้างอิง (TOR ข้อ 18.5)" },
+    "referenceDate": { "type": "date", "description": "วันที่อ้างอิง" }
+  }
+}

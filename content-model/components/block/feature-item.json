@@ -1,0 +1,12 @@
+{
+  "collectionName": "components_block_feature_items",
+  "info": { "displayName": "Block: Feature item", "icon": "bulletList", "description": "รายการคุณสมบัติ" },
+  "options": {},
+  "attributes": {
+    "icon": { "type": "string", "default": "i-check" },
+    "title": { "type": "string" },
+    "text": { "type": "text" },
+    "url": { "type": "string" },
+    "colorTheme": { "type": "enumeration", "enum": ["orange", "blue", "green", "amber", "purple", "teal"], "default": "blue" }
+  }
+}

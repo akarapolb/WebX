@@ -1,0 +1,20 @@
+{
+  "kind": "collectionType",
+  "collectionName": "releases",
+  "info": {
+    "singularName": "release",
+    "pluralName": "releases",
+    "displayName": "Release",
+    "description": "Group entries and publish them together, now or scheduled"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "state": { "type": "string", "default": "draft" },
+    "scheduledAt": { "type": "datetime" },
+    "publishedAt": { "type": "datetime" },
+    "items": { "type": "json" },
+    "note": { "type": "text" },
+    "tenant": { "type": "relation", "relation": "manyToOne", "target": "api::tenant.tenant" }
+  }
+}
