@@ -96,8 +96,10 @@ tenant `dga` 437, `pea` 289, `dgahub` 368 files, 0 differences.
 ## Not covered (yet)
 
 - WordPress tenants (ORST, Royal Society) read WordPress, not this engine.
-- Live mode (reading Strapi's Postgres directly) is milestone 6 of the plan,
-  optional.
+- Editing: content still comes from Strapi. In the target architecture
+  (`../docs/target-architecture.md`) this becomes a full engine, one of three
+  (Rust, Strapi, WordPress) behind the WebX control plane, with its own store,
+  content write API and media; snapshot mode stays for air-gapped builds.
 
 ## CI
 

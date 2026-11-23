@@ -2,8 +2,10 @@
 
 Status: milestones 1–5 built and passing (2026-11-22, code in
 `rust-engine/`, see its README; CI in `.github/workflows/rust-engine.yml`);
-6 (optional) not started. Off the DGA critical path: the hub ships on Strapi
-whatever happens here.
+6 dropped. The target architecture (`target-architecture.md`, decided
+2026-11-22) makes the Rust engine one of three engines with its own store,
+behind a WebX control plane, so it no longer reads Strapi's tables. Off the
+DGA critical path: the hub ships on Strapi whatever happens here.
 
 ## Results so far (2026-11-22)
 
@@ -122,7 +124,7 @@ The built site must come out identical:
 | 3 | Rust server: tenants, pages, slugs, menu, articles, FAQ, services, datasets, home-pages; contract test green — **done** (all collections the build reads) | 4–6 days |
 | 4 | Media passthrough; build test identical for `dgahub` — **done** (all Strapi tenants) | 1–2 days |
 | 5 | gov-portal tenant identical; CI job; docs — **done** (`dga` and `pea` identical; `tools/build-test.mjs`; `.github/workflows/rust-engine.yml`, not yet run on GitHub) | 2–3 days |
-| 6 | (Optional) live Postgres mode with per-upgrade tests | 3–5 days |
+| 6 | ~~(Optional) live Postgres mode with per-upgrade tests~~ — dropped: replaced by the Rust engine's own store (`target-architecture.md`, track R) | — |
 
 Risks: Strapi's populate output has quirks (nested component ids, media
 format objects) that the snapshot must reproduce exactly; the build test

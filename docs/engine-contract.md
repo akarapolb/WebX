@@ -49,8 +49,15 @@ Rules every engine must keep:
   `X-Tenant`, or the Host). Studio requests are scoped by the editor's
   membership (`adminEmails`); super admins are unscoped and must filter
   explicitly (`filter: [{ field: "tenant.key", op: "eq", value }]`).
-- An unknown tenant key resolves to the default tenant in `tenants/resolve`, and
-  to an empty result in list queries (never to "everything").
+- **Unknown or missing tenant.** Strapi resolves the tenant in this order:
+  `?tenant=<key>`, then `X-Tenant`, then a Host that matches a tenant's
+  `domains`, and otherwise falls back to the default tenant (`dga`, or the
+  first active tenant). So an unknown key reads the default tenant's rows in
+  every route, never "everything" and never an empty result. The Rust read
+  engine copies this (the contract test replays it). A stricter rule for the
+  target (an explicit unknown key returns an empty result, and only a request
+  naming no tenant falls back) is open decision D9 in
+  `target-architecture.md`; until it is taken, engines keep Strapi's behaviour.
 
 ## 3. Locales
 
