@@ -18,6 +18,7 @@
 mod audit;
 mod identity;
 mod jobs;
+mod schedules;
 mod records;
 mod registry;
 
@@ -426,6 +427,63 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
                 },
             }
         }
+        // recurring jobs (C5): the store Studio's tick works against, compare-and-set on runSeq
+        ("POST", ["schedules"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            match schedules::create(&conn, v.get("data").unwrap_or(&v), now_ms()) {
+                Ok(row) => Json(json!({"data": row})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
+        ("GET", ["schedules"]) => {
+            let (mut tenant, mut owner, mut page, mut size) = (None, None, 1usize, 25usize);
+            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+                let v = percent_decode(v);
+                match k {
+                    "tenantKey" => tenant = Some(v),
+                    "ownerEmail" => owner = Some(v),
+                    "page" => page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
+                    "pageSize" => size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(200),
+                    _ => return bad(format!("unsupported parameter {k}")),
+                }
+            }
+            match schedules::list(&conn, tenant.as_deref(), owner.as_deref(), page, size) {
+                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": page, "pageSize": size, "pageCount": total.div_ceil(size), "total": total}}})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
+        ("GET", ["schedules", "due"]) => match schedules::due(&conn, now_ms()) {
+            Ok(rows) => Json(json!({"schedules": rows})).into_response(),
+            Err(m) => fail(m),
+        },
+        ("POST", ["schedules", op @ ("advance" | "disable")]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let r = if *op == "advance" { schedules::advance(&conn, &v, now_ms()) } else { schedules::disable(&conn, &v, now_ms()) };
+            match r {
+                Ok(Ok(out)) => Json(out).into_response(),
+                Ok(Err(m)) => bad(m),
+                Err(m) => fail(m),
+            }
+        }
+        ("GET", ["schedules", id]) => match schedules::get(&conn, id) {
+            Ok(Some(row)) => Json(json!({"data": row})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("PUT", ["schedules", id]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            match schedules::update(&conn, id, v.get("data").unwrap_or(&v), now_ms()) {
+                Ok(Some(row)) => Json(json!({"data": row})).into_response(),
+                Ok(None) => not_found(),
+                Err(m) => bad(m),
+            }
+        }
+        ("DELETE", ["schedules", id]) => match schedules::remove(&conn, id) {
+            Ok(true) => Json(json!({"data": null})).into_response(),
+            Ok(false) => not_found(),
+            Err(m) => fail(m),
+        },
         ("GET", ["audit", id]) => match audit::get(&conn, id) {
             Ok(Some(row)) => Json(json!({"data": row})).into_response(),
             Ok(None) => not_found(),
@@ -459,6 +517,7 @@ async fn main() {
     conn.execute_batch(identity::DDL).unwrap_or_else(|e| panic!("{e}"));
     identity::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(schedules::DDL).unwrap_or_else(|e| panic!("{e}"));
     let key = identity::signing_key(&conn, std::env::var("WEBX_CONTROL_SIGNING_KEY").ok().as_deref()).unwrap_or_else(|e| panic!("{e}"));
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));

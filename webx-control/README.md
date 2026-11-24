@@ -150,7 +150,18 @@ workers use against Strapi (`strapi-cms/src/api/internal/controllers/agent-jobs.
 A lease lasts 90 s. A worker that stops heartbeating loses it: the next claim requeues the job with backoff (30 s, doubling), or
 pauses it when it crashed twice with no progress between (`stuck_crash`), or fails it after 5 attempts (`worker_lost`). The clock is
 this service's, so workers' clocks do not matter. `node tools/jobs-test.mjs` checks it on the real binary, including two workers
-claiming at the same moment and a restart in the middle of a job. Schedules (recurring jobs) are not here yet.
+claiming at the same moment and a restart in the middle of a job.
+
+### Schedules
+
+Recurring jobs, the store Studio's tick works against (port of `agent-schedules.ts`; working out the next run stays in Studio, which sends it as `nextRunAt`). Service token.
+
+| Call | Meaning |
+|---|---|
+| `POST /internal/schedules`, `GET/PUT/DELETE /internal/schedules/<id>`, `GET /internal/schedules?tenantKey=&ownerEmail=` | save, read, change (bumps `runSeq`; `null` clears a field), delete, list |
+| `GET /internal/schedules/due` | enabled schedules whose `nextRunAt` has come, soonest first (up to 50) |
+| `POST /internal/schedules/advance` `{documentId, expectedSeq, nextRunAt, job?, skipReason?, consecutiveFailures?, countedJobId?}` | compare-and-set on `runSeq`: moves to the next run and, with `job`, queues that occurrence in the same transaction (one job per `idempotencyKey`); answers `{ok, jobId, existing?}` |
+| `POST /internal/schedules/disable` `{documentId, expectedSeq, reason}` | turn off with a reason, if still enabled at that `runSeq` |
 
 ## Tests
 

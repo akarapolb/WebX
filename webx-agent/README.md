@@ -75,6 +75,6 @@ resume across two worker processes, and a model that keeps failing.
 
 ## Not yet
 
-Schedules (recurring jobs, with MicroAgent's `Trigger`), job creation from Studio (its jobs API still writes to Strapi),
+Studio's tick against the control plane's schedule store (the store is built, in `../webx-control`), job creation from Studio (its jobs API still writes to Strapi),
 memory notes and skills, the existing Node worker's behaviour parity (`webx-studio/lib/agent/worker.ts`), and the agent
 evals (`eval/`) run against this worker.

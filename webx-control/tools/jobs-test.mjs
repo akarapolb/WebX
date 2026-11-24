@@ -94,6 +94,22 @@ try {
   check("one running job per owner: Bob's second job waits", batch.length === 2 && batch.filter((j) => j.ownerEmail === "bob@example.org").length === 1);
   check("an unknown action is refused: 400", (await call("POST", "/internal/jobs/control", { documentId: id, action: "explode" })).status === 400);
   check("control on a job that does not exist: 404", (await call("POST", "/internal/jobs/control", { documentId: "nope", action: "cancel" })).status === 404);
+
+  // schedules: due, advance (compare-and-set), the job it queues, disable
+  const past = new Date(Date.now() - 60000).toISOString();
+  const sc = (await call("POST", "/internal/schedules", { data: { tenantKey: "dga", ownerEmail: "sam@example.org", name: "Weekly", template: "audit", nextRunAt: past, recurrence: { freq: "daily" } } })).json.data;
+  check("a schedule is saved enabled with runSeq 0", sc.enabled === true && sc.runSeq === 0 && sc.recurrence.freq === "daily");
+  check("it is due", (await call("GET", "/internal/schedules/due")).json.schedules.some((x) => x.documentId === sc.documentId));
+  const adv = { documentId: sc.documentId, expectedSeq: 0, nextRunAt: new Date(Date.now() + 86400000).toISOString(), job: { idempotencyKey: "occ-1", tenantKey: "dga", ownerEmail: "sam@example.org", ownerUserId: "9", title: "Weekly", requiredLevel: "read", goal: "audit" } };
+  const [r1, r2] = await Promise.all([call("POST", "/internal/schedules/advance", adv), call("POST", "/internal/schedules/advance", adv)]);
+  check("two ticks racing over one occurrence: exactly one advances it", [r1, r2].filter((r) => r.json.ok === true).length === 1);
+  const made1 = [r1, r2].find((r) => r.json.ok === true).json;
+  const qj = (await call("GET", `/internal/jobs/${made1.jobId}`)).json.data;
+  check("the occurrence's job is queued with the schedule id", qj.runState === "queued" && qj.scheduleId === sc.documentId);
+  check("the schedule is no longer due and remembers its job", !(await call("GET", "/internal/schedules/due")).json.schedules.some((x) => x.documentId === sc.documentId) && (await call("GET", `/internal/schedules/${sc.documentId}`)).json.data.lastJobId === made1.jobId);
+  check("disable at a stale seq does nothing", (await call("POST", "/internal/schedules/disable", { documentId: sc.documentId, expectedSeq: 0, reason: "user" })).json.ok === false);
+  check("disable at the current seq turns it off with the reason", (await call("POST", "/internal/schedules/disable", { documentId: sc.documentId, expectedSeq: 1, reason: "user" })).json.ok === true && (await call("GET", `/internal/schedules/${sc.documentId}`)).json.data.disabledReason === "user");
+  check("an advance without the required fields: 400", (await call("POST", "/internal/schedules/advance", { documentId: sc.documentId })).status === 400);
 } catch (e) {
   console.error(e);
   failures++;
