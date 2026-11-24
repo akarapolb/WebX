@@ -83,7 +83,8 @@ test.describe("Page templates in the control plane", () => {
   test("a template a dga editor saves is stored in the control plane for dga", async () => {
     const r = await dga.request.post(`${WEBX_STUDIO}/api/cms/entries/${TEMPLATE}`, { data: { key, name: "Mine " + key, dialect: "gov-portal", blocks: [] } });
     expect(r.ok(), `create answered ${r.status()}`).toBeTruthy();
-    const made = (await r.json()).data;
+    const body = await r.json();
+    const made = body.data ?? body; // Studio answers a create with the entry itself
     mineId = made.documentId;
     const stored = (await (await control("/" + mineId)).json()).data;
     expect(stored.tenantKey, "stamped with the editor's workspace").toBe("dga");

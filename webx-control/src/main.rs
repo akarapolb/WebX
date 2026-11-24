@@ -16,6 +16,7 @@
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 
 mod audit;
+mod identity;
 mod records;
 mod registry;
 
@@ -42,6 +43,10 @@ struct App {
     /// --strict-tenants: an unknown tenant key is a 404 (decision D9); otherwise it gets the
     /// first tenant's answer, as Strapi and every engine do today (engine-contract.md, section 2)
     strict: bool,
+    /// signs the tokens issued for signed-in users (decisions D10, D11)
+    key: ed25519_dalek::SigningKey,
+    /// seconds a token lives (--token-ttl, default 900)
+    token_ttl: i64,
 }
 type Shared = Arc<App>;
 
@@ -69,6 +74,27 @@ fn now_iso() -> String {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
     format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{ms:03}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
+}
+
+/// GET /.well-known/jwks.json: the public key that verifies tokens
+async fn jwks(State(app): State<Shared>) -> Response {
+    Json(identity::jwks(&app.key.verifying_key())).into_response()
+}
+
+/// GET /api/auth/me with a user token: who it is, and for which workspaces
+async fn me(State(app): State<Shared>, headers: HeaderMap) -> Response {
+    let Some(t) = headers.get("authorization").and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")) else {
+        return error(StatusCode::UNAUTHORIZED, "UnauthorizedError", "Missing or invalid token");
+    };
+    let conn = app.conn.lock().unwrap();
+    match identity::verify(&conn, &app.key.verifying_key(), t, now_secs()) {
+        Ok(c) => Json(json!({"data": {"email": c["sub"], "name": c["name"], "tenants": c["tenants"], "exp": c["exp"]}})).into_response(),
+        Err(m) => error(StatusCode::UNAUTHORIZED, "UnauthorizedError", &m),
+    }
 }
 
 fn query_param(raw: Option<&str>, name: &str) -> Option<String> {
@@ -145,6 +171,33 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
                 Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
             }
         }
+        ("GET", ["users"]) => match identity::list(&conn) {
+            Ok(l) => Json(json!({"data": l.iter().map(|u| u.to_json()).collect::<Vec<_>>()})).into_response(),
+            Err(m) => fail(m),
+        },
+        ("GET", ["users", email]) => match identity::get(&conn, email) {
+            Ok(Some(u)) => Json(json!({"data": u.to_json()})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("PUT", ["users", email]) => {
+            let v: Value = match serde_json::from_slice(&body) {
+                Ok(v) => v,
+                Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON"),
+            };
+            match identity::upsert(&conn, email, &v, &now_iso()) {
+                Ok(created) => {
+                    let u = identity::get(&conn, email).ok().flatten().map(|u| u.to_json());
+                    (if created { StatusCode::CREATED } else { StatusCode::OK }, Json(json!({"data": u}))).into_response()
+                }
+                Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
+            }
+        }
+        ("DELETE", ["users", email]) => match identity::remove(&conn, email) {
+            Ok(true) => Json(json!({"data": null})).into_response(),
+            Ok(false) => not_found(),
+            Err(m) => fail(m),
+        },
         ("DELETE", ["tenants", key]) => match registry::remove(&conn, key) {
             Ok(true) => Json(json!({"data": null})).into_response(),
             Ok(false) => not_found(),
@@ -184,6 +237,15 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
     let conn = app.conn.lock().unwrap();
     let bad = |m: String| error(StatusCode::BAD_REQUEST, "ValidationError", &m);
     match (method.as_str(), parts.as_slice()) {
+        // Studio has just signed a user in (OIDC); this issues the token engines and Studio verify
+        ("POST", ["token"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let Some(email) = v.get("email").and_then(Value::as_str) else { return bad("email is required".into()) };
+            match identity::issue(&conn, &app.key, email, v.get("tenantKey").and_then(Value::as_str), app.token_ttl, now_secs()) {
+                Ok((token, exp)) => Json(json!({"data": {"token": token, "expiresAt": exp}})).into_response(),
+                Err(m) => error(StatusCode::FORBIDDEN, "ForbiddenError", &m),
+            }
+        }
         ("POST", ["audit"]) => {
             let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
             match audit::create(&conn, v.get("data").unwrap_or(&v), &now_iso()) {
@@ -321,16 +383,20 @@ async fn main() {
     let conn = registry::open(&db).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(audit::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(records::DDL).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(identity::DDL).unwrap_or_else(|e| panic!("{e}"));
+    let key = identity::signing_key(&conn, std::env::var("WEBX_CONTROL_SIGNING_KEY").ok().as_deref()).unwrap_or_else(|e| panic!("{e}"));
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let n = registry::list(&conn).map(|l| l.len()).unwrap_or(0);
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
+        .route("/.well-known/jwks.json", get(jwks))
+        .route("/api/auth/me", get(me))
         .route("/admin/*rest", any(admin))
         .route("/internal/*rest", any(internal).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         .fallback(|| async { not_found() })
-        .with_state(Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants") }));
+        .with_state(Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl") }));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
     eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" });
     axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();

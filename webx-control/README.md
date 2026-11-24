@@ -105,6 +105,28 @@ STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL
 
 Run it before switching: a shared template (no workspace) that is only in Strapi is invisible once Studio reads here.
 
+## Identity (C4, first part)
+
+Decisions D10 and D11. webx-control holds **users** and their **memberships** (workspace and role) and issues the
+**tokens** that prove them. It stores no passwords: people sign in at an OIDC provider (Studio does the OIDC step
+today), and Studio then asks for a token here.
+
+| Call | Meaning |
+|---|---|
+| `PUT /admin/users/<email>` body `{name?, disabled?, memberships: [{tenantKey, role}]}` | create (201) or replace (200); email is kept lowercase |
+| `GET /admin/users`, `GET`, `DELETE /admin/users/<email>` | the users |
+| `POST /internal/token` body `{email, tenantKey?}` (service token) | a signed token for a known, enabled user; with `tenantKey` only for that workspace, which they must belong to; 403 otherwise |
+| `GET /.well-known/jwks.json` | the public key (Ed25519) engines and Studio verify tokens with |
+| `GET /api/auth/me` with `Authorization: Bearer <token>` | who the token is for; 401 if it is bad, expired, or the user was disabled or deleted |
+
+A token is a JWT signed with EdDSA: `iss` `webx-control`, `sub` the email, `tenants` `[{key, role}]`, `exp`. It lives
+15 minutes (`--token-ttl <seconds>`). Disabling a user cuts them off at once at `/api/auth/me`; an engine that checks
+only the signature honours a token until it expires, so engines that need instant revocation call `/api/auth/me`.
+The signing key is made on first start and kept in the database; set `WEBX_CONTROL_SIGNING_KEY` (base64, 32 bytes)
+to use your own, for example one shared by several instances. `node tools/identity-test.mjs` checks all of this on
+the real binary, verifying the tokens with Node's own crypto and the published key. Not done yet: Studio signing in
+through this, migrating the Strapi admin users, the OIDC provider settings per workspace, and engines verifying tokens.
+
 ## Tests
 
 ```sh

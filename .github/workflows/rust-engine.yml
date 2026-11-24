@@ -135,6 +135,9 @@ jobs:
       # C3: the audit log in the control plane, and Studio's adapter for it
       - name: Audit log in webx-control
         run: node webx-control/tools/audit-test.mjs
+      # C4: users, memberships and signed tokens an engine can verify
+      - name: Identity in webx-control
+        run: node webx-control/tools/identity-test.mjs
       - name: Write API test
         working-directory: rust-engine
         run: node tools/write-test.mjs
