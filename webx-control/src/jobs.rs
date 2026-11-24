@@ -174,6 +174,8 @@ pub struct Filters<'a> {
     pub tenant: Option<&'a str>,
     pub owner: Option<&'a str>,
     pub state: Option<&'a str>,
+    /// only jobs created at or after this time (epoch ms)
+    pub created_from: Option<i64>,
 }
 
 /// Newest first.
@@ -185,6 +187,10 @@ pub fn list(conn: &Connection, f: &Filters, page: usize, page_size: usize) -> Re
             wh.push(format!("{col} = ?"));
             args.push(rusqlite::types::Value::Text(v.to_string()));
         }
+    }
+    if let Some(ms) = f.created_from {
+        wh.push("created_ms >= ?".to_string());
+        args.push(rusqlite::types::Value::Integer(ms));
     }
     let w = wh.join(" AND ");
     let total: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM agent_jobs WHERE {w}"), rusqlite::params_from_iter(args.iter()), |r| r.get(0)).map_err(e)?;
@@ -455,7 +461,7 @@ mod tests {
         assert_eq!((j["runState"].clone(), j["attempts"].clone(), j["goal"].clone(), j["params"].clone()), (json!("queued"), json!(0), json!("g"), json!({"x": [1, 2]})), "a caller cannot choose the state or the attempts");
         assert_eq!(j["createdAt"], iso(T0));
         assert!(create(&c, &json!({"ownerEmail": "a@b.co"}), T0).is_err() && create(&c, &json!({"tenantKey": "dga"}), T0).is_err());
-        assert_eq!(list(&c, &Filters { tenant: Some("dga"), owner: None, state: Some("queued") }, 1, 10).unwrap().1, 1);
+        assert_eq!(list(&c, &Filters { tenant: Some("dga"), owner: None, state: Some("queued"), created_from: None }, 1, 10).unwrap().1, 1);
     }
 
     #[test]

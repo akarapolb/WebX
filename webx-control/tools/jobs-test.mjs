@@ -110,6 +110,13 @@ try {
   check("disable at a stale seq does nothing", (await call("POST", "/internal/schedules/disable", { documentId: sc.documentId, expectedSeq: 0, reason: "user" })).json.ok === false);
   check("disable at the current seq turns it off with the reason", (await call("POST", "/internal/schedules/disable", { documentId: sc.documentId, expectedSeq: 1, reason: "user" })).json.ok === true && (await call("GET", `/internal/schedules/${sc.documentId}`)).json.data.disabledReason === "user");
   check("an advance without the required fields: 400", (await call("POST", "/internal/schedules/advance", { documentId: sc.documentId })).status === 400);
+  // the list query Studio's adapter sends: filter=field:op:value and sort=createdAt:DESC
+  const fq = (p) => call("GET", `/internal/${p}`);
+  const f1 = await fq(`jobs?filter=${encodeURIComponent("tenantKey:eq:dga")}&filter=${encodeURIComponent("createdAt:gte:2020-01-01T00:00:00.000Z")}&sort=createdAt:DESC&pageSize=100`);
+  check("jobs list takes Studio's filter and sort form", f1.status === 200 && f1.json.meta.pagination.total >= 1);
+  check("a creation-time bound in the future matches none", (await fq(`jobs?filter=${encodeURIComponent("createdAt:gte:2999-01-01T00:00:00.000Z")}`)).json.meta.pagination.total === 0);
+  check("schedules filter on enabled", (await fq(`schedules?filter=${encodeURIComponent("enabled:eq:false")}`)).json.data.every((x) => x.enabled === false) && (await fq(`schedules?filter=${encodeURIComponent("enabled:eq:true")}`)).json.meta.pagination.total === 0);
+  check("a filter it does not know is refused: 400", (await fq(`jobs?filter=${encodeURIComponent("goal:contains:x")}`)).status === 400);
 } catch (e) {
   console.error(e);
   failures++;

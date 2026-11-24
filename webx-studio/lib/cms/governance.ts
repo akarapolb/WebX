@@ -32,6 +32,7 @@ import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./word
 import { CmsError } from "./types";
 import { controlAuditConfig, createControlAuditAdapter } from "./audit-store";
 import { CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter } from "./records-store";
+import { controlQueueConfig, createControlQueueAdapter, QUEUE_COLLECTIONS } from "./queue-store";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
 import { parseCheckpoint } from "@/lib/agent/engine/checkpoint";
@@ -163,7 +164,14 @@ function controlAuditAdapter(cfg: { baseUrl: string; token: string }): CmsAdapte
 }
 // custom roles, page templates and page versions live in the control plane once it is configured (track C3)
 let controlRecordsCache: { key: string; adapter: CmsAdapter } | null = null;
+let controlQueueCache: { key: string; adapter: CmsAdapter } | null = null;
 function bookkeepingAdapter(uid: string): CmsAdapter {
+  const queue = QUEUE_COLLECTIONS[uid] ? controlQueueConfig() : null;
+  if (queue) {
+    const k = queue.baseUrl + " " + queue.token;
+    if (controlQueueCache?.key !== k) controlQueueCache = { key: k, adapter: createControlQueueAdapter(queue) };
+    return controlQueueCache.adapter;
+  }
   const cfg = controlAuditConfig();
   if (!cfg || !CONTROL_RECORD_COLLECTIONS[uid]) return strapiAdapter;
   const key = cfg.baseUrl + " " + cfg.token;
@@ -2059,14 +2067,14 @@ const isWorkspaceAdmin = (eff: Tenant, email?: string) => !(eff.customRoleAssign
 
 async function loadJobForCaller(id: string, user: CurrentUser): Promise<any> {
   const eff = await resolveEffectiveTenant(user.email);
-  const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_JOB_UID, id)).catch(() => null);
+  const row: any = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_JOB_UID).entries.get(AGENT_JOB_UID, id)).catch(() => null);
   const isOwner = (row?.ownerEmail || "").toLowerCase() === (user.email || "").toLowerCase();
   if (!row || !eff || row.tenantKey !== eff.key || !(isOwner || isWorkspaceAdmin(eff, user.email))) throw new CmsError("Unknown job", 404);
   return row;
 }
 
 async function countJobs(tenantKey: string, runState: string): Promise<number> {
-  const { total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_JOB_UID, {
+  const { total } = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_JOB_UID).entries.list<any>(AGENT_JOB_UID, {
     pageSize: 1, filter: [{ field: "tenantKey", op: "eq", value: tenantKey }, { field: "runState", op: "eq", value: runState }],
   }));
   return total;
@@ -2227,7 +2235,7 @@ async function insertAgentJob(user: CurrentUser, eff: Tenant, policy: AgentPolic
   await enforceAgentTokenBudget(eff);
 
   const within = (asked: number | undefined, max: number) => (asked && asked > 0 ? Math.min(asked, max) : max);
-  const created: any = await strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_JOB_UID, {
+  const created: any = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_JOB_UID).entries.create(AGENT_JOB_UID, {
     tenantKey: eff.key, ownerEmail: user.email, ownerUserId: String(user.id), engine: eff.engine || "strapi",
     threadId: j.threadId, template: j.template, title: j.title.trim().slice(0, 120), goal: j.goal, params: j.params,
     lang: j.lang, requiredLevel: j.requiredLevel, policySnapshot: jobPolicyOf(policy), onQuestion: "wait",
@@ -2299,7 +2307,7 @@ export async function listAgentJobs(): Promise<any[]> {
   if (!eff) return [];
   const filter: NonNullable<EntryQuery["filter"]> = [{ field: "tenantKey", op: "eq", value: eff.key }];
   if (!isWorkspaceAdmin(eff, user.email)) filter.push({ field: "ownerEmail", op: "eq", value: user.email || "" });
-  const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_JOB_UID, { filter, sort: "createdAt:DESC", pageSize: 100 }));
+  const { data } = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_JOB_UID).entries.list<any>(AGENT_JOB_UID, { filter, sort: "createdAt:DESC", pageSize: 100 }));
   return data.map(agentJobView);
 }
 
@@ -2424,7 +2432,7 @@ function agentScheduleView(row: any): any {
 
 async function loadScheduleForCaller(id: string, user: CurrentUser): Promise<{ row: any; eff: Tenant; isOwner: boolean }> {
   const eff = await resolveEffectiveTenant(user.email);
-  const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_SCHEDULE_UID, id)).catch(() => null);
+  const row: any = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_SCHEDULE_UID).entries.get(AGENT_SCHEDULE_UID, id)).catch(() => null);
   const isOwner = (row?.ownerEmail || "").toLowerCase() === (user.email || "").toLowerCase();
   if (!row || !eff || row.tenantKey !== eff.key || !(isOwner || isWorkspaceAdmin(eff, user.email))) throw new CmsError("Unknown schedule", 404);
   return { row, eff, isOwner };
@@ -2457,7 +2465,7 @@ async function checkSchedule(eff: Tenant, policy: AgentPolicy, input: AgentSched
 }
 
 async function countActiveSchedules(tenantKey: string): Promise<number> {
-  const { total } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_SCHEDULE_UID, {
+  const { total } = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_SCHEDULE_UID).entries.list<any>(AGENT_SCHEDULE_UID, {
     pageSize: 1, filter: [{ field: "tenantKey", op: "eq", value: tenantKey }, { field: "enabled", op: "eq", value: true }],
   }));
   return total;
@@ -2469,7 +2477,7 @@ export async function listAgentSchedules(): Promise<any[]> {
   if (!eff) return [];
   const filter: NonNullable<EntryQuery["filter"]> = [{ field: "tenantKey", op: "eq", value: eff.key }];
   if (!isWorkspaceAdmin(eff, user.email)) filter.push({ field: "ownerEmail", op: "eq", value: user.email || "" });
-  const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_SCHEDULE_UID, { filter, sort: "createdAt:DESC", pageSize: 100 }));
+  const { data } = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_SCHEDULE_UID).entries.list<any>(AGENT_SCHEDULE_UID, { filter, sort: "createdAt:DESC", pageSize: 100 }));
   return data.map(agentScheduleView);
 }
 
@@ -2482,7 +2490,7 @@ export async function createAgentSchedule(input: AgentScheduleInput): Promise<an
   const active = await countActiveSchedules(eff.key);
   if (active >= limits.agentSchedules) throw new CmsError(`This workspace already has ${active} active schedules, the most its plan allows.`, 429);
   const now = Date.now();
-  const created: any = await strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_SCHEDULE_UID, {
+  const created: any = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_SCHEDULE_UID).entries.create(AGENT_SCHEDULE_UID, {
     tenantKey: eff.key, ownerEmail: user.email, ownerUserId: String(user.id), engine: eff.engine || "strapi",
     name: String(input.name || job.title).trim().slice(0, 120), template: job.template, params, lang, recurrence,
     enabled: true, nextRunAt: new Date(nextOccurrence(recurrence, now)).toISOString(), runSeq: 0, consecutiveFailures: 0,
@@ -2506,7 +2514,7 @@ export async function updateAgentSchedule(id: string, input: AgentScheduleInput)
 
   if (input.enabled === false && Object.keys(input).every((k) => k === "enabled")) {
     const patch = { enabled: false, disabledReason: "user", disabledAt: new Date().toISOString(), runSeq: seq };
-    await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_SCHEDULE_UID, row.documentId, patch));
+    await strapiBookkeeping(() => bookkeepingAdapter(AGENT_SCHEDULE_UID).entries.update(AGENT_SCHEDULE_UID, row.documentId, patch));
     await writeAudit("agent_schedule_disable", AGENT_SCHEDULE_UID, row.documentId, user, eff.key);
     return agentScheduleView({ ...row, ...patch });
   }
@@ -2531,7 +2539,7 @@ export async function updateAgentSchedule(id: string, input: AgentScheduleInput)
     authorizedAt: new Date(now).toISOString(), authorizedUntil: authorizationUntil(now),
     requiredLevel: job.requiredLevel, policySnapshot: jobPolicyOf(policy),
   };
-  await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_SCHEDULE_UID, row.documentId, patch));
+  await strapiBookkeeping(() => bookkeepingAdapter(AGENT_SCHEDULE_UID).entries.update(AGENT_SCHEDULE_UID, row.documentId, patch));
   await writeAudit("agent_schedule_update", AGENT_SCHEDULE_UID, row.documentId, user, eff.key);
   return agentScheduleView({ ...row, ...patch });
 }
@@ -2540,7 +2548,7 @@ export async function deleteAgentSchedule(id: string): Promise<void> {
   assertNotActing("delete schedules");
   const user = await requireUser();
   const { row, eff } = await loadScheduleForCaller(id, user);
-  await strapiBookkeeping(() => strapiAdapter.entries.remove(AGENT_SCHEDULE_UID, row.documentId));
+  await strapiBookkeeping(() => bookkeepingAdapter(AGENT_SCHEDULE_UID).entries.remove(AGENT_SCHEDULE_UID, row.documentId));
   await writeAudit("agent_schedule_delete", AGENT_SCHEDULE_UID, row.documentId, user, eff.key);
 }
 
@@ -2566,7 +2574,7 @@ export async function processAgentScheduleTick(): Promise<TickReport> {
       return { verdict: checked.verdict, schedulesOn: Boolean(t?.features?.agent?.schedules && planLimit(t.plan).agentSchedules) };
     },
     async lastJob(jobId) {
-      const j: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_JOB_UID, jobId)).catch(() => null);
+      const j: any = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_JOB_UID).entries.get(AGENT_JOB_UID, jobId)).catch(() => null);
       return j ? { runState: j.runState, outcome: j.outcome } : null;
     },
     async prepare(s, policy) {

@@ -5,11 +5,26 @@
 // changed it first.
 import "server-only";
 import { STRAPI_INTERNAL_SECRET, STRAPI_URL } from "@/lib/config";
+import { controlQueueConfig, controlQueueRoute } from "@/lib/cms/queue-store";
 import { CmsError } from "@/lib/cms/types";
 import type { AdvancePatch, AgentScheduleRow, DisablePatch } from "./schedules";
 import type { AgentJobRow, JobStore } from "./types";
 
+/** Strapi's internal endpoints, or webx-control's queue when WEBX_CONTROL_QUEUE moves jobs and schedules there. */
 async function call<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const control = controlQueueConfig();
+  if (control) {
+    const route = controlQueueRoute(path);
+    const r = await fetch(`${control.baseUrl}/internal/${route.path}`, {
+      method: route.method,
+      headers: { Authorization: `Bearer ${control.token}`, ...(route.method === "POST" ? { "Content-Type": "application/json" } : {}) },
+      body: route.method === "POST" ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new CmsError(`${path} failed: ${j?.error?.message || j?.error || r.status}`, r.status);
+    return j as T;
+  }
   if (!STRAPI_INTERNAL_SECRET) throw new CmsError("Background jobs need STRAPI_INTERNAL_SECRET to be configured", 500);
   const r = await fetch(`${STRAPI_URL}/api/internal/${path}`, {
     method: "POST",

@@ -123,7 +123,7 @@ pub fn remove(conn: &Connection, id: &str) -> Result<bool, String> {
 }
 
 /// Newest first.
-pub fn list(conn: &Connection, tenant: Option<&str>, owner: Option<&str>, page: usize, page_size: usize) -> Result<(Vec<Value>, usize), String> {
+pub fn list(conn: &Connection, tenant: Option<&str>, owner: Option<&str>, enabled: Option<bool>, created_from: Option<i64>, page: usize, page_size: usize) -> Result<(Vec<Value>, usize), String> {
     let mut wh = vec!["1=1".to_string()];
     let mut args: Vec<rusqlite::types::Value> = Vec::new();
     for (col, val) in [("tenant_key", tenant), ("owner_email", owner)] {
@@ -131,6 +131,14 @@ pub fn list(conn: &Connection, tenant: Option<&str>, owner: Option<&str>, page: 
             wh.push(format!("{col} = ?"));
             args.push(rusqlite::types::Value::Text(v.to_string()));
         }
+    }
+    if let Some(on) = enabled {
+        wh.push("enabled = ?".to_string());
+        args.push(rusqlite::types::Value::Integer(on as i64));
+    }
+    if let Some(ms) = created_from {
+        wh.push("created_ms >= ?".to_string());
+        args.push(rusqlite::types::Value::Integer(ms));
     }
     let w = wh.join(" AND ");
     let total: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM agent_schedules WHERE {w}"), rusqlite::params_from_iter(args.iter()), |r| r.get(0)).map_err(e)?;
@@ -293,7 +301,7 @@ mod tests {
         let b = advance(&c, &json!({"documentId": id, "expectedSeq": 1, "nextRunAt": iso(T0 + 1), "job": job("same")}), T0).unwrap().unwrap();
         assert_eq!(a["jobId"], b["jobId"]);
         assert_eq!(b["existing"], true);
-        assert_eq!(jobs::list(&c, &jobs::Filters { tenant: None, owner: None, state: None }, 1, 50).unwrap().1, 1);
+        assert_eq!(jobs::list(&c, &jobs::Filters { tenant: None, owner: None, state: None, created_from: None }, 1, 50).unwrap().1, 1);
     }
 
     #[test]
@@ -334,6 +342,18 @@ mod tests {
         assert_eq!(after["consecutiveFailures"], 3);
         assert!(disable(&c, &json!({"documentId": id}), T0).unwrap().is_err());
         assert!(due(&c, T0 + 1).unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_list_filters_on_enabled_and_creation_time() {
+        let c = db();
+        let a = sched(&c, &iso(T0));
+        sched(&c, &iso(T0));
+        update(&c, a["documentId"].as_str().unwrap(), &json!({"enabled": false}), 2000).unwrap();
+        assert_eq!(list(&c, Some("dga"), None, Some(true), None, 1, 10).unwrap().1, 1);
+        assert_eq!(list(&c, Some("dga"), None, Some(false), None, 1, 10).unwrap().1, 1);
+        assert_eq!(list(&c, None, None, None, Some(1000), 1, 10).unwrap().1, 2, "created at 1000 counts: the bound is inclusive");
+        assert_eq!(list(&c, None, None, None, Some(1001), 1, 10).unwrap().1, 0);
     }
 
     #[test]

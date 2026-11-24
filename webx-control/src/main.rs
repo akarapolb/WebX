@@ -213,6 +213,50 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
     }
 }
 
+/// The list query of jobs and schedules: plain parameters (tenantKey, ownerEmail, runState, enabled, page, pageSize) and
+/// the `filter=field:op:value` / `sort=createdAt:DESC` form Studio's adapters send. Anything else is refused.
+#[derive(Default)]
+struct QueueQuery {
+    tenant: Option<String>,
+    owner: Option<String>,
+    state: Option<String>,
+    enabled: Option<bool>,
+    created_from: Option<i64>,
+    page: usize,
+    size: usize,
+}
+
+fn queue_query(raw: Option<&str>) -> Result<QueueQuery, String> {
+    let mut q = QueueQuery { page: 1, size: 25, ..Default::default() };
+    for pair in raw.unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        let v = percent_decode(v);
+        match k {
+            "tenantKey" => q.tenant = Some(v),
+            "ownerEmail" => q.owner = Some(v),
+            "runState" => q.state = Some(v),
+            "enabled" => q.enabled = Some(v == "true"),
+            "page" => q.page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
+            "pageSize" => q.size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(200),
+            "sort" if v == "createdAt:DESC" => {}
+            "filter" => {
+                let mut it = v.splitn(3, ':');
+                let (field, op, val) = (it.next().unwrap_or(""), it.next().unwrap_or(""), it.next().unwrap_or(""));
+                match (field, op) {
+                    ("tenantKey", "eq") => q.tenant = Some(val.to_string()),
+                    ("ownerEmail", "eq") => q.owner = Some(val.to_string()),
+                    ("runState", "eq") => q.state = Some(val.to_string()),
+                    ("enabled", "eq") => q.enabled = Some(val == "true"),
+                    ("createdAt", "gte") => q.created_from = Some(jobs::parse_iso(val).ok_or("createdAt is not a time")?),
+                    _ => return Err(format!("unsupported filter {field}:{op}")),
+                }
+            }
+            _ => return Err(format!("unsupported parameter {k}")),
+        }
+    }
+    Ok(q)
+}
+
 fn percent_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -368,21 +412,9 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             }
         }
         ("GET", ["jobs"]) => {
-            let (mut tenant, mut owner, mut state, mut page, mut size) = (None, None, None, 1usize, 25usize);
-            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
-                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-                let v = percent_decode(v);
-                match k {
-                    "tenantKey" => tenant = Some(v),
-                    "ownerEmail" => owner = Some(v),
-                    "runState" => state = Some(v),
-                    "page" => page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
-                    "pageSize" => size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(200),
-                    _ => return bad(format!("unsupported parameter {k}")),
-                }
-            }
-            match jobs::list(&conn, &jobs::Filters { tenant: tenant.as_deref(), owner: owner.as_deref(), state: state.as_deref() }, page, size) {
-                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": page, "pageSize": size, "pageCount": total.div_ceil(size), "total": total}}})).into_response(),
+            let q = match queue_query(raw.as_deref()) { Ok(q) => q, Err(m) => return bad(m) };
+            match jobs::list(&conn, &jobs::Filters { tenant: q.tenant.as_deref(), owner: q.owner.as_deref(), state: q.state.as_deref(), created_from: q.created_from }, q.page, q.size) {
+                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": q.page, "pageSize": q.size, "pageCount": total.div_ceil(q.size), "total": total}}})).into_response(),
                 Err(m) => bad(m),
             }
         }
@@ -436,20 +468,9 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             }
         }
         ("GET", ["schedules"]) => {
-            let (mut tenant, mut owner, mut page, mut size) = (None, None, 1usize, 25usize);
-            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
-                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-                let v = percent_decode(v);
-                match k {
-                    "tenantKey" => tenant = Some(v),
-                    "ownerEmail" => owner = Some(v),
-                    "page" => page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
-                    "pageSize" => size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(200),
-                    _ => return bad(format!("unsupported parameter {k}")),
-                }
-            }
-            match schedules::list(&conn, tenant.as_deref(), owner.as_deref(), page, size) {
-                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": page, "pageSize": size, "pageCount": total.div_ceil(size), "total": total}}})).into_response(),
+            let q = match queue_query(raw.as_deref()) { Ok(q) => q, Err(m) => return bad(m) };
+            match schedules::list(&conn, q.tenant.as_deref(), q.owner.as_deref(), q.enabled, q.created_from, q.page, q.size) {
+                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": q.page, "pageSize": q.size, "pageCount": total.div_ceil(q.size), "total": total}}})).into_response(),
                 Err(m) => bad(m),
             }
         }
