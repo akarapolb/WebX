@@ -1,0 +1,15 @@
+[package]
+name = "webx-agent"
+version = "0.1.0"
+edition = "2021"
+description = "WebX agent worker: runs the assistant's background jobs on MicroAgent (docs/target-architecture.md, decision D13)"
+
+[dependencies]
+# pinned to a commit: MicroAgent is a young crate (see the risks in docs/target-architecture.md)
+microagent = { git = "https://github.com/akarapolb/MicroAgent", rev = "c5abc70fc15cc548c29326cda4f101891c791ebd" }
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }
+
+[profile.release]
+opt-level = 3
+strip = true

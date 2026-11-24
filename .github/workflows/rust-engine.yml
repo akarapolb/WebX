@@ -15,6 +15,7 @@ on:
     paths:
       - "rust-engine/**"
       - "webx-control/**"
+      - "webx-agent/**"
       - "content-model/**"
       - "webx-studio/lib/cms/rust.ts"
       - "webx-studio/tests/conformance/**"
@@ -29,6 +30,7 @@ on:
     paths:
       - "rust-engine/**"
       - "webx-control/**"
+      - "webx-agent/**"
       - "content-model/**"
       - "public-site/lib/cms.ts"
       - "public-site/lib/publicCms*"
@@ -54,10 +56,15 @@ jobs:
             ~/.cargo/git
             rust-engine/target
             webx-control/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('rust-engine/Cargo.lock', 'webx-control/Cargo.lock') }}
+            webx-agent/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('rust-engine/Cargo.lock', 'webx-control/Cargo.lock', 'webx-agent/Cargo.lock') }}
       - run: cargo test --locked
       - name: webx-control unit tests
         working-directory: webx-control
+        run: cargo test --locked
+      # C5: the agent worker on MicroAgent, against a mock model and a mock tool gateway
+      - name: webx-agent job tests
+        working-directory: webx-agent
         run: cargo test --locked
 
   build-identical:
