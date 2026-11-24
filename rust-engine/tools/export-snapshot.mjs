@@ -58,9 +58,11 @@ for (const api of readdirSync(join(MODEL, "api"))) {
       i18n: !!s.pluginOptions?.i18n?.localized,
       attrs: attrMap(s.attributes),
       // every attribute (name, type, required), for the write API's type listing
-      fields: Object.fromEntries(Object.entries(s.attributes || {}).map(([n, a]) => [n, { type: a.type, ...(a.required ? { required: true } : {}) }])),
+      fields: Object.fromEntries(Object.entries(s.attributes || {}).map(([n, a]) => [n, { type: a.type, ...(a.required ? { required: true } : {}), ...(a.unique ? { unique: true } : {}) }])),
       // fields the write API requires before it publishes (docs/engine-contract.md, section 8)
       required: Object.entries(s.attributes || {}).filter(([, a]) => a.required).map(([n]) => n),
+      // fields whose value must be unique per tenant + locale; the write API refuses a duplicate with 400
+      unique: Object.entries(s.attributes || {}).filter(([, a]) => a.unique).map(([n]) => n),
     };
   }
 }

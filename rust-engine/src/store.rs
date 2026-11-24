@@ -59,7 +59,7 @@ pub fn write_doc(conn: &mut Connection, doc: &Value) -> Result<usize, String> {
     let tx = conn.transaction().map_err(e)?;
     tx.execute_batch(DDL).map_err(e)?;
     tx.execute_batch(DDL2).map_err(e)?;
-    tx.execute_batch(crate::media::DDL).map_err(e)?;
+    crate::media::ensure(&tx).map_err(e)?;
     tx.execute_batch(&format!("PRAGMA user_version = {VERSION};")).map_err(e)?;
 
     let obj = doc.as_object().ok_or("store: the snapshot is not an object")?;
@@ -174,7 +174,7 @@ pub fn open_rw(path: &str) -> Result<Connection, String> {
     let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(e)?;
     if !(OLDEST..=VERSION).contains(&v) { return Err(format!("store: unsupported database version {v}")); }
     conn.execute_batch(DDL2).map_err(e)?;
-    conn.execute_batch(crate::media::DDL).map_err(e)?;
+    crate::media::ensure(&conn).map_err(e)?;
     conn.execute_batch(&format!("PRAGMA user_version = {VERSION};")).map_err(e)?;
     Ok(conn)
 }

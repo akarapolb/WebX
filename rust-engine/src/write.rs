@@ -21,9 +21,11 @@ pub struct WErr {
     pub status: u16,
     pub name: &'static str,
     pub message: String,
+    /// Strapi's `error.details` (`{}` when there is nothing to add)
+    pub details: Value,
 }
 fn err<T>(status: u16, name: &'static str, message: impl Into<String>) -> Result<T, WErr> {
-    Err(WErr { status, name, message: message.into() })
+    Err(WErr { status, name, message: message.into(), details: json!({}) })
 }
 fn not_found<T>() -> Result<T, WErr> {
     err(404, "NotFoundError", "Not Found")
@@ -161,6 +163,30 @@ impl Engine {
         v
     }
 
+    /// Strapi's unique rule: another entry of the same type, tenant and locale
+    /// (draft rows; `except` is the document being saved) must not hold the same
+    /// non-null value in a field the type lists under `unique` (or whose `fields`
+    /// entry says `unique: true`). Fails 400 with Strapi's ValidationError shape.
+    fn check_unique(&self, plural: &str, tenant: &str, locale: &str, except: Option<&str>, data: &Map<String, Value>) -> Result<(), WErr> {
+        let t = &self.snap.doc["schema"]["types"][plural];
+        let mut names: Vec<&str> = t["unique"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+        if let Some(f) = t["fields"].as_object() {
+            names.extend(f.iter().filter(|(_, a)| a["unique"] == true).map(|(n, _)| n.as_str()));
+        }
+        let mut errors = Vec::new();
+        for name in names {
+            let Some(v) = data.get(name).filter(|v| !v.is_null()) else { continue };
+            let dup = rows(&self.drafts, plural, tenant, locale).iter().any(|r| except.is_none_or(|d| !same_doc(r, d)) && r.get(name) == Some(v));
+            if dup && !errors.iter().any(|e: &Value| e["path"][0] == name) {
+                errors.push(json!({"path": [name], "message": "This attribute must be unique", "name": "ValidationError", "value": v}));
+            }
+        }
+        if errors.is_empty() {
+            return Ok(());
+        }
+        Err(WErr { status: 400, name: "ValidationError", message: "This attribute must be unique".into(), details: json!({"errors": errors}) })
+    }
+
     fn new_row(&self, plural: &str, doc_id: &str, locale: &str, data: Map<String, Value>) -> Value {
         let now = now_iso();
         let mut row = json!({"id": self.max_id(plural) + 1, "documentId": doc_id});
@@ -226,6 +252,7 @@ impl Engine {
         }
         self.check_locale(locale)?;
         let data = body_data(body)?;
+        self.check_unique(plural, tenant, locale, None, &data)?;
         let doc_id = new_document_id();
         let row = self.new_row(plural, &doc_id, locale, data);
         rows_mut(&mut self.drafts, plural, tenant, locale).push(row.clone());
@@ -243,6 +270,7 @@ impl Engine {
             return not_found();
         }
         let data = body_data(body)?;
+        self.check_unique(plural, tenant, locale, Some(doc_id), &data)?;
         let row = match self.draft(plural, tenant, locale, doc_id).cloned() {
             Some(mut r) => {
                 for (k, v) in data {
@@ -512,6 +540,53 @@ mod tests {
         assert_eq!(e.create("faqs", "dga", "th", &json!({"data": {"documentId": "x"}})).err().unwrap().status, 400);
         assert_eq!(e.create("faqs", "dga", "xx", &body("a")).err().unwrap().status, 400);
         assert_eq!(e.create("faqs", "dga", "th", &json!({"question": "a"})).err().unwrap().status, 400);
+    }
+
+    fn unique_engine() -> Engine {
+        let doc = json!({"format": 1, "defaultTenant": "dga", "tenants": ["dga", "pea"], "locales": ["th", "en"],
+            "schema": {"types": {"pages": {"attrs": {}, "unique": ["slug"], "required": []}}, "components": {}},
+            "special": {}, "data": {"pages": {"dga": {"th": []}}}});
+        Engine::new(Snapshot::from_doc(doc).unwrap())
+    }
+    fn slug(s: &str) -> Value {
+        json!({"data": {"slug": s}})
+    }
+
+    #[test]
+    fn unique_rejects_a_duplicate_in_the_same_locale_with_strapis_shape() {
+        let mut e = unique_engine();
+        let id = id_of(&e.create("pages", "dga", "th", &slug("a")).unwrap().0);
+        let r = e.create("pages", "dga", "th", &slug("a")).err().unwrap();
+        assert_eq!((r.status, r.name, r.message.as_str()), (400, "ValidationError", "This attribute must be unique"));
+        assert_eq!(r.details["errors"][0]["path"][0], "slug");
+        let other = id_of(&e.create("pages", "dga", "th", &slug("b")).unwrap().0);
+        assert_eq!(e.update("pages", "dga", "th", &other, &slug("a")).err().unwrap().status, 400);
+        // saving an entry with its own value is not a duplicate
+        assert!(e.update("pages", "dga", "th", &id, &slug("a")).is_ok());
+        // the failed update changed nothing
+        assert_eq!(e.get("pages", "dga", "th", &other).unwrap()["data"]["slug"], "b");
+    }
+
+    #[test]
+    fn unique_is_per_locale_and_per_tenant_and_ignores_null() {
+        let mut e = unique_engine();
+        let id = id_of(&e.create("pages", "dga", "th", &slug("a")).unwrap().0);
+        assert!(e.update("pages", "dga", "en", &id, &slug("a")).is_ok(), "another locale of the same document");
+        assert!(e.create("pages", "dga", "en", &slug("a")).is_err(), "now taken in en");
+        assert!(e.create("pages", "pea", "th", &slug("a")).is_ok(), "another tenant");
+        assert!(e.create("pages", "dga", "th", &json!({"data": {"slug": null}})).is_ok());
+        assert!(e.create("pages", "dga", "th", &json!({"data": {"slug": null}})).is_ok());
+        assert!(e.create("pages", "dga", "th", &json!({"data": {"title": "t"}})).is_ok());
+    }
+
+    #[test]
+    fn unique_reads_the_field_flag_when_there_is_no_list() {
+        let doc = json!({"format": 1, "defaultTenant": "dga", "tenants": ["dga"], "locales": ["th"],
+            "schema": {"types": {"pages": {"fields": {"slug": {"type": "string", "unique": true}}}}, "components": {}},
+            "special": {}, "data": {"pages": {"dga": {"th": []}}}});
+        let mut e = Engine::new(Snapshot::from_doc(doc).unwrap());
+        e.create("pages", "dga", "th", &slug("a")).unwrap();
+        assert_eq!(e.create("pages", "dga", "th", &slug("a")).err().unwrap().status, 400);
     }
 
     #[test]

@@ -8,7 +8,7 @@
 //
 //   node tools/write-test.mjs [--port 1391]
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,11 @@ const sh = (args) => {
   return r.stdout.trim();
 };
 
-sh(["import", "--snapshot", "snapshot/snapshot.json", "--db", db]);
+// the real snapshot, with the faqs type's `question` marked unique (what the exporter writes for "unique": true)
+const snap = JSON.parse(readFileSync(join(root, "snapshot", "snapshot.json"), "utf8"));
+snap.schema.types.faqs.unique = ["question"];
+writeFileSync(join(dir, "snapshot.json"), JSON.stringify(snap));
+sh(["import", "--snapshot", join(dir, "snapshot.json"), "--db", db]);
 const dga = sh(["token", "--db", db, "--tenant", "dga", "--label", "test"]);
 const pea = sh(["token", "--db", db, "--tenant", "pea"]);
 
@@ -107,11 +111,26 @@ try {
   check("body must carry data: 400", (await call("POST", "/write/faqs", dga, { question: "x" })).status === 400);
   check("engine fields cannot be set: 400", (await call("POST", "/write/faqs", dga, { data: { documentId: "x" } })).status === 400);
 
+  // unique fields: a duplicate in the same tenant + locale is refused with Strapi's 400 shape
+  const u1 = await call("POST", "/write/faqs?locale=th", dga, { data: { question: "unique-q" } });
+  const dup = await call("POST", "/write/faqs?locale=th", dga, { data: { question: "unique-q" } });
+  check("unique: duplicate create is 400 ValidationError", dup.status === 400 && dup.json.error.name === "ValidationError" && dup.json.error.message === "This attribute must be unique" && dup.json.error.details.errors[0].path[0] === "question", JSON.stringify(dup));
+  const u2 = await call("POST", "/write/faqs?locale=th", dga, { data: { question: "unique-q2" } });
+  const upd = await call("PUT", `/write/faqs/${u2.json.data.documentId}?locale=th`, dga, { data: { question: "unique-q" } });
+  check("unique: update to a taken value is 400", upd.status === 400 && upd.json.error.details.errors[0].path[0] === "question", JSON.stringify(upd));
+  check("unique: saving an entry with its own value is fine", (await call("PUT", `/write/faqs/${u1.json.data.documentId}?locale=th`, dga, { data: { question: "unique-q" } })).status === 200);
+  check("unique: same value in another locale is fine", (await call("PUT", `/write/faqs/${u1.json.data.documentId}?locale=en`, dga, { data: { question: "unique-q" } })).status === 200);
+  check("unique: same value in another tenant is fine", (await call("POST", "/write/faqs?locale=th", pea, { data: { question: "unique-q" } })).status === 200);
+  check("unique: the failed update left the entry alone", (await call("GET", `/write/faqs/${u2.json.data.documentId}?locale=th`, dga)).json.data.question === "unique-q2");
+  for (const d of [u1, u2]) await call("DELETE", `/write/faqs/${d.json.data.documentId}`, dga);
+
   // media (R4)
-  const png = Buffer.from("89504e470d0a1a0a", "hex");
+  // a real 3 x 2 PNG: width and height come from its header
+  const png = Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.from([0, 0, 0, 3, 0, 0, 0, 2, 8, 2, 0, 0, 0])]);
   const upRes = await fetch(`${BASE}/write/_media?name=${encodeURIComponent("my logo.png")}`, { method: "POST", headers: { authorization: `Bearer ${dga}`, "content-type": "image/png" }, body: png });
   const upj = await upRes.json();
   check("media upload: 200 with url and mime", upRes.status === 200 && upj.data.mime === "image/png" && upj.data.url.startsWith("/uploads/dga/") && upj.data.name === "my logo.png", JSON.stringify(upj));
+  check("media upload: width and height from the header", upj.data.width === 3 && upj.data.height === 2, JSON.stringify(upj));
   const file = await fetch(`${BASE}${upj.data.url}`);
   check("the file is served from /uploads, byte for byte", file.status === 200 && Buffer.from(await file.arrayBuffer()).equals(png));
   const mid = upj.data.documentId;

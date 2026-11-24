@@ -190,7 +190,10 @@ async fn api(State(app): State<Shared>, Path(rest): Path<String>, RawQuery(raw):
     }
 }
 
-fn werr(e: write::WErr) -> Response { error(StatusCode::from_u16(e.status).unwrap(), e.name, &e.message) }
+fn werr(e: write::WErr) -> Response {
+    let status = StatusCode::from_u16(e.status).unwrap();
+    (status, Json(json!({"data": null, "error": {"status": e.status, "name": e.name, "message": e.message, "details": e.details}}))).into_response()
+}
 
 /// The write API, /write/<plural>[/<documentId>[/publish|unpublish]], every call
 /// scoped to the tenant of the bearer token (docs/engine-contract.md, section 8).
@@ -254,7 +257,7 @@ fn media_api(app: &App, conn: &Mutex<rusqlite::Connection>, method: &Method, ten
             let mime = headers.get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("application/octet-stream").to_string();
             let file = format!("{}-{}", write::random_hex(6), media::safe(&name));
             if let Err(e) = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(&file), body)) { return fail(format!("cannot save the file: {e}")); }
-            match media::insert(&c, tenant, &write::random_hex(12), &name, &mime, &file, body.len() as i64, &write::now_iso()) {
+            match media::insert(&c, tenant, &write::random_hex(12), &name, &mime, &file, body.len() as i64, media::dimensions(&body), &write::now_iso()) {
                 Ok(a) => Json(json!({"data": media::to_json(tenant, &a), "meta": {}})).into_response(),
                 Err(m) => { let _ = std::fs::remove_file(dir.join(&file)); fail(m) }
             }

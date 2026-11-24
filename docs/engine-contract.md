@@ -206,7 +206,11 @@ which is the only one the read API returns. `unpublish` removes the published
 version and keeps the draft. Validation: a draft may be saved incomplete
 (Strapi does), but an entry missing a required field is never published:
 `publish` fails with `CmsError` 400 (an engine may instead refuse the create
-with 400). Every publish/unpublish must trigger a public-site
+with 400). A field declared `"unique": true` in the content model must not repeat
+across entries of the same type, tenant and locale: `create` and `update` fail
+with 400 `ValidationError`, message `This attribute must be unique`, and
+`error.details.errors[]` of `{path: [field], message, name, value}` (Strapi's
+shape; null values are not compared). Every publish/unpublish must trigger a public-site
 rebuild (`webx-studio/lib/publicSiteBuild.ts`, or a webhook; see
 `docs/hosting-plan.md`).
 
@@ -221,7 +225,7 @@ The Rust engine (`rust-engine/`, started with `--db`) exposes the same
 operations as `/write/<plural>[/<documentId>[/publish|unpublish]]` instead of
 Strapi's admin paths, with a per-tenant bearer token instead of an admin login;
 see `rust-engine/README.md`. An adapter for it maps the `CmsAdapter` calls above
-onto these, media included (`/write/_media`); users are not in it (control plane, C2).
+onto these, media included (`/write/_media`, an image's `width` and `height` are read from its header on upload; thumbnails are not generated, `thumbnailUrl` is the file); users are not in it (control plane, C2).
 
 ## 9. Conformance
 

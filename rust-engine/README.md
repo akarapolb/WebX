@@ -99,9 +99,23 @@ never carry a path. Metadata is in the store's `media` table.
 | `PUT /write/_media/<documentId>` body `{caption, alt, tags}` | a key left out stays; `null` clears it |
 | `DELETE /write/_media/<documentId>` | removes the row and the file |
 
-An asset is `{id, documentId, url, thumbnailUrl, mime, name, size, caption, alt, tags}`
-with a relative `url` (`/uploads/<tenant>/...`). Width, height and resized
-thumbnails are not produced yet (`thumbnailUrl` is the file itself).
+An asset is `{id, documentId, url, thumbnailUrl, mime, name, size, width, height, caption, alt, tags}`
+with a relative `url` (`/uploads/<tenant>/...`). `width` and `height` (pixels)
+are read from the header of a PNG, GIF, JPEG or WebP upload, `null` for any other
+file; a database made before this gets the two columns added at start. Resized
+thumbnails are **not done**: they need an image decoder/encoder (the `image`
+crate, a large dependency tree), so `thumbnailUrl` is the file itself.
+
+### Unique fields
+
+An attribute with `"unique": true` in `content-model/` (the exporter writes a
+`unique` list per type; `fields[name].unique` also counts) is enforced on create
+and update: another draft of the same type, tenant and locale with the same
+non-null value gives 400 `ValidationError` ("This attribute must be unique",
+`details.errors[].path`), as Strapi does. Strapi's rule is global across tenants;
+here it is per tenant, which is what the engine's isolation implies. An export made before
+this change has no `unique` list: export again. The Studio conformance suite
+(`webx-studio`) has no case for it yet; `tools/write-test.mjs` covers it.
 
 ### A tenant that lives on this engine (R5)
 
