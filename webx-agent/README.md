@@ -17,6 +17,20 @@ LITELLM_URL=http://localhost:4000/v1 WEBX_TOOLS_URL=http://localhost:3000/api/in
   --autonomy draft --state ./agent-state --max-steps 40
 ```
 
+## Serving the queue
+
+```sh
+WEBX_CONTROL_URL=http://localhost:1400 WEBX_CONTROL_SERVICE_TOKEN=... LITELLM_URL=... WEBX_TOOLS_URL=... WEBX_TOOLS_SECRET=... \
+  target/release/webx-agent serve [--once] [--worker-id w1] [--poll-seconds 5] [--max-steps 40] [--default-cap 2] [--heartbeat-ms 20000]
+```
+
+`serve` leases jobs from the queue in webx-control (`../webx-control`, section "Job queue") and runs each in a slice as its
+owner. The agent's snapshot is saved as the job's checkpoint after every step (which also extends the lease), so any worker
+can pick a job up where another stopped. A heartbeat thread runs beside the job: it keeps the lease and hears the user's cancel
+and pause (a cancel stops the agent and reports `cancelled`; a pause ends the slice and reports `paused`); if the lease is lost
+the worker stops at once and writes nothing more. A slice that runs out of steps goes back to the queue; `--once` claims what
+is runnable, runs it and exits. Several workers can share one queue.
+
 ## The tool gateway (Studio serves it)
 
 ```
@@ -51,7 +65,8 @@ finished job clears its snapshot.
 ## Tests
 
 ```sh
-cargo test    # 7 job tests against a mock model and a mock gateway over real HTTP
+cargo test                       # 8 job tests against a mock model and a mock gateway over real HTTP
+node tools/serve-test.mjs        # the real worker, the real job queue, a mock model and a mock Studio gateway
 ```
 
 They cover the happy path (tools run as the owner, with the bearer token), a held-back write declined without reaching
@@ -60,6 +75,6 @@ resume across two worker processes, and a model that keeps failing.
 
 ## Not yet
 
-The job and schedule queue in the control plane (leasing, `Trigger` for schedules, `SnapshotStore` over HTTP),
+Schedules (recurring jobs, with MicroAgent's `Trigger`), job creation from Studio (its jobs API still writes to Strapi),
 memory notes and skills, the existing Node worker's behaviour parity (`webx-studio/lib/agent/worker.ts`), and the agent
 evals (`eval/`) run against this worker.

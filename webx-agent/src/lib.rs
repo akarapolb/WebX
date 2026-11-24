@@ -11,8 +11,11 @@
 //!
 //! After every step the agent's snapshot is saved, so a job resumes where it stopped
 //! after a restart.
+pub mod control;
 pub mod gateway;
 pub mod job;
+pub mod serve;
 
 pub use gateway::{ModelClient, ToolGateway};
-pub use job::{run_job, Autonomy, FileStore, Job, JobResult, SnapshotStore};
+pub use control::ControlClient;
+pub use job::{run_job, run_job_with, Autonomy, FileStore, Interrupt, Job, JobResult, SnapshotStore};

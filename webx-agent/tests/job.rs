@@ -193,3 +193,29 @@ fn a_model_that_keeps_failing_ends_the_job_as_failed() {
     let r = run_job(&job("j6", Autonomy::Draft), Config::default(), &model, &gw, &mut store("fails"), 40).unwrap();
     assert!(r.stop.starts_with("failed"), "{}", r.stop);
 }
+
+#[test]
+fn an_interrupt_cancels_pauses_or_abandons_the_job_between_steps() {
+    use webx_agent::{run_job_with, Interrupt};
+    let run = |name: &str, what: Option<Interrupt>| {
+        let seen = Arc::new(Mutex::new(Seen::default()));
+        let (model, gw) = (start_model(vec![PLAN, READ, DONE], seen.clone()), start_gateway(seen.clone()));
+        let mut st = store(name);
+        let r = run_job_with(&job(name, Autonomy::Draft), Config::default(), &model, &gw, &mut st, 40, &move || what);
+        let kept = st.0.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false);
+        (r, kept, seen)
+    };
+    let (r, _, seen) = run("cancel", Some(Interrupt::Cancel));
+    assert_eq!(r.unwrap().stop, "stopped", "a cancel stops the agent");
+    assert!(seen.lock().unwrap().tools.iter().all(|(p, _, _)| p != "/run"), "and no tool runs after it");
+
+    let (r, kept, _) = run("pause", Some(Interrupt::Pause));
+    assert_eq!(r.unwrap().stop, "pause");
+    assert!(kept, "a pause keeps the snapshot, so the job can resume");
+
+    let (r, _, _) = run("lost", Some(Interrupt::LeaseLost));
+    assert_eq!(r.err().as_deref(), Some("lease lost"), "a lost lease abandons the job with nothing more written");
+
+    let (r, _, _) = run("none", None);
+    assert_eq!(r.unwrap().stop, "done");
+}

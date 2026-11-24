@@ -17,6 +17,7 @@
 
 mod audit;
 mod identity;
+mod jobs;
 mod records;
 mod registry;
 
@@ -74,6 +75,10 @@ fn now_iso() -> String {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
     format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{ms:03}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64
 }
 
 fn now_secs() -> i64 {
@@ -353,6 +358,74 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             Ok(false) => not_found(),
             Err(m) => fail(m),
         },
+        // the agent job queue (C5): the Rust worker and Studio use the same lease rules as the Strapi-backed queue
+        ("POST", ["jobs"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            match jobs::create(&conn, v.get("data").unwrap_or(&v), now_ms()) {
+                Ok(row) => Json(json!({"data": row})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
+        ("GET", ["jobs"]) => {
+            let (mut tenant, mut owner, mut state, mut page, mut size) = (None, None, None, 1usize, 25usize);
+            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+                let v = percent_decode(v);
+                match k {
+                    "tenantKey" => tenant = Some(v),
+                    "ownerEmail" => owner = Some(v),
+                    "runState" => state = Some(v),
+                    "page" => page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
+                    "pageSize" => size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(200),
+                    _ => return bad(format!("unsupported parameter {k}")),
+                }
+            }
+            match jobs::list(&conn, &jobs::Filters { tenant: tenant.as_deref(), owner: owner.as_deref(), state: state.as_deref() }, page, size) {
+                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": page, "pageSize": size, "pageCount": total.div_ceil(size), "total": total}}})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
+        ("GET", ["jobs", id]) => match jobs::get(&conn, id) {
+            Ok(Some(row)) => Json(json!({"data": row})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("POST", ["jobs", op @ ("claim" | "heartbeat" | "checkpoint" | "finish" | "control")]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let now = now_ms();
+            let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("");
+            if *op == "claim" {
+                let caps: std::collections::HashMap<String, i64> = v.get("caps").and_then(Value::as_object).map(|m| m.iter().filter_map(|(k, x)| x.as_i64().map(|n| (k.clone(), n))).collect()).unwrap_or_default();
+                let limit = v.get("limit").and_then(Value::as_u64).unwrap_or(1) as usize;
+                let cap = v.get("defaultCap").and_then(Value::as_i64).unwrap_or(2);
+                return match jobs::claim(&conn, s("workerId"), limit, &caps, cap, now) {
+                    Ok((rows, reaped)) => Json(json!({"jobs": rows, "reaped": reaped})).into_response(),
+                    Err(m) => fail(m),
+                };
+            }
+            if s("documentId").is_empty() { return bad("documentId is required".into()); }
+            if *op != "control" && s("leaseToken").is_empty() { return bad("documentId and leaseToken are required".into()); }
+            match *op {
+                "heartbeat" => match jobs::heartbeat(&conn, s("documentId"), s("leaseToken"), now) {
+                    Ok(Some((c, p))) => Json(json!({"ok": true, "cancelRequested": c, "pauseRequested": p})).into_response(),
+                    Ok(None) => Json(json!({"ok": false})).into_response(),
+                    Err(m) => fail(m),
+                },
+                "checkpoint" => match jobs::checkpoint(&conn, s("documentId"), s("leaseToken"), &v, now) {
+                    Ok(ok) => Json(json!({"ok": ok})).into_response(),
+                    Err(m) => fail(m),
+                },
+                "finish" => match jobs::finish(&conn, s("documentId"), s("leaseToken"), &v, now) {
+                    Ok(ok) => Json(json!({"ok": ok})).into_response(),
+                    Err(m) => bad(m),
+                },
+                _ => match jobs::control(&conn, s("documentId"), s("action"), v.get("answer").and_then(Value::as_str), now) {
+                    Ok(Some((ok, job))) => Json(json!({"ok": ok, "job": job})).into_response(),
+                    Ok(None) => not_found(),
+                    Err(m) => bad(m),
+                },
+            }
+        }
         ("GET", ["audit", id]) => match audit::get(&conn, id) {
             Ok(Some(row)) => Json(json!({"data": row})).into_response(),
             Ok(None) => not_found(),
@@ -385,6 +458,7 @@ async fn main() {
     conn.execute_batch(records::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(identity::DDL).unwrap_or_else(|e| panic!("{e}"));
     identity::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
     let key = identity::signing_key(&conn, std::env::var("WEBX_CONTROL_SIGNING_KEY").ok().as_deref()).unwrap_or_else(|e| panic!("{e}"));
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));

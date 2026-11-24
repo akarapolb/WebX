@@ -71,6 +71,17 @@ impl Job {
     }
 }
 
+/// Something that happened to the job while it ran, which the loop checks before each step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Interrupt {
+    /// the user asked to cancel: the agent is stopped
+    Cancel,
+    /// the user asked to pause: the slice ends and the snapshot stays
+    Pause,
+    /// another worker holds the job now: stop at once and write nothing more
+    LeaseLost,
+}
+
 pub struct JobResult {
     /// "done", "call limit", "declined", "stopped" or "failed: ..."
     pub stop: String,
@@ -119,7 +130,15 @@ pub fn offered_tools(listed: Vec<(Tool, Risk)>, autonomy: Autonomy) -> Vec<Tool>
 /// Run `job` to its end, or for at most `max_steps` model and tool steps (a slice, so one long job cannot hold
 /// the worker): then the result is "paused" and the snapshot stays, and running the same job again continues it.
 /// A snapshot is stored for every step taken; one already stored for this job id means the job resumes from it.
-pub fn run_job(job: &Job, mut cfg: Config, model: &ModelClient, gateway: &ToolGateway, store: &mut dyn SnapshotStore, max_steps: u32) -> Result<JobResult, String> {
+pub fn run_job(job: &Job, cfg: Config, model: &ModelClient, gateway: &ToolGateway, store: &mut dyn SnapshotStore, max_steps: u32) -> Result<JobResult, String> {
+    run_job_with(job, cfg, model, gateway, store, max_steps, &|| None)
+}
+
+/// `run_job` that also asks `interrupt` before each step (the worker's heartbeat tells it what the user asked for).
+pub fn run_job_with(
+    job: &Job, mut cfg: Config, model: &ModelClient, gateway: &ToolGateway, store: &mut dyn SnapshotStore, max_steps: u32,
+    interrupt: &dyn Fn() -> Option<Interrupt>,
+) -> Result<JobResult, String> {
     if job.autonomy == Autonomy::Off {
         return Ok(JobResult { stop: "declined".into(), summary: "The assistant is not allowed to act for this workspace.".into(), calls: 0, resumed: false, steps: 0 });
     }
@@ -144,6 +163,12 @@ pub fn run_job(job: &Job, mut cfg: Config, model: &ModelClient, gateway: &ToolGa
         if steps > max_steps {
             // out of steps for this slice: leave the snapshot, so the job continues next time
             return Ok(JobResult { stop: "paused".into(), summary: String::new(), calls: 0, resumed, steps: steps - 1 });
+        }
+        match interrupt() {
+            Some(Interrupt::Cancel) => step = agent.stop(),
+            Some(Interrupt::Pause) => return Ok(JobResult { stop: "pause".into(), summary: String::new(), calls: 0, resumed, steps: steps - 1 }),
+            Some(Interrupt::LeaseLost) => return Err("lease lost".into()),
+            None => {}
         }
         step = match step {
             Step::Ask(req) => match model.ask(&req) {

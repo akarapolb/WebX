@@ -145,6 +145,14 @@ jobs:
       # C4: users, memberships and signed tokens an engine can verify
       - name: Identity in webx-control
         run: node webx-control/tools/identity-test.mjs
+      # C5: the job queue, and the worker with the real queue (mock model and Studio gateway)
+      - name: Job queue in webx-control
+        run: node webx-control/tools/jobs-test.mjs
+      - name: Build webx-agent
+        working-directory: webx-agent
+        run: cargo build --release --locked
+      - name: Agent worker with the real job queue
+        run: node webx-agent/tools/serve-test.mjs
       - name: Strapi users to webx-control users, mapping
         run: node --test webx-control/tools/users-map.test.mjs
       - name: Write API test

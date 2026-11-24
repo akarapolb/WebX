@@ -131,6 +131,27 @@ trusting these tokens instead of Strapi's (with engines called by a service cred
 OIDC provider settings per workspace, MFA here, engines verifying tokens, custom-role assignments in the migration,
 and the security review D10 and the plan require before it ships.
 
+## Job queue (C5)
+
+The assistant's background jobs, leased to workers in slices (decision D13). The rules are a port of the ones Studio's
+workers use against Strapi (`strapi-cms/src/api/internal/controllers/agent-jobs.ts`), so the Rust worker
+(`../webx-agent`) and the Node worker behave alike. All behind the service token.
+
+| Call | Meaning |
+|---|---|
+| `POST /internal/jobs` body `{data: {tenantKey, ownerEmail, goal, ...}}` | queue a job (always `queued`; `notBefore` and `priority` allowed; other fields are kept) |
+| `GET /internal/jobs?tenantKey=&ownerEmail=&runState=&page=&pageSize=`, `GET /internal/jobs/<documentId>` | list (newest first) and read |
+| `POST /internal/jobs/claim` `{workerId, limit, caps, defaultCap}` | lease up to `limit` runnable jobs; `caps` is each workspace's running-job limit; one running job per owner |
+| `POST /internal/jobs/heartbeat` `{documentId, leaseToken}` | extend the lease; answers `{ok, cancelRequested, pauseRequested}`; `ok: false` means the lease is gone |
+| `POST /internal/jobs/checkpoint` `{documentId, leaseToken, checkpoint, checkpointSeq, eventSeq, progress, tokensUsed, events}` | save the run under the lease (also extends it); the newest 200 events are kept |
+| `POST /internal/jobs/finish` `{documentId, leaseToken, runState, ...}` | end a slice as `queued`, `paused`, `done`, `failed` or `cancelled`; releases the lease |
+| `POST /internal/jobs/control` `{documentId, action, answer?}` | a user's `cancel`, `pause`, `resume` or `answer`: a queued or paused job changes state, a running one gets a flag its worker hears at the next heartbeat |
+
+A lease lasts 90 s. A worker that stops heartbeating loses it: the next claim requeues the job with backoff (30 s, doubling), or
+pauses it when it crashed twice with no progress between (`stuck_crash`), or fails it after 5 attempts (`worker_lost`). The clock is
+this service's, so workers' clocks do not matter. `node tools/jobs-test.mjs` checks it on the real binary, including two workers
+claiming at the same moment and a restart in the middle of a job. Schedules (recurring jobs) are not here yet.
+
 ## Tests
 
 ```sh
