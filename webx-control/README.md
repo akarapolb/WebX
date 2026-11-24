@@ -113,7 +113,7 @@ today), and Studio then asks for a token here.
 
 | Call | Meaning |
 |---|---|
-| `PUT /admin/users/<email>` body `{name?, disabled?, memberships: [{tenantKey, role}]}` | create (201) or replace (200); email is kept lowercase |
+| `PUT /admin/users/<email>` body `{name?, disabled?, superAdmin?, memberships: [{tenantKey, role}]}` | create (201) or replace (200); email is kept lowercase; `superAdmin` marks a user tied to no workspace (Studio's unscoped admin), who may be issued a token for any workspace |
 | `GET /admin/users`, `GET`, `DELETE /admin/users/<email>` | the users |
 | `POST /internal/token` body `{email, tenantKey?}` (service token) | a signed token for a known, enabled user; with `tenantKey` only for that workspace, which they must belong to; 403 otherwise |
 | `GET /.well-known/jwks.json` | the public key (Ed25519) engines and Studio verify tokens with |
@@ -124,8 +124,12 @@ A token is a JWT signed with EdDSA: `iss` `webx-control`, `sub` the email, `tena
 only the signature honours a token until it expires, so engines that need instant revocation call `/api/auth/me`.
 The signing key is made on first start and kept in the database; set `WEBX_CONTROL_SIGNING_KEY` (base64, 32 bytes)
 to use your own, for example one shared by several instances. `node tools/identity-test.mjs` checks all of this on
-the real binary, verifying the tokens with Node's own crypto and the published key. Not done yet: Studio signing in
-through this, migrating the Strapi admin users, the OIDC provider settings per workspace, and engines verifying tokens.
+the real binary, verifying the tokens with Node's own crypto and the published key. `node tools/migrate-users.mjs [--dry-run]` copies Strapi's admin users (name, active flag, workspaces from each
+tenant's `adminEmails`, role as a slug; a super admin on no tenant becomes `superAdmin`) with their admin API; its mapping
+is unit-tested (`node --test tools/users-map.test.mjs`). Not done yet, and the larger part of C4: Studio's session
+trusting these tokens instead of Strapi's (with engines called by a service credential plus the acting editor), the
+OIDC provider settings per workspace, MFA here, engines verifying tokens, custom-role assignments in the migration,
+and the security review D10 and the plan require before it ships.
 
 ## Tests
 

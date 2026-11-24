@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users(
   email TEXT NOT NULL UNIQUE,
   name TEXT,
   disabled INTEGER NOT NULL DEFAULT 0,
+  super_admin INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -32,6 +33,15 @@ CREATE TABLE IF NOT EXISTS signing_key(id INTEGER PRIMARY KEY CHECK (id = 1), se
 
 fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()
+}
+
+/// A database made before `super_admin` existed gets the column (idempotent).
+pub fn migrate(conn: &Connection) -> Result<(), String> {
+    let has: bool = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='super_admin'", [], |r| r.get::<_, i64>(0)).map_err(e)? > 0;
+    if !has {
+        conn.execute("ALTER TABLE users ADD COLUMN super_admin INTEGER NOT NULL DEFAULT 0", []).map_err(e)?;
+    }
+    Ok(())
 }
 
 pub fn valid_email(s: &str) -> bool {
@@ -80,17 +90,19 @@ pub struct User {
     pub email: String,
     pub name: Option<String>,
     pub disabled: bool,
+    /// not tied to one workspace: may act on every tenant (Studio's "unscoped" admin)
+    pub super_admin: bool,
     pub memberships: Vec<Membership>,
 }
 impl User {
     pub fn to_json(&self) -> Value {
-        json!({"email": self.email, "name": self.name, "disabled": self.disabled,
+        json!({"email": self.email, "name": self.name, "disabled": self.disabled, "superAdmin": self.super_admin,
                "memberships": self.memberships.iter().map(|m| json!({"tenantKey": m.tenant_key, "role": m.role})).collect::<Vec<_>>()})
     }
 }
 
 /// Create or replace a user and their memberships. Returns true when it was created.
-/// body: {name?, disabled?, memberships: [{tenantKey, role}]}
+/// body: {name?, disabled?, superAdmin?, memberships: [{tenantKey, role}]}
 pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result<bool, String> {
     let email = email.to_lowercase();
     if !valid_email(&email) {
@@ -102,6 +114,7 @@ pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result
         _ => return Err("name must be text of at most 200 characters".into()),
     };
     let disabled = body.get("disabled").and_then(Value::as_bool).unwrap_or(false);
+    let super_admin = body.get("superAdmin").and_then(Value::as_bool).unwrap_or(false);
     let mut members: Vec<(String, String)> = Vec::new();
     for m in body.get("memberships").and_then(Value::as_array).ok_or("memberships must be a list")? {
         let (k, r) = (m.get("tenantKey").and_then(Value::as_str).unwrap_or(""), m.get("role").and_then(Value::as_str).unwrap_or(""));
@@ -119,12 +132,12 @@ pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result
     let existing: Option<i64> = conn.query_row("SELECT id FROM users WHERE email=?1", [&email], |r| r.get(0)).ok();
     let id = match existing {
         Some(id) => {
-            conn.execute("UPDATE users SET name=?1, disabled=?2, updated_at=?3 WHERE id=?4", rusqlite::params![name, disabled, now, id]).map_err(e)?;
+            conn.execute("UPDATE users SET name=?1, disabled=?2, super_admin=?3, updated_at=?4 WHERE id=?5", rusqlite::params![name, disabled, super_admin, now, id]).map_err(e)?;
             conn.execute("DELETE FROM memberships WHERE user_id=?1", [id]).map_err(e)?;
             id
         }
         None => {
-            conn.execute("INSERT INTO users(email, name, disabled, created_at, updated_at) VALUES (?1,?2,?3,?4,?4)", rusqlite::params![email, name, disabled, now]).map_err(e)?;
+            conn.execute("INSERT INTO users(email, name, disabled, super_admin, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?5)", rusqlite::params![email, name, disabled, super_admin, now]).map_err(e)?;
             conn.last_insert_rowid()
         }
     };
@@ -136,11 +149,11 @@ pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result
 
 pub fn get(conn: &Connection, email: &str) -> Result<Option<User>, String> {
     let email = email.to_lowercase();
-    let row: Option<(i64, Option<String>, bool)> = conn.query_row("SELECT id, name, disabled FROM users WHERE email=?1", [&email], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).ok();
-    let Some((id, name, disabled)) = row else { return Ok(None) };
+    let row: Option<(i64, Option<String>, bool, bool)> = conn.query_row("SELECT id, name, disabled, super_admin FROM users WHERE email=?1", [&email], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).ok();
+    let Some((id, name, disabled, super_admin)) = row else { return Ok(None) };
     let mut st = conn.prepare("SELECT tenant_key, role FROM memberships WHERE user_id=?1 ORDER BY tenant_key").map_err(e)?;
     let memberships = st.query_map([id], |r| Ok(Membership { tenant_key: r.get(0)?, role: r.get(1)? })).map_err(e)?.collect::<Result<Vec<_>, _>>().map_err(e)?;
-    Ok(Some(User { email, name, disabled, memberships }))
+    Ok(Some(User { email, name, disabled, super_admin, memberships }))
 }
 
 pub fn list(conn: &Connection) -> Result<Vec<User>, String> {
@@ -167,12 +180,12 @@ pub fn issue(conn: &Connection, key: &SigningKey, email: &str, tenant: Option<&s
         return Err("user is disabled".into());
     }
     let tenants: Vec<Value> = u.memberships.iter().filter(|m| tenant.is_none_or(|t| t == m.tenant_key)).map(|m| json!({"key": m.tenant_key, "role": m.role})).collect();
-    if tenant.is_some() && tenants.is_empty() {
+    if tenant.is_some() && tenants.is_empty() && !u.super_admin {
         return Err("user is not a member of that workspace".into());
     }
     let exp = now_secs + ttl_secs;
     let header = json!({"alg": "EdDSA", "typ": "JWT", "kid": kid(&key.verifying_key())});
-    let claims = json!({"iss": "webx-control", "sub": u.email, "name": u.name, "tenants": tenants, "iat": now_secs, "exp": exp});
+    let claims = json!({"iss": "webx-control", "sub": u.email, "name": u.name, "tenants": tenants, "superAdmin": u.super_admin, "iat": now_secs, "exp": exp});
     let signing_input = format!("{}.{}", B64.encode(header.to_string()), B64.encode(claims.to_string()));
     let sig = key.sign(signing_input.as_bytes());
     Ok((format!("{signing_input}.{}", B64.encode(sig.to_bytes())), exp))
@@ -270,6 +283,28 @@ mod tests {
         upsert(&c, "ann@example.org", &json!({"disabled": true, "memberships": []}), NOW).unwrap();
         assert_eq!(verify(&c, &vk, &t, 1_500).unwrap_err(), "user is unknown or disabled", "disabling cuts a live token off");
         assert!(issue(&c, &k, "ann@example.org", None, 900, 1_000).is_err());
+    }
+
+    #[test]
+    fn a_super_admin_is_not_tied_to_a_workspace() {
+        let (c, k) = db();
+        upsert(&c, "root@example.org", &json!({"superAdmin": true, "memberships": []}), NOW).unwrap();
+        assert!(get(&c, "root@example.org").unwrap().unwrap().super_admin);
+        let (t, _) = issue(&c, &k, "root@example.org", Some("orst"), 900, 1_000).unwrap();
+        let claims = verify(&c, &k.verifying_key(), &t, 1_500).unwrap();
+        assert_eq!((claims["superAdmin"].clone(), claims["tenants"].clone()), (json!(true), json!([])));
+        editor(&c);
+        assert_eq!(get(&c, "ann@example.org").unwrap().unwrap().to_json()["superAdmin"], json!(false));
+    }
+
+    #[test]
+    fn an_older_database_gets_the_column() {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch("CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT, disabled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL); INSERT INTO users(email, created_at, updated_at) VALUES ('old@example.org','x','x');").unwrap();
+        migrate(&c).unwrap();
+        migrate(&c).unwrap();
+        c.execute_batch("CREATE TABLE IF NOT EXISTS memberships(user_id INTEGER NOT NULL, tenant_key TEXT NOT NULL, role TEXT NOT NULL, PRIMARY KEY(user_id, tenant_key));").unwrap();
+        assert!(!get(&c, "old@example.org").unwrap().unwrap().super_admin);
     }
 
     #[test]

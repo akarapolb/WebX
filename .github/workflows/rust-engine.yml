@@ -138,6 +138,8 @@ jobs:
       # C4: users, memberships and signed tokens an engine can verify
       - name: Identity in webx-control
         run: node webx-control/tools/identity-test.mjs
+      - name: Strapi users to webx-control users, mapping
+        run: node --test webx-control/tools/users-map.test.mjs
       - name: Write API test
         working-directory: rust-engine
         run: node tools/write-test.mjs

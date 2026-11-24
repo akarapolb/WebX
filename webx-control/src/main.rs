@@ -384,6 +384,7 @@ async fn main() {
     conn.execute_batch(audit::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(records::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(identity::DDL).unwrap_or_else(|e| panic!("{e}"));
+    identity::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     let key = identity::signing_key(&conn, std::env::var("WEBX_CONTROL_SIGNING_KEY").ok().as_deref()).unwrap_or_else(|e| panic!("{e}"));
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));

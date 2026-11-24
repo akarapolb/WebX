@@ -63,7 +63,12 @@ try {
   check("create a user: 201, lowercase email, memberships back", made.status === 201 && made.json.data.email === "ann@example.org" && made.json.data.memberships.length === 2);
   check("replace: 200", (await put("ann@example.org", { name: "Ann", memberships: [{ tenantKey: "dga", role: "editor" }, { tenantKey: "pea", role: "viewer" }] })).status === 200);
   check("a bad body is refused: 400", (await put("ann@example.org", { memberships: [{ tenantKey: "BAD", role: "x" }] })).status === 400 && (await put("nope", { memberships: [] })).status === 400);
-  check("list and read", (await call("GET", "/admin/users", ADMIN)).json.data.length === 1 && (await call("GET", "/admin/users/ann@example.org", ADMIN)).json.data.name === "Ann");
+  const root = await put("root@example.org", { name: "Root", superAdmin: true, memberships: [] });
+  check("a super admin has no workspace and the flag comes back", root.status === 201 && root.json.data.superAdmin === true && root.json.data.memberships.length === 0 && made.json.data.superAdmin === false);
+  const rootTok = await call("POST", "/internal/token", SERVICE, { email: "root@example.org", tenantKey: "orst" });
+  const rootClaims = rootTok.status === 200 ? await engineVerifies(rootTok.json.data.token) : null;
+  check("a super admin gets a token for any workspace, marked superAdmin", rootClaims && rootClaims.superAdmin === true && rootClaims.tenants.length === 0);
+  check("list and read", (await call("GET", "/admin/users", ADMIN)).json.data.length === 2 && (await call("GET", "/admin/users/ann@example.org", ADMIN)).json.data.name === "Ann");
 
   check("the token API needs the service token, not the admin token", (await call("POST", "/internal/token", ADMIN, { email: "ann@example.org" })).status === 401);
   const tok = await call("POST", "/internal/token", SERVICE, { email: "ann@example.org", tenantKey: "dga" });
