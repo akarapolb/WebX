@@ -31,6 +31,7 @@ import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./wordpress";
 import { CmsError } from "./types";
 import { controlAuditConfig, createControlAuditAdapter } from "./audit-store";
+import { CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter } from "./records-store";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
 import { parseCheckpoint } from "@/lib/agent/engine/checkpoint";
@@ -159,6 +160,15 @@ function controlAuditAdapter(cfg: { baseUrl: string; token: string }): CmsAdapte
   const key = cfg.baseUrl + " " + cfg.token;
   if (controlAuditCache?.key !== key) controlAuditCache = { key, adapter: createControlAuditAdapter(cfg) };
   return controlAuditCache.adapter;
+}
+// custom roles, page templates and page versions live in the control plane once it is configured (track C3)
+let controlRecordsCache: { key: string; adapter: CmsAdapter } | null = null;
+function bookkeepingAdapter(uid: string): CmsAdapter {
+  const cfg = controlAuditConfig();
+  if (!cfg || !CONTROL_RECORD_COLLECTIONS[uid]) return strapiAdapter;
+  const key = cfg.baseUrl + " " + cfg.token;
+  if (controlRecordsCache?.key !== key) controlRecordsCache = { key, adapter: createControlRecordsAdapter(cfg) };
+  return controlRecordsCache.adapter;
 }
 const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
@@ -1004,7 +1014,7 @@ async function getCustomRoles(): Promise<any[]> {
   const now = Date.now();
   if (now - customRoleCache.at > 15_000) {
     try {
-      const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(CUSTOM_ROLE_UID, { pageSize: 500 }));
+      const { data } = await strapiBookkeeping(() => bookkeepingAdapter(CUSTOM_ROLE_UID).entries.list<any>(CUSTOM_ROLE_UID, { pageSize: 500 }));
       customRoleCache = { at: now, list: data };
     } catch {
       // Deliberately does NOT advance `.at` or clear `.list` on failure —
@@ -1102,7 +1112,7 @@ export async function saveCustomRole(tenantKey: string, input: CustomRoleInput):
     const existing = forTenant.find((r) => r.roleKey === input.roleKey);
     if (!existing) throw new CmsError("Unknown role", 404);
     const result = await strapiBookkeeping(() =>
-      strapiAdapter.entries.update(CUSTOM_ROLE_UID, existing.documentId ?? existing.id, { name: input.name.trim(), permissions: input.permissions || {} }));
+      bookkeepingAdapter(CUSTOM_ROLE_UID).entries.update(CUSTOM_ROLE_UID, existing.documentId ?? existing.id, { name: input.name.trim(), permissions: input.permissions || {} }));
     invalidateCustomRoleCache();
     await writeAudit("custom_role_update", CUSTOM_ROLE_UID, existing.documentId ?? existing.id, caller, tenantKey);
     return result;
@@ -1112,7 +1122,7 @@ export async function saveCustomRole(tenantKey: string, input: CustomRoleInput):
   if (!roleKey) throw new CmsError("A role name is required", 400);
   if (forTenant.some((r) => r.roleKey === roleKey)) throw new CmsError("A role with that name already exists in this workspace", 409);
   const result = await strapiBookkeeping(() =>
-    strapiAdapter.entries.create(CUSTOM_ROLE_UID, { tenantKey, roleKey, name: input.name.trim(), permissions: input.permissions || {} }));
+    bookkeepingAdapter(CUSTOM_ROLE_UID).entries.create(CUSTOM_ROLE_UID, { tenantKey, roleKey, name: input.name.trim(), permissions: input.permissions || {} }));
   invalidateCustomRoleCache();
   await writeAudit("custom_role_create", CUSTOM_ROLE_UID, result?.documentId ?? result?.id ?? null, caller, tenantKey);
   return result;
@@ -1125,7 +1135,7 @@ export async function deleteCustomRole(tenantKey: string, roleKey: string): Prom
   assertCanActOnTenant(eff, tenantKey);
   const existing = (await getCustomRoles()).find((r) => r.tenantKey === tenantKey && r.roleKey === roleKey);
   if (!existing) throw new CmsError("Unknown role", 404);
-  await strapiBookkeeping(() => strapiAdapter.entries.remove(CUSTOM_ROLE_UID, existing.documentId ?? existing.id));
+  await strapiBookkeeping(() => bookkeepingAdapter(CUSTOM_ROLE_UID).entries.remove(CUSTOM_ROLE_UID, existing.documentId ?? existing.id));
   invalidateCustomRoleCache();
 
   // Scrub dangling assignments so a stale roleKey doesn't sit as a
@@ -1612,7 +1622,7 @@ async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff
     // editable here: `eff` is non-null, so this caller is workspace-scoped
     // and must own the row outright — sharing one globally is a one-way
     // door only an unscoped super admin can re-open.
-    const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(PAGE_TEMPLATE_UID, id)).catch(() => null);
+    const row: any = await strapiBookkeeping(() => bookkeepingAdapter(PAGE_TEMPLATE_UID).entries.get(PAGE_TEMPLATE_UID, id)).catch(() => null);
     if ((row?.tenantKey || "") !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
   }
 }
@@ -2785,7 +2795,7 @@ async function withContentAdapter<T>(uid: string, fn: (adapter: CmsAdapter) => P
     const cfg = controlAuditConfig();
     if (cfg) return fn(controlAuditAdapter(cfg));
   }
-  if (BOOKKEEPING_UIDS.has(uid)) return strapiBookkeeping(() => fn(strapiAdapter));
+  if (BOOKKEEPING_UIDS.has(uid)) return strapiBookkeeping(() => fn(bookkeepingAdapter(uid)));
   return fn(await activeAdapter());
 }
 

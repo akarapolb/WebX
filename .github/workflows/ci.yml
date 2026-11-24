@@ -270,7 +270,7 @@ jobs:
           STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
-        run: npx playwright test tests/audit-control-plane.spec.ts
+        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts
       - if: failure()
         run: |
           tail -n 100 /tmp/webx-studio.log

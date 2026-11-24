@@ -16,6 +16,7 @@
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 
 mod audit;
+mod records;
 mod registry;
 
 use axum::{
@@ -228,6 +229,68 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
                 Err(m) => bad(m),
             }
         }
+        ("GET", ["records", c]) if records::known(c) => {
+            let mut q = records::Query { filters: vec![], sort: None, page: 1, page_size: 25 };
+            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+                let v = percent_decode(v);
+                match k {
+                    "filter" => {
+                        let mut it = v.splitn(3, ':');
+                        match (it.next(), it.next(), it.next()) {
+                            (Some(f), Some(o), Some(val)) => q.filters.push(records::Filter { field: f.into(), op: o.into(), value: val.into() }),
+                            _ => return bad("filter is field:op:value".into()),
+                        }
+                    }
+                    "sort" => { let (f, d) = v.split_once(':').unwrap_or((&v, "asc")); q.sort = Some((f.to_string(), d.eq_ignore_ascii_case("desc"))); }
+                    "page" => q.page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
+                    "pageSize" => q.page_size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(500),
+                    _ => return bad(format!("unsupported parameter {k}")),
+                }
+            }
+            match records::list(&conn, c, &q) {
+                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": q.page, "pageSize": q.page_size, "pageCount": total.div_ceil(q.page_size), "total": total}}})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
+        ("POST", ["records", c]) if records::known(c) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            match records::create(&conn, c, v.get("data").unwrap_or(&v), &now_iso()) {
+                Ok(row) => Json(json!({"data": row})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
+        ("POST", ["records", c, "import"]) if records::known(c) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let Some(rows) = v.as_array() else { return bad("body must be an array of records".into()) };
+            let (mut added, mut skipped) = (0, 0);
+            for (i, r) in rows.iter().enumerate() {
+                match records::import(&conn, c, r, &now_iso()) {
+                    Ok(true) => added += 1,
+                    Ok(false) => skipped += 1,
+                    Err(m) => return bad(format!("record {i}: {m}")),
+                }
+            }
+            Json(json!({"added": added, "skipped": skipped})).into_response()
+        }
+        ("GET", ["records", c, id]) if records::known(c) => match records::get(&conn, c, id) {
+            Ok(Some(row)) => Json(json!({"data": row})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("PUT", ["records", c, id]) if records::known(c) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            match records::update(&conn, c, id, v.get("data").unwrap_or(&v), &now_iso()) {
+                Ok(Some(row)) => Json(json!({"data": row})).into_response(),
+                Ok(None) => not_found(),
+                Err(m) => bad(m),
+            }
+        }
+        ("DELETE", ["records", c, id]) if records::known(c) => match records::remove(&conn, c, id) {
+            Ok(true) => Json(json!({"data": null})).into_response(),
+            Ok(false) => not_found(),
+            Err(m) => fail(m),
+        },
         ("GET", ["audit", id]) => match audit::get(&conn, id) {
             Ok(Some(row)) => Json(json!({"data": row})).into_response(),
             Ok(None) => not_found(),
@@ -257,6 +320,7 @@ async fn main() {
     let port: u16 = arg("port", "1400").parse().expect("--port");
     let conn = registry::open(&db).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(audit::DDL).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(records::DDL).unwrap_or_else(|e| panic!("{e}"));
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let n = registry::list(&conn).map(|l| l.len()).unwrap_or(0);

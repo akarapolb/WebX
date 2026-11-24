@@ -75,16 +75,36 @@ try {
   check("sort ascending", (await q("?sort=at:asc")).json.data[0].documentId === "imported0000000000000001");
   check("pagination reports the total", (await q("?pageSize=1&page=2")).json.meta.pagination.total === 3);
 
+
+  // bookkeeping records (custom roles, page templates, page versions)
+  const rec = (m, p, b) => call(m, "/internal/records" + p, SERVICE, b);
+  const made2 = await rec("POST", "/custom-role", { data: { tenantKey: "dga", roleKey: "r1", name: "R1", permissions: { faq: { view: true } } } });
+  check("records: create answers with ids, timestamps and the fields back", made2.status === 200 && made2.json.data.documentId?.length === 24 && made2.json.data.roleKey === "r1" && made2.json.data.createdAt);
+  const rid = made2.json.data.documentId;
+  check("records: no token: 401", (await call("GET", "/internal/records/custom-role")).status === 401);
+  check("records: an unknown collection is a 404", (await rec("GET", "/release")).status === 404);
+  check("records: update merges", (await rec("PUT", "/custom-role/" + rid, { data: { name: "R2" } })).json.data.roleKey === "r1");
+  check("records: a unique read", (await rec("GET", "/custom-role/" + rid)).json.data.name === "R2");
+  check("records: filter by tenant", (await rec("GET", "/custom-role?filter=tenantKey:eq:dga")).json.meta.pagination.total === 1 && (await rec("GET", "/custom-role?filter=tenantKey:eq:pea")).json.meta.pagination.total === 0);
+  check("records: a relation path in a filter is refused: 400", (await rec("GET", "/custom-role?filter=tenant.key:eq:dga")).status === 400);
+  check("records: another collection does not see it", (await rec("GET", "/page-version/" + rid)).status === 404);
+  check("records: delete, then 404", (await rec("DELETE", "/custom-role/" + rid)).status === 200 && (await rec("GET", "/custom-role/" + rid)).status === 404);
+  const imp = [{ documentId: "imptemplate00000000000001", tenantKey: "", key: "shared", name: "Shared", createdAt: "2026-01-01T00:00:00.000Z" }];
+  const i1 = await rec("POST", "/page-template/import", imp), i2 = await rec("POST", "/page-template/import", imp);
+  check("records: import keeps ids and times, and can be run again", i1.json.added === 1 && i2.json.skipped === 1 && (await rec("GET", "/page-template/imptemplate00000000000001")).json.data.createdAt === "2026-01-01T00:00:00.000Z");
+  const keep = await rec("POST", "/page-template", { data: { tenantKey: "dga", key: "kept", name: "Kept" } });
+
   // Studio's own adapter against this binary
-  const r = spawnSync(process.execPath, ["--import", "./tests/setup/register.mjs", "--import", "tsx", "--test", "tests/audit-store.test.ts"], {
+  const r = spawnSync(process.execPath, ["--import", "./tests/setup/register.mjs", "--import", "tsx", "--test", "tests/audit-store.test.ts", "tests/records-store.test.ts"], {
     cwd: studio, stdio: "inherit", env: { ...process.env, AUDIT_CONTROL_URL: BASE, AUDIT_CONTROL_TOKEN: SERVICE },
   });
-  check("Studio's audit adapter tests pass against it", r.status === 0);
+  check("Studio's audit and records adapter tests pass against it", r.status === 0);
 
   // durable
   await down();
   await up({ WEBX_CONTROL_SERVICE_TOKEN: SERVICE });
   check("rows survive a restart", (await q("")).json.meta.pagination.total >= 3);
+  check("records survive a restart", (await rec("GET", "/page-template/" + keep.json.data.documentId)).json.data.name === "Kept");
 } catch (e) {
   console.error(e);
   failures++;

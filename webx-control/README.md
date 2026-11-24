@@ -78,8 +78,32 @@ STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL
 ```
 
 `node tools/audit-test.mjs` checks the API on the real binary and runs Studio's
-adapter tests against it. The other 12 bookkeeping types (releases, reviews,
-custom roles, agent jobs and so on) are still in Strapi.
+adapter tests against it. The other bookkeeping types (releases, reviews,
+custom roles, agent jobs and so on) are still in Strapi, except those under Records below.
+
+## Records (C3, second part)
+
+Page templates and page versions are stored here as JSON documents, one
+`records` table keyed by collection, behind the same service token:
+
+| Call | Meaning |
+|---|---|
+| `POST /internal/records/<collection>` body `{data}` | create; the id is chosen here |
+| `GET /internal/records/<collection>?filter=field:op:value&sort=field:dir&page=&pageSize=` | list; ops `eq ne contains gte lte`; fields are the record's own (no relation paths) |
+| `GET`, `PUT` (merge, `null` clears), `DELETE /internal/records/<collection>/<documentId>` | one record |
+| `POST /internal/records/<collection>/import` body `[record, ...]` | migration: records keep their `documentId` and times; ones already there are skipped |
+
+`COLLECTIONS` in `src/records.rs` lists what exists: `custom-role`, `page-template`, `page-version`.
+**Studio** (`webx-studio/lib/cms/records-store.ts`) uses it for page templates and page
+versions with the same two variables as audit. Custom roles can be stored here but Studio does
+**not** use that yet: Strapi's own enforcement and the WordPress mu-plugin read them from
+Strapi, so they move once that lookup is served from here. To move the existing templates first:
+
+```sh
+STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL=... WEBX_CONTROL_SERVICE_TOKEN=...   node tools/migrate-records.mjs [--dry-run]
+```
+
+Run it before switching: a shared template (no workspace) that is only in Strapi is invisible once Studio reads here.
 
 ## Tests
 
