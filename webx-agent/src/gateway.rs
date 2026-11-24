@@ -1,4 +1,5 @@
 //! The model and the tools, over HTTP.
+use crate::job::Job;
 use microagent::{Kind, ModelRequest, Risk, Tool, ToolCall, ToolOutput};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -61,10 +62,11 @@ fn parse_kind(s: &str) -> Kind {
 }
 
 /// Studio's governed tools, behind two calls:
-///   GET  {base}/tools?tenantKey=&ownerEmail=   -> {"data": [{name, help, risk, args: [{name, kind, help, required}]}]}
-///   POST {base}/run  {tenantKey, ownerEmail, tool, args} -> {"ok": bool, "text": string}
-/// Both carry `Authorization: Bearer <secret>`. The gateway applies the owner's permissions; the tools it lists
-/// are the ones that tenant and owner may use, with each tool's risk class set from those permissions (D13).
+///   POST {base}/tools  {job}                 -> {"data": [{name, help, risk, args: [{name, kind, help, required}]}]}
+///   POST {base}/run    {job, tool, args}     -> {"ok": bool, "text": string}
+/// `job` is the job's identity (`Job::identity`). Both carry `Authorization: Bearer <secret>`. Studio re-checks the
+/// owner on every call (still in the workspace and active, plan and policy still allow it), applies the owner's
+/// permissions, and sets each tool's risk class from them (D13).
 pub struct ToolGateway {
     pub base: String,
     pub secret: String,
@@ -75,13 +77,11 @@ impl ToolGateway {
         format!("{}/{}", self.base.trim_end_matches('/'), path)
     }
 
-    pub fn list(&self, tenant: &str, owner: &str) -> Result<Vec<(Tool, Risk)>, String> {
+    pub fn list(&self, job: &Job) -> Result<Vec<(Tool, Risk)>, String> {
         let resp: Value = agent()
-            .get(&self.url("tools"))
+            .post(&self.url("tools"))
             .set("Authorization", &format!("Bearer {}", self.secret))
-            .query("tenantKey", tenant)
-            .query("ownerEmail", owner)
-            .call()
+            .send_json(json!({"job": job.identity()}))
             .map_err(|e| format!("tool list failed: {e}"))?
             .into_json()
             .map_err(|e| format!("tool list is not JSON: {e}"))?;
@@ -99,11 +99,11 @@ impl ToolGateway {
         Ok(out)
     }
 
-    pub fn run(&self, tenant: &str, owner: &str, call: &ToolCall) -> ToolOutput {
+    pub fn run(&self, job: &Job, call: &ToolCall) -> ToolOutput {
         let sent = agent()
             .post(&self.url("run"))
             .set("Authorization", &format!("Bearer {}", self.secret))
-            .send_json(json!({"tenantKey": tenant, "ownerEmail": owner, "tool": call.name, "args": call.args}));
+            .send_json(json!({"job": job.identity(), "tool": call.name, "args": call.args}));
         match sent {
             Ok(r) => match r.into_json::<Value>() {
                 Ok(v) => {

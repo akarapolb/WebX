@@ -13,26 +13,33 @@ says what to do next; this crate supplies what it asks for:
 ```sh
 cargo build --release
 LITELLM_URL=http://localhost:4000/v1 WEBX_TOOLS_URL=http://localhost:3000/api/internal/agent-tools WEBX_TOOLS_SECRET=... \
-  target/release/webx-agent run --goal "Summarise last month's audit log" --tenant dga --owner ann@example.org \
+  target/release/webx-agent run --goal "Summarise last month's audit log" --tenant dga --owner ann@example.org --owner-user-id 7 \
   --autonomy draft --state ./agent-state --max-steps 40
 ```
 
-## The tool gateway (what Studio has to serve)
+## The tool gateway (Studio serves it)
 
 ```
-GET  {base}/tools?tenantKey=&ownerEmail=   -> {"data": [{name, help, risk, args: [{name, kind, help, required}]}]}
-POST {base}/run  {tenantKey, ownerEmail, tool, args} -> {"ok": bool, "text": string}
+POST {base}/tools  {job}               -> {"data": [{name, help, risk, args: [{name, kind, help, required}]}]}
+POST {base}/run    {job, tool, args}   -> {"ok": bool, "text": string}
 ```
 
-Both carry `Authorization: Bearer <secret>`. `risk` is `read`, `create`, `write`, `outside` or `money`, **set by the
-gateway from the owner's governed permissions** (D13); a word this crate does not know counts as `money`, the strictest
-class. `kind` is `text`, `number`, `bool`, `list`, `object` or anything else for free-form.
+`job` is the job's identity (`Job::identity`): `documentId`, `tenantKey`, `ownerEmail`, `ownerUserId`, `engine`,
+`requiredLevel`, `policySnapshot`, `lang`. Both calls carry `Authorization: Bearer <secret>`.
+
+Studio's side is `webx-studio/app/api/internal/agent-tools/` (`WEBX_AGENT_TOOLS_SECRET`, which must equal this worker's
+`WEBX_TOOLS_SECRET`). It re-checks the owner on every call through `runAsJobOwner`, the check a Studio-run background job
+uses (still in the workspace and active, the plan and the agent policy still allow it), then lists or runs the tools through
+`executeTool`, which re-checks the autonomy level, the allow-list and the arguments. `risk` is `read` or `write`, set from
+the tool's mode; nothing the agent has leaves WebX, so none is `outside` or `money`. This crate treats a risk word it does
+not know as `money`, the strictest class. `kind` is `text`, `number`, `bool`, `list`, `object` or free-form.
 
 ## Autonomy
 
 Studio's agent levels decide which tools a job is offered at all (not just which it may run):
 `off` none, `read` and `suggest` read tools, `draft` read, create and write, `draft_submit` those and outside tools.
-Money tools are never offered to a background job.
+Money tools are never offered to a background job. Write tools run at `draft` and above (the policy is trusting there);
+an outside tool is held back and declined, because no person is there to say yes.
 
 ## Resuming
 
@@ -53,7 +60,6 @@ resume across two worker processes, and a model that keeps failing.
 
 ## Not yet
 
-Studio's side of the tool gateway (`/api/internal/agent-tools`, built from `lib/agent/tools.ts` with the acting-session
-context), the job and schedule queue in the control plane (leasing, `Trigger` for schedules, `SnapshotStore` over HTTP),
+The job and schedule queue in the control plane (leasing, `Trigger` for schedules, `SnapshotStore` over HTTP),
 memory notes and skills, the existing Node worker's behaviour parity (`webx-studio/lib/agent/worker.ts`), and the agent
 evals (`eval/`) run against this worker.

@@ -88,7 +88,11 @@ fn start_gateway(seen: Arc<Mutex<Seen>>) -> ToolGateway {
 }
 
 fn job(id: &str, autonomy: Autonomy) -> Job {
-    Job { id: id.into(), tenant: "dga".into(), owner: "ann@example.org".into(), goal: "Read page p1 and report".into(), context: String::new(), autonomy }
+    Job {
+        id: id.into(), tenant: "dga".into(), owner: "ann@example.org".into(), owner_user_id: "7".into(), engine: "strapi".into(),
+        required_level: "read".into(), policy_snapshot: Value::Null, lang: "en".into(),
+        goal: "Read page p1 and report".into(), context: String::new(), autonomy,
+    }
 }
 fn store(name: &str) -> FileStore {
     let d = std::env::temp_dir().join(format!("webx-agent-test-{name}-{}", std::process::id()));
@@ -109,28 +113,38 @@ fn a_job_runs_its_tools_through_the_gateway_as_the_owner_and_finishes() {
     let g = seen.lock().unwrap();
     let run = g.tools.iter().find(|(p, _, _)| p == "/run").expect("the tool ran through the gateway");
     assert_eq!(run.1, "Bearer gw-secret");
-    assert_eq!((run.2["tenantKey"].clone(), run.2["ownerEmail"].clone(), run.2["tool"].clone()), (json!("dga"), json!("ann@example.org"), json!("read_page")));
+    assert_eq!((run.2["job"]["tenantKey"].clone(), run.2["job"]["ownerEmail"].clone(), run.2["tool"].clone()), (json!("dga"), json!("ann@example.org"), json!("read_page")));
+    assert_eq!((run.2["job"]["ownerUserId"].clone(), run.2["job"]["engine"].clone(), run.2["job"]["documentId"].clone()), (json!("7"), json!("strapi"), json!("j1")), "Studio gets the job's whole identity to re-check the owner");
     assert!(st.0.read_dir().map(|mut d| d.next().is_none()).unwrap_or(true), "the snapshot is cleared when the job is done");
 }
 
 #[test]
-fn a_call_the_policy_holds_back_is_declined_and_never_reaches_the_gateway() {
+fn a_write_runs_at_draft_level_but_an_outside_call_is_held_back_and_declined() {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let edit = r#"{"tool":"edit_page","args":{"id":"p1","title":"New"}}"#;
     let (model, gw) = (start_model(vec![PLAN, edit, DONE], seen.clone()), start_gateway(seen.clone()));
-    let r = run_job(&job("j2", Autonomy::Draft), Config::default(), &model, &gw, &mut store("declined"), 40).unwrap();
+    run_job(&job("j2", Autonomy::Draft), Config::default(), &model, &gw, &mut store("write"), 40).unwrap();
+    let ran = |g: &Seen, tool: &str| g.tools.iter().any(|(p, _, b)| p == "/run" && b["tool"] == tool);
+    assert!(ran(&seen.lock().unwrap(), "edit_page"), "at draft level a write tool is offered and runs");
+
+    let seen = Arc::new(Mutex::new(Seen::default()));
+    let mail = r#"{"tool":"send_email","args":{"to":"x@example.org"}}"#;
+    let (model, gw) = (start_model(vec![PLAN, mail, DONE], seen.clone()), start_gateway(seen.clone()));
+    let r = run_job(&job("j2b", Autonomy::DraftSubmit), Config::default(), &model, &gw, &mut store("outside"), 40).unwrap();
     assert_eq!(r.stop, "done");
-    assert!(seen.lock().unwrap().tools.iter().all(|(p, _, _)| p != "/run"), "a write the policy asks about is declined: nobody can say yes to a background job");
+    assert!(!ran(&seen.lock().unwrap(), "send_email"), "an outside tool needs a yes the policy cannot get in the background: declined, never sent to the gateway");
 }
 
 #[test]
 fn tools_above_the_autonomy_level_are_not_offered_and_unknown_ones_count_as_the_strictest() {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let gw = start_gateway(seen.clone());
-    let listed = gw.list("dga", "ann@example.org").unwrap();
-    let names = |a: Autonomy| webx_agent::job::offered_tools(gw.list("dga", "ann@example.org").unwrap(), a).len();
+    let j = job("lists", Autonomy::Draft);
+    let listed = gw.list(&j).unwrap();
+    let names = |a: Autonomy| webx_agent::job::offered_tools(gw.list(&j).unwrap(), a).len();
     assert_eq!(listed.len(), 4);
     assert_eq!((names(Autonomy::Off), names(Autonomy::Read), names(Autonomy::Suggest), names(Autonomy::Draft), names(Autonomy::DraftSubmit)), (0, 1, 1, 2, 3));
+    assert!(seen.lock().unwrap().tools.iter().all(|(p, _, b)| p != "/tools" || b["job"]["tenantKey"] == "dga"), "the list is asked for with the job's identity");
     // "mystery" has an unknown risk word: never offered at any level
     assert!(listed.iter().any(|(t, r)| format!("{t:?}").contains("mystery") && *r == microagent::Risk::Money));
 }
