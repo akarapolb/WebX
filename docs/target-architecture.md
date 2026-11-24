@@ -22,6 +22,12 @@ DGA hub ships on Strapi as it is now, and stays a valid setup of the target.
    │ governance · bookkeeping ·   │               │
    │ runtime routes               │               │
    └──────┬───────────┬───────────┘               │
+          │           │ jobs, schedules, snapshots │
+          │           ▼                            │
+          │   ┌──────────────────────┐             │
+          │   │ Agent worker         │  model: LiteLLM gateway
+          │   │ (MicroAgent loop)    │  tools: Studio's governed tools
+          │   └──────────────────────┘             │
           │ engine adapter (one contract)          │
           ▼           ▼            ▼               │
      Rust engine   Strapi      WordPress ◄─────────┘
@@ -36,6 +42,7 @@ whichever engine is chosen; an engine only stores and serves content.
 |---|---|---|
 | **WebX Studio** | All editing screens (Visual Builder, entries, media, releases, reviews, users, audit, agent) | Data: it calls the control plane and, through it, the engines |
 | **WebX control plane** | Tenant registry; editors' identity (users, login, MFA, SSO); roles, custom roles and field policies; governance (permissions, review and release rules, audit log); bookkeeping (page versions and templates, menus, consent logs, agent threads, jobs and schedules); assistant embeddings; the public runtime routes (forms, captcha, consent, search stats, assistant, tenant contact); the rebuild trigger | Site content |
+| **Agent worker** | Running the assistant's background jobs and schedules: it drives [MicroAgent](https://github.com/akarapolb/MicroAgent), a Rust agent loop with no I/O of its own (plan approval, tool risk classes, call limits, resumable snapshots, memory, skills, triggers), and supplies its three connections: the model (through the LiteLLM gateway), the tools (Studio's governed tools, so tenant scoping, custom roles and field policies apply unchanged) and the approvals | Data: jobs, schedules, threads, snapshots and memory notes are stored in the control plane; the model itself |
 | **Engine** (Rust, Strapi or WordPress) | A tenant's content: entries, drafts and publish, locales, blocks, media; the read API the public-site build uses | Users, tenants, permissions, bookkeeping, runtime routes |
 | **public-site** | Rendering | Reads content from the tenant's engine, and tenants and runtime routes from the control plane |
 
@@ -84,7 +91,7 @@ permission logic and becomes part of the control plane.
 | # | Decision | Recommendation |
 |---|---|---|
 | D1 | Is this in the DGA deliverable? (Q-11, handover) | No: a WebX product track. DGA keeps Strapi, which is one of the three setups of the target. |
-| D2 | Where the control plane runs | A separate service (`webx-control`), not inside Studio's Next.js server: public-site and visitors' browsers must reach the tenant registry and runtime routes, and Studio should not be public. Written in Rust in the same Cargo workspace as the engine, sharing the store, auth and isolation code; the assistant's answer logic first runs as-is in a small Node worker (it reuses `answer.ts`, `retrieval.ts`, `llm.ts`). |
+| D2 | Where the control plane runs | A separate service (`webx-control`), not inside Studio's Next.js server: public-site and visitors' browsers must reach the tenant registry and runtime routes, and Studio should not be public. Written in Rust in the same Cargo workspace as the engine, sharing the store, auth and isolation code; the assistant's background loop runs in a separate worker built on MicroAgent (D13), not in Node as first proposed. |
 | D3 | Database | Postgres in production, SQLite for development and CI, same `sqlx` code. The control plane and the Rust engine may share one Postgres (separate schemas) in the Rust setup. |
 | D4 | Engine contract | The engine contract (`engine-contract.md`) shrinks to content only: read API (section 6) and the content part of the write API (section 8: schema, entries, publish, media). Users and auth move to a new control-plane section. The read API keeps Strapi's format for Rust, so public-site does not change. |
 | D5 | Content model | Keep Strapi's `schema.json` format as WebX's content-model format, with the source of truth in a top-level `content-model/` folder; Strapi's copies are generated from it and CI fails if they differ; the Rust engine reads it directly; WordPress keeps its fixed post-type registry. |
@@ -111,7 +118,7 @@ which do not depend on it.
 | C2 (done 2026-11-23: `webx-control/` with the tenant registry, public routes and admin API, parity test and build test in CI; `WEBX_CONTROL_URL` in public-site; Studio's own tenant routing and Postgres are not done) | `webx-control` service and store; tenant registry moved, with `/tenants/keys` and `/tenants/resolve` served by it; public-site reads tenants from it; build test identical | 6–8 days |
 | C3 (started 2026-11-23: the audit log, then 2026-11-24 page templates and page versions, are in webx-control, with Studio switching by `WEBX_CONTROL_URL` + `WEBX_CONTROL_SERVICE_TOKEN` and migration tools; custom roles are stored there too but not used until Strapi and WordPress enforcement read them from there; the other 9 types are not moved) | Bookkeeping moved: the 13 `BOOKKEEPING_UIDS` types behind one control-plane interface in `governance.ts`; data migrated from Strapi; audit log written by the control plane only | 8–12 days |
 | C4 (started 2026-11-24: users, memberships and Ed25519 signed tokens with a published key, tested on the real binary; Studio sign-in through it, user migration and engine verification are not done) | Identity: users, login, sessions, MFA, SSO and roles in the control plane; Studio logs in to WebX, not to an engine; engines get per-tenant service credentials with the acting editor passed along; e2e `user-management`, `mfa-enforcement` and `cross-tenant-isolation` pass for Strapi and WordPress tenants | 10–15 days |
-| C5 | Runtime routes moved: captcha, rate limit, consent logs, search stats, forms with PII encryption, tenant contact, assistant (Node worker, D2); `PUBLIC_CMS_URL` points at the control plane for every engine | 10–15 days |
+| C5 | Runtime routes moved: captcha, rate limit, consent logs, search stats, forms with PII encryption, tenant contact, the assistant worker built on MicroAgent (D13: the `Host` implementation, job and schedule storage in the control plane, MicroAgent triggers for schedules, snapshots for resuming after a restart); `PUBLIC_CMS_URL` points at the control plane for every engine | 10–15 days |
 | C6 | Strapi and WordPress as pure content engines: their copies of the moved types and routes switched off; contract rewritten (D4); rebuild trigger from the control plane | 3–5 days |
 
 ### Track R: Rust engine as a full engine (about 4–6 weeks)
@@ -149,6 +156,8 @@ air-gapped public-site build, served by the read-only Rust binary.
   `cross-tenant-isolation` pass for one tenant of each engine.
 
 ## Risks
+
+- **MicroAgent is the user's own young crate** (one dependency, MIT). Pin it to a commit in `Cargo.toml`, keep the `Host` adapter thin, and treat its plan approval and risk classes as the assistant's safety boundary: a tool's risk class must be set from the tenant's governed permissions, never left at a default. Studio's existing agent tests (`webx-studio/tests`, `eval/`) are the behaviour the worker has to keep.
 
 - **Identity is security-critical.** Moving login, MFA and SSO out of the
   engines makes them WebX's code to secure. Security review before C4 ships.
