@@ -4,6 +4,7 @@
 // component) instead of from the browser after load. Thai locale only for
 // this proof — see the Phase 4 plan for what's deliberately out of scope.
 import { PUBLIC_CMS } from "./publicCms";
+import { parseEngineUrls, engineBaseFor, absolutizeMedia } from "./engineUrls";
 
 // Build time (server): the CMS the build reads. In the browser (client
 // components importing mediaUrl etc.): the public CMS address, so the build
@@ -23,14 +24,11 @@ const TENANTS = typeof window === "undefined"
 // Tenants whose content lives on a different engine than STRAPI_URL (the first
 // Rust tenant, docs/target-architecture.md R5): WEBX_ENGINE_URLS is a JSON map
 // of tenant key -> engine base URL, e.g. {"rusthub":"http://localhost:1338"}.
-// Any engine of kind strapi or rust answers the same read API. Media URLs of
-// such a tenant are not rewritten yet (mediaUrl does not know the tenant).
-const ENGINE_URLS: Record<string, string> = (() => {
-  if (typeof window !== "undefined" || !process.env.WEBX_ENGINE_URLS) return {};
-  const m = JSON.parse(process.env.WEBX_ENGINE_URLS) as Record<string, string>;
-  return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, String(v).replace(/\/$/, "")]));
-})();
-const engineBase = (tenant: string): string => ENGINE_URLS[tenant] || STRAPI;
+// Any engine of kind strapi or rust answers the same read API. Relative media
+// URLs in such a tenant's responses are made absolute against its own engine in
+// get() (lib/engineUrls.ts), so mediaUrl() needs no tenant.
+const ENGINE_URLS: Record<string, string> = typeof window !== "undefined" ? {} : parseEngineUrls(process.env.WEBX_ENGINE_URLS);
+const engineBase = (tenant: string): string => engineBaseFor(ENGINE_URLS, tenant, STRAPI);
 const WORDPRESS = typeof window === "undefined"
   ? (process.env.WORDPRESS_URL || "http://localhost:8081/wp-json").replace(/\/$/, "")
   : "";
@@ -67,7 +65,8 @@ async function get<T = any>(path: string, tenant: string, locale: "th" | "en" = 
     const r = await fetch(url, { headers: { Accept: "application/json" } });
     if (!r.ok) { console.error("[cms] " + url + " -> HTTP " + r.status); return null; }
     const j = await r.json();
-    return j.data as T;
+    // A tenant on its own engine: media URLs point at that engine, not STRAPI.
+    return (ENGINE_URLS[tenant] ? absolutizeMedia(j.data, ENGINE_URLS[tenant]) : j.data) as T;
   } catch (e) {
     console.error("[cms] " + url + " -> " + (e as Error).message);
     return null;
