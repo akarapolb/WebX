@@ -257,6 +257,9 @@ jobs:
           WEBX_CONTROL_URL: http://localhost:1400
           WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
           WEBX_CONTROL_QUEUE: "1"
+          # the model the agent's jobs call: the mock the job spec starts on this port (webx-studio/tests/harness/mockLlmServer.ts)
+          LITELLM_URL: http://localhost:4010
+          LITELLM_KEY: ci-mock
         run: npm run dev > /tmp/webx-studio.log 2>&1 &
       - name: Wait for webx-studio to be ready
         run: |
@@ -278,7 +281,7 @@ jobs:
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
           ANALYTICS_READS_CONTROL: "1"
-        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts tests/consent-control-plane.spec.ts
+        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts tests/consent-control-plane.spec.ts tests/agent-job-control-plane.spec.ts
       - if: failure()
         run: |
           tail -n 100 /tmp/webx-studio.log

@@ -75,6 +75,9 @@ resume across two worker processes, and a model that keeps failing.
 
 ## Not yet
 
-Studio's tick against the control plane's schedule store (the store is built, in `../webx-control`), job creation from Studio (its jobs API still writes to Strapi),
-memory notes and skills, the existing Node worker's behaviour parity (`webx-studio/lib/agent/worker.ts`), and the agent
-evals (`eval/`) run against this worker.
+Studio's side is done: with `WEBX_CONTROL_QUEUE=1` (and the control URL and token) its jobs API, the workers' leases and the schedule
+tick all use the control plane's queue and schedule store (`webx-studio/lib/cms/queue-store.ts`), and that path runs against a live
+Studio in CI for list, read and cancel (`e2e/tests/queue-control-plane.spec.ts`). Creating a job and running it through this
+worker end to end against a live Studio is only covered by unit and mock tests. What is left: memory notes and skills, behaviour
+parity with the Node worker (`webx-studio/lib/agent/worker.ts`: its slice and retry rules, stuck-job handling, usage limits), the
+agent evals (`eval/`) run against this worker, and schedules driving MicroAgent triggers.
