@@ -25,3 +25,17 @@ export function assertSafeToStart(env: Env): void {
   const found = publicDefaults(env);
   if (found.length) throw new Error("WebX Studio will not start in production: " + found.join(" "));
 }
+
+/**
+ * Says why on stderr, then ends the process with status 1 once the message has been written.
+ *
+ * Throwing from instrumentation's register() is not a refusal on its own: Next logs the error as an unhandled rejection and
+ * leaves the process up, listening, answering 500 to every request (seen on Next 15.5 with `next start`), so a container
+ * looks started and is only ever unhealthy. A refusal to start should end the process, where a supervisor and
+ * `docker compose up` both see it. `exit` can be replaced, for tests.
+ */
+export function failFast(message: string, exit: (code: number) => void = (code) => process.exit(code)): Promise<void> {
+  return new Promise((resolve) => {
+    process.stderr.write(`\n${message}\n`, () => { exit(1); resolve(); });
+  });
+}

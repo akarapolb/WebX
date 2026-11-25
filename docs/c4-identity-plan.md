@@ -255,7 +255,9 @@ About 33 working days, against 10 to 15 in the C4 row of `docs/target-architectu
 - Secrets: `lib/secretCompare.ts` (SHA-256 of both sides, then `timingSafeEqual`, so the length does not leak either; `gatewayAuthorized`
   uses it as well), `lib/internalAuth.ts` for the four scheduler routes, and a test that every route under `app/api/internal` is behind
   one of the two approved checks before it awaits anything. `lib/startupChecks.ts` runs from `instrumentation.ts`: Studio refuses to start in
-  production with the public scheduler password. Strapi's seed no longer creates the scheduler account with it in production, and
+  production with the public scheduler password, which means it prints why and exits with status 1. (The first version only threw from
+  `register()`; a production build run with `next start` showed that on Next 15.5 this leaves the process up, listening and answering 500 to
+  everything, so it looked started and was only unhealthy.) Strapi's seed no longer creates the scheduler account with it in production, and
   logs an error at every boot while an existing account still accepts it (`src/utils/scheduler-credentials.ts`).
   **Upgrade note:** a production Studio with `STRAPI_SCHEDULER_PASSWORD=WebxSched@2569` will not start until the password is changed on both sides.
 
