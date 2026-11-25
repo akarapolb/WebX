@@ -183,6 +183,21 @@ try {
   await down();
   await up([], { WEBX_PUBLIC_SITE_ORIGINS: "*" });
   check("\"*\" allows any origin", (await call("OPTIONS", "/api/consent-logs", { headers: { origin: other, "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === "*");
+
+  // the address the limits count is the one our own proxy added to X-Forwarded-For (one proxy unless told otherwise), never one
+  // the caller wrote to its left: writing a fresh address each time must not buy a fresh allowance
+  await down();
+  await up();
+  const behindProxy = (written, added) => call("POST", "/api/consent-logs?tenant=dga", { body: consent, headers: { "x-forwarded-for": `${written}, ${added}` } });
+  let spoofed = 0;
+  for (let n = 0; n < 40; n++) if ((await behindProxy(`198.18.0.${n}`, "203.0.113.50")).status === 429) spoofed++;
+  check("a caller who writes a new address in front of the proxy's own each time is still one caller: 429 after 30", spoofed === 10, `limited ${spoofed}`);
+  check("another address added by the proxy is another caller", (await behindProxy("198.18.1.1", "203.0.113.51")).status === 201);
+  await down();
+  await up([], { WEBX_TRUSTED_PROXIES: "0" });
+  let direct = 0;
+  for (let n = 0; n < 40; n++) if ((await call("POST", "/api/consent-logs?tenant=dga", { body: consent, headers: { "x-forwarded-for": `198.19.0.${n}` } })).status === 429) direct++;
+  check("with WEBX_TRUSTED_PROXIES=0 the header is ignored: a changing one makes no difference, 429 after 30", direct === 10, `limited ${direct}`);
 } catch (e) {
   console.error(e);
   failures++;

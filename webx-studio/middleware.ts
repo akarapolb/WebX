@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/config";
+import { clientAddress, trustedProxies } from "@/lib/clientAddress";
 
 // Basic per-IP rate limiting for the BFF's own API routes — previously
 // nothing here at all (Strapi's own API had src/middlewares/rate-limit.ts;
@@ -28,13 +29,15 @@ function hit(key: string, max: number, windowMs: number): boolean {
   return true;
 }
 
+// How many reverse proxies of ours stand in front of Studio (WEBX_TRUSTED_PROXIES, one unless set): which X-Forwarded-For
+// entry may be believed. The first entry may not: it is the one the caller writes, and used as the key it let anyone pick a
+// fresh address per attempt and so never reach the sign-in limit (lib/clientAddress.ts).
+const PROXIES = trustedProxies(process.env.WEBX_TRUSTED_PROXIES);
+
 function clientIp(req: NextRequest): string {
-  // req.ip (Vercel-only, removed from NextRequest as of Next 15) isn't
-  // available here — XFF is what DEPLOY.md's own reverse-proxy-in-front
-  // assumption relies on; "unknown" only happens hitting Next directly
-  // with no proxy in front (e.g. local dev), which shares one bucket.
-  const xff = req.headers.get("x-forwarded-for") || "";
-  return xff.split(",")[0].trim() || "unknown";
+  // req.ip (Vercel-only, removed from NextRequest as of Next 15) isn't available here, so a request that does not come through
+  // a proxy (local dev) shares one "unknown" bucket.
+  return clientAddress(req.headers.get("x-forwarded-for"), PROXIES);
 }
 
 const AUTH_PREFIX = "/api/auth/";

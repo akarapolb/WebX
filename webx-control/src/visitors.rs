@@ -4,6 +4,37 @@
 //! caller from filling the disk, and a per-address rate limit.
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
+
+/// The address a request counts against for the rate limits. `proxies` reverse proxies of ours sit in front of this service, and
+/// each adds the address it received the request from to X-Forwarded-For; the entry that can be trusted is the one the outermost
+/// of them added, `proxies` places from the right. Everything to its left was written by the caller, who can put anything there:
+/// the first entry (which this once used) let a caller choose their own address and so have no limit at all. With no proxies, too
+/// few entries (the request did not pass through all of them) or an entry that is not an address, the connecting address is used.
+/// An IPv6 address counts as its /64, the smallest block one customer is given, so rotating the rest of it buys nothing.
+pub fn client_ip(peer: IpAddr, forwarded: &[&str], proxies: usize) -> String {
+    let entries: Vec<&str> = forwarded.iter().flat_map(|h| h.split(',')).map(str::trim).filter(|s| !s.is_empty()).collect();
+    let ip = if proxies == 0 || entries.len() < proxies { peer } else { parse_ip(entries[entries.len() - proxies]).unwrap_or(peer) };
+    match ip {
+        IpAddr::V6(v6) if v6.to_ipv4_mapped().is_none() => {
+            let s = v6.segments();
+            format!("{:x}:{:x}:{:x}:{:x}::/64", s[0], s[1], s[2], s[3])
+        }
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map(|v4| v4.to_string()).unwrap_or_else(|| ip.to_string()),
+        other => other.to_string(),
+    }
+}
+
+/// An address as a proxy writes it: bare, with a port (`1.2.3.4:5678`, `[::1]:443`), or an IPv6 address in brackets.
+fn parse_ip(s: &str) -> Option<IpAddr> {
+    if let Ok(ip) = s.parse::<IpAddr>() {
+        return Some(ip);
+    }
+    if let Ok(sa) = s.parse::<SocketAddr>() {
+        return Some(sa.ip());
+    }
+    s.strip_prefix('[').and_then(|r| r.strip_suffix(']')).and_then(|r| r.parse().ok())
+}
 
 /// What one address may log per window.
 pub const RATE_LIMIT: u32 = 30;
@@ -126,6 +157,47 @@ pub fn is_visitor_path(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn the_address_is_the_one_our_own_proxy_added_not_one_the_caller_wrote() {
+        let peer = ip("10.0.0.5");
+        // one proxy in front: it appended the caller's address to whatever the caller sent, so only the last entry is its word
+        assert_eq!(client_ip(peer, &["6.6.6.6, 203.0.113.9"], 1), "203.0.113.9");
+        assert_eq!(client_ip(peer, &["203.0.113.9"], 1), "203.0.113.9");
+        // two proxies in front: the second from the right
+        assert_eq!(client_ip(peer, &["6.6.6.6, 203.0.113.9, 10.0.0.2"], 2), "203.0.113.9");
+        // the header may be sent as several lines; they read in order
+        assert_eq!(client_ip(peer, &["6.6.6.6", "203.0.113.9"], 1), "203.0.113.9");
+        // a caller who rotates what they write gets one address, not a new one each time
+        assert_eq!(client_ip(peer, &["1.1.1.1, 203.0.113.9"], 1), client_ip(peer, &["2.2.2.2, 203.0.113.9"], 1));
+    }
+
+    #[test]
+    fn without_a_trustworthy_header_the_connecting_address_counts() {
+        let peer = ip("198.51.100.7");
+        assert_eq!(client_ip(peer, &[], 1), "198.51.100.7", "no header: the request did not come through a proxy");
+        assert_eq!(client_ip(peer, &["203.0.113.9"], 0), "198.51.100.7", "no proxies: the header is ignored whatever it says");
+        assert_eq!(client_ip(peer, &["203.0.113.9"], 2), "198.51.100.7", "fewer entries than proxies: it did not pass through them all");
+        assert_eq!(client_ip(peer, &["not-an-address"], 1), "198.51.100.7");
+        assert_eq!(client_ip(peer, &["unknown, <script>"], 1), "198.51.100.7", "garbage never becomes a key");
+        assert_eq!(client_ip(peer, &[""], 1), "198.51.100.7");
+    }
+
+    #[test]
+    fn a_port_or_brackets_are_dropped_and_an_ipv6_address_counts_as_its_64() {
+        let peer = ip("10.0.0.5");
+        assert_eq!(client_ip(peer, &["203.0.113.9:51234"], 1), "203.0.113.9");
+        assert_eq!(client_ip(peer, &["[2001:db8:1:2:3:4:5:6]:443"], 1), "2001:db8:1:2::/64");
+        assert_eq!(client_ip(peer, &["[2001:db8:1:2:3:4:5:6]"], 1), "2001:db8:1:2::/64");
+        assert_eq!(client_ip(peer, &["2001:DB8:1:2:ffff:ffff:ffff:ffff"], 1), client_ip(peer, &["2001:db8:1:2::1"], 1), "the rest of the address buys nothing");
+        assert_ne!(client_ip(peer, &["2001:db8:1:3::1"], 1), client_ip(peer, &["2001:db8:1:2::1"], 1), "another /64 is another caller");
+        assert_eq!(client_ip(ip("2001:db8:9:9::7"), &[], 1), "2001:db8:9:9::/64");
+        assert_eq!(client_ip(peer, &["::ffff:203.0.113.9"], 1), "203.0.113.9", "an IPv4 address written as IPv6 is the IPv4 address");
+    }
 
     #[test]
     fn a_consent_body_is_kept_as_given_with_the_workspace_stamped_on() {

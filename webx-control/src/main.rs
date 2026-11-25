@@ -42,7 +42,7 @@ mod registry;
 
 use axum::{
     body::Bytes,
-    extract::{Multipart, Path, RawQuery, Request, State},
+    extract::{ConnectInfo, Multipart, Path, RawQuery, Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Json, Response},
@@ -51,6 +51,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 struct App {
@@ -70,6 +71,8 @@ struct App {
     token_ttl: i64,
     /// per-address limit on the visitors' write routes
     limiter: Mutex<visitors::RateLimiter>,
+    /// how many reverse proxies of ours stand in front (WEBX_TRUSTED_PROXIES): which X-Forwarded-For entry may be believed
+    proxies: usize,
     /// browser origins allowed to call the visitors' routes (CORS; WEBX_PUBLIC_SITE_ORIGINS)
     origins: Vec<String>,
     /// the captcha challenges handed out and not yet answered
@@ -174,7 +177,7 @@ async fn public(State(app): State<Shared>, Path(what): Path<String>, RawQuery(ra
 }
 
 /// POST /api/consent-logs?tenant=<key>: a visitor's cookie choice, kept as evidence (decision D12). Anonymous and
-/// rate-limited per address (X-Forwarded-For's first entry when a proxy sets it). A tenant that is not registered
+/// rate-limited per address (visitors::client_ip: the connecting address, or what our own proxy put in X-Forwarded-For). A tenant that is not registered
 /// is filed under the first tenant, as Strapi does, or refused with --strict-tenants.
 async fn consent_log(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
     if let Err(r) = rate_limited(&app, "consent", &headers) {
@@ -641,10 +644,23 @@ async fn assist_find(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw
     }
 }
 
-/// The address a visitor's request came from, for rate limiting: the first X-Forwarded-For entry (a proxy in front of this
-/// service sets it), else one shared bucket.
+/// The header the middleware below puts the caller's address in for the handlers. It is always written there, replacing
+/// whatever the caller sent under that name, so a handler can believe it.
+const CLIENT_HEADER: &str = "x-webx-client";
+
+/// The address a visitor's request counts against for rate limiting (visitors::client_ip, decided by WEBX_TRUSTED_PROXIES).
 fn client_address(headers: &HeaderMap) -> String {
-    headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.split(',').next()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "direct".into())
+    headers.get(CLIENT_HEADER).and_then(|v| v.to_str().ok()).map(str::to_string).filter(|s| !s.is_empty()).unwrap_or_else(|| "direct".into())
+}
+
+/// Works out who is calling from the connecting socket and X-Forwarded-For, and tells the handlers in CLIENT_HEADER.
+async fn client_key(State(app): State<Shared>, ConnectInfo(peer): ConnectInfo<SocketAddr>, mut req: Request, next: Next) -> Response {
+    let forwarded: Vec<&str> = req.headers().get_all("x-forwarded-for").iter().filter_map(|v| v.to_str().ok()).collect();
+    let who = visitors::client_ip(peer.ip(), &forwarded, app.proxies);
+    if let Ok(v) = HeaderValue::from_str(&who) {
+        req.headers_mut().insert(CLIENT_HEADER, v);
+    }
+    next.run(req).await
 }
 
 /// One request counted against the visitor's address for `route` (each visitors' route has its own allowance); the 429 to
@@ -1234,7 +1250,7 @@ async fn main() {
     let pii_on = pii.is_some();
     let mailer = mailer::Mailer::from_env().unwrap_or_else(|e| panic!("{e}"));
     let mail_on = mailer.is_some();
-    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), proxies: std::env::var("WEBX_TRUSTED_PROXIES").ok().filter(|v| !v.trim().is_empty()).map_or(1, |v| v.trim().parse().unwrap_or_else(|_| panic!("WEBX_TRUSTED_PROXIES must be a number (0 when no proxy is in front)"))), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
     let state_for_log = state.clone();
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
@@ -1261,6 +1277,7 @@ async fn main() {
         .route("/internal/*rest", any(internal).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         .fallback(|| async { not_found() })
         .with_state(state.clone())
+        .layer(middleware::from_fn_with_state(state.clone(), client_key))
         .layer(middleware::from_fn_with_state(state.clone(), cors));
     let state_for_mail = state;
     if let Some(m) = mailer {
@@ -1269,6 +1286,6 @@ async fn main() {
     // the loopback address unless told otherwise: in a container, or behind a proxy on another host, give --host 0.0.0.0
     let host: std::net::IpAddr = arg("host", "127.0.0.1").parse().unwrap_or_else(|_| panic!("--host must be an IP address"));
     let listener = tokio::net::TcpListener::bind((host, port)).await.unwrap_or_else(|e| panic!("bind {host}:{port}: {e}"));
-    eprintln!("[webx-control] http://{host}:{port} ({n} tenant(s) in {db}; admin API {}, internal API {}, forms {}, mail {}, assistant {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" }, if pii_on { "on" } else { "off: set WEBX_PII_KEY" }, if mail_on { "on" } else { "queued only: set WEBX_SMTP_URL" }, if state_for_log.assist.ask.is_some() { "answers by LLM" } else { "quotes only: set LITELLM_URL" });
-    axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();
+    eprintln!("[webx-control] http://{host}:{port} ({n} tenant(s) in {db}; admin API {}, internal API {}, forms {}, mail {}, assistant {}; {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" }, if pii_on { "on" } else { "off: set WEBX_PII_KEY" }, if mail_on { "on" } else { "queued only: set WEBX_SMTP_URL" }, if state_for_log.assist.ask.is_some() { "answers by LLM" } else { "quotes only: set LITELLM_URL" }, if state_for_log.proxies == 0 { "X-Forwarded-For ignored: callers are counted at the connecting address".to_string() } else { format!("{} proxy hop(s) trusted for X-Forwarded-For: set WEBX_TRUSTED_PROXIES=0 if none is in front", state_for_log.proxies) });
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();
 }

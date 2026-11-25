@@ -53,7 +53,11 @@ loop, although the comment in `lib/keycloakAdmin.ts:40` says the caller treats a
   when governed code asks the engine "who am I", one engine call each time (`gov:1724-1734` -> `lib/cms/strapi.ts:248-258`,
   `lib/cms/wordpress.ts:495-502`), and in the app layout (`layout.tsx:11-15`).
 - Limits: 10 POSTs per 10 minutes by default (`WEBX_AUTH_RATE_MAX`) per forwarded address for everything under `/api/auth/`,
-  refresh included, in memory (`middleware.ts:40-66`). No CSRF token or Origin check exists (`git grep` over
+  refresh included, in memory (`middleware.ts:40-66`). At `a5d7fc5` that address was the **first** `X-Forwarded-For` entry, which
+  the caller writes, so anyone could pick a fresh address per attempt and never reach the limit (Strapi's own login limiter, keyed
+  on Studio's address and the e-mail, was then the only brake on guessing a password). Fixed after this plan was read, outside
+  C4: the key is the entry the outermost of `WEBX_TRUSTED_PROXIES` proxies added (`lib/clientAddress.ts`; the same in webx-control's
+  visitors' routes). No CSRF token or Origin check exists (`git grep` over
   `middleware.ts`, `app/`, `lib/` finds none); the cookies are `SameSite=Lax`.
 
 | Cookie | Holds | Lifetime | Set at |

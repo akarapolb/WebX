@@ -127,6 +127,9 @@ services:
       # RAG vector store: leave WEBX_VECTOR empty for in-app cosine, or 'pgvector'
       WEBX_VECTOR: ${WEBX_VECTOR:-}
       PGVECTOR_URL: ${PGVECTOR_URL:-}
+      # Studio's own per-address limits (sign-in and the API's POSTs) believe the X-Forwarded-For entry the outermost of this many
+      # reverse proxies added (webx-studio/.env.example); 0 ignores the header
+      WEBX_TRUSTED_PROXIES: ${WEBX_TRUSTED_PROXIES:-1}
       # Release scheduler (see the release-scheduler service below): the
       # secret protects POST /api/internal/releases/process-due itself; the
       # STRAPI_SCHEDULER_* pair is the account this process logs in as to
@@ -459,7 +462,7 @@ services:
   # assistant). Optional; one Rust binary with one SQLite file on the control-data volume (back it up like the database).
   # To use it: give `webx` and `strapi` WEBX_CONTROL_URL=http://webx-control:1400 and the same WEBX_CONTROL_SERVICE_TOKEN, and build
   # public-site with PUBLIC_CONTROL_URL set to this service's public address (behind your reverse proxy, which must set
-  # X-Forwarded-For: the per-address limits key on it).
+  # X-Forwarded-For: the per-address limits key on the entry it adds; WEBX_TRUSTED_PROXIES says how many proxies there are).
   webx-control:
     build: ./webx-control
     restart: unless-stopped
@@ -471,6 +474,9 @@ services:
       # the SAME value as strapi's PII_ENCRYPTION_KEY, so rows and files move between the two without re-encryption
       WEBX_PII_KEY: ${PII_ENCRYPTION_KEY:?set PII_ENCRYPTION_KEY}
       WEBX_PUBLIC_SITE_ORIGINS: ${WEBX_PUBLIC_SITE_ORIGINS:-}
+      # how many reverse proxies of yours stand in front: the per-address limits believe the X-Forwarded-For entry the outermost
+      # of them added, never one the caller wrote; 0 if the service is reachable directly (then the connecting address counts)
+      WEBX_TRUSTED_PROXIES: ${WEBX_TRUSTED_PROXIES:-1}
       # where the site assistant reads a Strapi workspace's content (a workspace's own engineUrl in the registry wins)
       WEBX_ENGINE_URL: http://strapi:1337
       WEBX_SMTP_URL: ${WEBX_SMTP_URL:-}

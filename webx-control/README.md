@@ -57,6 +57,7 @@ otherwise, so give `0.0.0.0` in a container or when a proxy on another host reac
 | `WEBX_CONTROL_SIGNING_KEY` | base64 of 32 bytes: the key sign-in tokens are signed with | one is made and kept in the database |
 | `WEBX_PII_KEY` | base64 of 32 bytes, the **same value as Strapi's `PII_ENCRYPTION_KEY`**: personal data and files are encrypted with it | the form routes and form collections answer 503 |
 | `WEBX_PUBLIC_SITE_ORIGINS` | comma-separated origins of the public sites (or `*`) allowed to call the visitors' routes from a browser | only the local development origins |
+| `WEBX_TRUSTED_PROXIES` | how many reverse proxies of yours stand in front: the per-address limits use the `X-Forwarded-For` entry the outermost of them added (that many places from the right), never an entry to its left, which the caller writes. `0` when the service is reachable directly: the header is ignored and the connecting address counts | `1` |
 | `WEBX_CAPTCHA` | `off` turns the form captcha off (development only) | the captcha is asked |
 | `WEBX_SMTP_URL`, `WEBX_MAIL_FROM` | the mail server and sender for the forms' mail | mail is queued and kept, not sent |
 | `WEBX_COMPLAINT_NOTIFY_EMAIL` | where a new complaint is reported | staff are not mailed |
@@ -65,7 +66,7 @@ otherwise, so give `0.0.0.0` in a container or when a proxy on another host reac
 
 Run it in Docker with `docker compose --profile control up -d --build` (the `webx-control` service in `../docker-compose.yml`, an image built
 from `./Dockerfile`, the database on the `control-data` volume). Put it behind the reverse proxy that serves the public sites:
-the per-address limits key on the first `X-Forwarded-For` entry. The database is one SQLite file: back it up by copying it while the
+the per-address limits key on the `X-Forwarded-For` entry that proxy adds (`WEBX_TRUSTED_PROXIES`). The database is one SQLite file: back it up by copying it while the
 service is stopped, or with `sqlite3 control.db ".backup copy.db"`.
 
 ## Visitors' routes (C5, decision D12)
@@ -87,7 +88,8 @@ The choice is stored as given in the `consent-log` records collection, stamped w
 (`path` and `userAgent` at 512 characters), unknown fields are dropped, `categories` must be an object of at most 2 KB, an
 `action` is required, and a body past 16 KB is refused (413). A tenant that is not registered is filed under the first one, as
 Strapi does, or refused (404) with `--strict-tenants`. One address may log 30 times a minute (429 after that). The address is the
-first entry of `X-Forwarded-For`, so run this service behind a proxy that sets it; without one every caller shares one limit.
+one your own proxy added to `X-Forwarded-For` (the last entry when one proxy stands in front; see `WEBX_TRUSTED_PROXIES`), else the
+connecting address; an entry the caller wrote to its left is never believed, and an IPv6 address counts as its /64.
 **Search statistics** (a port of `strapi-cms/src/api/search-stat`): one row per workspace, language and normalised query, with
 `count`, the last `results`, `zeroCount` (how often it found nothing) and `lastAt`; never who searched. The query is trimmed,
 single-spaced, lower-cased and cut at 100 characters; an empty one, one with an e-mail address in it, or one with a number of
