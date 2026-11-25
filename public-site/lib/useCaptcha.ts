@@ -11,9 +11,12 @@
 // unaffected by this.
 import { useEffect, useState, useCallback } from "react";
 
-import { PUBLIC_CMS, PUBLIC_WP } from "@/lib/publicCms";
-/** Browser-facing CMS URL ("" when the published site has no CMS; lib/publicCms.ts). */
+import { PUBLIC_CMS, PUBLIC_RUNTIME, PUBLIC_WP } from "@/lib/publicCms";
+/** Browser-facing CMS URL ("" when the published site has no CMS; lib/publicCms.ts): what the assistant calls. */
 export const STRAPI = PUBLIC_CMS;
+/** Where the forms and their captcha are: the WebX control plane when PUBLIC_CONTROL_URL is set (webx-control's forms.rs and
+ *  captcha.rs), the CMS as before otherwise. The captcha and the form it guards must be one service, so both use this. */
+export const FORMS = PUBLIC_RUNTIME;
 /** Browser-facing WordPress REST base ("" when the published site has none). */
 export const WORDPRESS = PUBLIC_WP;
 
@@ -21,13 +24,13 @@ export type Captcha = { id: string; question: string };
 export type CaptchaEngine = "strapi" | "wordpress";
 
 function captchaUrl(engine: CaptchaEngine): string {
-  return engine === "wordpress" ? `${WORDPRESS}/webx/v1/captcha` : `${STRAPI}/api/captcha`;
+  return engine === "wordpress" ? `${WORDPRESS}/webx/v1/captcha` : `${FORMS}/api/captcha`;
 }
 
 export function useCaptcha(engine: CaptchaEngine = "strapi") {
   const [captcha, setCaptcha] = useState<Captcha | null>(null);
   const refreshCaptcha = useCallback(async () => {
-    if (engine === "strapi" ? !STRAPI : !WORDPRESS) return; // no CMS behind this copy
+    if (engine === "strapi" ? !FORMS : !WORDPRESS) return; // no CMS behind this copy
     try {
       const r = await fetch(captchaUrl(engine), { cache: "no-store" });
       if (!r.ok) return;

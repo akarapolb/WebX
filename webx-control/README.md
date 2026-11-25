@@ -138,7 +138,8 @@ addresses, the same variable Strapi's CORS reads.
 | `GET /internal/consent/summary?tenant=<key>&from=<iso>&before=<iso>` | `{data: {total, accept, reject, custom}}` for one workspace (no `tenant`: all) and a creation window, from inclusive, before exclusive; counted as Strapi's analytics counts (an action containing `accept`, or `all`/`opt-in`, is an accept; containing `reject`, or `none`/`opt-out`, a reject; the rest custom) |
 
 **Switching over.** Nothing is copied. Point public-site at this service with `PUBLIC_CONTROL_URL=https://control.example.go.th`
-(its cookie banner and the contact lookup then call here; unset, they call the CMS as before) and give Strapi and Studio the same
+(its cookie banner, search reporter, forms with their captcha, and the contact lookup then call here; unset, they call the CMS as
+before; the assistant still calls the CMS) and give Strapi and Studio the same
 `WEBX_CONTROL_URL` and `WEBX_CONTROL_SERVICE_TOKEN` they use for the audit log. Then **Studio's Cookie Consent page lists the
 choices from both places** (`webx-studio/lib/cms/consent-merge.ts`: the control plane's and Strapi's, newest first, scoped to the
 workspace; a page may reach 1000 rows deep) and **Strapi's analytics dashboard and monthly report add this service's counts to
@@ -157,8 +158,21 @@ editor's workspace and their role's permission to see that form; it is always a 
 no key needed, since no personal data is read) to its own, in the dashboard and in the monthly report. Studio's switch is the same
 two variables as the audit log (`WEBX_CONTROL_URL`, `WEBX_CONTROL_SERVICE_TOKEN`).
 
-Not here yet: the assistant; for the forms, the migration from Strapi (rows copy as they are under the same key, files through
-`POST /internal/files`) and the WordPress-native forms (decision D6). Strapi's own `console/export` still reads only Strapi's table.
+**Moving the old submissions** is optional (Studio and the dashboards read both places) and is for the day Strapi's copy is retired (C6):
+
+```
+STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL=... WEBX_CONTROL_SERVICE_TOKEN=... \
+  node tools/migrate-forms.mjs [--dry-run] [--move] [--default-tenant <key>]
+```
+
+It copies each form's rows with their id, reference number, stage, steps and times, asks Strapi for the rows of each tenant to know a row's
+workspace (a row with no tenant is reported, and filed under `--default-tenant` if given), downloads each complaint attachment and
+application résumé from Strapi's uploads and stores it here (encrypted), and skips what is already here, so it can be run again.
+Strapi hands over the personal data decrypted and this service encrypts it again (a value already ciphertext under the key is kept).
+`--dry-run` writes nothing; `--move` deletes each row from Strapi once it is verified here (without it a migrated row would be listed
+twice by Studio until Strapi's copy is deleted). `node tools/migrate-forms-test.mjs` runs it against the real binary and a fake Strapi.
+
+Not here yet: the assistant, and the WordPress-native forms (decision D6). Strapi's own `console/export` still reads only Strapi's table.
 
 ## Admin API
 
@@ -293,6 +307,7 @@ node tools/parity-test.mjs --reference http://localhost:1337   # same answers as
 node tools/build-test.mjs --no-check-export                # a site build reading tenants from here is identical
 node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, CORS, summary, restart
 node tools/forms-test.mjs                                  # the form inboxes: encryption at rest, references, tracking, captcha, attachments, mail over SMTP
+node tools/migrate-forms-test.mjs                          # moving Strapi's submissions and their files here, against a fake Strapi
 ```
 
 `parity-test` compares the tenant list and `resolve` for every tenant in both

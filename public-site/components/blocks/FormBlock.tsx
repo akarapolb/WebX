@@ -5,7 +5,7 @@
 // from the browser to Strapi's public REST API — no BFF/API-route layer in
 // this app — so this follows the same shape, reusing useCaptcha() as-is.
 import { useState, type FormEvent } from "react";
-import { useCaptcha, STRAPI } from "@/lib/useCaptcha";
+import { useCaptcha, FORMS } from "@/lib/useCaptcha";
 import { FORM_FIELD_DEFS, STAGE_LABELS, todayTH, maskNid, type FormTypeDef } from "@/lib/formFieldDefs";
 import { t, type Locale } from "@/lib/i18n";
 
@@ -72,9 +72,9 @@ function SubmitForm({ def, tenant, b, locale }: { def: FormTypeDef; tenant: stri
         mp.append("files." + def.fileFieldKey, file, file.name);
         mp.append("captchaId", captcha.id);
         mp.append("captchaAnswer", String(fd.get("captchaAnswer") || ""));
-        r = await fetch(`${STRAPI}${def.submitMultipartEndpoint}?tenant=${encodeURIComponent(tenant)}`, { method: "POST", body: mp });
+        r = await fetch(`${FORMS}${def.submitMultipartEndpoint}?tenant=${encodeURIComponent(tenant)}`, { method: "POST", body: mp });
       } else {
-        r = await fetch(`${STRAPI}${def.submitEndpoint}?tenant=${encodeURIComponent(tenant)}`, {
+        r = await fetch(`${FORMS}${def.submitEndpoint}?tenant=${encodeURIComponent(tenant)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ data: payload, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
@@ -173,7 +173,7 @@ function TrackForm({ def, tenant, heading, locale }: { def: FormTypeDef; tenant:
     if (!ref || !def.trackEndpoint) return;
     setStatus("loading");
     try {
-      const r = await fetch(`${STRAPI}${def.trackEndpoint.replace(":ref", encodeURIComponent(ref))}?tenant=${encodeURIComponent(tenant)}`, {
+      const r = await fetch(`${FORMS}${def.trackEndpoint.replace(":ref", encodeURIComponent(ref))}?tenant=${encodeURIComponent(tenant)}`, {
         headers: { Accept: "application/json" },
       });
       if (r.status === 404) { setStatus("notfound"); return; }
