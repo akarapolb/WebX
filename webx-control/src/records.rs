@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS records_collection_tenant ON records(collection, tena
 ";
 
 /// The collections served here, by the route name Studio uses (the content type's singular name).
-pub const COLLECTIONS: [&str; 3] = ["custom-role", "page-template", "page-version"];
+pub const COLLECTIONS: [&str; 4] = ["custom-role", "page-template", "page-version", "consent-log"];
 
 fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()

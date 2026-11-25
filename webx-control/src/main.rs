@@ -12,6 +12,7 @@
 //!   GET /api/tenants/resolve?tenant=<key>        -> {data: {key, name, brand, contact, ...}}
 //!       no tenant named: the first tenant. An unknown key gets the first tenant's answer too
 //!       (what Strapi does today), or a 404 with --strict-tenants (decision D9)
+//!   POST /api/consent-logs?tenant=<key>          -> 201; a visitor's cookie choice, rate-limited (see visitors.rs)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 
@@ -19,6 +20,7 @@ mod audit;
 mod identity;
 mod jobs;
 mod schedules;
+mod visitors;
 mod records;
 mod registry;
 
@@ -27,7 +29,7 @@ use axum::{
     extract::{Path, RawQuery, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json, Response},
-    routing::{any, get},
+    routing::{any, get, post},
     Router,
 };
 use serde_json::{json, Value};
@@ -49,6 +51,8 @@ struct App {
     key: ed25519_dalek::SigningKey,
     /// seconds a token lives (--token-ttl, default 900)
     token_ttl: i64,
+    /// per-address limit on the visitors' write routes
+    limiter: Mutex<visitors::RateLimiter>,
 }
 type Shared = Arc<App>;
 
@@ -57,6 +61,9 @@ fn error(status: StatusCode, name: &str, message: &str) -> Response {
 }
 fn not_found() -> Response {
     error(StatusCode::NOT_FOUND, "NotFoundError", "Not Found")
+}
+fn bad(m: String) -> Response {
+    error(StatusCode::BAD_REQUEST, "ValidationError", &m)
 }
 fn fail(m: String) -> Response {
     error(StatusCode::INTERNAL_SERVER_ERROR, "InternalServerError", &m)
@@ -107,6 +114,11 @@ fn query_param(raw: Option<&str>, name: &str) -> Option<String> {
     raw?.split('&').filter_map(|p| p.split_once('=')).find(|(k, _)| *k == name).map(|(_, v)| v.to_lowercase())
 }
 
+/// A query parameter's value as sent (query_param lowercases it, which a tenant key can take but nothing else should).
+fn query_param_exact(raw: Option<&str>, name: &str) -> Option<String> {
+    raw?.split('&').filter_map(|p| p.split_once('=')).find(|(k, _)| *k == name).map(|(_, v)| percent_decode(v))
+}
+
 async fn public(State(app): State<Shared>, Path(what): Path<String>, RawQuery(raw): RawQuery) -> Response {
     app.served.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let conn = app.conn.lock().unwrap();
@@ -129,6 +141,30 @@ async fn public(State(app): State<Shared>, Path(what): Path<String>, RawQuery(ra
             }
         }
         _ => not_found(),
+    }
+}
+
+/// POST /api/consent-logs?tenant=<key>: a visitor's cookie choice, kept as evidence (decision D12). Anonymous and
+/// rate-limited per address (X-Forwarded-For's first entry when a proxy sets it). A tenant that is not registered
+/// is filed under the first tenant, as Strapi does, or refused with --strict-tenants.
+async fn consent_log(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
+    let who = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.split(',').next()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "direct".into());
+    if !app.limiter.lock().unwrap().allow(&who, now_ms()) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "RateLimitError", "Too many requests");
+    }
+    let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+    let conn = app.conn.lock().unwrap();
+    let asked = query_param_exact(raw.as_deref(), "tenant").filter(|t| !t.is_empty());
+    let known = match &asked { Some(k) => matches!(registry::get(&conn, k), Ok(Some(_))), None => false };
+    let key = match asked {
+        Some(k) if known => k,
+        Some(_) if app.strict => return not_found(),
+        _ => match registry::default_key(&conn) { Some(k) => k, None => return not_found() },
+    };
+    let doc = match visitors::consent_document(&v, &key) { Ok(d) => d, Err(m) => return bad(m) };
+    match records::create(&conn, "consent-log", &doc, &now_iso()) {
+        Ok(row) => (StatusCode::CREATED, Json(json!({"data": {"documentId": row["documentId"], "createdAt": row["createdAt"]}}))).into_response(),
+        Err(m) => fail(m),
     }
 }
 
@@ -546,12 +582,13 @@ async fn main() {
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
+        .route("/api/consent-logs", post(consent_log).layer(axum::extract::DefaultBodyLimit::max(16 * 1024)))
         .route("/.well-known/jwks.json", get(jwks))
         .route("/api/auth/me", get(me))
         .route("/admin/*rest", any(admin))
         .route("/internal/*rest", any(internal).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         .fallback(|| async { not_found() })
-        .with_state(Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl") }));
+        .with_state(Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default() }));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
     eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" });
     axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();

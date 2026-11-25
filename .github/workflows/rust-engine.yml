@@ -148,6 +148,8 @@ jobs:
       # C5: the job queue, and the worker with the real queue (mock model and Studio gateway)
       - name: Job queue in webx-control
         run: node webx-control/tools/jobs-test.mjs
+      - name: Visitors' routes in webx-control
+        run: node webx-control/tools/visitors-test.mjs
       - name: Build webx-agent
         working-directory: webx-agent
         run: cargo build --release --locked

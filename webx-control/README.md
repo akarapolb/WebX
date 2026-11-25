@@ -38,6 +38,23 @@ without that variable public-site reads the tenant routes from the content
 engine as before. The browser's own tenant lookup (`useTenantContact`) still uses
 the public CMS address until the runtime routes move (C5).
 
+## Visitors' routes (C5, decision D12)
+
+What a visitor's browser calls without signing in. Anonymous, rate-limited per address, write-only.
+
+| Route | Meaning |
+|---|---|
+| `POST /api/consent-logs?tenant=<key>` body `{data: {consentId, action, categories, language, path, userAgent}}` | log a cookie choice (PDPA evidence); `201 {data: {documentId, createdAt}}` |
+
+The choice is stored as given in the `consent-log` records collection, stamped with the workspace; text is cut at its limit
+(`path` and `userAgent` at 512 characters), unknown fields are dropped, `categories` must be an object of at most 2 KB, an
+`action` is required, and a body past 16 KB is refused (413). A tenant that is not registered is filed under the first one, as
+Strapi does, or refused (404) with `--strict-tenants`. One address may log 30 times a minute (429 after that). The address is the
+first entry of `X-Forwarded-For`, so run this service behind a proxy that sets it; without one every caller shares one limit.
+The log is read with the records API (`GET /internal/records/consent-log?filter=tenantKey:eq:<key>`, service token). Studio's
+Cookie Consent page still reads Strapi's log until the old rows are moved and it is switched; the assistant, search statistics,
+captcha, form and tenant-contact routes are not here yet.
+
 ## Admin API
 
 `Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>`; without that variable the
@@ -169,6 +186,7 @@ Recurring jobs, the store Studio's tick works against (port of `agent-schedules.
 cargo test                                                  # registry rules (unit)
 node tools/parity-test.mjs --reference http://localhost:1337   # same answers as Strapi; admin API; restart
 node tools/build-test.mjs --no-check-export                # a site build reading tenants from here is identical
+node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, restart
 ```
 
 `parity-test` compares the tenant list and `resolve` for every tenant in both
@@ -181,6 +199,6 @@ engine workflow).
 ## Not yet
 
 Identity and login (C4), bookkeeping such as the audit log, releases and
-reviews (C3), the visitors' runtime routes (C5), and Studio reading the tenant
+reviews (C3), the rest of the visitors' runtime routes (C5: the assistant, search statistics, captcha, forms), and Studio reading the tenant
 registry from here for its own routing. The database file is one SQLite file;
 Postgres for production is decision D3.
