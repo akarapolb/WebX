@@ -61,6 +61,7 @@ test("a build that reads tenants from a local control plane must not ship its ad
     assert.match(checkExport(dir, { ...env, WEBX_CONTROL_URL: "http://localhost:1400" }).join("\n"), /d\.js: contains the build machine's CMS address localhost:1400/);
     assert.deepEqual(checkExport(dir, env), [], "without WEBX_CONTROL_URL there is nothing to compare against");
     assert.deepEqual(checkExport(dir, { ...env, WEBX_CONTROL_URL: "https://control.example.org" }), [], "a hosted control plane's address may be in the JS");
+    assert.match(checkExport(dir, { ...env, PUBLIC_CONTROL_URL: "http://localhost:1400" }).join("\n"), /d\.js: contains the build machine's CMS address localhost:1400/, "a browser address that is a local one is a mistake on a public site");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
