@@ -24,20 +24,51 @@ export async function keycloakAdminToken(): Promise<string | null> {
   } catch { return null; }
 }
 
-/** Lowercased emails of currently-enabled users in one realm. Single page
- * (up to 1000) — matches this feature's own v1, don't-over-engineer scope. */
+/** How many users to ask for at a time. Keycloak may serve fewer (a cap of its own), so a short page is NOT taken for
+ * the last one: the list is read on until a page comes back empty. */
+const USER_PAGE = 500;
+/** A bound on that loop (at most 200 000 users here) so a server that ignores `first` cannot hold the tick forever. */
+const MAX_USER_PAGES = 400;
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/** Lowercased emails of every currently-enabled user in one realm, or a THROW when that cannot be known.
+ *
+ * The only caller deprovisions (deactivates) everyone it does not find on this list, so a list that is wrong is worse
+ * than none: it used to return what it had, and a failed request, a bad answer or a realm that served no one all came
+ * back as an empty set, which read as "nobody is enabled any more" and deactivated every SSO admin of the workspace.
+ * It also stopped at one page of 1000, so in a larger realm everyone after them was deactivated as well. Now:
+ *  - every page is read (offset by `first`, on until an empty page);
+ *  - any failed request, any answer that is not a list, a page that adds no new user (the server ignoring `first`), a
+ *    realm too large to read within the bound, or no enabled user with an e-mail at all, is an error, never a set.
+ * A realm that really has no enabled users therefore leaves the workspace's SSO admins as they are, with an error on
+ * the reconcile report for an operator, rather than switching them all off on one empty answer. */
 export async function listEnabledKeycloakEmails(adminToken: string, realm: string): Promise<Set<string>> {
+  const base = `${KEYCLOAK_URL}/admin/realms/${encodeURIComponent(realm)}/users`;
   const emails = new Set<string>();
-  try {
-    const r = await fetch(`${KEYCLOAK_URL}/admin/realms/${encodeURIComponent(realm)}/users?enabled=true&max=1000`, {
-      headers: { Authorization: "Bearer " + adminToken }, cache: "no-store",
+  const seen = new Set<string>();
+  let first = 0;
+  for (let page = 0; ; page++) {
+    if (page >= MAX_USER_PAGES) throw new Error(`Keycloak realm ${realm}: more than ${MAX_USER_PAGES} pages of users — not guessing at the rest`);
+    const r = await fetch(`${base}?enabled=true&first=${first}&max=${USER_PAGE}`, {
+      headers: { Authorization: "Bearer " + adminToken }, cache: "no-store", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!r.ok) return emails;
-    const list = await r.json();
-    for (const u of Array.isArray(list) ? list : []) {
+    if (!r.ok) throw new Error(`Keycloak realm ${realm}: listing users failed (HTTP ${r.status})`);
+    const list: unknown = await r.json();
+    if (!Array.isArray(list)) throw new Error(`Keycloak realm ${realm}: the user list was not a list`);
+    if (list.length === 0) break;
+
+    let fresh = 0;
+    for (const u of list) {
+      const key = String(u?.id ?? u?.username ?? u?.email ?? "");
+      if (!key || !seen.has(key)) { fresh++; if (key) seen.add(key); }
       if (u?.email) emails.add(String(u.email).toLowerCase());
     }
-  } catch { /* return whatever we have — caller treats an empty set from a failed fetch as "couldn't determine", not "nobody enabled" */ }
+    if (fresh === 0) throw new Error(`Keycloak realm ${realm}: paging did not advance (offset ${first} served users already read)`);
+    first += list.length;
+  }
+  if (emails.size === 0) {
+    throw new Error(`Keycloak realm ${realm}: no enabled user with an e-mail came back — not treating that as "everyone was removed"`);
+  }
   return emails;
 }
 

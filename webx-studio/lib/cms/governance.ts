@@ -940,6 +940,11 @@ export async function ssoLogin(tenantKey: string, rawEmail: string): Promise<{ t
  * matters for something running unattended on a timer (already confirmed
  * with you, not re-litigated here).
  *
+ * It acts only on a list it can trust: listEnabledKeycloakEmails reads every
+ * page and THROWS when the list cannot be read or comes back empty, which
+ * lands in the catch below — that workspace is skipped, with an error on the
+ * report, and nobody is deactivated on a failed or empty answer.
+ *
  * "SSO-provisioned admin of this tenant" is anyone in the tenant's own
  * adminEmails who ALSO has an sso-credential row — checked by the email
  * existing in that table at all, not filtered by the row's own tenantKey,
