@@ -202,6 +202,24 @@ pub fn list(conn: &Connection, collection: &str, q: &Query) -> Result<(Vec<Value
     Ok((out, total as usize))
 }
 
+/// How many rows of a collection hold each value of one field (its text; None where the field is absent), inside an
+/// optional workspace and creation window `[from, before)` (times as `jobs::iso` writes them): the numbers behind an
+/// analytics screen without reading every row.
+pub fn count_by(conn: &Connection, collection: &str, field: &str, tenant: Option<&str>, from: Option<&str>, before: Option<&str>) -> Result<Vec<(Option<String>, usize)>, String> {
+    let x = expr(field)?;
+    let mut wh = vec!["collection = ?".to_string()];
+    let mut args: Vec<Sql> = vec![Sql::Text(collection.to_string())];
+    if let Some(t) = tenant { wh.push("tenant_key = ?".into()); args.push(Sql::Text(t.into())); }
+    if let Some(f) = from { wh.push("created_at >= ?".into()); args.push(Sql::Text(f.into())); }
+    if let Some(b) = before { wh.push("created_at < ?".into()); args.push(Sql::Text(b.into())); }
+    let sql = format!("SELECT CAST({x} AS TEXT), COUNT(*) FROM records WHERE {} GROUP BY 1", wh.join(" AND "));
+    let mut st = conn.prepare(&sql).map_err(e)?;
+    let rows = st.query_map(params_from_iter(args.iter()), |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, i64>(1)? as usize))).map_err(e)?;
+    let mut out = Vec::new();
+    for r in rows { out.push(r.map_err(e)?); }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,6 +292,24 @@ mod tests {
         assert_eq!(list(&c, "page-version", &q(&[("n", "gte", "10")])).unwrap().1, 2, "numbers order as numbers");
         assert!(list(&c, "page-version", &q(&[("tenant.key", "eq", "x")])).is_err(), "no relation paths");
         assert!(list(&c, "page-version", &q(&[("a'); DROP TABLE records;--", "eq", "x")])).is_err());
+    }
+
+    #[test]
+    fn counts_group_by_a_field_inside_a_workspace_and_a_window() {
+        let c = db();
+        for (t, a, at) in [("pea", "accept_all", "2026-10-31T23:59:59.999Z"), ("pea", "accept_all", "2026-11-02T10:00:00.000Z"), ("pea", "reject", "2026-11-03T10:00:00.000Z"), ("dga", "reject", "2026-11-03T11:00:00.000Z")] {
+            create(&c, "consent-log", &json!({"tenantKey": t, "action": a}), at).unwrap();
+        }
+        create(&c, "consent-log", &json!({"tenantKey": "pea"}), "2026-11-04T10:00:00.000Z").unwrap();
+        create(&c, "page-version", &json!({"tenantKey": "pea", "action": "x"}), "2026-11-04T10:00:00.000Z").unwrap();
+        let all = count_by(&c, "consent-log", "action", None, None, None).unwrap();
+        assert_eq!(all.iter().map(|(_, n)| n).sum::<usize>(), 5, "every row of the collection, none of another");
+        let pea = count_by(&c, "consent-log", "action", Some("pea"), None, None).unwrap();
+        assert_eq!(pea.iter().find(|(a, _)| a.as_deref() == Some("accept_all")).unwrap().1, 2);
+        assert!(pea.iter().any(|(a, n)| a.is_none() && *n == 1), "a row without the field is counted under None");
+        let nov = count_by(&c, "consent-log", "action", Some("pea"), Some("2026-11-01T00:00:00.000Z"), Some("2026-12-01T00:00:00.000Z")).unwrap();
+        assert_eq!(nov.iter().map(|(_, n)| n).sum::<usize>(), 3, "the window is from-inclusive, before-exclusive");
+        assert!(count_by(&c, "consent-log", "bad field!", None, None, None).is_err());
     }
 
     #[test]

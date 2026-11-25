@@ -9,7 +9,7 @@
 //   - when the site is published somewhere public (PUBLIC_SITE_URL not
 //     localhost), no JS chunk contains the build machine's CMS addresses
 //     (STRAPI_URL, default http://localhost:1337; WORDPRESS_URL, default
-//     http://localhost:8081/wp-json)
+//     http://localhost:8081/wp-json; WEBX_CONTROL_URL when it is a local address)
 //
 // Usage: node scripts/check-export.mjs [exportDir]   (default: $NEXT_DIST_DIR or out)
 // Runs as the last step of `npm run build`.
@@ -72,7 +72,7 @@ export function checkExport(dir, env = process.env) {
   const site = env.PUBLIC_SITE_URL || "http://localhost:3100";
   if (!isLocalUrl(site)) {
     // host:port only, so "http://localhost:8081" and "localhost:8081/wp-json" both match
-    const needles = [env.STRAPI_URL || DEFAULT_STRAPI_URL, env.WORDPRESS_URL || DEFAULT_WORDPRESS_URL]
+    const needles = [env.STRAPI_URL || DEFAULT_STRAPI_URL, env.WORDPRESS_URL || DEFAULT_WORDPRESS_URL, env.WEBX_CONTROL_URL]
       .filter(isLocalUrl)
       .map((u) => u.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
     for (const f of files) {

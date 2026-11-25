@@ -67,6 +67,56 @@ pub fn consent_document(body: &Value, tenant_key: &str) -> Result<Value, String>
     Ok(Value::Object(o))
 }
 
+/// How the dashboards class a consent action, as Strapi's analytics counts it: accept, reject, or custom.
+pub fn consent_class(action: &str) -> &'static str {
+    let a = action.to_lowercase();
+    if a.contains("accept") || a == "all" || a == "opt-in" {
+        "accept"
+    } else if a.contains("reject") || a == "none" || a == "opt-out" {
+        "reject"
+    } else {
+        "custom"
+    }
+}
+
+/// `{total, accept, reject, custom}` from the counts of each action (a row without one counts as custom).
+pub fn consent_summary(counts: &[(Option<String>, usize)]) -> Value {
+    let (mut accept, mut reject, mut custom) = (0, 0, 0);
+    for (action, n) in counts {
+        match consent_class(action.as_deref().unwrap_or("")) {
+            "accept" => accept += n,
+            "reject" => reject += n,
+            _ => custom += n,
+        }
+    }
+    json!({"total": accept + reject + custom, "accept": accept, "reject": reject, "custom": custom})
+}
+
+/// The development origins Strapi's CORS already allows for the public site.
+const DEV_ORIGINS: [&str; 4] = ["http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:3100", "http://localhost:8095"];
+
+/// The browser origins that may call the visitors' routes: the development ones plus `extra` (WEBX_PUBLIC_SITE_ORIGINS,
+/// comma-separated, a trailing slash ignored). `*` allows any origin, which is safe here: these routes are anonymous and
+/// take no cookies.
+pub fn allowed_origins(extra: &str) -> Vec<String> {
+    let mut v: Vec<String> = DEV_ORIGINS.iter().map(|s| s.to_string()).collect();
+    v.extend(extra.split(',').map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty()));
+    v
+}
+
+/// What to answer in Access-Control-Allow-Origin for a request that came from `origin`; None when it is not allowed.
+pub fn allow_origin(allowed: &[String], origin: Option<&str>) -> Option<String> {
+    if allowed.iter().any(|a| a == "*") {
+        return Some("*".into());
+    }
+    origin.filter(|o| allowed.iter().any(|a| a == o)).map(str::to_string)
+}
+
+/// Whether a path is one a visitor's browser calls (CORS applies); the sign-in check Studio makes server to server is not.
+pub fn is_visitor_path(path: &str) -> bool {
+    path.starts_with("/api/") && !path.starts_with("/api/auth/")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,6 +142,27 @@ mod tests {
         assert!(consent_document(&json!({"data": {"action": "a", "categories": [1]}}), "dga").is_err());
         assert!(consent_document(&json!({"data": {"action": "a", "categories": {"k": long.repeat(2)}}}), "dga").is_err());
         assert!(consent_document(&json!("nope"), "dga").is_err());
+    }
+
+    #[test]
+    fn consent_actions_are_classed_as_the_dashboards_count_them() {
+        for a in ["accept_all", "ACCEPT", "all", "opt-in"] { assert_eq!(consent_class(a), "accept", "{a}"); }
+        for a in ["reject", "reject_all", "none", "opt-out"] { assert_eq!(consent_class(a), "reject", "{a}"); }
+        for a in ["custom", "", "save"] { assert_eq!(consent_class(a), "custom", "{a}"); }
+        let s = consent_summary(&[(Some("accept_all".into()), 4), (Some("reject".into()), 2), (Some("custom".into()), 1), (None, 3)]);
+        assert_eq!((s["total"].as_u64(), s["accept"].as_u64(), s["reject"].as_u64(), s["custom"].as_u64()), (Some(10), Some(4), Some(2), Some(4)));
+    }
+
+    #[test]
+    fn origins_come_from_the_environment_and_only_listed_ones_are_allowed() {
+        let a = allowed_origins(" https://pea.example.go.th/ ,https://nbtc.example.go.th,");
+        assert_eq!(allow_origin(&a, Some("https://pea.example.go.th")).as_deref(), Some("https://pea.example.go.th"), "a trailing slash in the setting is ignored");
+        assert_eq!(allow_origin(&a, Some("http://localhost:3100")).as_deref(), Some("http://localhost:3100"), "development origins are always allowed");
+        assert_eq!(allow_origin(&a, Some("https://evil.example.com")), None);
+        assert_eq!(allow_origin(&a, None), None, "a request with no Origin header (a server) gets no CORS answer");
+        assert_eq!(allow_origin(&allowed_origins("*"), Some("https://anything.example")).as_deref(), Some("*"));
+        assert!(is_visitor_path("/api/consent-logs") && is_visitor_path("/api/tenants/resolve"));
+        assert!(!is_visitor_path("/api/auth/me") && !is_visitor_path("/internal/records/consent-log") && !is_visitor_path("/admin/tenants"));
     }
 
     #[test]

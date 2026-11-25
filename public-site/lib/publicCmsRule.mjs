@@ -29,6 +29,15 @@ export function publicCmsUrl(env) {
   return publicUrl(env.PUBLIC_CMS_URL, env.STRAPI_URL || DEFAULT_STRAPI_URL, env.PUBLIC_SITE_URL || DEFAULT_SITE_URL);
 }
 
+// The WebX control plane's address as the visitor's browser reaches it (webx-control), or "" while all of the site's
+// browser calls still go to the CMS. Where the control plane already serves a route the browser calls (the cookie-consent
+// log, the tenant lookup), the browser calls it there instead of at PUBLIC_CMS_URL (docs/target-architecture.md, track
+// C5). No default: the control plane is optional, and WEBX_CONTROL_URL (what the BUILD reads tenants from) is separate.
+export function publicControlUrl(env) {
+  const u = env.PUBLIC_CONTROL_URL;
+  return u === undefined || u === "off" ? "" : trim(u);
+}
+
 export function publicWordpressUrl(env) {
   const explicit = env.PUBLIC_WORDPRESS_URL !== undefined ? env.PUBLIC_WORDPRESS_URL : (env.NEXT_PUBLIC_WORDPRESS_URL || undefined);
   return publicUrl(explicit, env.WORDPRESS_URL || DEFAULT_WORDPRESS_URL, env.PUBLIC_SITE_URL || DEFAULT_SITE_URL);

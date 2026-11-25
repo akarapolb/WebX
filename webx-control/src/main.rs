@@ -13,6 +13,7 @@
 //!       no tenant named: the first tenant. An unknown key gets the first tenant's answer too
 //!       (what Strapi does today), or a 404 with --strict-tenants (decision D9)
 //!   POST /api/consent-logs?tenant=<key>          -> 201; a visitor's cookie choice, rate-limited (see visitors.rs)
+//!       a browser may call these from the origins in WEBX_PUBLIC_SITE_ORIGINS (and the local development ones)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 
@@ -26,8 +27,9 @@ mod registry;
 
 use axum::{
     body::Bytes,
-    extract::{Path, RawQuery, State},
-    http::{HeaderMap, StatusCode},
+    extract::{Path, RawQuery, Request, State},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Json, Response},
     routing::{any, get, post},
     Router,
@@ -53,6 +55,8 @@ struct App {
     token_ttl: i64,
     /// per-address limit on the visitors' write routes
     limiter: Mutex<visitors::RateLimiter>,
+    /// browser origins allowed to call the visitors' routes (CORS; WEBX_PUBLIC_SITE_ORIGINS)
+    origins: Vec<String>,
 }
 type Shared = Arc<App>;
 
@@ -166,6 +170,26 @@ async fn consent_log(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw
         Ok(row) => (StatusCode::CREATED, Json(json!({"data": {"documentId": row["documentId"], "createdAt": row["createdAt"]}}))).into_response(),
         Err(m) => fail(m),
     }
+}
+
+/// CORS for what a visitor's browser calls (visitors::is_visitor_path): the public site is on another origin than this
+/// service, so a JSON post is preflighted and the answer must name that origin (WEBX_PUBLIC_SITE_ORIGINS). Studio's
+/// and the engines' calls are server to server and get none; /internal and /admin are never answered to a browser.
+async fn cors(State(app): State<Shared>, req: Request, next: Next) -> Response {
+    if !visitors::is_visitor_path(req.uri().path()) {
+        return next.run(req).await;
+    }
+    let origin = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let mut res = if req.method() == Method::OPTIONS { StatusCode::NO_CONTENT.into_response() } else { next.run(req).await };
+    let h = res.headers_mut();
+    h.append(header::VARY, HeaderValue::from_static("Origin"));
+    if let Some(o) = visitors::allow_origin(&app.origins, origin.as_deref()).and_then(|o| HeaderValue::from_str(&o).ok()) {
+        h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, o);
+        h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, OPTIONS"));
+        h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type"));
+        h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
+    }
+    res
 }
 
 fn authorised(app: &App, headers: &HeaderMap) -> Result<(), Response> {
@@ -541,6 +565,26 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             Ok(false) => not_found(),
             Err(m) => fail(m),
         },
+        // the cookie-consent numbers an analytics screen shows: {total, accept, reject, custom}, for one workspace (or all)
+        // and optionally a creation window [from, before)
+        ("GET", ["consent", "summary"]) => {
+            let (mut tenant, mut from, mut before) = (None, None, None);
+            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+                let v = percent_decode(v);
+                let time = |v: &str| jobs::parse_iso(v).map(jobs::iso).ok_or_else(|| format!("{k} is not a time"));
+                match k {
+                    "tenant" if !v.is_empty() => tenant = Some(v),
+                    "from" => from = match time(&v) { Ok(t) => Some(t), Err(m) => return bad(m) },
+                    "before" => before = match time(&v) { Ok(t) => Some(t), Err(m) => return bad(m) },
+                    _ => return bad(format!("unsupported parameter {k}")),
+                }
+            }
+            match records::count_by(&conn, "consent-log", "action", tenant.as_deref(), from.as_deref(), before.as_deref()) {
+                Ok(counts) => Json(json!({"data": visitors::consent_summary(&counts)})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
         ("GET", ["audit", id]) => match audit::get(&conn, id) {
             Ok(Some(row)) => Json(json!({"data": row})).into_response(),
             Ok(None) => not_found(),
@@ -579,6 +623,7 @@ async fn main() {
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let n = registry::list(&conn).map(|l| l.len()).unwrap_or(0);
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()) });
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
@@ -588,7 +633,8 @@ async fn main() {
         .route("/admin/*rest", any(admin))
         .route("/internal/*rest", any(internal).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         .fallback(|| async { not_found() })
-        .with_state(Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default() }));
+        .with_state(state.clone())
+        .layer(middleware::from_fn_with_state(state, cors));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
     eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" });
     axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();

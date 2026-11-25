@@ -11,6 +11,14 @@
 /** Browser-facing CMS base URL, "" when the published site has no CMS. */
 export const PUBLIC_CMS: string = (process.env.PUBLIC_CMS_URL || "").replace(/\/$/, "");
 
+/** Browser-facing WebX control plane base URL (PUBLIC_CONTROL_URL, lib/publicCmsRule.mjs), "" while the browser's
+ *  calls all go to the CMS. */
+export const PUBLIC_CONTROL: string = (process.env.PUBLIC_CONTROL_URL || "").replace(/\/$/, "");
+
+/** Where the browser calls a route the control plane already serves (the cookie-consent log, a tenant's contact
+ *  lookup): the control plane when PUBLIC_CONTROL_URL is set, else the CMS as before. "" switches the call off. */
+export const PUBLIC_RUNTIME: string = PUBLIC_CONTROL || PUBLIC_CMS;
+
 /** False on a public copy with no reachable CMS: blocks that call the CMS from
  *  the browser (assistant, form) show components/site/OfflineNote instead, and
  *  cookie-consent logging, captcha and contact lookups are skipped. */

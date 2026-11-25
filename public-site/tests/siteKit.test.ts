@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { defineSite } from "@/lib/site/config";
 import { queryTerms, searchDocs, snippetParts, type SearchDoc } from "@/lib/site/search";
 import { blockWords } from "@/lib/site/searchIndex";
-import { publicCmsUrl, publicWordpressUrl } from "@/lib/publicCmsRule.mjs";
+import { publicCmsUrl, publicControlUrl, publicWordpressUrl } from "@/lib/publicCmsRule.mjs";
 
 test("defineSite gives the TH/EN URL scheme", () => {
   const s = defineSite({ tenant: "hub", homeSlug: "home-blocks" });
@@ -57,4 +57,12 @@ test("public CMS rule: local CMS on a public site is switched off", () => {
   assert.equal(publicWordpressUrl({ WORDPRESS_URL: "https://wp.example.org/wp-json/", PUBLIC_SITE_URL: "https://orst.example.org" }), "https://wp.example.org/wp-json");
   assert.equal(publicWordpressUrl({ NEXT_PUBLIC_WORDPRESS_URL: "https://wp.example.org/wp-json", PUBLIC_SITE_URL: "https://orst.example.org" }), "https://wp.example.org/wp-json", "older variable still honoured");
   assert.equal(publicWordpressUrl({ PUBLIC_WORDPRESS_URL: "off", NEXT_PUBLIC_WORDPRESS_URL: "https://wp.example.org/wp-json" }), "");
+});
+
+test("public control plane rule: no default, off by itself, explicit address used as is", () => {
+  assert.equal(publicControlUrl({}), "", "the control plane is optional: the browser's calls go to the CMS");
+  assert.equal(publicControlUrl({ WEBX_CONTROL_URL: "http://localhost:1400" }), "", "the address the BUILD reads is not the browser's");
+  assert.equal(publicControlUrl({ PUBLIC_CONTROL_URL: "https://control.example.org/" }), "https://control.example.org");
+  assert.equal(publicControlUrl({ PUBLIC_CONTROL_URL: "off" }), "");
+  assert.equal(publicControlUrl({ PUBLIC_CONTROL_URL: "" }), "");
 });

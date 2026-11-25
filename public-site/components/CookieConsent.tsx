@@ -13,7 +13,9 @@ import { usePathname } from "next/navigation";
 import { pathLocale } from "@/lib/i18n";
 
 const STORAGE_KEY = "webx_consent";
-import { PUBLIC_CMS as STRAPI } from "@/lib/publicCms";
+// The consent log is the WebX control plane's route when PUBLIC_CONTROL_URL is set (webx-control's visitors.rs),
+// Strapi's own otherwise: same path, same body.
+import { PUBLIC_RUNTIME as STRAPI } from "@/lib/publicCms";
 
 /** Every template segment's own tenant, mirrored from the app/ route
  * structure (app/orst, app/royalsociety, app/(gov-portal)/[tenant] with "/"

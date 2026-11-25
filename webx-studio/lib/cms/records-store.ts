@@ -21,9 +21,18 @@ export const CONTROL_RECORD_COLLECTIONS: Record<string, string> = {
   "api::page-version.page-version": "page-version",
 };
 
-export function createControlRecordsAdapter(cfg: ControlAuditConfig): CmsAdapter {
+/** Content types the control plane holds that Studio only READS from there, next to the engine's own rows: the
+ * visitors' cookie choices. The public site writes them (POST /api/consent-logs, webx-control/src/visitors.rs), to the
+ * control plane once PUBLIC_CONTROL_URL points there and to the engine until then, so the Cookie Consent page shows both
+ * and nothing is migrated (lib/cms/consent-merge.ts). They are NOT in CONTROL_RECORD_COLLECTIONS: that map switches
+ * every read and write of a type, which would hide the engine's old rows. */
+export const CONTROL_READ_COLLECTIONS: Record<string, string> = {
+  "api::consent-log.consent-log": "consent-log",
+};
+
+export function createControlRecordsAdapter(cfg: ControlAuditConfig, collections: Record<string, string> = CONTROL_RECORD_COLLECTIONS): CmsAdapter {
   const collectionOf = (uid: string): string => {
-    const c = CONTROL_RECORD_COLLECTIONS[uid];
+    const c = collections[uid];
     if (!c) throw new CmsError(`${uid} is not stored in the control plane`, 501);
     return c;
   };

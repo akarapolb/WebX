@@ -55,6 +55,15 @@ test("broken pages, links, JSON and leaked CMS addresses are reported", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("a build that reads tenants from a local control plane must not ship its address either", () => {
+  const dir = fixture({ ...good, "_next/static/chunks/d.js": 'fetch("http://localhost:1400/api/consent-logs")' });
+  try {
+    assert.match(checkExport(dir, { ...env, WEBX_CONTROL_URL: "http://localhost:1400" }).join("\n"), /d\.js: contains the build machine's CMS address localhost:1400/);
+    assert.deepEqual(checkExport(dir, env), [], "without WEBX_CONTROL_URL there is nothing to compare against");
+    assert.deepEqual(checkExport(dir, { ...env, WEBX_CONTROL_URL: "https://control.example.org" }), [], "a hosted control plane's address may be in the JS");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("the script exits non-zero on a broken page, so `npm run build` fails", () => {
   const dir = fixture({ ...good, "dgahub/policy.html": '<html id="__next_error__"><title>Error</title></html>' });
   try {

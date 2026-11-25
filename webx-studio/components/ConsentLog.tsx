@@ -91,7 +91,7 @@ export default function ConsentLog() {
                 </thead>
                 <tbody>
                   {shown.slice(0, 200).map((l) => (
-                    <tr key={l.id} style={{ borderTop: "1px solid var(--line)" }}>
+                    <tr key={l.documentId || l.id} style={{ borderTop: "1px solid var(--line)" }}>
                       <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{l.createdAt ? new Date(l.createdAt).toLocaleString() : "—"}</td>
                       <td style={{ padding: "6px 8px" }}><span className={"badge " + actBadge(l.action)}>{l.action || "—"}</span></td>
                       <td style={{ padding: "6px 8px" }}>{catList(l.categories).map((c) => <span key={c} className="badge b-mut" style={{ marginRight: 4 }}>{c}</span>)}{catList(l.categories).length === 0 ? <span className="muted">—</span> : null}</td>

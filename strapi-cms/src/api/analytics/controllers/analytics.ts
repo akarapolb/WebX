@@ -1,4 +1,14 @@
 import { fetchGa4Metrics } from '../../../utils/ga4';
+import { controlConfig, controlAudit, controlConsent } from '../../../utils/control-plane';
+
+// When Studio's audit log and the public site's cookie choices live in the WebX control plane (webx-control), the
+// dashboard reads them from there: see utils/control-plane.ts. Cookie choices are read from BOTH (the control plane's
+// are added to Strapi's own, which stay where they were); the audit log from the control plane alone, as Studio does.
+// A control plane that cannot be reached is logged and left out, so the dashboard still loads.
+const warn = (what: string) => (e: any) => {
+  (global as any).strapi?.log?.warn(`analytics: ${what} from the control plane left out: ${e?.message || e}`);
+  return null;
+};
 
 /**
  * analytics controller — สรุปสถิติเว็บไซต์สำหรับแดชบอร์ดหลังบ้าน
@@ -45,6 +55,11 @@ export default {
       else if (a.indexOf('reject') >= 0 || a === 'none' || a === 'opt-out') consent.reject++;
       else consent.custom++;
     });
+    const control = controlConfig();
+    if (control) {
+      const c = await controlConsent(control, { tenantKey }).catch(warn('cookie-consent counts'));
+      if (c) { consent.total += c.total; consent.accept += c.accept; consent.reject += c.reject; consent.custom += c.custom; }
+    }
 
     // บทความยอดนิยม (ตามยอดเข้าชม) + ยอดเข้าชมรวม
     const topArticles: any[] = await strapi.db.query('api::article.article')
@@ -59,7 +74,10 @@ export default {
 
     // กิจกรรมแอดมินล่าสุด (audit log)
     const auditWhere = tenantKey ? { tenantKey } : {};
-    const recentAudit: any[] = await strapi.db.query('api::audit-log.audit-log')
+    const fromControl: any[] | null = control
+      ? await controlAudit(control, { tenantKey, limit: 10 }).catch(warn('the audit log'))
+      : null;
+    const recentAudit: any[] = fromControl ?? await strapi.db.query('api::audit-log.audit-log')
       .findMany({ where: auditWhere, select: ['action', 'contentType', 'adminEmail', 'at'], orderBy: { at: 'desc' }, limit: 10 }).catch(() => []);
 
     // ค่าตั้ง analytics ของ tenant (GA4 / Clarity) สำหรับลิงก์ไปแดชบอร์ดภายนอก
@@ -149,6 +167,12 @@ export default {
       else if (a.indexOf('reject') >= 0 || a === 'none' || a === 'opt-out') consent.reject++;
       else consent.custom++;
     });
+    const control = controlConfig();
+    if (control) {
+      const c = await controlConsent(control, { tenantKey, from: rangeStart.toISOString(), before: rangeEnd.toISOString() }).catch(warn('cookie-consent counts'));
+      if (c) { consent.accept += c.accept; consent.reject += c.reject; consent.custom += c.custom; }
+    }
+    const consentTotal = consent.accept + consent.reject + consent.custom;
 
     // Article views are a cumulative counter, not naturally month-scoped —
     // reported as an all-time snapshot (clearly labeled below), not
@@ -157,7 +181,10 @@ export default {
       .findMany({ where: { ...scope, publishedAt: { $notNull: true } }, select: ['title', 'views'], orderBy: { views: 'desc' }, limit: 5 }).catch(() => []);
 
     const auditWhere = tenantKey ? { tenantKey, ...inMonth } : inMonth;
-    const auditRows: any[] = await strapi.db.query('api::audit-log.audit-log')
+    const auditFromControl: any[] | null = control
+      ? await controlAudit(control, { tenantKey, from: rangeStart.toISOString(), to: new Date(rangeEnd.getTime() - 1).toISOString(), limit: 500 }).catch(warn('the audit log'))
+      : null;
+    const auditRows: any[] = auditFromControl ?? await strapi.db.query('api::audit-log.audit-log')
       .findMany({ where: auditWhere, select: ['action', 'contentType', 'adminEmail', 'at'], orderBy: { at: 'desc' }, limit: 500 }).catch(() => []);
 
     const wb = XLSX.utils.book_new();
@@ -167,7 +194,7 @@ export default {
       { Metric: 'Generated at', Value: new Date().toISOString() },
       { Metric: 'Content published this month', Value: contentCounts.reduce((a, b) => a + b, 0) },
       { Metric: 'Form submissions this month', Value: submissionCounts.reduce((a, b) => a + b, 0) },
-      { Metric: 'Cookie-consent events this month', Value: consentRows.length },
+      { Metric: 'Cookie-consent events this month', Value: consentTotal },
       { Metric: 'Admin actions this month', Value: auditRows.length },
       { Metric: 'Total article views (all-time snapshot, not month-scoped)', Value: topArticles.reduce((s, a) => s + (a.views || 0), 0) },
     ]), 'Summary');

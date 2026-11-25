@@ -11,7 +11,9 @@
 // both through the same fetch is what keeps them from ever disagreeing again.
 import { useEffect, useState } from "react";
 
-import { PUBLIC_CMS as STRAPI } from "@/lib/publicCms";
+// The lookup is the WebX control plane's own route too (webx-control serves /api/tenants/resolve), so it follows
+// PUBLIC_CONTROL_URL when that is set.
+import { PUBLIC_RUNTIME as STRAPI } from "@/lib/publicCms";
 
 export type TenantContact = { phone?: string; email?: string; address?: { th?: string; en?: string } };
 

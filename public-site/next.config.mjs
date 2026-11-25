@@ -1,4 +1,4 @@
-import { publicCmsUrl, publicWordpressUrl } from "./lib/publicCmsRule.mjs";
+import { publicCmsUrl, publicControlUrl, publicWordpressUrl } from "./lib/publicCmsRule.mjs";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -20,6 +20,7 @@ const nextConfig = {
   // before (lib/cms.ts).
   env: {
     PUBLIC_CMS_URL: publicCmsUrl(process.env),
+    PUBLIC_CONTROL_URL: publicControlUrl(process.env),
     PUBLIC_WORDPRESS_URL: publicWordpressUrl(process.env),
   },
 };

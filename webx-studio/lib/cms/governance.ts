@@ -31,7 +31,8 @@ import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./wordpress";
 import { CmsError } from "./types";
 import { controlAuditConfig, createControlAuditAdapter } from "./audit-store";
-import { CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter } from "./records-store";
+import { CONTROL_READ_COLLECTIONS, CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter } from "./records-store";
+import { controlConsentQuery, mergedList } from "./consent-merge";
 import { controlQueueConfig, createControlQueueAdapter, QUEUE_COLLECTIONS } from "./queue-store";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
@@ -177,6 +178,16 @@ function bookkeepingAdapter(uid: string): CmsAdapter {
   const key = cfg.baseUrl + " " + cfg.token;
   if (controlRecordsCache?.key !== key) controlRecordsCache = { key, adapter: createControlRecordsAdapter(cfg) };
   return controlRecordsCache.adapter;
+}
+// The visitors' cookie choices the control plane has taken (POST /api/consent-logs), read next to the engine's own rows
+// — the public site writes to one or the other until it is switched, so the page shows both (lib/consent-merge.ts).
+let controlConsentCache: { key: string; adapter: CmsAdapter } | null = null;
+function controlConsentAdapter(): CmsAdapter | null {
+  const cfg = controlAuditConfig();
+  if (!cfg) return null;
+  const key = cfg.baseUrl + " " + cfg.token;
+  if (controlConsentCache?.key !== key) controlConsentCache = { key, adapter: createControlRecordsAdapter(cfg, CONTROL_READ_COLLECTIONS) };
+  return controlConsentCache.adapter;
 }
 const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
@@ -3004,6 +3015,18 @@ export const governed = {
         const filter = withTenantFilter(query?.filter, "tenant.id", "eq", eff?.id ?? -1);
         return cms.entries.list<T>(uid, { ...query, filter });
       }
+      if (uid === CONSENT_LOG_UID) {
+        // Same scoping as the relation branch below (an unscoped caller sees every workspace), and when the control
+        // plane is configured the rows it has taken are listed with the engine's own, as one list.
+        const filter = eff ? withTenantFilter(query?.filter, "tenant.id", "eq", eff.id) : query?.filter;
+        const ctl = controlConsentAdapter();
+        if (!ctl) return cms.entries.list<T>(uid, { ...query, filter });
+        return mergedList<any>(
+          (q) => cms.entries.list<any>(uid, { ...q, filter }),
+          (q) => ctl.entries.list<any>(uid, controlConsentQuery(q, eff?.key ?? null)),
+          query,
+        ) as Promise<EntryList<T>>;
+      }
       if (RELATION_SCOPED_BOOKKEEPING_UIDS.has(uid) && eff) {
         // See RELATION_SCOPED_BOOKKEEPING_UIDS's own comment — unlike
         // REVIEW_UID/WP_SCOPED above, no filter is added at all when eff is
@@ -3076,7 +3099,18 @@ export const governed = {
       if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
     }
     return withContentAdapter(uid, async (cms) => {
-      const result: any = await cms.entries.get<T>(uid, id, opts);
+      let result: any;
+      try {
+        result = await cms.entries.get<T>(uid, id, opts);
+      } catch (e) {
+        // A cookie choice the control plane took has its own ids, so the engine does not know it: look there.
+        const ctl = uid === CONSENT_LOG_UID && e instanceof CmsError && (e.status === 404 || e.status === 400) ? controlConsentAdapter() : null;
+        if (!ctl) throw e;
+        const row: any = await ctl.entries.get<T>(uid, id).catch(() => null);
+        if (!row) throw e;
+        if (eff && row.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+        return row;
+      }
       if (acting && result && SCOPED.has(uid) && (await trueOwnerOf(uid, id)) !== eff?.key) {
         // Fail closed: an entry a background job can't confirm as its tenant's is not returned.
         throw new CmsError("Cross-tenant operation not permitted", 403);

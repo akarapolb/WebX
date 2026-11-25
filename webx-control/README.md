@@ -35,8 +35,8 @@ with `--strict-tenants` for decision D9: an unknown key is then a **404**, never
 another tenant's data. D9 becomes the default once every engine and the build
 agree. Point a public-site build at it with `WEBX_CONTROL_URL=http://host:1400`;
 without that variable public-site reads the tenant routes from the content
-engine as before. The browser's own tenant lookup (`useTenantContact`) still uses
-the public CMS address until the runtime routes move (C5).
+engine as before. The browser's own tenant lookup (`useTenantContact`) follows
+public-site's `PUBLIC_CONTROL_URL` when that is set (it is a visitors' route, below), and the CMS address until then.
 
 ## Visitors' routes (C5, decision D12)
 
@@ -51,9 +51,32 @@ The choice is stored as given in the `consent-log` records collection, stamped w
 `action` is required, and a body past 16 KB is refused (413). A tenant that is not registered is filed under the first one, as
 Strapi does, or refused (404) with `--strict-tenants`. One address may log 30 times a minute (429 after that). The address is the
 first entry of `X-Forwarded-For`, so run this service behind a proxy that sets it; without one every caller shares one limit.
-The log is read with the records API (`GET /internal/records/consent-log?filter=tenantKey:eq:<key>`, service token). Studio's
-Cookie Consent page still reads Strapi's log until the old rows are moved and it is switched; the assistant, search statistics,
-captcha, form and tenant-contact routes are not here yet.
+**CORS.** The public site is on another origin than this service, so a JSON post is preflighted and the answer has to name
+that origin. Every `/api/*` route a browser calls (these and the tenant lookups; not `/api/auth/*`, `/internal` or `/admin`)
+answers `OPTIONS` with 204 and sends `Access-Control-Allow-Origin` for an allowed origin: the local development ones Strapi
+allows (`http://localhost:3100`, `:8080`, `:8095`, `http://127.0.0.1:8080`) and the comma-separated
+`WEBX_PUBLIC_SITE_ORIGINS` (a trailing slash is ignored; `*` allows any origin, safe here since these routes are anonymous and
+take no cookies). Any other origin gets no permission, so its browser blocks the post. Set it to the public sites' own
+addresses, the same variable Strapi's CORS reads.
+
+**Reading the log back** (service token):
+
+| Route | Meaning |
+|---|---|
+| `GET /internal/records/consent-log?filter=tenantKey:eq:<key>&sort=createdAt:DESC` | list, as any records collection |
+| `GET /internal/consent/summary?tenant=<key>&from=<iso>&before=<iso>` | `{data: {total, accept, reject, custom}}` for one workspace (no `tenant`: all) and a creation window, from inclusive, before exclusive; counted as Strapi's analytics counts (an action containing `accept`, or `all`/`opt-in`, is an accept; containing `reject`, or `none`/`opt-out`, a reject; the rest custom) |
+
+**Switching over.** Nothing is copied. Point public-site at this service with `PUBLIC_CONTROL_URL=https://control.example.go.th`
+(its cookie banner and the contact lookup then call here; unset, they call the CMS as before) and give Strapi and Studio the same
+`WEBX_CONTROL_URL` and `WEBX_CONTROL_SERVICE_TOKEN` they use for the audit log. Then **Studio's Cookie Consent page lists the
+choices from both places** (`webx-studio/lib/cms/consent-merge.ts`: the control plane's and Strapi's, newest first, scoped to the
+workspace; a page may reach 1000 rows deep) and **Strapi's analytics dashboard and monthly report add this service's counts to
+its own** and read the audit log from here (`strapi-cms/src/utils/control-plane.ts`; an unreachable control plane is logged and
+left out). Old evidence therefore stays where it was and stays visible, and the public site can be switched at any moment. Studio
+cannot edit or delete a choice held here. Strapi's own copy of the table goes in C6, after an import (`records import` keeps the
+ids) and with the dual read turned off, or the migrated rows would be counted twice.
+
+Not here yet: the assistant, search statistics, captcha, the forms and the tenant-contact fields beyond `/api/tenants/resolve`.
 
 ## Admin API
 
@@ -186,7 +209,7 @@ Recurring jobs, the store Studio's tick works against (port of `agent-schedules.
 cargo test                                                  # registry rules (unit)
 node tools/parity-test.mjs --reference http://localhost:1337   # same answers as Strapi; admin API; restart
 node tools/build-test.mjs --no-check-export                # a site build reading tenants from here is identical
-node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, restart
+node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, CORS, summary, restart
 ```
 
 `parity-test` compares the tenant list and `resolve` for every tenant in both

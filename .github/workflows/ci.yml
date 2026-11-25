@@ -223,6 +223,9 @@ jobs:
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
           MFA_ENABLED: "false"
+          # the analytics dashboard reads the audit log and cookie counts from the control plane (src/utils/control-plane.ts)
+          WEBX_CONTROL_URL: http://localhost:1400
+          WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
         run: npx strapi develop > /tmp/strapi.log 2>&1 &
       - name: Start webx-control with its service token
         working-directory: webx-control
@@ -271,7 +274,8 @@ jobs:
           STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
-        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts
+          ANALYTICS_READS_CONTROL: "1"
+        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts tests/consent-control-plane.spec.ts
       - if: failure()
         run: |
           tail -n 100 /tmp/webx-studio.log

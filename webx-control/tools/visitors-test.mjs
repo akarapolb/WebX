@@ -28,11 +28,11 @@ const check = (name, ok, extra = "") => { console.log(`${ok ? "ok  " : "FAIL"} $
 const call = async (method, path, { token, body, headers } = {}) => {
   const r = await fetch(BASE + path, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json", ...(headers || {}) }, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
   let j = null; try { j = await r.json(); } catch {}
-  return { status: r.status, json: j };
+  return { status: r.status, json: j, headers: Object.fromEntries(r.headers) };
 };
 let server;
-async function up(args = []) {
-  server = spawn(exe, ["--port", PORT, "--db", db, ...args], { env: { ...process.env, WEBX_CONTROL_ADMIN_TOKEN: ADMIN, WEBX_CONTROL_SERVICE_TOKEN: SERVICE }, stdio: ["ignore", "ignore", "inherit"] });
+async function up(args = [], env = {}) {
+  server = spawn(exe, ["--port", PORT, "--db", db, ...args], { env: { ...process.env, WEBX_CONTROL_ADMIN_TOKEN: ADMIN, WEBX_CONTROL_SERVICE_TOKEN: SERVICE, ...env }, stdio: ["ignore", "ignore", "inherit"] });
   server.done = new Promise((ok) => server.on("exit", ok));
   for (let n = 0; ; n++) {
     try { if ((await fetch(`${BASE}/_health`)).ok) return; } catch {}
@@ -81,12 +81,51 @@ try {
   const mine = await logs(`&filter=${encodeURIComponent("tenantKey:eq:pea")}`);
   check("the control plane lists a workspace's log by tenantKey", mine.meta.pagination.total === 1 && mine.data[0].consentId === "c-1", JSON.stringify(mine).slice(0, 200));
 
+  // a visitor's browser is on the public site's origin, not this service's: CORS names the origins that may call
+  const site = "http://localhost:3100", other = "https://evil.example.com";
+  const pre = await call("OPTIONS", "/api/consent-logs?tenant=pea", { headers: { origin: site, "access-control-request-method": "POST", "access-control-request-headers": "content-type" } });
+  check("a preflight from the public site's origin is answered 204 naming that origin", pre.status === 204 && pre.headers["access-control-allow-origin"] === site && /POST/.test(pre.headers["access-control-allow-methods"] || "") && /content-type/i.test(pre.headers["access-control-allow-headers"] || ""), JSON.stringify(pre.headers));
+  const withOrigin = await call("POST", "/api/consent-logs?tenant=pea", { body: consent, headers: { origin: site, "x-forwarded-for": "10.0.0.5" } });
+  check("the post itself carries the origin too, and Vary: Origin", withOrigin.status === 201 && withOrigin.headers["access-control-allow-origin"] === site && /origin/i.test(withOrigin.headers.vary || ""), JSON.stringify(withOrigin.headers));
+  const evilPre = await call("OPTIONS", "/api/consent-logs?tenant=pea", { headers: { origin: other, "access-control-request-method": "POST" } });
+  check("an origin that is not listed gets no permission from the preflight", evilPre.status === 204 && evilPre.headers["access-control-allow-origin"] === undefined, JSON.stringify(evilPre.headers));
+  check("nor on the post", (await call("POST", "/api/consent-logs?tenant=pea", { body: consent, headers: { origin: other, "x-forwarded-for": "10.0.0.6" } })).headers["access-control-allow-origin"] === undefined);
+  check("the tenant lookup a browser makes is covered too", (await call("GET", "/api/tenants/resolve?tenant=pea", { headers: { origin: site } })).headers["access-control-allow-origin"] === site);
+  check("a server call with no Origin gets no CORS headers", (await call("GET", "/api/tenants/keys")).headers["access-control-allow-origin"] === undefined);
+  check("/internal is never opened to a browser", (await call("GET", "/internal/records/consent-log", { token: SERVICE, headers: { origin: site } })).headers["access-control-allow-origin"] === undefined);
+  check("nor is the sign-in check", (await call("GET", "/api/auth/me", { headers: { origin: site } })).headers["access-control-allow-origin"] === undefined);
+
+  // the numbers an analytics screen shows, from the control plane (service token)
+  const sum = async (q = "") => (await call("GET", `/internal/consent/summary${q}`, { token: SERVICE }));
+  const pea = (await sum("?tenant=pea")).json.data;
+  check("the consent summary counts a workspace's choices by kind", pea.total === 3 && pea.accept === 3 && pea.reject === 0 && pea.custom === 0, JSON.stringify(pea));
+  const dga = (await sum("?tenant=dga")).json.data;
+  check("the other workspace has its own numbers", dga.total === 34 && dga.accept === 33 && dga.custom === 1, JSON.stringify(dga));
+  check("no tenant: every workspace together", (await sum()).json.data.total === pea.total + dga.total);
+  check("a window that has not started yet has none", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 0);
+  check("a window that ended before has none", (await sum("?before=2020-01-01T00:00:00Z")).json.data.total === 0);
+  check("a window around now has them all", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&before=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 34);
+  check("a bad time is refused: 400", (await sum("?from=yesterday")).status === 400);
+  check("an unknown parameter is refused: 400", (await sum("?colour=red")).status === 400);
+  check("the summary needs the service token: 401", (await call("GET", "/internal/consent/summary")).status === 401);
+
   // the same log survives a restart, and --strict-tenants refuses an unknown workspace
   await down();
   await up(["--strict-tenants"]);
   check("the log is still there after a restart", (await logs()).meta.pagination.total >= 4);
   check("with --strict-tenants an unknown workspace is refused: 404", (await call("POST", "/api/consent-logs?tenant=nobody", { body: consent, headers: { "x-forwarded-for": "10.0.1.1" } })).status === 404);
   check("a registered one is still accepted", (await call("POST", "/api/consent-logs?tenant=dga", { body: consent, headers: { "x-forwarded-for": "10.0.1.1" } })).status === 201);
+
+  // a deployment names its public sites in WEBX_PUBLIC_SITE_ORIGINS (a trailing slash is ignored), or "*" for any
+  await down();
+  await up([], { WEBX_PUBLIC_SITE_ORIGINS: "https://pea.example.go.th/, https://nbtc.example.go.th" });
+  const named = await call("OPTIONS", "/api/consent-logs", { headers: { origin: "https://pea.example.go.th", "access-control-request-method": "POST" } });
+  check("an origin named in WEBX_PUBLIC_SITE_ORIGINS is allowed", named.headers["access-control-allow-origin"] === "https://pea.example.go.th", JSON.stringify(named.headers));
+  check("the development origins stay allowed", (await call("OPTIONS", "/api/consent-logs", { headers: { origin: site, "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === site);
+  check("an unnamed one is still refused", (await call("OPTIONS", "/api/consent-logs", { headers: { origin: other, "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === undefined);
+  await down();
+  await up([], { WEBX_PUBLIC_SITE_ORIGINS: "*" });
+  check("\"*\" allows any origin", (await call("OPTIONS", "/api/consent-logs", { headers: { origin: other, "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === "*");
 } catch (e) {
   console.error(e);
   failures++;
