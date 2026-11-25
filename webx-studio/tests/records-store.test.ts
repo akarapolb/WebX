@@ -16,7 +16,7 @@ const VERSION = "api::page-version.page-version";
 
 describe("the collections", () => {
   it("are the content types moved so far, by their control-plane names", () => {
-    assert.deepEqual(CONTROL_RECORD_COLLECTIONS, { [TEMPLATE]: "page-template", [VERSION]: "page-version" });
+    assert.deepEqual(CONTROL_RECORD_COLLECTIONS, { [TEMPLATE]: "page-template", [VERSION]: "page-version", "api::agent-thread.agent-thread": "agent-thread" });
   });
   it("leave out custom roles, which Strapi's and WordPress's own enforcement still read from Strapi", () => {
     assert.equal(CONTROL_RECORD_COLLECTIONS[ROLE], undefined);

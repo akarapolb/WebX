@@ -2326,7 +2326,7 @@ export async function createAgentJobFromThread(threadId: string, lang?: string):
     // A job has no open editor to hand proposals to, so its draft tools write (within the owner's level).
     checkpoint: { ...cp, mode: "job", ref: { kind: "none" } },
   });
-  await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_THREAD_UID, threadId, { checkpoint: null, runState: "done" }));
+  await strapiBookkeeping(() => bookkeepingAdapter(AGENT_THREAD_UID).entries.update(AGENT_THREAD_UID, threadId, { checkpoint: null, runState: "done" }));
   return job;
 }
 
@@ -2689,7 +2689,7 @@ export function agentThreadView(row: any): any {
 }
 
 async function loadOwnedThread(id: string, user: CurrentUser): Promise<any> {
-  const row: any = await strapiBookkeeping(() => strapiAdapter.entries.get(AGENT_THREAD_UID, id)).catch(() => null);
+  const row: any = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_THREAD_UID).entries.get(AGENT_THREAD_UID, id)).catch(() => null);
   if (!row || (row.ownerEmail || "").toLowerCase() !== (user.email || "").toLowerCase()) {
     throw new CmsError("Unknown thread", 404);
   }
@@ -2701,7 +2701,7 @@ export async function listAgentThreads(): Promise<any[]> {
   const eff = await resolveEffectiveTenant(user.email);
   const filter: any[] = [{ field: "ownerEmail", op: "eq", value: user.email || "" }];
   if (eff) filter.push({ field: "tenantKey", op: "eq", value: eff.key });
-  const { data } = await strapiBookkeeping(() => strapiAdapter.entries.list<any>(AGENT_THREAD_UID, { filter, sort: "updatedAt:DESC", pageSize: 100 }));
+  const { data } = await strapiBookkeeping(() => bookkeepingAdapter(AGENT_THREAD_UID).entries.list<any>(AGENT_THREAD_UID, { filter, sort: "updatedAt:DESC", pageSize: 100 }));
   return data.map(agentThreadView);
 }
 
@@ -2714,7 +2714,7 @@ export async function createAgentThread(input: AgentThreadInput): Promise<any> {
   const user = await requireUser();
   const eff = await resolveEffectiveTenant(user.email);
   if (eff && input.tenantKey && input.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
-  return strapiBookkeeping(() => strapiAdapter.entries.create(AGENT_THREAD_UID, {
+  return strapiBookkeeping(() => bookkeepingAdapter(AGENT_THREAD_UID).entries.create(AGENT_THREAD_UID, {
     tenantKey: input.tenantKey ?? eff?.key ?? null, ownerEmail: user.email, title: input.title || "New chat",
     context: input.context || {}, messages: [], runState: "idle",
   }));
@@ -2723,13 +2723,13 @@ export async function createAgentThread(input: AgentThreadInput): Promise<any> {
 export async function updateAgentThread(id: string, patch: AgentThreadPatch): Promise<void> {
   const user = await requireUser();
   await loadOwnedThread(id, user);
-  await strapiBookkeeping(() => strapiAdapter.entries.update(AGENT_THREAD_UID, id, patch));
+  await strapiBookkeeping(() => bookkeepingAdapter(AGENT_THREAD_UID).entries.update(AGENT_THREAD_UID, id, patch));
 }
 
 export async function deleteAgentThread(id: string): Promise<void> {
   const user = await requireUser();
   await loadOwnedThread(id, user);
-  await strapiBookkeeping(() => strapiAdapter.entries.remove(AGENT_THREAD_UID, id));
+  await strapiBookkeeping(() => bookkeepingAdapter(AGENT_THREAD_UID).entries.remove(AGENT_THREAD_UID, id));
 }
 
 /** Strapi half of what Billing.tsx / contentUsageFor() below show as "items

@@ -26,7 +26,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS records_ref ON records(collection, json_extrac
 ";
 
 /// The collections served here, by the route name Studio uses (the content type's singular name).
-pub const COLLECTIONS: [&str; 8] = ["custom-role", "page-template", "page-version", "consent-log", "complaint", "application", "registration", "contact-message"];
+pub const COLLECTIONS: [&str; 9] = ["custom-role", "page-template", "page-version", "consent-log", "complaint", "application", "registration", "contact-message", "agent-thread"];
 
 fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()

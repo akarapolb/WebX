@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Moves page templates and page versions from Strapi into
+// Moves page templates, page versions and the agent's threads from Strapi into
 // webx-control (track C3). Safe to run again: rows keep their documentId, and
 // ones already imported are skipped.
 //
@@ -8,7 +8,7 @@
 //     node tools/migrate-records.mjs [--dry-run]
 //
 // Run it before switching Studio over (WEBX_CONTROL_URL + WEBX_CONTROL_SERVICE_TOKEN),
-// so the templates are there when it does. Reads through Strapi's
+// so the templates (and threads) are there when it does. Reads through Strapi's
 // content-manager as a super admin.
 const env = (k) => { const v = process.env[k]; if (!v) { console.error(`${k} is required`); process.exit(2); } return v; };
 const STRAPI = env("STRAPI_URL").replace(/\/$/, "");
@@ -16,7 +16,7 @@ const CONTROL = env("WEBX_CONTROL_URL").replace(/\/$/, "");
 const TOKEN = env("WEBX_CONTROL_SERVICE_TOKEN");
 const dry = process.argv.includes("--dry-run");
 const SECRET = process.env.STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": process.env.STRAPI_INTERNAL_SECRET } : {};
-const TYPES = { "api::page-template.page-template": "page-template", "api::page-version.page-version": "page-version" };
+const TYPES = { "api::page-template.page-template": "page-template", "api::page-version.page-version": "page-version", "api::agent-thread.agent-thread": "agent-thread" };
 // Strapi's own bookkeeping, not part of the record
 const DROP = new Set(["id", "createdBy", "updatedBy", "publishedAt", "locale", "localizations", "status"]);
 

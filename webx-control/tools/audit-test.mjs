@@ -94,6 +94,18 @@ try {
   check("records: import keeps ids and times, and can be run again", i1.json.added === 1 && i2.json.skipped === 1 && (await rec("GET", "/page-template/imptemplate00000000000001")).json.data.createdAt === "2026-01-01T00:00:00.000Z");
   const keep = await rec("POST", "/page-template", { data: { tenantKey: "dga", key: "kept", name: "Kept" } });
 
+  // the agent's threads: owner-scoped conversations Studio keeps here (fields as Strapi's thread type has them)
+  const th = await rec("POST", "/agent-thread", { data: { tenantKey: "dga", ownerEmail: "editor@dga.go.th", title: "New chat", context: {}, messages: [], runState: "idle" } });
+  const tid = th.json.data.documentId;
+  await rec("POST", "/agent-thread", { data: { tenantKey: "dga", ownerEmail: "other@dga.go.th", title: "Someone else's", messages: [], runState: "idle" } });
+  await rec("POST", "/agent-thread", { data: { tenantKey: "pea", ownerEmail: "editor@dga.go.th", title: "Same person, other workspace", messages: [], runState: "idle" } });
+  check("threads: an owner's threads in a workspace are listed by owner and workspace", (await rec("GET", "/agent-thread?filter=" + encodeURIComponent("ownerEmail:eq:editor@dga.go.th") + "&filter=tenantKey:eq:dga&sort=updatedAt:DESC&pageSize=100")).json.data.length === 1);
+  const big = { steps: Array.from({ length: 200 }, (_, i) => ({ i, note: "x".repeat(100) })) };
+  check("threads: a message list and a large checkpoint are kept and updated", (await rec("PUT", "/agent-thread/" + tid, { data: { messages: [{ role: "user", text: "สวัสดี" }], runState: "running", checkpoint: big } })).json.data.messages[0].text === "สวัสดี" && (await rec("GET", "/agent-thread/" + tid)).json.data.checkpoint.steps.length === 200);
+  check("threads: null clears the checkpoint, as the finished thread does", (await rec("PUT", "/agent-thread/" + tid, { data: { checkpoint: null, runState: "done" } })).json.data.checkpoint === null || (await rec("GET", "/agent-thread/" + tid)).json.data.checkpoint === undefined);
+  check("threads: the newest-updated comes first", (await rec("GET", "/agent-thread?filter=tenantKey:eq:dga&sort=updatedAt:DESC")).json.data[0].documentId !== undefined);
+  check("threads: delete, then 404", (await rec("DELETE", "/agent-thread/" + tid)).status === 200 && (await rec("GET", "/agent-thread/" + tid)).status === 404);
+
   // Studio's own adapter against this binary
   const r = spawnSync(process.execPath, ["--import", "./tests/setup/register.mjs", "--import", "tsx", "--test", "tests/audit-store.test.ts", "tests/records-store.test.ts"], {
     cwd: studio, stdio: "inherit", env: { ...process.env, AUDIT_CONTROL_URL: BASE, AUDIT_CONTROL_TOKEN: SERVICE },

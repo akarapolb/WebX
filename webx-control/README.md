@@ -238,7 +238,7 @@ custom roles, agent jobs and so on) are still in Strapi, except those under Reco
 
 ## Records (C3, second part)
 
-Page templates and page versions are stored here as JSON documents, one
+Page templates, page versions and the agent's threads are stored here as JSON documents, one
 `records` table keyed by collection, behind the same service token:
 
 | Call | Meaning |
@@ -248,17 +248,19 @@ Page templates and page versions are stored here as JSON documents, one
 | `GET`, `PUT` (merge, `null` clears), `DELETE /internal/records/<collection>/<documentId>` | one record |
 | `POST /internal/records/<collection>/import` body `[record, ...]` | migration: records keep their `documentId` and times; ones already there are skipped |
 
-`COLLECTIONS` in `src/records.rs` lists what exists: `custom-role`, `page-template`, `page-version`.
-**Studio** (`webx-studio/lib/cms/records-store.ts`) uses it for page templates and page
-versions with the same two variables as audit. Custom roles can be stored here but Studio does
+`COLLECTIONS` in `src/records.rs` lists what exists: `custom-role`, `page-template`, `page-version`, `agent-thread`, and the visitors' `consent-log` and
+the four form inboxes (above).
+**Studio** (`webx-studio/lib/cms/records-store.ts`) uses it for page templates, page
+versions and the agent's threads (owner-scoped conversation history, with the engine's resumable checkpoint) with the same two variables as audit. Custom roles can be stored here but Studio does
 **not** use that yet: Strapi's own enforcement and the WordPress mu-plugin read them from
-Strapi, so they move once that lookup is served from here. To move the existing templates first:
+Strapi, so they move once that lookup is served from here. To move the existing templates and threads first:
 
 ```sh
 STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL=... WEBX_CONTROL_SERVICE_TOKEN=...   node tools/migrate-records.mjs [--dry-run]
 ```
 
-Run it before switching: a shared template (no workspace) that is only in Strapi is invisible once Studio reads here.
+Run it before switching: a shared template (no workspace) that is only in Strapi is invisible once Studio reads here, and so is an
+existing thread (it would show as an empty list of conversations).
 
 ## Identity (C4, first part)
 
