@@ -130,6 +130,8 @@ services:
       # Studio's own per-address limits (sign-in and the API's POSTs) believe the X-Forwarded-For entry the outermost of this many
       # reverse proxies added (webx-studio/.env.example); 0 ignores the header
       WEBX_TRUSTED_PROXIES: ${WEBX_TRUSTED_PROXIES:-1}
+      # Other origins whose pages may post to Studio's API from a browser (the rest are refused as cross-site; webx-studio/.env.example)
+      WEBX_TRUSTED_ORIGINS: ${WEBX_TRUSTED_ORIGINS:-}
       # Release scheduler (see the release-scheduler service below): the
       # secret protects POST /api/internal/releases/process-due itself; the
       # STRAPI_SCHEDULER_* pair is the account this process logs in as to

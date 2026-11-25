@@ -235,6 +235,30 @@ About 33 working days, against 10 to 15 in the C4 row of `docs/target-architectu
   default scheduler password (`strapi-cms/src/seed/seed.ts:920`).
 - Proof: `npm test` in `webx-studio` plus the cross-tenant spec in CI (`.github/workflows/ci.yml:123-195`).
 
+**Step 0 status, 2026-11-25: built and unit-tested; none of it changes who can sign in.** What was built, and where it differs from the list:
+- CSRF: `lib/csrf.ts`, called first in `middleware.ts` (before the rate limiter, so another site cannot use up a visitor's sign-in
+  attempts). The rules are Go's `CrossOriginProtection`: GET, HEAD and OPTIONS pass; `Sec-Fetch-Site` `same-origin` or `none` passes,
+  `same-site` (a sibling subdomain) and `cross-site` are refused; without that header the `Origin` must be this host (`Host`, or
+  `X-Forwarded-Host`) or listed in the new `WEBX_TRUSTED_ORIGINS`; with neither header the request is not a browser page and passes.
+  Exempt: `/api/internal/` and `/api/webhooks/`. `tests/csrf.test.ts` posts to every file under `app/api` from another site, so a route
+  added later is covered. **Not done:** the refresh cookie `Strict` on `Path=/api/auth` from the threat table below. A path
+  restriction would hide the cookie from page requests that refresh in the layout, so it goes with the session work (step 6).
+- MFA: `lib/cms/mfaEnrollment.ts`. A current authenticator code or an unused recovery code is required to start an enrollment while
+  MFA is on, and counts against the same per-account attempt limit as signing in. **Left for step 4:** the old factor stops counting
+  between start and confirm (a pending-secret field would fix that), and a code just used to sign in still works for 30 seconds.
+- Keycloak: `listEnabledKeycloakEmails` reads every page (offset until an empty page, so a server that serves fewer than asked is not
+  taken for done) and throws on a failed request, an answer that is not a list, paging that does not advance, or no enabled user
+  with an e-mail. The reconcile loop skips that workspace with an error on its report. A realm that really has no enabled users now
+  leaves its SSO admins as they are, with the error, instead of deactivating all of them.
+- Strapi: `src/utils/governed-audit.ts`. With no `WEBX_INTERNAL_SECRET` configured the header is never believed, so a deployment that
+  never set the secret gets an extra audit row for each Studio write rather than a missing one (compose requires the secret).
+- Secrets: `lib/secretCompare.ts` (SHA-256 of both sides, then `timingSafeEqual`, so the length does not leak either; `gatewayAuthorized`
+  uses it as well), `lib/internalAuth.ts` for the four scheduler routes, and a test that every route under `app/api/internal` is behind
+  one of the two approved checks before it awaits anything. `lib/startupChecks.ts` runs from `instrumentation.ts`: Studio refuses to start in
+  production with the public scheduler password. Strapi's seed no longer creates the scheduler account with it in production, and
+  logs an error at every boot while an existing account still accepts it (`src/utils/scheduler-credentials.ts`).
+  **Upgrade note:** a production Studio with `STRAPI_SCHEDULER_PASSWORD=WebxSched@2569` will not start until the password is changed on both sides.
+
 **Step 1 - token v2 and credentials** (`idn`, `ctl`).
 - Add claims `aud uid sid tid role crole sa mfa amr nbf jti`; keep `tenants`, `superAdmin`. `verify` checks `alg`, `kid`,
   `aud`, `nbf` strictly. JWKS lists the current and the previous key (`WEBX_CONTROL_SIGNING_KEY`,
