@@ -5,6 +5,9 @@
  * context : คืนข้อมูลผู้ล็อกอิน + รายการ tenant ที่เข้าถึงได้ (super admin = ทุก tenant,
  *           editor = เฉพาะ tenant ที่อีเมลอยู่ใน adminEmails) พร้อมแบรนด์ของแต่ละ tenant
  */
+import { controlConfig, controlRecords } from '../../../utils/control-plane';
+import { CONTROL_COLLECTION, mergeExportRows } from '../../../utils/form-export';
+
 const lc = (s: any) => String(s || '').toLowerCase();
 
 async function isSuperAdmin(strapi: any, adminId: number) {
@@ -133,12 +136,21 @@ location.replace(redirect);
 
     const where = tenantId ? { tenant: tenantId } : {};
     const rows = await strapi.db.query(uid).findMany({ where, limit: 10000, orderBy: { id: 'desc' } });
-    const clean = rows.map((r: any) => {
-      const o: any = { ...r };
-      delete o.id; delete o.documentId; delete o.tenant; delete o.createdById; delete o.updatedById; delete o.locale;
-      if (o.steps) o.steps = undefined;
-      return o;
-    });
+    // The submissions the control plane took (the public site posts there once PUBLIC_CONTROL_URL points at it) belong in the
+    // same sheet. An export that silently left them out would look complete and not be, so when the control plane is
+    // configured and cannot be read the export fails instead.
+    let fromControl: any[] = [];
+    const control = controlConfig();
+    if (control) {
+      try {
+        fromControl = await controlRecords(control, CONTROL_COLLECTION[type], { tenantKey, limit: 10000 });
+      } catch (e: any) {
+        strapi.log.error(`console export: the control plane could not be read: ${e?.message || e}`);
+        ctx.status = 502; ctx.body = { error: 'อ่านข้อมูลจาก WebX control plane ไม่ได้ จึงยังไม่ส่งออก (ข้อมูลจะไม่ครบ) — ลองใหม่อีกครั้ง' };
+        return;
+      }
+    }
+    const clean = mergeExportRows(rows, fromControl);
     const ws = XLSX.utils.json_to_sheet(clean);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, type);

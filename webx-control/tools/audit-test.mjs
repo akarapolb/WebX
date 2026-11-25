@@ -82,7 +82,7 @@ try {
   check("records: create answers with ids, timestamps and the fields back", made2.status === 200 && made2.json.data.documentId?.length === 24 && made2.json.data.roleKey === "r1" && made2.json.data.createdAt);
   const rid = made2.json.data.documentId;
   check("records: no token: 401", (await call("GET", "/internal/records/custom-role")).status === 401);
-  check("records: an unknown collection is a 404", (await rec("GET", "/release")).status === 404);
+  check("records: an unknown collection is a 404", (await rec("GET", "/menu-item")).status === 404);
   check("records: update merges", (await rec("PUT", "/custom-role/" + rid, { data: { name: "R2" } })).json.data.roleKey === "r1");
   check("records: a unique read", (await rec("GET", "/custom-role/" + rid)).json.data.name === "R2");
   check("records: filter by tenant", (await rec("GET", "/custom-role?filter=tenantKey:eq:dga")).json.meta.pagination.total === 1 && (await rec("GET", "/custom-role?filter=tenantKey:eq:pea")).json.meta.pagination.total === 0);

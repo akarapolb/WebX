@@ -1,9 +1,31 @@
 import { test, expect, type BrowserContext } from "@playwright/test";
+import { inflateRawSync } from "node:zlib";
 import {
-  WEBX_STUDIO, STRAPI_SCHEDULER_PASSWORD, studioContext,
+  WEBX_STUDIO, STRAPI_URL, STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD, studioContext,
   DGA_EDITOR_EMAIL, DGA_EDITOR_PASSWORD,
   PEA_EDITOR_EMAIL, PEA_EDITOR_PASSWORD,
 } from "./_helpers";
+
+/** The text of every file inside a zip (an .xlsx workbook is one): the central directory is read, each entry inflated. */
+function unzipText(buf: Buffer): string {
+  let end = buf.length - 22;
+  while (end >= 0 && buf.readUInt32LE(end) !== 0x06054b50) end--;
+  if (end < 0) throw new Error("not a zip file");
+  const count = buf.readUInt16LE(end + 10);
+  let p = buf.readUInt32LE(end + 16);
+  const parts: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const method = buf.readUInt16LE(p + 10);
+    const size = buf.readUInt32LE(p + 20);
+    const nameLen = buf.readUInt16LE(p + 28), extraLen = buf.readUInt16LE(p + 30), noteLen = buf.readUInt16LE(p + 32);
+    const local = buf.readUInt32LE(p + 42);
+    const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    const data = buf.subarray(start, start + size);
+    parts.push((method === 8 ? inflateRawSync(data) : data).toString("utf8"));
+    p += 46 + nameLen + extraLen + noteLen;
+  }
+  return parts.join("\n");
+}
 
 // Track C5 (docs/target-architecture.md), the first visitors' routes: a visitor's browser posts its cookie choice
 // (POST /api/consent-logs) and its searches (POST /api/search-stats/log) to webx-control, and Studio's screens read them from there.
@@ -274,6 +296,28 @@ test.describe("Visitors' routes in the control plane: cookie consent, search sta
     expect((await track(withFile.ref, "dga")).error?.name, "it is gone").toBe("NotFoundError");
     const gone = await fetch(`${CONTROL}/internal/files/${withFile.fileId}`, { headers: { Authorization: `Bearer ${TOKEN}` } });
     expect(gone.status, "and so is its file").toBe(404);
+  });
+
+  test("Strapi's Excel export of a form lists the control plane's submissions for the workspace, with the personal data readable", async () => {
+    const login = await fetch(`${STRAPI_URL}/admin/login`, {
+      method: "POST", headers: { "content-type": "application/json", ...(process.env.STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": process.env.STRAPI_INTERNAL_SECRET } : {}) },
+      body: JSON.stringify({ email: STRAPI_SCHEDULER_EMAIL, password: STRAPI_SCHEDULER_PASSWORD }),
+    });
+    const jwt = (await login.json())?.data?.token;
+    expect(jwt, "the scheduler account (a super admin) can sign in to Strapi").toBeTruthy();
+    const sheet = async (tenant: string) => {
+      const r = await fetch(`${STRAPI_URL}/api/console/export?type=complaint&tenant=${tenant}`, { headers: { Authorization: `Bearer ${jwt}` } });
+      expect(r.status, `the export for ${tenant} answered ${r.status}`).toBe(200);
+      expect(r.headers.get("content-type")).toContain("spreadsheetml");
+      return unzipText(Buffer.from(await r.arrayBuffer()));
+    };
+    const dgaSheet = await sheet("dga");
+    expect(dgaSheet, "dga's complaint, which only the control plane holds, is in dga's sheet").toContain(subjectOf("dga"));
+    expect(dgaSheet, "with the e-mail decrypted").toContain("citizen-dga@example.com");
+    expect(dgaSheet, "and not pea's").not.toContain(subjectOf("pea"));
+    const peaSheet = await sheet("pea");
+    expect(peaSheet).toContain(subjectOf("pea"));
+    expect(peaSheet, "pea's sheet has none of dga's").not.toContain(subjectOf("dga"));
   });
 
   test("the dashboard's cookie numbers include the control plane's, and its recent activity comes from there", async () => {

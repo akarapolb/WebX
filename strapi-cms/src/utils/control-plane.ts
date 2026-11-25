@@ -30,6 +30,23 @@ export async function controlAudit(cfg: ControlConfig, o: { tenantKey?: string; 
   return (await get(cfg, '/internal/audit?' + p.join('&'))).data || [];
 }
 
+/** Rows of one of the control plane's record collections (a form's submissions), newest first, for one workspace (or all), up to
+ * `limit`. Personal data comes back readable: the control plane decrypts what it holds. Throws when it cannot be read, so a
+ * caller that must not hand out a partial answer (an export) can say so. */
+export async function controlRecords(cfg: ControlConfig, collection: string, o: { tenantKey?: string; limit: number }): Promise<any[]> {
+  const PAGE = 500;
+  const rows: any[] = [];
+  for (let page = 1; rows.length < o.limit; page++) {
+    const p = ['sort=' + encodeURIComponent('createdAt:desc'), 'page=' + page, 'pageSize=' + PAGE];
+    if (o.tenantKey) p.push('filter=' + encodeURIComponent('tenantKey:eq:' + o.tenantKey));
+    const j = await get(cfg, `/internal/records/${encodeURIComponent(collection)}?` + p.join('&'));
+    const got: any[] = j.data || [];
+    rows.push(...got);
+    if (got.length < PAGE || page >= (j.meta?.pagination?.pageCount ?? page)) break;
+  }
+  return rows.slice(0, o.limit);
+}
+
 export type FormCounts = { complaint: number; application: number; registration: number; 'contact-message': number };
 
 /** How many submissions the control plane holds for each form, for one workspace (or all), optionally inside `[from, before)`. */

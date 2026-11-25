@@ -94,7 +94,7 @@ describe("against a real webx-control", { skip: !URL_ || !TOKEN }, () => {
     const t: any = await a().entries.create(TEMPLATE, { tenantKey: tag, key: "k", name: "T", blocks: [{ type: "hero" }] });
     await assert.rejects(a().entries.get(VERSION, t.documentId), (e: any) => e.status === 404);
     await a().entries.remove(TEMPLATE, t.documentId);
-    const r = await fetch(`${URL_}/internal/records/release`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    const r = await fetch(`${URL_}/internal/records/menu-item`, { headers: { Authorization: `Bearer ${TOKEN}` } });
     assert.equal(r.status, 404);
   });
 });
