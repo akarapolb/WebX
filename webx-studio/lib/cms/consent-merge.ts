@@ -22,13 +22,13 @@ function value(field: string, r: Row): number | string {
   if (field === "createdAt" || field === "updatedAt") return Date.parse(v) || 0;
   return typeof v === "number" ? v : String(v ?? "");
 }
-function compare(field: string, a: Row, b: Row): number {
+export function compare(field: string, a: Row, b: Row): number {
   const x = value(field, a), y = value(field, b);
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
 /** The first `need` rows of a source, and its total, reading it a chunk at a time. */
-async function firstRows<T>(list: ListFn<T>, q: EntryQuery, need: number): Promise<{ rows: T[]; total: number }> {
+export async function firstRows<T>(list: ListFn<T>, q: EntryQuery, need: number): Promise<{ rows: T[]; total: number }> {
   const rows: T[] = [];
   let total = 0;
   for (let page = 1; rows.length < need; page++) {

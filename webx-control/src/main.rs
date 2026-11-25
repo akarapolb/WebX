@@ -13,6 +13,7 @@
 //!       no tenant named: the first tenant. An unknown key gets the first tenant's answer too
 //!       (what Strapi does today), or a 404 with --strict-tenants (decision D9)
 //!   POST /api/consent-logs?tenant=<key>          -> 201; a visitor's cookie choice, rate-limited (see visitors.rs)
+//!   POST /api/search-stats/log?tenant=<key>      -> 204; what a visitor searched for, counted anonymously (see search_stats.rs)
 //!       a browser may call these from the origins in WEBX_PUBLIC_SITE_ORIGINS (and the local development ones)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
@@ -21,6 +22,7 @@ mod audit;
 mod identity;
 mod jobs;
 mod schedules;
+mod search_stats;
 mod visitors;
 mod records;
 mod registry;
@@ -152,19 +154,12 @@ async fn public(State(app): State<Shared>, Path(what): Path<String>, RawQuery(ra
 /// rate-limited per address (X-Forwarded-For's first entry when a proxy sets it). A tenant that is not registered
 /// is filed under the first tenant, as Strapi does, or refused with --strict-tenants.
 async fn consent_log(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
-    let who = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.split(',').next()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "direct".into());
-    if !app.limiter.lock().unwrap().allow(&who, now_ms()) {
-        return error(StatusCode::TOO_MANY_REQUESTS, "RateLimitError", "Too many requests");
+    if let Err(r) = rate_limited(&app, "consent", &headers) {
+        return r;
     }
     let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
     let conn = app.conn.lock().unwrap();
-    let asked = query_param_exact(raw.as_deref(), "tenant").filter(|t| !t.is_empty());
-    let known = match &asked { Some(k) => matches!(registry::get(&conn, k), Ok(Some(_))), None => false };
-    let key = match asked {
-        Some(k) if known => k,
-        Some(_) if app.strict => return not_found(),
-        _ => match registry::default_key(&conn) { Some(k) => k, None => return not_found() },
-    };
+    let key = match tenant_for(&app, &conn, raw.as_deref()) { Ok(k) => k, Err(r) => return r };
     let doc = match visitors::consent_document(&v, &key) { Ok(d) => d, Err(m) => return bad(m) };
     match records::create(&conn, "consent-log", &doc, &now_iso()) {
         Ok(row) => (StatusCode::CREATED, Json(json!({"data": {"documentId": row["documentId"], "createdAt": row["createdAt"]}}))).into_response(),
@@ -190,6 +185,59 @@ async fn cors(State(app): State<Shared>, req: Request, next: Next) -> Response {
         h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
     }
     res
+}
+
+/// POST /api/search-stats/log?tenant=<key> {q, locale, results}: one search on the public site, counted without who made it
+/// (decision D12; a port of strapi-cms/src/api/search-stat). A query that is empty or looks like personal data is not
+/// stored, and the answer is the same 204 either way, so a caller cannot probe what was kept.
+async fn search_stat_log(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
+    if let Err(r) = rate_limited(&app, "search", &headers) {
+        return r;
+    }
+    let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+    let conn = app.conn.lock().unwrap();
+    let key = match tenant_for(&app, &conn, raw.as_deref()) { Ok(k) => k, Err(r) => return r };
+    let Some(query) = search_stats::normalise_query(v.get("q").and_then(Value::as_str).unwrap_or("")) else { return StatusCode::NO_CONTENT.into_response() };
+    let locale = if v.get("locale").and_then(Value::as_str) == Some("en") { "en" } else { "th" };
+    let results = match v.get("results") {
+        Some(Value::Number(n)) => n.as_f64(),
+        Some(Value::String(s)) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    }
+    .filter(|n| n.is_finite())
+    .map_or(0, |n| n.floor().clamp(0.0, 10_000.0) as i64);
+    match search_stats::log(&conn, &key, &query, locale, results, search_stats::MAX_DISTINCT, &now_iso()) {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(m) => fail(m),
+    }
+}
+
+/// The address a visitor's request came from, for rate limiting: the first X-Forwarded-For entry (a proxy in front of this
+/// service sets it), else one shared bucket.
+fn client_address(headers: &HeaderMap) -> String {
+    headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.split(',').next()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "direct".into())
+}
+
+/// One request counted against the visitor's address for `route` (each visitors' route has its own allowance); the 429 to
+/// send when it is over.
+fn rate_limited(app: &App, route: &str, headers: &HeaderMap) -> Result<(), Response> {
+    if app.limiter.lock().unwrap().allow(&format!("{route}:{}", client_address(headers)), now_ms()) {
+        Ok(())
+    } else {
+        Err(error(StatusCode::TOO_MANY_REQUESTS, "RateLimitError", "Too many requests"))
+    }
+}
+
+/// The workspace a visitors' route files its data under: the one named by ?tenant= when it is registered; otherwise the first
+/// tenant, as Strapi does, or a 404 with --strict-tenants (decision D9).
+fn tenant_for(app: &App, conn: &rusqlite::Connection, raw: Option<&str>) -> Result<String, Response> {
+    let asked = query_param_exact(raw, "tenant").filter(|t| !t.is_empty());
+    let known = match &asked { Some(k) => matches!(registry::get(conn, k), Ok(Some(_))), None => false };
+    match asked {
+        Some(k) if known => Ok(k),
+        Some(_) if app.strict => Err(not_found()),
+        _ => registry::default_key(conn).ok_or_else(not_found),
+    }
 }
 
 fn authorised(app: &App, headers: &HeaderMap) -> Result<(), Response> {
@@ -317,6 +365,29 @@ fn queue_query(raw: Option<&str>) -> Result<QueueQuery, String> {
     Ok(q)
 }
 
+/// The list query of a records collection: `filter=field:op:value` (any number), `sort=field:dir`, `page`, `pageSize` (at most 500).
+fn records_query(raw: Option<&str>) -> Result<records::Query, String> {
+    let mut q = records::Query { filters: vec![], sort: None, page: 1, page_size: 25 };
+    for pair in raw.unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        let v = percent_decode(v);
+        match k {
+            "filter" => {
+                let mut it = v.splitn(3, ':');
+                match (it.next(), it.next(), it.next()) {
+                    (Some(f), Some(o), Some(val)) => q.filters.push(records::Filter { field: f.into(), op: o.into(), value: val.into() }),
+                    _ => return Err("filter is field:op:value".into()),
+                }
+            }
+            "sort" => { let (f, d) = v.split_once(':').unwrap_or((&v, "asc")); q.sort = Some((f.to_string(), d.eq_ignore_ascii_case("desc"))); }
+            "page" => q.page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
+            "pageSize" => q.page_size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(500),
+            _ => return Err(format!("unsupported parameter {k}")),
+        }
+    }
+    Ok(q)
+}
+
 fn percent_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -402,25 +473,16 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             }
         }
         ("GET", ["records", c]) if records::known(c) => {
-            let mut q = records::Query { filters: vec![], sort: None, page: 1, page_size: 25 };
-            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
-                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-                let v = percent_decode(v);
-                match k {
-                    "filter" => {
-                        let mut it = v.splitn(3, ':');
-                        match (it.next(), it.next(), it.next()) {
-                            (Some(f), Some(o), Some(val)) => q.filters.push(records::Filter { field: f.into(), op: o.into(), value: val.into() }),
-                            _ => return bad("filter is field:op:value".into()),
-                        }
-                    }
-                    "sort" => { let (f, d) = v.split_once(':').unwrap_or((&v, "asc")); q.sort = Some((f.to_string(), d.eq_ignore_ascii_case("desc"))); }
-                    "page" => q.page = v.parse().ok().filter(|n| *n >= 1).unwrap_or(1),
-                    "pageSize" => q.page_size = v.parse().ok().filter(|n| *n >= 1).unwrap_or(25).min(500),
-                    _ => return bad(format!("unsupported parameter {k}")),
-                }
-            }
+            let q = match records_query(raw.as_deref()) { Ok(q) => q, Err(m) => return bad(m) };
             match records::list(&conn, c, &q) {
+                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": q.page, "pageSize": q.page_size, "pageCount": total.div_ceil(q.page_size), "total": total}}})).into_response(),
+                Err(m) => bad(m),
+            }
+        }
+        // what visitors searched for (C5): read-only here, written by POST /api/search-stats/log; same list query as a collection
+        ("GET", ["records", "search-stat"]) => {
+            let q = match records_query(raw.as_deref()) { Ok(q) => q, Err(m) => return bad(m) };
+            match search_stats::list(&conn, &q) {
                 Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": q.page, "pageSize": q.page_size, "pageCount": total.div_ceil(q.page_size), "total": total}}})).into_response(),
                 Err(m) => bad(m),
             }
@@ -619,6 +681,7 @@ async fn main() {
     identity::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(schedules::DDL).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(search_stats::DDL).unwrap_or_else(|e| panic!("{e}"));
     let key = identity::signing_key(&conn, std::env::var("WEBX_CONTROL_SIGNING_KEY").ok().as_deref()).unwrap_or_else(|e| panic!("{e}"));
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
@@ -628,6 +691,7 @@ async fn main() {
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
         .route("/api/consent-logs", post(consent_log).layer(axum::extract::DefaultBodyLimit::max(16 * 1024)))
+        .route("/api/search-stats/log", post(search_stat_log).layer(axum::extract::DefaultBodyLimit::max(4 * 1024)))
         .route("/.well-known/jwks.json", get(jwks))
         .route("/api/auth/me", get(me))
         .route("/admin/*rest", any(admin))

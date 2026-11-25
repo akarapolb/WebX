@@ -1,6 +1,6 @@
 import { test, expect, type BrowserContext } from "@playwright/test";
 import {
-  WEBX_STUDIO, STRAPI_URL,
+  WEBX_STUDIO, STRAPI_URL, studioContext,
   STRAPI_SCHEDULER_EMAIL, STRAPI_SCHEDULER_PASSWORD,
   DGA_EDITOR_EMAIL, DGA_EDITOR_PASSWORD,
   PEA_EDITOR_EMAIL, PEA_EDITOR_PASSWORD,
@@ -27,18 +27,7 @@ test.describe("Audit log in the control plane", () => {
     "AUDIT_CONTROL_URL, AUDIT_CONTROL_TOKEN, DGA_EDITOR_PASSWORD, PEA_EDITOR_PASSWORD and STRAPI_SCHEDULER_PASSWORD required"
   );
 
-  async function loginAs(browser: import("@playwright/test").Browser, email: string, password: string): Promise<BrowserContext> {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await page.goto(WEBX_STUDIO + "/login");
-    await page.getByRole("tab", { name: "Strapi" }).click();
-    await page.getByPlaceholder("admin@webx.io").fill(email);
-    await page.getByPlaceholder("••••••••").fill(password);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
-    await page.close();
-    return context;
-  }
+  const loginAs = studioContext;
   const control = async (query: string) => {
     const r = await fetch(`${CONTROL}/internal/audit${query}`, { headers: { Authorization: `Bearer ${TOKEN}` } });
     expect(r.ok, `control plane answered ${r.status}`).toBeTruthy();

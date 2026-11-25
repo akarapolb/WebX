@@ -45,12 +45,25 @@ What a visitor's browser calls without signing in. Anonymous, rate-limited per a
 | Route | Meaning |
 |---|---|
 | `POST /api/consent-logs?tenant=<key>` body `{data: {consentId, action, categories, language, path, userAgent}}` | log a cookie choice (PDPA evidence); `201 {data: {documentId, createdAt}}` |
+| `POST /api/search-stats/log?tenant=<key>` body `{q, locale, results}` | count one search on the public site, anonymously; `204` whether or not it was kept |
 
 The choice is stored as given in the `consent-log` records collection, stamped with the workspace; text is cut at its limit
 (`path` and `userAgent` at 512 characters), unknown fields are dropped, `categories` must be an object of at most 2 KB, an
 `action` is required, and a body past 16 KB is refused (413). A tenant that is not registered is filed under the first one, as
 Strapi does, or refused (404) with `--strict-tenants`. One address may log 30 times a minute (429 after that). The address is the
 first entry of `X-Forwarded-For`, so run this service behind a proxy that sets it; without one every caller shares one limit.
+**Search statistics** (a port of `strapi-cms/src/api/search-stat`): one row per workspace, language and normalised query, with
+`count`, the last `results`, `zeroCount` (how often it found nothing) and `lastAt`; never who searched. The query is trimmed,
+single-spaced, lower-cased and cut at 100 characters; an empty one, one with an e-mail address in it, or one with a number of
+9 or more digits (a phone, national ID or account number; a list of 4-digit years such as `2566-2570` is fine) is **dropped
+without being stored, with the same 204**, so a caller cannot probe what was kept. `locale` is `en` or else `th`; `results` is
+clamped to 0..10000. A workspace keeps at most 20,000 different queries (a new one past that is dropped; known ones still
+count), a body past 4 KB is refused (413), and an address may search 30 times a minute (its own allowance, apart from the
+consent log's). Read with `GET /internal/records/search-stat?filter=tenantKey:eq:<key>&sort=count:DESC&pageSize=500` (service
+token; filters `tenantKey` and `locale` eq, `query` contains; sorts `count` `results` `zeroCount` `lastAt` `query` `createdAt`),
+which is read-only here. Studio's search insights add these counts to the engine's per query
+(`webx-studio/lib/cms/stat-merge.ts`, the top 1000 queries of each); one Unicode step of Strapi's normaliser (NFC) is not applied.
+
 **CORS.** The public site is on another origin than this service, so a JSON post is preflighted and the answer has to name
 that origin. Every `/api/*` route a browser calls (these and the tenant lookups; not `/api/auth/*`, `/internal` or `/admin`)
 answers `OPTIONS` with 204 and sends `Access-Control-Allow-Origin` for an allowed origin: the local development ones Strapi
@@ -76,7 +89,7 @@ left out). Old evidence therefore stays where it was and stays visible, and the 
 cannot edit or delete a choice held here. Strapi's own copy of the table goes in C6, after an import (`records import` keeps the
 ids) and with the dual read turned off, or the migrated rows would be counted twice.
 
-Not here yet: the assistant, search statistics, captcha, the forms and the tenant-contact fields beyond `/api/tenants/resolve`.
+Not here yet: the assistant, captcha and the forms (with their attachments, whose storage is not decided).
 
 ## Admin API
 

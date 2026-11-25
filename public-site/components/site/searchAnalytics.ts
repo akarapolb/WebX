@@ -6,7 +6,9 @@
 // who searched. Off when the site has no public CMS (lib/publicCms.ts) or the
 // browser asks not to be tracked. Each query is reported once per page view.
 import { useCallback, useRef } from "react";
-import { PUBLIC_CMS } from "@/lib/publicCms";
+// The control plane's own route when PUBLIC_CONTROL_URL is set (webx-control's search_stats.rs), the CMS's otherwise: same
+// path, same body.
+import { PUBLIC_RUNTIME as PUBLIC_CMS } from "@/lib/publicCms";
 
 export function useSearchReporter(tenant: string, locale: "th" | "en") {
   const sent = useRef(new Set<string>());

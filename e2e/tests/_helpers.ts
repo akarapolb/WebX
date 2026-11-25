@@ -1,6 +1,8 @@
 // Shared constants/helpers across all 3 suites. Kept intentionally small —
 // each suite owns its own assertions; this just avoids repeating base URLs
 // and the couple of credential/env lookups every suite needs.
+import type { Browser, BrowserContext } from "@playwright/test";
+
 export const PUBLIC_SITE = process.env.PUBLIC_SITE_URL || "http://localhost:8095";
 export const WEBX_STUDIO = process.env.WEBX_STUDIO_URL || "http://localhost:3000";
 export const STRAPI_URL = process.env.STRAPI_URL || "http://localhost:1337";
@@ -55,3 +57,16 @@ export const PEA_EDITOR_PASSWORD = process.env.PEA_EDITOR_PASSWORD || "";
 // lib/llm.ts are read once at module load, not per-request — see
 // e2e/README.md's Suite 5 section for the exact startup command).
 export const MOCK_LITELLM_PORT = Number(process.env.MOCK_LITELLM_PORT || 4010);
+
+/** A browser context signed in to Studio as `email`, through the login API the sign-in form posts to, for specs that only
+ * use the context's `request`. Faster and steadier than driving the form: a click that lands before the page has hydrated
+ * is lost, and a spec that fails then retries its sign-ins, which loads the dev server further. */
+export async function studioContext(browser: Browser, email: string, password: string): Promise<BrowserContext> {
+  const context = await browser.newContext();
+  const r = await context.request.post(WEBX_STUDIO + "/api/auth/login", { data: { email, password } });
+  if (!r.ok()) {
+    await context.close();
+    throw new Error(`Studio sign-in as ${email} answered ${r.status()}`);
+  }
+  return context;
+}

@@ -12,7 +12,7 @@ import { useLang } from "./LangProvider";
 import { useTenant } from "./TenantProvider";
 import { cms, CmsError } from "@/lib/cms";
 
-type Row = { id: number; query: string; locale?: string; count?: number; results?: number; zeroCount?: number; lastAt?: string };
+type Row = { id: number; documentId?: string; query: string; locale?: string; count?: number; results?: number; zeroCount?: number; lastAt?: string };
 const UID = "api::search-stat.search-stat";
 
 export default function SearchInsights() {
@@ -82,7 +82,7 @@ export default function SearchInsights() {
               <table className="tbl">
                 <thead><tr><th scope="col">{th ? "คำค้น" : "Query"}</th><th scope="col">{th ? "ภาษา" : "Lang"}</th><th scope="col" style={{ textAlign: "right" }}>{th ? "ครั้ง" : "Times"}</th><th scope="col" style={{ textAlign: "right" }}>{th ? "ผลลัพธ์" : "Results"}</th></tr></thead>
                 <tbody>{top.map((r) => (
-                  <tr key={r.id}><td>{r.query}</td><td>{(r.locale || "").toUpperCase()}</td><td style={{ textAlign: "right" }}>{r.count}</td><td style={{ textAlign: "right" }}>{r.results ? r.results : <span className="badge b-warn">0</span>}</td></tr>
+                  <tr key={r.documentId || r.id}><td>{r.query}</td><td>{(r.locale || "").toUpperCase()}</td><td style={{ textAlign: "right" }}>{r.count}</td><td style={{ textAlign: "right" }}>{r.results ? r.results : <span className="badge b-warn">0</span>}</td></tr>
                 ))}</tbody>
               </table>
             </div>
@@ -92,7 +92,7 @@ export default function SearchInsights() {
                 <table className="tbl">
                   <thead><tr><th scope="col">{th ? "คำค้น" : "Query"}</th><th scope="col">{th ? "ภาษา" : "Lang"}</th><th scope="col" style={{ textAlign: "right" }}>{th ? "ครั้ง" : "Times"}</th><th scope="col">{th ? "ล่าสุด" : "Last"}</th></tr></thead>
                   <tbody>{zero.map((r) => (
-                    <tr key={r.id}><td>{r.query}</td><td>{(r.locale || "").toUpperCase()}</td><td style={{ textAlign: "right" }}>{r.zeroCount}</td><td>{when(r.lastAt)}</td></tr>
+                    <tr key={r.documentId || r.id}><td>{r.query}</td><td>{(r.locale || "").toUpperCase()}</td><td style={{ textAlign: "right" }}>{r.zeroCount}</td><td>{when(r.lastAt)}</td></tr>
                   ))}</tbody>
                 </table>
               ) : <p className="muted">{th ? "ทุกคำค้นพบผลลัพธ์" : "Every search found something."}</p>}

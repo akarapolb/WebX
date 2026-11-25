@@ -1,43 +1,38 @@
 import { test, expect, type BrowserContext } from "@playwright/test";
 import {
-  WEBX_STUDIO, STRAPI_SCHEDULER_PASSWORD,
+  WEBX_STUDIO, STRAPI_SCHEDULER_PASSWORD, studioContext,
   DGA_EDITOR_EMAIL, DGA_EDITOR_PASSWORD,
   PEA_EDITOR_EMAIL, PEA_EDITOR_PASSWORD,
 } from "./_helpers";
 
-// Track C5 (docs/target-architecture.md), the first visitors' route: a visitor's browser posts its cookie choice to
-// webx-control (POST /api/consent-logs), and Studio's screens read it from there.
+// Track C5 (docs/target-architecture.md), the first visitors' routes: a visitor's browser posts its cookie choice
+// (POST /api/consent-logs) and its searches (POST /api/search-stats/log) to webx-control, and Studio's screens read them from there.
 //   - the post is made the way the public site's browser makes it (from an origin webx-control allows, no sign-in);
 //   - the Cookie Consent screen's API lists an editor their own workspace's choices (control plane and Strapi together)
 //     and no other workspace's, and reads one by id only inside its workspace;
 //   - the choices cannot be edited or deleted through Studio;
+//   - searches are counted per query, personal data in a query is never kept, and the search insights API shows an editor
+//     their own workspace's counts only;
 //   - with Strapi given the same control plane (ANALYTICS_READS_CONTROL=1), the dashboard's cookie numbers and its
 //     recent activity come from there too, and the monthly report still builds.
 // Same stack as audit-control-plane.spec.ts: AUDIT_CONTROL_URL / AUDIT_CONTROL_TOKEN.
 const CONTROL = (process.env.AUDIT_CONTROL_URL || "").replace(/\/$/, "");
 const TOKEN = process.env.AUDIT_CONTROL_TOKEN || "";
+// the admin token, to register the two workspaces the choices are posted for (a fresh control plane has none, and a post for
+// a workspace it does not know is filed under the first one, or refused when there is none)
+const ADMIN = process.env.AUDIT_CONTROL_ADMIN_TOKEN || "";
 const CL = "api::consent-log.consent-log";
+const SS = "api::search-stat.search-stat";
 // the public site's development origin, one webx-control allows by default
 const SITE = "http://localhost:3100";
 
-test.describe("Cookie consent in the control plane", () => {
+test.describe("Visitors' routes in the control plane: cookie consent and search statistics", () => {
   test.skip(
-    !CONTROL || !TOKEN || !DGA_EDITOR_PASSWORD || !PEA_EDITOR_PASSWORD || !STRAPI_SCHEDULER_PASSWORD,
-    "AUDIT_CONTROL_URL, AUDIT_CONTROL_TOKEN, DGA_EDITOR_PASSWORD, PEA_EDITOR_PASSWORD and STRAPI_SCHEDULER_PASSWORD required"
+    !CONTROL || !TOKEN || !ADMIN || !DGA_EDITOR_PASSWORD || !PEA_EDITOR_PASSWORD || !STRAPI_SCHEDULER_PASSWORD,
+    "AUDIT_CONTROL_URL, AUDIT_CONTROL_TOKEN, AUDIT_CONTROL_ADMIN_TOKEN, DGA_EDITOR_PASSWORD, PEA_EDITOR_PASSWORD and STRAPI_SCHEDULER_PASSWORD required"
   );
 
-  async function loginAs(browser: import("@playwright/test").Browser, email: string, password: string): Promise<BrowserContext> {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await page.goto(WEBX_STUDIO + "/login");
-    await page.getByRole("tab", { name: "Strapi" }).click();
-    await page.getByPlaceholder("admin@webx.io").fill(email);
-    await page.getByPlaceholder("••••••••").fill(password);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
-    await page.close();
-    return context;
-  }
+  const loginAs = studioContext;
 
   const stamp = Date.now();
   // one address per post: the route is rate-limited per address (X-Forwarded-For)
@@ -47,6 +42,12 @@ test.describe("Cookie consent in the control plane", () => {
       method: "POST",
       headers: { "content-type": "application/json", origin: SITE, "x-forwarded-for": `10.77.${stamp % 250}.${++n}` },
       body: JSON.stringify({ data }),
+    });
+  const search = (tenant: string, data: object) =>
+    fetch(`${CONTROL}/api/search-stats/log?tenant=${tenant}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: SITE, "x-forwarded-for": `10.78.${stamp % 250}.${++n}` },
+      body: JSON.stringify(data),
     });
   const control = (path: string, init: RequestInit = {}) =>
     fetch(`${CONTROL}/internal${path}`, { ...init, headers: { Authorization: `Bearer ${TOKEN}`, "content-type": "application/json", ...(init.headers || {}) } });
@@ -71,6 +72,10 @@ test.describe("Cookie consent in the control plane", () => {
       loginAs(browser, DGA_EDITOR_EMAIL, DGA_EDITOR_PASSWORD),
       loginAs(browser, PEA_EDITOR_EMAIL, PEA_EDITOR_PASSWORD),
     ]);
+    for (const key of ["dga", "pea"]) {
+      const r = await fetch(`${CONTROL}/admin/tenants/${key}`, { method: "PUT", headers: { Authorization: `Bearer ${ADMIN}`, "content-type": "application/json" }, body: JSON.stringify({ engine: "strapi", publicTemplate: "gov-portal" }) });
+      expect(r.ok, `registering ${key} answered ${r.status}`).toBeTruthy();
+    }
     if (analyticsFromControl) consentBefore = (await summary(dga, "dga")).consent;
     dgaPost = await visit("dga", { consentId: dgaConsentId, action: "accept_all", categories: { necessary: true, analytics: true, marketing: false }, language: "th", path: "/", userAgent: "e2e" });
     const peaPost = await visit("pea", { consentId: peaConsentId, action: "reject_all", categories: { necessary: true, analytics: false, marketing: false }, language: "th", path: "/pea", userAgent: "e2e" });
@@ -128,6 +133,34 @@ test.describe("Cookie consent in the control plane", () => {
     const kept = (await (await control(`/records/consent-log/${dgaId}`)).json()).data;
     expect(kept.action, "the row is unchanged").toBe("accept_all");
     expect(kept.tenantKey).toBe("dga");
+  });
+
+  // letters only: a long run of digits in a query is taken for a phone number and not kept
+  const word = String(stamp).replace(/\d/g, (d) => "abcdefghij"[Number(d)]);
+  const searchRows = async (ctx: BrowserContext, asking: string) => {
+    const filter = encodeURIComponent(JSON.stringify([{ field: "tenant.key", op: "eq", value: asking }]));
+    const r = await ctx.request.get(`${WEBX_STUDIO}/api/cms/entries/${SS}?pageSize=500&sort=count:DESC&filter=${filter}`);
+    expect(r.ok(), `the search statistics answered ${r.status()}`).toBeTruthy();
+    return (await r.json()).data as any[];
+  };
+
+  test("searches are counted per query by the control plane, and the search insights API shows an editor their own workspace's", async () => {
+    const mine = `e2e dga ${word}`, theirs = `e2e pea ${word}`;
+    for (const results of [4, 0]) expect((await search("dga", { q: mine.toUpperCase(), locale: "th", results })).status, "a search is counted").toBe(204);
+    expect((await search("pea", { q: theirs, locale: "en", results: 1 })).status).toBe(204);
+    expect((await search("dga", { q: "somchai@example.com", results: 1 })).status, "personal data is dropped with the same answer").toBe(204);
+    expect((await search("dga", { q: "081-234-5678", results: 1 })).status).toBe(204);
+
+    const dgaRows = await searchRows(dga, "dga");
+    const row = dgaRows.find((r) => r.query === mine);
+    expect(row, "dga's search is in its statistics, however it was typed").toBeTruthy();
+    expect([row.count, row.zeroCount, row.results], "two searches, one of them found nothing, the last found nothing").toEqual([2, 1, 0]);
+    expect(dgaRows.some((r) => /@|081/.test(r.query)), "an address or a phone number was never stored").toBeFalsy();
+    expect(dgaRows.some((r) => r.query === theirs), "dga does not see pea's").toBeFalsy();
+
+    const peaRows = await searchRows(pea, "dga"); // pea's editor names dga's key and still gets only pea's own
+    expect(peaRows.some((r) => r.query === theirs), "pea sees its own search").toBeTruthy();
+    expect(peaRows.some((r) => r.query === mine), "pea cannot read dga's statistics by naming them").toBeFalsy();
   });
 
   test("the dashboard's cookie numbers include the control plane's, and its recent activity comes from there", async () => {

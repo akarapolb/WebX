@@ -105,8 +105,9 @@ describe("controlConsentQuery", () => {
 
 describe("the consent log in the control plane's collections", () => {
   it("is read from there next to the engine's rows, not switched like the types that moved", () => {
-    assert.deepEqual(CONTROL_READ_COLLECTIONS, { "api::consent-log.consent-log": "consent-log" });
+    assert.deepEqual(CONTROL_READ_COLLECTIONS, { "api::consent-log.consent-log": "consent-log", "api::search-stat.search-stat": "search-stat" });
     assert.equal(CONTROL_RECORD_COLLECTIONS["api::consent-log.consent-log"], undefined, "writes and the engine's old rows stay where they are");
+    assert.equal(CONTROL_RECORD_COLLECTIONS["api::search-stat.search-stat"], undefined);
   });
   it("is reachable through an adapter made for the read-only map, and not through the default one", async () => {
     const realFetch = globalThis.fetch;

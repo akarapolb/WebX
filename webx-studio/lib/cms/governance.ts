@@ -33,6 +33,7 @@ import { CmsError } from "./types";
 import { controlAuditConfig, createControlAuditAdapter } from "./audit-store";
 import { CONTROL_READ_COLLECTIONS, CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter } from "./records-store";
 import { controlConsentQuery, mergedList } from "./consent-merge";
+import { controlStatQuery, mergedStats, tenantKeyOf } from "./stat-merge";
 import { controlQueueConfig, createControlQueueAdapter, QUEUE_COLLECTIONS } from "./queue-store";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
@@ -179,15 +180,16 @@ function bookkeepingAdapter(uid: string): CmsAdapter {
   if (controlRecordsCache?.key !== key) controlRecordsCache = { key, adapter: createControlRecordsAdapter(cfg) };
   return controlRecordsCache.adapter;
 }
-// The visitors' cookie choices the control plane has taken (POST /api/consent-logs), read next to the engine's own rows
-// — the public site writes to one or the other until it is switched, so the page shows both (lib/consent-merge.ts).
-let controlConsentCache: { key: string; adapter: CmsAdapter } | null = null;
-function controlConsentAdapter(): CmsAdapter | null {
+// What visitors' browsers reported to the control plane (cookie choices, searches), read next to the engine's own rows
+// — the public site writes to one or the other until it is switched, so the screens show both (lib/cms/consent-merge.ts,
+// lib/cms/stat-merge.ts).
+let controlReadCache: { key: string; adapter: CmsAdapter } | null = null;
+function controlReadAdapter(): CmsAdapter | null {
   const cfg = controlAuditConfig();
   if (!cfg) return null;
   const key = cfg.baseUrl + " " + cfg.token;
-  if (controlConsentCache?.key !== key) controlConsentCache = { key, adapter: createControlRecordsAdapter(cfg, CONTROL_READ_COLLECTIONS) };
-  return controlConsentCache.adapter;
+  if (controlReadCache?.key !== key) controlReadCache = { key, adapter: createControlRecordsAdapter(cfg, CONTROL_READ_COLLECTIONS) };
+  return controlReadCache.adapter;
 }
 const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
@@ -240,6 +242,9 @@ const AGENT_SCHEDULE_UID = "api::agent-schedule.agent-schedule";
 // so a WordPress-engine admin's Cookie Consent page isn't stuck 400ing on
 // an "api::" uid its own session's adapter can never resolve.
 const CONSENT_LOG_UID = "api::consent-log.consent-log";
+// What visitors search for on the public site (aggregated counts, no personal data). Scoped by Strapi's own tenant hook
+// when the engine is asked; read next to the control plane's counts when that is configured.
+const SEARCH_STAT_UID = "api::search-stat.search-stat";
 // Every uid the Users/Field Access/Audit Log/Releases pages read or write —
 // always Strapi-hosted regardless of which engine THIS session authenticated
 // against (Phase 5's module header). Without this, a WordPress-session admin
@@ -3019,12 +3024,26 @@ export const governed = {
         // Same scoping as the relation branch below (an unscoped caller sees every workspace), and when the control
         // plane is configured the rows it has taken are listed with the engine's own, as one list.
         const filter = eff ? withTenantFilter(query?.filter, "tenant.id", "eq", eff.id) : query?.filter;
-        const ctl = controlConsentAdapter();
+        const ctl = controlReadAdapter();
         if (!ctl) return cms.entries.list<T>(uid, { ...query, filter });
         return mergedList<any>(
           (q) => cms.entries.list<any>(uid, { ...q, filter }),
           (q) => ctl.entries.list<any>(uid, controlConsentQuery(q, eff?.key ?? null)),
           query,
+        ) as Promise<EntryList<T>>;
+      }
+      if (uid === SEARCH_STAT_UID) {
+        // The engine's counts as before (its own tenant hook scopes them), and when the control plane is configured its
+        // counts are added to them per query. Scoped by the workspace key there; an unscoped caller gets the workspace the
+        // page asked for, or all of them.
+        const ctl = controlReadAdapter();
+        if (!ctl) return cms.entries.list<T>(uid, query);
+        const key = eff ? eff.key : tenantKeyOf(query);
+        return mergedStats<any>(
+          (q) => cms.entries.list<any>(uid, q),
+          (q) => ctl.entries.list<any>(uid, controlStatQuery(q, key)),
+          query,
+          !!key,
         ) as Promise<EntryList<T>>;
       }
       if (RELATION_SCOPED_BOOKKEEPING_UIDS.has(uid) && eff) {
@@ -3104,7 +3123,7 @@ export const governed = {
         result = await cms.entries.get<T>(uid, id, opts);
       } catch (e) {
         // A cookie choice the control plane took has its own ids, so the engine does not know it: look there.
-        const ctl = uid === CONSENT_LOG_UID && e instanceof CmsError && (e.status === 404 || e.status === 400) ? controlConsentAdapter() : null;
+        const ctl = uid === CONSENT_LOG_UID && e instanceof CmsError && (e.status === 404 || e.status === 400) ? controlReadAdapter() : null;
         if (!ctl) throw e;
         const row: any = await ctl.entries.get<T>(uid, id).catch(() => null);
         if (!row) throw e;

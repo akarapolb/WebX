@@ -231,6 +231,7 @@ jobs:
         working-directory: webx-control
         env:
           WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
+          WEBX_CONTROL_ADMIN_TOKEN: ci-audit-admin-token
         run: ./target/release/webx-control --db /tmp/control.db --port 1400 > /tmp/control.log 2>&1 &
       - name: Wait for Strapi to finish booting and seeding
         run: |
@@ -271,6 +272,7 @@ jobs:
         env:
           AUDIT_CONTROL_URL: http://localhost:1400
           AUDIT_CONTROL_TOKEN: ci-audit-service-token
+          AUDIT_CONTROL_ADMIN_TOKEN: ci-audit-admin-token
           STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}

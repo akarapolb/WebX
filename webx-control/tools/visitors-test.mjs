@@ -81,6 +81,52 @@ try {
   const mine = await logs(`&filter=${encodeURIComponent("tenantKey:eq:pea")}`);
   check("the control plane lists a workspace's log by tenantKey", mine.meta.pagination.total === 1 && mine.data[0].consentId === "c-1", JSON.stringify(mine).slice(0, 200));
 
+  // search statistics: what visitors search for, counted without who searched
+  const search = (tenant, body, ip = "10.1.0.1", extra = {}) => call("POST", `/api/search-stats/log${tenant === null ? "" : "?tenant=" + tenant}`, { body, headers: { "x-forwarded-for": ip, ...extra } });
+  const stats = async (q = "") => (await call("GET", `/internal/records/search-stat?pageSize=100${q}`, { token: SERVICE })).json;
+  const peaStats = (extra = "") => stats(`&filter=${encodeURIComponent("tenantKey:eq:pea")}${extra}`);
+  const s1 = await search("pea", { q: "  Open   DATA ", locale: "en", results: 7 });
+  check("a search is counted and answered 204 with no body", s1.status === 204 && s1.json === null, JSON.stringify(s1));
+  await search("pea", { q: "open data", locale: "en", results: 0 });
+  await search("pea", { q: "OPEN DATA", locale: "en", results: 3 });
+  const row = (await peaStats()).data.find((r) => r.query === "open data");
+  check("the same search, however it was typed, is one row that counts up", row && row.count === 3 && row.locale === "en" && row.tenantKey === "pea", JSON.stringify(row));
+  check("it remembers the last result count and how often it found nothing", row.results === 3 && row.zeroCount === 1 && typeof row.lastAt === "string" && typeof row.documentId === "string", JSON.stringify(row));
+  await search("pea", { q: "open data", locale: "th", results: 1 });
+  await search("pea", { q: "budget", locale: "xx", results: "12" });
+  const all = (await peaStats()).data;
+  check("each language is its own row; an unknown language is Thai", all.some((r) => r.query === "open data" && r.locale === "th") && all.find((r) => r.query === "budget").locale === "th");
+  check("a result count sent as text is read; the rest are clamped", all.find((r) => r.query === "budget").results === 12);
+  await search("pea", { q: "huge", results: 999999 });
+  await search("pea", { q: "negative", results: -5 });
+  await search("pea", { q: "junk", results: "lots" });
+  const clamped = Object.fromEntries((await peaStats()).data.map((r) => [r.query, r.results]));
+  check("results are clamped to 0..10000 and junk is 0", clamped.huge === 10000 && clamped.negative === 0 && clamped.junk === 0, JSON.stringify(clamped));
+  for (const q of ["somchai@example.com", "081-234-5678", "1 2345 67890 12 3", "", "   "]) {
+    check(`a query that is empty or looks like personal data is dropped, still 204: "${q}"`, (await search("pea", { q, results: 1 })).status === 204);
+  }
+  const names = (await peaStats()).data.map((r) => r.query);
+  check("none of them was stored", !names.some((n) => /@|081|2345|^$/.test(n)), JSON.stringify(names));
+  check("a year in a query is kept", (await search("pea", { q: "EGDI 2026", results: 2 })).status === 204 && (await peaStats()).data.some((r) => r.query === "egdi 2026"));
+  const top = (await peaStats("&sort=count:DESC")).data;
+  check("the list is most searched first", top[0].query === "open data" && top[0].count === 3 && top[1].count <= top[0].count, JSON.stringify(top.map((r) => [r.query, r.count])));
+  check("it filters by language", (await peaStats(`&filter=${encodeURIComponent("locale:eq:en")}`)).data.every((r) => r.locale === "en"));
+  check("and pages with a total", (await stats(`&filter=${encodeURIComponent("tenantKey:eq:pea")}&page=2&pageSize=2`)).meta.pagination.pageSize === 2);
+  check("a search with no tenant is filed under the first workspace", (await search(null, { q: "no tenant", results: 1 })).status === 204 && (await stats(`&filter=${encodeURIComponent("tenantKey:eq:dga")}`)).data.some((r) => r.query === "no tenant"));
+  check("an unregistered tenant too, as Strapi does", (await search("nobody", { q: "stranger", results: 1 })).status === 204 && (await stats(`&filter=${encodeURIComponent("tenantKey:eq:dga")}`)).data.some((r) => r.query === "stranger"));
+  check("another workspace's statistics are separate", !(await stats(`&filter=${encodeURIComponent("tenantKey:eq:pea")}`)).data.some((r) => r.query === "stranger"));
+  check("a body that is not JSON: 400", (await call("POST", "/api/search-stats/log?tenant=pea", { body: "nope", headers: { "x-forwarded-for": "10.1.0.2" } })).status === 400);
+  check("a body past 4 KB is refused: 413", (await search("pea", { q: "x", pad: "y".repeat(5000) }, "10.1.0.3")).status === 413);
+  check("the statistics cannot be changed through the records API: 404", (await call("POST", "/internal/records/search-stat", { token: SERVICE, body: { data: { query: "forged" } } })).status === 404);
+  check("reading them needs the service token: 401", (await call("GET", "/internal/records/search-stat")).status === 401);
+  check("an unknown filter is refused: 400", (await call("GET", `/internal/records/search-stat?filter=${encodeURIComponent("tenant.key:eq:pea")}`, { token: SERVICE })).status === 400);
+  // its own allowance: 30 a minute per address, not shared with the consent log's
+  let slowed = 0;
+  for (let k = 0; k < 40; k++) if ((await search("pea", { q: "flood " + k, results: 1 }, "10.2.2.2")).status === 429) slowed++;
+  check("an address that searches 40 times in a minute is rate-limited after 30: 429", slowed === 10, `limited ${slowed}`);
+  check("the consent log's allowance for that address is its own", (await call("POST", "/api/consent-logs?tenant=dga", { body: consent, headers: { "x-forwarded-for": "10.2.2.2" } })).status === 201);
+  check("the browser's preflight is answered for it too", (await call("OPTIONS", "/api/search-stats/log?tenant=pea", { headers: { origin: "http://localhost:3100", "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === "http://localhost:3100");
+
   // a visitor's browser is on the public site's origin, not this service's: CORS names the origins that may call
   const site = "http://localhost:3100", other = "https://evil.example.com";
   const pre = await call("OPTIONS", "/api/consent-logs?tenant=pea", { headers: { origin: site, "access-control-request-method": "POST", "access-control-request-headers": "content-type" } });
@@ -100,11 +146,11 @@ try {
   const pea = (await sum("?tenant=pea")).json.data;
   check("the consent summary counts a workspace's choices by kind", pea.total === 3 && pea.accept === 3 && pea.reject === 0 && pea.custom === 0, JSON.stringify(pea));
   const dga = (await sum("?tenant=dga")).json.data;
-  check("the other workspace has its own numbers", dga.total === 34 && dga.accept === 33 && dga.custom === 1, JSON.stringify(dga));
+  check("the other workspace has its own numbers", dga.total === 35 && dga.accept === 34 && dga.custom === 1, JSON.stringify(dga));
   check("no tenant: every workspace together", (await sum()).json.data.total === pea.total + dga.total);
   check("a window that has not started yet has none", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 0);
   check("a window that ended before has none", (await sum("?before=2020-01-01T00:00:00Z")).json.data.total === 0);
-  check("a window around now has them all", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&before=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 34);
+  check("a window around now has them all", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&before=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 35);
   check("a bad time is refused: 400", (await sum("?from=yesterday")).status === 400);
   check("an unknown parameter is refused: 400", (await sum("?colour=red")).status === 400);
   check("the summary needs the service token: 401", (await call("GET", "/internal/consent/summary")).status === 401);
