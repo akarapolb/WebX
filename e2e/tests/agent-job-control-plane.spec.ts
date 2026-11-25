@@ -124,7 +124,13 @@ test.describe("A background job run through the control plane's queue", () => {
         state = String((j?.data ?? j)?.runState ?? "");
       }
       const final = (await (await control("/" + id)).json()).data;
-      expect(state, `the job ended ${state}; in the queue: ${JSON.stringify({ runState: final.runState, error: final.error, attempts: final.attempts, events: (final.events || []).slice(-4) })}`).toBe("done");
+      // what the mock model saw and refused, for when the job does not finish
+      const seen = await fetch(`http://localhost:${MOCK_LITELLM_PORT}/__mock/report`).then((r) => r.json()).catch((e) => ({ unreachable: String(e) }));
+      const why = JSON.stringify({
+        runState: final.runState, error: final.error, attempts: final.attempts, events: (final.events || []).slice(0, 24),
+        mock: { requests: seen.requests, remaining: seen.remaining, violations: seen.violations, failures: seen.failures, unreachable: seen.unreachable },
+      });
+      expect(state, `the job ended ${state}; in the queue: ${why}`).toBe("done");
       expect(final.runState).toBe("done");
       expect(final.leaseToken || null, "a finished job holds no lease").toBeNull();
 

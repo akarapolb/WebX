@@ -296,10 +296,17 @@ jobs:
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
           ANALYTICS_READS_CONTROL: "1"
           WEBX_SCHEDULER_SECRET: ci-scheduler-secret
-        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts tests/consent-control-plane.spec.ts tests/agent-job-control-plane.spec.ts tests/review-release-control-plane.spec.ts
+        run: |
+          status=0
+          npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts tests/consent-control-plane.spec.ts tests/review-release-control-plane.spec.ts || status=1
+          # the job spec turns background jobs on for dga and runs Studio's worker against a mock model: alone, so that the
+          # jobs the queue spec puts in the queue are not leased by that worker while the queue spec reads them
+          npx playwright test tests/agent-job-control-plane.spec.ts || status=1
+          exit $status
       - if: failure()
         run: |
-          tail -n 100 /tmp/webx-studio.log
+          # the access lines are most of the log: what the worker and the routes printed is what is wanted
+          grep -vE '^ (GET|POST|PUT|DELETE|OPTIONS|HEAD) ' /tmp/webx-studio.log | tail -n 150
           tail -n 50 /tmp/control.log
 
   # NOT wired into CI, deliberately — this is the honest half of the same
