@@ -6,8 +6,12 @@
 //
 //   node tools/forms-test.mjs [--port 1408]
 //
+// Also: a file attached to a complaint or an application, kept encrypted and only ever downloaded through the internal API; and
+// the mail a form calls for, queued in an outbox and sent over SMTP to a fake mail server started here.
+//
 // Needs the release build.
 import { spawn } from "node:child_process";
+import net from "node:net";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -59,6 +63,76 @@ const submit = async (plural, data, { tenant = "pea", captcha, address = ip(), e
 const admin = (method, path, body) => call(method, `/internal/records/${path}`, { token: SERVICE, body });
 const read = async (collection, id) => (await admin("GET", `${collection}/${id}`)).json?.data;
 const track = (plural, ref, tenant = "pea", address = ip()) => call("GET", `/api/${plural}/track/${encodeURIComponent(ref)}?tenant=${tenant}`, { headers: { "x-forwarded-for": address } });
+
+const multipart = async (plural, data, file, { tenant = "pea", captcha, fieldName = "files.attachment", address = ip() } = {}) => {
+  const fd = new FormData();
+  fd.append("data", JSON.stringify(data));
+  const c = captcha ?? (await solved());
+  fd.append("captchaId", c.captchaId ?? "");
+  fd.append("captchaAnswer", c.captchaAnswer ?? "");
+  if (file) fd.append(fieldName, new Blob([file.bytes], { type: file.type || "application/octet-stream" }), file.name);
+  const r = await fetch(`${BASE}/api/${plural}/submit?tenant=${tenant}`, { method: "POST", body: fd, headers: { "x-forwarded-for": address } });
+  let j = null; try { j = await r.json(); } catch {}
+  return { status: r.status, json: j };
+};
+const download = async (id) => {
+  const r = await fetch(`${BASE}/internal/files/${id}`, { headers: { authorization: `Bearer ${SERVICE}` } });
+  return { status: r.status, bytes: Buffer.from(await r.arrayBuffer()), headers: Object.fromEntries(r.headers) };
+};
+const PDF = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
+
+// A mail server that takes whatever it is sent, and remembers it (RCPT TO addresses, the DATA part).
+function fakeSmtp({ rejectTo = null } = {}) {
+  const got = [];
+  const server = net.createServer((sock) => {
+    let buf = "", inData = false, cur = { to: [], data: "" };
+    sock.write("220 fake ESMTP\r\n");
+    sock.on("data", (d) => {
+      buf += d.toString("utf8");
+      for (;;) {
+        if (inData) {
+          const i = buf.indexOf("\r\n.\r\n");
+          if (i < 0) return;
+          cur.data = buf.slice(0, i); buf = buf.slice(i + 5); inData = false;
+          got.push(cur); cur = { to: [], data: "" };
+          sock.write("250 queued\r\n");
+          continue;
+        }
+        const i = buf.indexOf("\r\n");
+        if (i < 0) return;
+        const line = buf.slice(0, i); buf = buf.slice(i + 2);
+        const up = line.toUpperCase();
+        if (up.startsWith("EHLO") || up.startsWith("HELO")) sock.write("250-fake\r\n250 8BITMIME\r\n");
+        else if (up.startsWith("RCPT TO")) {
+          const to = line.slice(8).replace(/[<>]/g, "");
+          if (rejectTo && to.includes(rejectTo)) sock.write("550 no such user\r\n"); else { cur.to.push(to); sock.write("250 ok\r\n"); }
+        } else if (up === "DATA") { inData = true; sock.write("354 go on\r\n"); }
+        else if (up === "QUIT") { sock.write("221 bye\r\n"); sock.end(); return; }
+        else sock.write("250 ok\r\n");
+      }
+    });
+    sock.on("error", () => {});
+  });
+  return new Promise((ok) => server.listen(0, "127.0.0.1", () => ok({ port: server.address().port, got, close: () => new Promise((r) => { server.close(r); server.closeAllConnections?.(); }) })));
+}
+const qpDecode = (t) => {
+  const out = []; const x = t.replace(/=\r?\n/g, "");
+  for (let i = 0; i < x.length; i++) { if (x[i] === "=" && /^[0-9A-Fa-f]{2}$/.test(x.slice(i + 1, i + 3))) { out.push(parseInt(x.slice(i + 1, i + 3), 16)); i += 2; } else out.push(...Buffer.from(x[i])); }
+  return Buffer.from(out).toString("utf8");
+};
+const decodeMail = (rawMail) => {
+  const at = rawMail.indexOf("\r\n\r\n");
+  const head = rawMail.slice(0, at).replace(/\r\n[ \t]+/g, " ");
+  const body = rawMail.slice(at + 4);
+  const h = {};
+  for (const l of head.split("\r\n")) { const i = l.indexOf(":"); if (i > 0) h[l.slice(0, i).toLowerCase()] = l.slice(i + 1).trim(); }
+  const enc = (h["content-transfer-encoding"] || "7bit").toLowerCase();
+  const text = enc === "base64" ? Buffer.from(body.replace(/\s+/g, ""), "base64").toString("utf8") : enc === "quoted-printable" ? qpDecode(body) : body;
+  // whitespace between two encoded words is not part of the text; whitespace between an encoded word and plain text is (RFC 2047)
+  const subject = (h.subject || "").replace(/\?=\s+=\?/g, "?==?").replace(/=\?utf-8\?([bqBQ])\?([^?]*)\?=/gi, (_, k, v) => (k.toLowerCase() === "b" ? Buffer.from(v, "base64").toString("utf8") : qpDecode(v.replace(/_/g, " "))));
+  return { headers: h, subject, text: text.replace(/\r\n/g, "\n").trimEnd() };
+};
+const waitFor = async (fn, ms = 15000) => { for (let t = 0; t < ms; t += 200) { if (fn()) return true; await new Promise((r) => setTimeout(r, 200)); } return fn(); };
 
 const complaint = { type: "ทุจริต/ไม่โปร่งใส", subject: "ขอตรวจสอบ", detail: "รายละเอียดของเรื่อง", name: "สมชาย ใจดี", email: "somchai@example.com", phone: "0812345678", date: "25/11/2569", anonymous: false };
 
@@ -173,6 +247,53 @@ try {
   check("tracking has its own allowance: 429 after 30", trackLimited === 10, `limited ${trackLimited}`);
   check("the form allowance of that address is separate from tracking's", (await call("POST", "/api/contact-messages?tenant=pea", { body: { data: { name: "N", message: "m" } }, headers: { "x-forwarded-for": trackIp } })).status === 400, "a post with no captcha is a 400, not a 429");
 
+  // ---- files attached to a complaint or an application
+  const withFile = await multipart("complaints", complaint, { name: "หลักฐาน 1.pdf", bytes: PDF, type: "application/pdf" });
+  check("a complaint with a PDF attached is accepted: 201 with a reference", withFile.status === 201 && /^DGA-CMP-/.test(withFile.json.data.ref), JSON.stringify(withFile));
+  const wf = await read("complaint", withFile.json.data.documentId);
+  check("the row refers to the file; the personal data is still stored encrypted and read decrypted", wf.attachment?.name === "หลักฐาน 1.pdf" && wf.attachment.mime === "application/pdf" && wf.attachment.size === PDF.length && typeof wf.attachment.documentId === "string" && wf.name === complaint.name, JSON.stringify(wf));
+  const dl = await download(wf.attachment.documentId);
+  check("Studio downloads the file whole, as an attachment that a browser must not sniff or show", dl.status === 200 && dl.bytes.equals(PDF) && /^attachment; filename=/.test(dl.headers["content-disposition"]) && dl.headers["content-disposition"].includes("filename*=UTF-8''%E0%B8%AB") && dl.headers["x-content-type-options"] === "nosniff" && dl.headers["content-type"] === "application/pdf" && dl.headers["cache-control"] === "no-store", JSON.stringify(dl.headers));
+  check("the file is for the service token only: 401", (await fetch(`${BASE}/internal/files/${wf.attachment.documentId}`)).status === 401);
+  const resume = await multipart("applications", { position: "นักพัฒนา", name: "นก", email: "nok@example.com" }, { name: "cv.PDF", bytes: PDF }, { fieldName: "files.resume" });
+  const rv = await read("application", resume.json.data.documentId);
+  check("an application takes its résumé as files.resume", resume.status === 201 && /^DGA-JOB-/.test(resume.json.data.ref) && rv.resume?.name === "cv.PDF" && rv.attachment === undefined, JSON.stringify(rv));
+  check("tracking shows no file",(await track("applications", resume.json.data.ref)).json.data.resume === undefined);
+
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(40)]);
+  check("an image is taken too", (await multipart("complaints", complaint, { name: "photo.png", bytes: png })).status === 201);
+  check("a program renamed .pdf is refused: 400", (await multipart("complaints", complaint, { name: "renamed.pdf", bytes: Buffer.from("MZ\x90\x00 a program") })).status === 400);
+  check("an .exe is refused: 400", (await multipart("complaints", complaint, { name: "virus.exe", bytes: Buffer.from("MZ\x90\x00") })).status === 400);
+  check("a page that could run script is refused: 400", (await multipart("complaints", complaint, { name: "page.html", bytes: Buffer.from("<script>alert(1)</script>") })).status === 400);
+  const big = await multipart("complaints", complaint, { name: "big.pdf", bytes: Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(5.5 * 1024 * 1024, 0x41)]) });
+  check("a file over 5 MB is refused: 400 naming the limit", big.status === 400 && /5MB/.test(big.json.error.message), JSON.stringify(big));
+  let huge;
+  try { huge = await multipart("complaints", complaint, { name: "huge.pdf", bytes: Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(7 * 1024 * 1024, 0x41)]) }); } catch { huge = { status: "reset" }; }
+  check("a body over 6 MB is refused outright (413, or the connection is closed) and the server carries on", (huge.status === 413 || huge.status === "reset") && (await fetch(BASE + "/_health")).ok, JSON.stringify(huge));
+  const stray = await multipart("complaints", complaint, { name: "ok.pdf", bytes: PDF }, { fieldName: "something-else" });
+  check("a file in a field the form does not have is ignored; the complaint is still taken", stray.status === 201 && (await read("complaint", stray.json.data.documentId)).attachment === undefined);
+  const nofile = await multipart("complaints", complaint, null);
+  check("a multipart post with no file is a plain complaint", nofile.status === 201 && (await read("complaint", nofile.json.data.documentId)).attachment === undefined);
+  const noCap = await multipart("complaints", complaint, { name: "a.pdf", bytes: PDF }, { captcha: {} });
+  check("the captcha is asked on the multipart route too: 400 CaptchaError", noCap.status === 400 && noCap.json.error.name === "CaptchaError", JSON.stringify(noCap));
+  const stored = await admin("GET", `complaint?pageSize=500`);
+  const files = stored.json.data.filter((r) => r.attachment).length;
+  const del = await admin("DELETE", `complaint/${withFile.json.data.documentId}`);
+  check("deleting a complaint takes its file with it", del.status === 200 && (await download(wf.attachment.documentId)).status === 404 && files >= 1);
+  const up1 = await fetch(`${BASE}/internal/files?name=${encodeURIComponent("เอกสาร.pdf")}&tenant=pea`, { method: "POST", headers: { authorization: `Bearer ${SERVICE}` }, body: PDF });
+  const upMeta = (await up1.json()).data;
+  check("an upload through the internal API (a migration's) is kept and downloads back", up1.status === 200 && upMeta.name === "เอกสาร.pdf" && upMeta.mime === "application/pdf" && (await download(upMeta.documentId)).bytes.equals(PDF), JSON.stringify(upMeta));
+  check("and is deleted through it", (await call("DELETE", `/internal/files/${upMeta.documentId}`, { token: SERVICE })).status === 200 && (await download(upMeta.documentId)).status === 404);
+  const keptId = resume.json.data.documentId;
+  const keptFile = rv.resume.documentId;
+
+  // ---- the outbox: with no mail server set, mail is queued and kept, encrypted; the summary shows no address
+  const box = (await call("GET", "/internal/outbox", { token: SERVICE })).json.data;
+  check("mail owed is queued while no SMTP server is set, by kind", box.total >= 3 && box.pending === box.total && box.sent === 0 && box.recent.some((m) => m.kind === "complaint-ack") && box.recent.some((m) => m.kind === "application-ack") && box.recent.some((m) => m.kind === "registration-welcome"), JSON.stringify(box).slice(0, 300));
+  check("the summary shows no address and no text", !/example\.com|@|ได้รับ|สพร/.test(JSON.stringify(box)), JSON.stringify(box).slice(0, 300));
+  check("a workspace's own summary counts only its mail", (await call("GET", "/internal/outbox?tenant=pea", { token: SERVICE })).json.data.total === box.total && (await call("GET", "/internal/outbox?tenant=dga", { token: SERVICE })).json.data.total === 0, "everything queued so far was filed under pea");
+  check("the outbox needs the service token: 401", (await call("GET", "/internal/outbox")).status === 401);
+
   // ---- the browser's preflight
   check("a browser on the public site may post a form: preflight answered", (await call("OPTIONS", "/api/complaints?tenant=pea", { headers: { origin: "http://localhost:3100", "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === "http://localhost:3100");
 
@@ -185,7 +306,46 @@ try {
   const bad = await admin("GET", `complaint/${c1.json.data.documentId}`);
   check("with a different key the personal data is unreadable, and it says which field: 500 PiiError", bad.status === 500 && bad.json.error.name === "PiiError" && /^(name|email|phone): /.test(bad.json.error.message), JSON.stringify(bad.json));
   check("so it really is stored encrypted", !JSON.stringify(bad.json).includes("somchai"));
+  const badFile = await download(keptFile);
+  check("a file is unreadable with the wrong key too: 500", badFile.status === 500 && !badFile.bytes.includes(Buffer.from("%PDF")), String(badFile.status));
+  check("the application row is unaffected but its personal data is not readable either", (await admin("GET", `application/${keptId}`)).status === 500);
   check("what is not personal data stays readable without the key", (await call("GET", `/api/complaints/track/${c1.json.data.ref}?tenant=pea`, { headers: { "x-forwarded-for": ip() } })).json.data.subject === complaint.subject);
+
+  // ---- mail: the outbox is sent over SMTP, the address and text are wiped once sent, a refusal is counted and shown
+  const backlog = (await call("GET", "/internal/outbox", { token: SERVICE })).json.data.pending;
+  await down();
+  const smtp = await fakeSmtp({ rejectTo: "bounce@" });
+  await up([], { WEBX_SMTP_URL: `smtp://127.0.0.1:${smtp.port}`, WEBX_MAIL_FROM: "สพร. <no-reply@dga.or.th>", WEBX_COMPLAINT_NOTIFY_EMAIL: "staff@dga.or.th" });
+  // the mail queued by the earlier runs is sent first; wait for all of it, then look at new mail only
+  check("mail queued while no server was set is sent once one is (" + backlog + " mails)", (await waitFor(() => smtp.got.length >= backlog)) && backlog >= 3);
+  const early = smtp.got.length;
+  const newComplaint = await submit("complaints", { subject: "เรื่องใหม่", type: "อื่นๆ", name: "ผู้แจ้ง", email: "citizen@example.com" });
+  await submit("complaints", { subject: "ไม่ออกนาม", anonymous: true });
+  await submit("applications", { position: "นักวิเคราะห์", email: "applicant@example.com", name: "ผู้สมัคร" });
+  await submit("registrations", { email: "newuser@example.com", firstname: "ใหม่", lastname: "ผู้ใช้" });
+  await submit("contact-messages", { name: "ติดต่อ", email: "contact@example.com", message: "m" });
+  await submit("complaints", { subject: "ปฏิเสธ", email: "bounce@example.com" });
+  const expected = 2 + 1 + 1 + 1 + 1 + 0 /* staff + citizen; anonymous: staff; application; registration; contact: none; bounced: staff delivered, ack refused */;
+  await waitFor(() => smtp.got.length >= early + expected, 20000);
+  const mails = smtp.got.slice(early).map((g) => ({ to: g.to.join(","), ...decodeMail(g.data) }));
+  check(`the mail a form calls for is sent over SMTP (${expected} mails)`, mails.length === expected, JSON.stringify(mails.map((m) => [m.to, m.subject])));
+  const to = (addr) => mails.filter((m) => m.to === addr);
+  const ref = newComplaint.json.data.ref;
+  check("the citizen gets Strapi's acknowledgement in Thai, with the reference", to("citizen@example.com").length === 1 && to("citizen@example.com")[0].subject === `รับเรื่องร้องเรียนแล้ว (${ref})` && to("citizen@example.com")[0].text.includes(`หมายเลขอ้างอิง: ${ref}`) && to("citizen@example.com")[0].text.includes("ติดตามเรื่องร้องเรียน"), JSON.stringify(to("citizen@example.com")));
+  const staff = to("staff@dga.or.th").find((m) => m.subject.includes("เรื่องใหม่"));
+  check("staff are told of the new complaint, with the reporter's name and address", staff && staff.subject === `[ร้องเรียนใหม่] ${ref} — เรื่องใหม่` && staff.text.includes("ผู้แจ้ง: ผู้แจ้ง / citizen@example.com") && staff.text.includes("ประเภท: อื่นๆ"), JSON.stringify(staff));
+  const anonMail = to("staff@dga.or.th").find((m) => m.subject.includes("ไม่ออกนาม"));
+  check("an anonymous complaint is reported to staff as such, and acknowledged to no one", anonMail && anonMail.text.endsWith("ผู้แจ้ง: ไม่ประสงค์ออกนาม"), JSON.stringify(anonMail));
+  check("an application is confirmed", to("applicant@example.com").length === 1 && /^รับใบสมัครงานแล้ว \(DGA-JOB-\d{4}-\d{6}\)$/.test(to("applicant@example.com")[0].subject) && to("applicant@example.com")[0].text.includes("ตำแหน่ง: นักวิเคราะห์"), JSON.stringify(to("applicant@example.com")));
+  check("a registration is welcomed with its username", to("newuser@example.com").length === 1 && /^ลงทะเบียนผู้ใช้งานสำเร็จ \(newuser\d{4}\)$/.test(to("newuser@example.com")[0].subject), JSON.stringify(to("newuser@example.com")));
+  check("a contact message sends nothing", to("contact@example.com").length === 0);
+  check("the sender is the configured one", mails.every((m) => /no-reply@dga\.or\.th/.test(m.headers.from || "")), JSON.stringify(mails[0]?.headers));
+  await new Promise((r) => setTimeout(r, 2500));
+  const after = (await call("GET", "/internal/outbox", { token: SERVICE })).json.data;
+  const refused = after.recent.find((m) => m.kind === "complaint-ack" && m.lastError);
+  check("a mail the server refuses stays queued, counted, with the reason; the rest are sent", after.sent >= 3 + expected - 1 && after.pending >= 1 && refused && refused.attempts === 1 && /550|no such user/i.test(refused.lastError), JSON.stringify(after).slice(0, 400));
+  check("it is not retried straight away (it waits a minute)", smtp.got.slice(early).filter((g) => g.to.includes("bounce@example.com")).length === 0);
+  await smtp.close();
 } catch (e) {
   console.error(e);
   failures++;

@@ -16,13 +16,17 @@
 //!   POST /api/search-stats/log?tenant=<key>      -> 204; what a visitor searched for, counted anonymously (see search_stats.rs)
 //!   GET  /api/captcha                            -> {data: {id, question}}; a sum the form routes ask to be answered (see captcha.rs)
 //!   POST /api/complaints|applications|registrations|contact-messages?tenant=<key>  -> 201; a visitor's form (see forms.rs)
+//!   POST /api/complaints|applications/submit?tenant=<key> (multipart)               -> 201; the form with a file attached
 //!   GET  /api/complaints|applications/track/<ref>?tenant=<key>                      -> where a submission stands
 //!       a browser may call these from the origins in WEBX_PUBLIC_SITE_ORIGINS (and the local development ones)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 
 mod audit;
+mod files;
 mod forms;
+mod mailer;
+mod outbox;
 mod pii;
 mod captcha;
 mod identity;
@@ -35,7 +39,7 @@ mod registry;
 
 use axum::{
     body::Bytes,
-    extract::{Path, RawQuery, Request, State},
+    extract::{Multipart, Path, RawQuery, Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Json, Response},
@@ -71,6 +75,8 @@ struct App {
     captcha_on: bool,
     /// the key personal data is encrypted with (WEBX_PII_KEY); without it the form collections refuse every read and write
     pii: Option<pii::Pii>,
+    /// where a new complaint is reported to (WEBX_COMPLAINT_NOTIFY_EMAIL), as in Strapi
+    notify_to: Option<String>,
 }
 type Shared = Arc<App>;
 
@@ -292,15 +298,11 @@ fn form_submit(app: &App, collection: &'static str, headers: &HeaderMap, raw: Op
     let key = match tenant_for(app, &conn, raw) { Ok(k) => k, Err(r) => return r };
     let mut doc = match forms::clean(collection, &v) { Ok(d) => d, Err(m) => return bad(m) };
     doc.insert("tenantKey".into(), json!(key));
+    let plain = doc.clone();
     match forms::create(&conn, cipher, collection, doc, &now_iso()) {
         Ok(row) => {
-            let mut out = serde_json::Map::new();
-            for f in ["documentId", "createdAt", "ref", "username"] {
-                if let Some(x) = row.get(f) {
-                    out.insert(f.into(), x.clone());
-                }
-            }
-            (StatusCode::CREATED, Json(json!({"data": out}))).into_response()
+            queue_mail(app, &conn, cipher, collection, &plain, &row);
+            submitted(&row)
         }
         Err(m) => fail(m),
     }
@@ -317,6 +319,160 @@ async fn registration_submit(State(app): State<Shared>, headers: HeaderMap, RawQ
 }
 async fn contact_message_submit(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
     form_submit(&app, "contact-message", &headers, raw.as_deref(), &body)
+}
+
+/// Queue the mails a new form row calls for (outbox.rs). `plain` is what was stored, with the personal data in the clear; `stored`
+/// is the row as the database made it (the reference or username). A mail that cannot be queued is logged and never fails
+/// the visitor's submission.
+fn queue_mail(app: &App, conn: &rusqlite::Connection, cipher: &pii::Pii, collection: &str, plain: &serde_json::Map<String, Value>, stored: &Value) {
+    let mut row = plain.clone();
+    for f in ["ref", "username", "tenantKey"] {
+        if let Some(v) = stored.get(f) {
+            row.insert(f.into(), v.clone());
+        }
+    }
+    for m in outbox::notices(collection, &Value::Object(row), app.notify_to.as_deref()) {
+        if let Err(e) = outbox::enqueue(conn, cipher, &m, now_ms()) {
+            eprintln!("[webx-control] could not queue a {} mail: {e}", m.kind);
+        }
+    }
+}
+
+/// The answer to a stored submission: what the success screen shows, no personal data.
+fn submitted(row: &Value) -> Response {
+    let mut out = serde_json::Map::new();
+    for f in ["documentId", "createdAt", "ref", "username"] {
+        if let Some(x) = row.get(f) {
+            out.insert(f.into(), x.clone());
+        }
+    }
+    (StatusCode::CREATED, Json(json!({"data": out}))).into_response()
+}
+
+/// POST /api/complaints/submit and /api/applications/submit (multipart): the form with a file attached, the way public-site
+/// sends it (`data` as JSON text, the file as `files.attachment` or `files.resume`, `captchaId`, `captchaAnswer`). The same
+/// rules as the JSON post, and the file must be a document or an image of at most 5 MB whose content matches its name
+/// (files.rs); it is kept encrypted and the row refers to it as `attachment` or `resume`.
+async fn form_submit_file(app: &App, collection: &'static str, field: &str, file_fields: &[&str], headers: &HeaderMap, raw: Option<&str>, mut mp: Multipart) -> Response {
+    if let Err(r) = rate_limited(app, "form", headers) {
+        return r;
+    }
+    let mut text = std::collections::HashMap::<String, String>::new();
+    let mut file: Option<(String, Vec<u8>)> = None;
+    loop {
+        let f = match mp.next_field().await {
+            Ok(Some(f)) => f,
+            Ok(None) => break,
+            Err(e) => return error(e.status(), "ValidationError", "the form could not be read"),
+        };
+        let name = f.name().unwrap_or("").to_string();
+        let filename = f.file_name().map(str::to_string);
+        let bytes = match f.bytes().await {
+            Ok(b) => b,
+            Err(e) => return error(e.status(), "ValidationError", "the form could not be read"),
+        };
+        match filename {
+            Some(fname) => {
+                if file.is_none() && file_fields.contains(&name.as_str()) && !bytes.is_empty() {
+                    file = Some((fname, bytes.to_vec()));
+                }
+            }
+            None => {
+                if text.len() < 64 {
+                    text.insert(name, String::from_utf8_lossy(&bytes).into_owned());
+                }
+            }
+        }
+    }
+    if let Err(r) = check_captcha(app, text.get("captchaId").map(String::as_str).unwrap_or(""), &json!(text.get("captchaAnswer").cloned().unwrap_or_default())) {
+        return r;
+    }
+    let cipher = match cipher_for(app, collection) { Ok(Some(p)) => p, Ok(None) => return fail("no cipher for a form collection".into()), Err(r) => return r };
+    // the fields as JSON text in `data`, or bare as separate parts
+    let data: Value = match text.get("data") {
+        Some(s) => match serde_json::from_str::<Value>(s) {
+            Ok(v @ Value::Object(_)) => v,
+            _ => return bad("data is not JSON".into()),
+        },
+        None => Value::Object(text.iter().filter(|(k, _)| k.as_str() != "captchaId" && k.as_str() != "captchaAnswer").map(|(k, v)| (k.clone(), json!(v))).collect()),
+    };
+    let conn = app.conn.lock().unwrap();
+    let key = match tenant_for(app, &conn, raw) { Ok(k) => k, Err(r) => return r };
+    let mut doc = match forms::clean(collection, &data) { Ok(d) => d, Err(m) => return bad(m) };
+    doc.insert("tenantKey".into(), json!(key));
+    let plain = doc.clone();
+    let mut kept: Option<String> = None;
+    if let Some((fname, bytes)) = file {
+        let (name, mime) = match files::validate(&fname, &bytes) { Ok(x) => x, Err(m) => return bad(m) };
+        match files::store(&conn, cipher, &key, &name, mime, &bytes, &now_iso()) {
+            Ok(meta) => {
+                kept = meta.get("documentId").and_then(Value::as_str).map(str::to_string);
+                doc.insert(field.into(), meta);
+            }
+            Err(m) => return fail(m),
+        }
+    }
+    match forms::create(&conn, cipher, collection, doc, &now_iso()) {
+        Ok(row) => {
+            queue_mail(app, &conn, cipher, collection, &plain, &row);
+            submitted(&row)
+        }
+        Err(m) => {
+            if let Some(id) = kept {
+                let _ = files::remove(&conn, &id);
+            }
+            fail(m)
+        }
+    }
+}
+
+async fn complaint_submit_file(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, mp: Multipart) -> Response {
+    form_submit_file(&app, "complaint", "attachment", &["files.attachment", "attachment", "file"], &headers, raw.as_deref(), mp).await
+}
+async fn application_submit_file(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, mp: Multipart) -> Response {
+    form_submit_file(&app, "application", "resume", &["files.resume", "resume", "file"], &headers, raw.as_deref(), mp).await
+}
+
+/// The loop that sends the outbox's mail (decision D15): every few seconds the mails that are due go out one at a time, off
+/// the async runtime; one that fails is counted and tried again later with a growing wait (outbox.rs). Once an hour the mails
+/// given up on a week ago are dropped. It runs only with WEBX_SMTP_URL set; without it mail is queued and kept.
+async fn mail_loop(app: Shared, mailer: Arc<mailer::Mailer>) {
+    let mut rounds: u64 = 0;
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        rounds += 1;
+        let Some(cipher) = app.pii.as_ref() else { continue };
+        let batch = {
+            let conn = app.conn.lock().unwrap();
+            if rounds % 1800 == 0 {
+                let _ = outbox::purge(&conn, now_ms());
+            }
+            outbox::due(&conn, cipher, now_ms(), 20)
+        };
+        let batch = match batch {
+            Ok(b) => b,
+            Err(m) => {
+                eprintln!("[webx-control] outbox: {m}");
+                continue;
+            }
+        };
+        for mail in batch {
+            let m = mailer.clone();
+            let (to, subject, text) = (mail.to.clone(), mail.subject.clone(), mail.text.clone());
+            let sent = tokio::task::spawn_blocking(move || m.send(&to, &subject, &text)).await.unwrap_or_else(|e| Err(e.to_string()));
+            let conn = app.conn.lock().unwrap();
+            let done = match sent {
+                Ok(()) => outbox::mark_sent(&conn, mail.id, now_ms()),
+                Err(m) => {
+                    eprintln!("[webx-control] mail {} not sent (try {}): {m}", mail.id, mail.attempts + 1);
+                    outbox::mark_failed(&conn, mail.id, &m, now_ms())
+                }
+            };
+            if let Err(m) = done {
+                eprintln!("[webx-control] outbox: {m}");
+            }
+        }
+    }
 }
 
 /// GET /api/<complaints|applications>/track/<ref>?tenant=<key>: where a submission stands, found by its reference number alone
@@ -646,7 +802,10 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
                 let cipher = match cipher_for(&app, c) { Ok(Some(p)) => p, Ok(None) => return fail("no cipher for a form collection".into()), Err(r) => return r };
                 let Some(map) = doc.as_object() else { return bad("a record is an object".into()) };
                 return match forms::create(&conn, cipher, c, map.clone(), &now_iso()) {
-                    Ok(row) => match opened(&app, c, row) { Ok(r) => Json(json!({"data": r})).into_response(), Err(r) => r },
+                    Ok(row) => {
+                        queue_mail(&app, &conn, cipher, c, map, &row);
+                        match opened(&app, c, row) { Ok(r) => Json(json!({"data": r})).into_response(), Err(r) => r }
+                    }
                     Err(m) => bad(m),
                 };
             }
@@ -684,9 +843,64 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
                 Err(m) => bad(m),
             }
         }
-        ("DELETE", ["records", c, id]) if records::known(c) => match records::remove(&conn, c, id) {
+        ("DELETE", ["records", c, id]) if records::known(c) => {
+            // a complaint's or application's attached file goes with it
+            if matches!(*c, "complaint" | "application") {
+                if let Ok(Some(row)) = records::get(&conn, c, id) {
+                    for f in ["attachment", "resume"] {
+                        if let Some(fid) = row.get(f).and_then(|a| a.get("documentId")).and_then(Value::as_str) {
+                            let _ = files::remove(&conn, fid);
+                        }
+                    }
+                }
+            }
+            match records::remove(&conn, c, id) {
+                Ok(true) => Json(json!({"data": null})).into_response(),
+                Ok(false) => not_found(),
+                Err(m) => fail(m),
+            }
+        }
+        // the files kept for the forms (D14): an upload by an editor or a migration, a download for Studio, a delete
+        ("POST", ["files"]) => {
+            let Some(cipher) = app.pii.as_ref() else { return error(StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable", "files are kept encrypted: start with WEBX_PII_KEY set") };
+            if body.is_empty() {
+                return bad("the body is the file".into());
+            }
+            let name = files::clean_name(&query_param_exact(raw.as_deref(), "name").unwrap_or_default());
+            let ext = name.rsplit_once('.').map(|(_, x)| x.to_lowercase()).unwrap_or_default();
+            let mime = files::mime_for(&ext).unwrap_or("application/octet-stream");
+            match files::store(&conn, cipher, &query_param_exact(raw.as_deref(), "tenant").unwrap_or_default(), &name, mime, &body, &now_iso()) {
+                Ok(meta) => Json(json!({"data": meta})).into_response(),
+                Err(m) => fail(m),
+            }
+        }
+        ("GET", ["files", id]) => {
+            let Some(cipher) = app.pii.as_ref() else { return error(StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable", "files are kept encrypted: start with WEBX_PII_KEY set") };
+            match files::load(&conn, cipher, id) {
+                Ok(Some(f)) => (
+                    StatusCode::OK,
+                    [
+                        (header::CONTENT_TYPE, f.mime),
+                        (header::CONTENT_DISPOSITION, files::disposition(&f.name)),
+                        (header::HeaderName::from_static("x-content-type-options"), "nosniff".to_string()),
+                        (header::CACHE_CONTROL, "no-store".to_string()),
+                        (header::HeaderName::from_static("x-file-tenant"), f.tenant_key.unwrap_or_default()),
+                    ],
+                    f.bytes,
+                )
+                    .into_response(),
+                Ok(None) => not_found(),
+                Err(m) => error(StatusCode::INTERNAL_SERVER_ERROR, "PiiError", &m),
+            }
+        }
+        ("DELETE", ["files", id]) => match files::remove(&conn, id) {
             Ok(true) => Json(json!({"data": null})).into_response(),
             Ok(false) => not_found(),
+            Err(m) => fail(m),
+        },
+        // the mail owed (D15): counts and the recent rows, never an address or a text
+        ("GET", ["outbox"]) => match outbox::summary(&conn, query_param_exact(raw.as_deref(), "tenant").filter(|t| !t.is_empty()).as_deref(), 50) {
+            Ok(s) => Json(json!({"data": s})).into_response(),
             Err(m) => fail(m),
         },
         // the agent job queue (C5): the Rust worker and Studio use the same lease rules as the Strapi-backed queue
@@ -846,13 +1060,17 @@ async fn main() {
     conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(schedules::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(search_stats::DDL).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(files::DDL).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(outbox::DDL).unwrap_or_else(|e| panic!("{e}"));
     let key = identity::signing_key(&conn, std::env::var("WEBX_CONTROL_SIGNING_KEY").ok().as_deref()).unwrap_or_else(|e| panic!("{e}"));
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let n = registry::list(&conn).map(|l| l.len()).unwrap_or(0);
     let pii = std::env::var("WEBX_PII_KEY").ok().filter(|k| !k.trim().is_empty()).map(|k| pii::Pii::from_base64(&k).unwrap_or_else(|e| panic!("WEBX_PII_KEY: {e}")));
     let pii_on = pii.is_some();
-    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii });
+    let mailer = mailer::Mailer::from_env().unwrap_or_else(|e| panic!("{e}"));
+    let mail_on = mailer.is_some();
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()) });
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
@@ -863,6 +1081,8 @@ async fn main() {
         .route("/api/applications", post(application_submit).layer(axum::extract::DefaultBodyLimit::max(64 * 1024)))
         .route("/api/registrations", post(registration_submit).layer(axum::extract::DefaultBodyLimit::max(64 * 1024)))
         .route("/api/contact-messages", post(contact_message_submit).layer(axum::extract::DefaultBodyLimit::max(64 * 1024)))
+        .route("/api/complaints/submit", post(complaint_submit_file).layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)))
+        .route("/api/applications/submit", post(application_submit_file).layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)))
         .route("/api/complaints/track/:ref", get(complaint_track))
         .route("/api/applications/track/:ref", get(application_track))
         .route("/.well-known/jwks.json", get(jwks))
@@ -871,8 +1091,12 @@ async fn main() {
         .route("/internal/*rest", any(internal).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         .fallback(|| async { not_found() })
         .with_state(state.clone())
-        .layer(middleware::from_fn_with_state(state, cors));
+        .layer(middleware::from_fn_with_state(state.clone(), cors));
+    let state_for_mail = state;
+    if let Some(m) = mailer {
+        tokio::spawn(mail_loop(state_for_mail, Arc::new(m)));
+    }
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
-    eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {}, forms {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" }, if pii_on { "on" } else { "off: set WEBX_PII_KEY" });
+    eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {}, forms {}, mail {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" }, if pii_on { "on" } else { "off: set WEBX_PII_KEY" }, if mail_on { "on" } else { "queued only: set WEBX_SMTP_URL" });
     axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();
 }

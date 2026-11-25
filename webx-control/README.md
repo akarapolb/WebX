@@ -48,6 +48,7 @@ What a visitor's browser calls without signing in. Anonymous, rate-limited per a
 | `POST /api/search-stats/log?tenant=<key>` body `{q, locale, results}` | count one search on the public site, anonymously; `204` whether or not it was kept |
 | `GET /api/captcha` | `{data: {id, question}}`: a sum such as `3 + 4 = ?` for a form to ask; the answer is never sent |
 | `POST /api/complaints`, `/api/applications`, `/api/registrations`, `/api/contact-messages` `?tenant=<key>` body `{data: {...}, captchaId, captchaAnswer}` | a visitor's form; `201 {data: {documentId, createdAt, ref}}` (`username` for a registration, neither for a contact message) |
+| `POST /api/complaints/submit`, `/api/applications/submit` `?tenant=<key>` multipart: `data` (JSON text), `files.attachment` / `files.resume`, `captchaId`, `captchaAnswer` | the same form with a file attached; `201` as above |
 | `GET /api/complaints/track/<ref>?tenant=<key>`, `GET /api/applications/track/<ref>?tenant=<key>` | where a submission stands: `{data: {ref, type, subject, date, stage, steps}}` (an application: `ref, jobId, position, date, stage`); 404 for an unknown reference or another workspace's |
 
 The choice is stored as given in the `consent-log` records collection, stamped with the workspace; text is cut at its limit
@@ -91,6 +92,31 @@ side is Studio's records API (`/internal/records/complaint`, `application`, `reg
 come back decrypted, a create gets the same reference, stage and username a visitor's post gets, an update re-encrypts what it
 changes, and a filter on a personal-data field is a 400 (it would compare ciphertext).
 
+**Attachments** (decision D14, default: kept in this service's own database; an object store can replace it later). The multipart
+routes take one file per form, as `files.attachment` (complaint) or `files.resume` (application); a file in any other field is
+ignored. It must be at most **5 MB** (a body past 6 MB is refused outright, 413), a **document or an image** (pdf, png, jpg, gif,
+webp, doc/docx, xls/xlsx, ppt/pptx, odt/ods/odp, rtf, txt, csv) **whose first bytes match its extension** (a program renamed `.pdf`
+is refused; so are html, svg, exe and anything not listed), and not empty: Strapi took anything. The name is cleaned (no path, no
+quotes or control characters, 120 characters at most, Thai kept) and the type it is served as is the one the extension gives, never
+the client's claim. The bytes are **encrypted at rest** with the same key as the form fields (`iv || ciphertext || tag`), because an
+attachment is personal data too. The row keeps `attachment` or `resume` as `{documentId, name, mime, size}`. Only Studio reads the
+file, through the internal API with the service token: `GET /internal/files/<documentId>` answers it whole as an attachment with
+`X-Content-Type-Options: nosniff` and `Cache-Control: no-store` (never inline); `POST /internal/files?name=<name>&tenant=<key>` (the
+body is the file; no type check, for a migration) and `DELETE /internal/files/<documentId>` complete it. Deleting a complaint or an
+application through the records API deletes its file.
+
+**Mail** (decision D15; the texts and the cases are the ones Strapi's lifecycles had). A new complaint tells staff (to
+`WEBX_COMPLAINT_NOTIFY_EMAIL`, when set) and, unless it is anonymous or has no address, acknowledges the citizen; a new application and a
+new registration confirm to their address; a contact message sends nothing. The mail is written to an **outbox first**, so a slow or
+absent mail server never delays or fails a visitor's submission, and sent by a loop in the background every couple of seconds. While it
+waits, its recipient, subject and text are **encrypted**; once it is sent they are **wiped** (the kind, workspace and times stay). A
+mail the server refuses is counted and tried again after a wait that doubles from a minute to an hour; after 8 tries it is given up on and
+dropped a week later. Set the server with `WEBX_SMTP_URL` (`smtps://user:pass@host:465` for TLS from the first byte,
+`smtp://user:pass@host:587?tls=required` for STARTTLS, `smtp://relay.internal:25` for a plain internal relay; TLS is rustls) and the sender
+with `WEBX_MAIL_FROM` (`"สพร. <no-reply@dga.or.th>"`). With no server set mail is queued and kept, and sent once one is. `GET
+/internal/outbox[?tenant=<key>]` shows the counts (total, sent, pending, failed) and the recent rows (kind, workspace, times, attempts,
+last error), never an address or a text.
+
 **Captcha** (a port of `strapi-cms/src/utils/captcha.ts`): `GET /api/captcha` makes a sum of two digits, keeps its answer here and
 sends only an `id` and the question. The form routes take `captchaId` and `captchaAnswer` in the body and check them
 here: one try per challenge (a wrong answer uses it up), five minutes to answer, at most 20,000 open at once (503 past that), and an
@@ -121,8 +147,8 @@ left out). Old evidence therefore stays where it was and stays visible, and the 
 cannot edit or delete a choice held here. Strapi's own copy of the table goes in C6, after an import (`records import` keeps the
 ids) and with the dual read turned off, or the migrated rows would be counted twice.
 
-Not here yet: the assistant; for the forms, the file attachment of a complaint or application (multipart, storage not decided: D14), the
-e-mails they send (an acknowledgement, a notice to staff: D15), Studio reading and editing them here, and the migration from Strapi.
+Not here yet: the assistant; for the forms, Studio reading and editing them here (its screens still read Strapi's), showing an attachment,
+and the migration from Strapi (rows, which copy as they are under the same key, and files).
 
 ## Admin API
 
@@ -256,7 +282,7 @@ cargo test                                                  # registry rules (un
 node tools/parity-test.mjs --reference http://localhost:1337   # same answers as Strapi; admin API; restart
 node tools/build-test.mjs --no-check-export                # a site build reading tenants from here is identical
 node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, CORS, summary, restart
-node tools/forms-test.mjs                                  # the form inboxes: encryption at rest, references, tracking, captcha, what the server owns
+node tools/forms-test.mjs                                  # the form inboxes: encryption at rest, references, tracking, captcha, attachments, mail over SMTP
 ```
 
 `parity-test` compares the tenant list and `resolve` for every tenant in both

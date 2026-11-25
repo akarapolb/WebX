@@ -59,6 +59,24 @@ impl Pii {
         String::from_utf8(plain).map_err(|_| "decrypted value is not text".to_string())
     }
 
+    /// A whole file: `iv || ciphertext || tag`, with the same cipher and key as the text fields.
+    pub fn encrypt_bytes(&self, plain: &[u8]) -> Result<Vec<u8>, String> {
+        let mut iv = [0u8; IV_LEN];
+        getrandom::getrandom(&mut iv).map_err(|e| e.to_string())?;
+        let sealed = self.0.encrypt(Nonce::from_slice(&iv), plain).map_err(|_| "encryption failed".to_string())?;
+        let mut out = iv.to_vec();
+        out.extend(sealed);
+        Ok(out)
+    }
+
+    pub fn decrypt_bytes(&self, sealed: &[u8]) -> Result<Vec<u8>, String> {
+        if sealed.len() < IV_LEN + TAG_LEN {
+            return Err("malformed encrypted file".into());
+        }
+        let (iv, rest) = sealed.split_at(IV_LEN);
+        self.0.decrypt(Nonce::from_slice(iv), rest).map_err(|_| "wrong key or damaged file".to_string())
+    }
+
     /// Whether `v` is something this key encrypted.
     pub fn is_valid_ciphertext(&self, v: &str) -> bool {
         looks_encrypted(v) && self.decrypt(v).is_ok()
