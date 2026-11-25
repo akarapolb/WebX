@@ -47,6 +47,8 @@ What a visitor's browser calls without signing in. Anonymous, rate-limited per a
 | `POST /api/consent-logs?tenant=<key>` body `{data: {consentId, action, categories, language, path, userAgent}}` | log a cookie choice (PDPA evidence); `201 {data: {documentId, createdAt}}` |
 | `POST /api/search-stats/log?tenant=<key>` body `{q, locale, results}` | count one search on the public site, anonymously; `204` whether or not it was kept |
 | `GET /api/captcha` | `{data: {id, question}}`: a sum such as `3 + 4 = ?` for a form to ask; the answer is never sent |
+| `POST /api/assist/ask?tenant=<key>` body `{q, locale}` | the site assistant: `{answer, mode, sources, cited}` |
+| `GET /api/assist/status`; `POST /api/assist/simplify`, `/api/assist/translate`, `/api/assist/find` | whether answers are generated (`{llm}`); the model's rewrite in plain Thai, a translation, and the service finder |
 | `POST /api/complaints`, `/api/applications`, `/api/registrations`, `/api/contact-messages` `?tenant=<key>` body `{data: {...}, captchaId, captchaAnswer}` | a visitor's form; `201 {data: {documentId, createdAt, ref}}` (`username` for a registration, neither for a contact message) |
 | `POST /api/complaints/submit`, `/api/applications/submit` `?tenant=<key>` multipart: `data` (JSON text), `files.attachment` / `files.resume`, `captchaId`, `captchaAnswer` | the same form with a file attached; `201` as above |
 | `GET /api/complaints/track/<ref>?tenant=<key>`, `GET /api/applications/track/<ref>?tenant=<key>` | where a submission stands: `{data: {ref, type, subject, date, stage, steps}}` (an application: `ref, jobId, position, date, stage`); 404 for an unknown reference or another workspace's |
@@ -67,6 +69,23 @@ consent log's). Read with `GET /internal/records/search-stat?filter=tenantKey:eq
 token; filters `tenantKey` and `locale` eq, `query` contains; sorts `count` `results` `zeroCount` `lastAt` `query` `createdAt`),
 which is read-only here. Studio's search insights add these counts to the engine's per query
 (`webx-studio/lib/cms/stat-merge.ts`, the top 1000 queries of each); one Unicode step of Strapi's normaliser (NFC) is not applied.
+
+**The assistant** (a port of `strapi-cms/src/api/assist` and its retrieval and answer rules: `assist.rs`, `llm.rs`). `ask` answers a visitor's
+question (at most 400 characters; `locale` `en` or else `th`) **only from the workspace's own published content**: its pages (each
+block, and each tab or accordion panel as a passage of its own), services, FAQs, articles and datasets, read from the workspace's
+content engine through the same read API public-site's build uses (`<engine>/api/pages?populate[blocks][populate]=*&tenant=<key>&locale=…`,
+`services`, `faqs`, `articles`, `datasets`, 100 each), at the registry's `engineUrl` or `WEBX_ENGINE_URL` (default
+`http://localhost:1337`); a WordPress workspace has no read API of that shape, so nothing to answer from. The corpus is kept for a
+minute per workspace and language, and an engine that does not answer gives no answer (`mode: "none"`) and is asked again at once
+next time. Retrieval is small and lexical (Latin words, Thai character bigrams, question words dropped, a BM25-like score, the
+document whose title is the question first). **The answer always lists its sources** (`{n, kind, title, url}`, the url being where on the
+site the passage is shown). With a model (`LITELLM_URL`, `LITELLM_KEY`, `LITELLM_ASK_MODEL`/`LITELLM_MODEL`, `LITELLM_TIMEOUT_MS`, the same
+settings as Strapi's) it may use only the numbered sources and cites them as `[1]`, `[2]`; a citation to a number that does not exist is
+removed (`mode: "llm"`). With no model, or when it fails, times out or says nothing, the answer **quotes the best passage** and never
+generates text of its own (`mode: "extractive"`); nothing found is `mode: "none"` with no sources, and the model is not called.
+`simplify`, `translate` and `find` need the model (503 `AI not configured` without it; 502 `AI error` when it fails). All of them
+share an allowance of **20 a minute per address** (429). `find` answers from the workspace's services and FAQs and returns the first six
+services with their slugs. Test: `node tools/assist-test.mjs` (a fake engine and a fake LiteLLM).
 
 **Forms** (decisions D6 and D12; a port of Strapi's complaint, application, registration and contact-message types, same fields
 and rules). A post is rate-limited (30 a minute per address, its own allowance), checked against the captcha (a 400 named
@@ -138,8 +157,8 @@ addresses, the same variable Strapi's CORS reads.
 | `GET /internal/consent/summary?tenant=<key>&from=<iso>&before=<iso>` | `{data: {total, accept, reject, custom}}` for one workspace (no `tenant`: all) and a creation window, from inclusive, before exclusive; counted as Strapi's analytics counts (an action containing `accept`, or `all`/`opt-in`, is an accept; containing `reject`, or `none`/`opt-out`, a reject; the rest custom) |
 
 **Switching over.** Nothing is copied. Point public-site at this service with `PUBLIC_CONTROL_URL=https://control.example.go.th`
-(its cookie banner, search reporter, forms with their captcha, and the contact lookup then call here; unset, they call the CMS as
-before; the assistant still calls the CMS) and give Strapi and Studio the same
+(its cookie banner, search reporter, forms with their captcha, site assistant, and the contact lookup then call here; unset, they call
+the CMS as before) and give Strapi and Studio the same
 `WEBX_CONTROL_URL` and `WEBX_CONTROL_SERVICE_TOKEN` they use for the audit log. Then **Studio's Cookie Consent page lists the
 choices from both places** (`webx-studio/lib/cms/consent-merge.ts`: the control plane's and Strapi's, newest first, scoped to the
 workspace; a page may reach 1000 rows deep) and **Strapi's analytics dashboard and monthly report add this service's counts to
@@ -172,7 +191,7 @@ Strapi hands over the personal data decrypted and this service encrypts it again
 `--dry-run` writes nothing; `--move` deletes each row from Strapi once it is verified here (without it a migrated row would be listed
 twice by Studio until Strapi's copy is deleted). `node tools/migrate-forms-test.mjs` runs it against the real binary and a fake Strapi.
 
-Not here yet: the assistant, and the WordPress-native forms (decision D6). Strapi's own `console/export` still reads only Strapi's table.
+Not here yet: the WordPress-native forms (decision D6). Strapi's own `console/export` still reads only Strapi's table.
 
 ## Admin API
 
@@ -308,6 +327,7 @@ node tools/build-test.mjs --no-check-export                # a site build readin
 node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, CORS, summary, restart
 node tools/forms-test.mjs                                  # the form inboxes: encryption at rest, references, tracking, captcha, attachments, mail over SMTP
 node tools/migrate-forms-test.mjs                          # moving Strapi's submissions and their files here, against a fake Strapi
+node tools/assist-test.mjs                                 # the assistant: retrieval, answers with sources, the model's failures, simplify/translate/find
 ```
 
 `parity-test` compares the tenant list and `resolve` for every tenant in both

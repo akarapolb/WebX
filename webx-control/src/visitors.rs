@@ -18,7 +18,13 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     /// Count one request from `who` at `now`; false when it is over the limit for the current window.
+    #[cfg(test)]
     pub fn allow(&mut self, who: &str, now: i64) -> bool {
+        self.allow_up_to(who, now, RATE_LIMIT)
+    }
+
+    /// The same with a limit of the route's own (the assistant's calls are dearer than a cookie choice).
+    pub fn allow_up_to(&mut self, who: &str, now: i64, limit: u32) -> bool {
         if self.windows.len() > SWEEP_AT {
             self.windows.retain(|_, (start, _)| now - *start < RATE_WINDOW_MS);
         }
@@ -27,7 +33,7 @@ impl RateLimiter {
             *w = (now, 0);
         }
         w.1 += 1;
-        w.1 <= RATE_LIMIT
+        w.1 <= limit
     }
 }
 

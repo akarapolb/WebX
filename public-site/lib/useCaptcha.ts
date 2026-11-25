@@ -11,9 +11,7 @@
 // unaffected by this.
 import { useEffect, useState, useCallback } from "react";
 
-import { PUBLIC_CMS, PUBLIC_RUNTIME, PUBLIC_WP } from "@/lib/publicCms";
-/** Browser-facing CMS URL ("" when the published site has no CMS; lib/publicCms.ts): what the assistant calls. */
-export const STRAPI = PUBLIC_CMS;
+import { PUBLIC_RUNTIME, PUBLIC_WP } from "@/lib/publicCms";
 /** Where the forms and their captcha are: the WebX control plane when PUBLIC_CONTROL_URL is set (webx-control's forms.rs and
  *  captcha.rs), the CMS as before otherwise. The captcha and the form it guards must be one service, so both use this. */
 export const FORMS = PUBLIC_RUNTIME;

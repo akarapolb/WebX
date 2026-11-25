@@ -1,11 +1,11 @@
 "use client";
-// block.assistant — "ask this site" box. Calls Strapi's public, rate-limited
-// POST /api/assist/ask, which answers only from this tenant's own published
+// block.assistant — "ask this site" box. Calls the public, rate-limited
+// POST /api/assist/ask (webx-control's when PUBLIC_CONTROL_URL is set, else Strapi's), which answers only from this tenant's own published
 // content and always returns the sources it used. With no LLM gateway
 // configured it returns the best-matching passage instead (mode "extractive"),
 // and says so, so a visitor never mistakes a quote for a generated answer.
 import { useState, type FormEvent } from "react";
-import { STRAPI } from "@/lib/useCaptcha";
+import { PUBLIC_RUNTIME as ASSISTANT } from "@/lib/publicCms";
 import { t, type Locale } from "@/lib/i18n";
 
 type Source = { n: number; kind: string; title: string; url: string | null };
@@ -32,7 +32,7 @@ export default function AssistantBlock({ b, tenant, locale }: { b: any; tenant: 
     if (!question.trim()) return;
     setBusy(true); setErr(false); setRes(null);
     try {
-      const r = await fetch(`${STRAPI}/api/assist/ask?tenant=${encodeURIComponent(tenant)}`, {
+      const r = await fetch(`${ASSISTANT}/api/assist/ask?tenant=${encodeURIComponent(tenant)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ q: question.slice(0, 400), locale }),
