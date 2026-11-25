@@ -14,11 +14,13 @@
 //!       (what Strapi does today), or a 404 with --strict-tenants (decision D9)
 //!   POST /api/consent-logs?tenant=<key>          -> 201; a visitor's cookie choice, rate-limited (see visitors.rs)
 //!   POST /api/search-stats/log?tenant=<key>      -> 204; what a visitor searched for, counted anonymously (see search_stats.rs)
+//!   GET  /api/captcha                            -> {data: {id, question}}; a sum the form routes ask to be answered (see captcha.rs)
 //!       a browser may call these from the origins in WEBX_PUBLIC_SITE_ORIGINS (and the local development ones)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 
 mod audit;
+mod captcha;
 mod identity;
 mod jobs;
 mod schedules;
@@ -59,6 +61,8 @@ struct App {
     limiter: Mutex<visitors::RateLimiter>,
     /// browser origins allowed to call the visitors' routes (CORS; WEBX_PUBLIC_SITE_ORIGINS)
     origins: Vec<String>,
+    /// the captcha challenges handed out and not yet answered
+    captchas: Mutex<captcha::Captchas>,
 }
 type Shared = Arc<App>;
 
@@ -209,6 +213,19 @@ async fn search_stat_log(State(app): State<Shared>, headers: HeaderMap, RawQuery
     match search_stats::log(&conn, &key, &query, locale, results, search_stats::MAX_DISTINCT, &now_iso()) {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(m) => fail(m),
+    }
+}
+
+/// GET /api/captcha: a new challenge, `{data: {id, question}}`. Its answer stays here; the form routes check it (one try, five
+/// minutes). Counted against the address's own allowance, and refused (503) when too many are open.
+async fn captcha_issue(State(app): State<Shared>, headers: HeaderMap) -> Response {
+    if let Err(r) = rate_limited(&app, "captcha", &headers) {
+        return r;
+    }
+    let issued = app.captchas.lock().unwrap().issue(now_ms());
+    match issued {
+        Some((id, question)) => ([(header::CACHE_CONTROL, "no-store")], Json(json!({"data": {"id": id, "question": question}}))).into_response(),
+        None => error(StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable", "Too many open challenges, try again shortly"),
     }
 }
 
@@ -686,12 +703,13 @@ async fn main() {
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let n = registry::list(&conn).map(|l| l.len()).unwrap_or(0);
-    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()) });
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default() });
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
         .route("/api/consent-logs", post(consent_log).layer(axum::extract::DefaultBodyLimit::max(16 * 1024)))
         .route("/api/search-stats/log", post(search_stat_log).layer(axum::extract::DefaultBodyLimit::max(4 * 1024)))
+        .route("/api/captcha", get(captcha_issue))
         .route("/.well-known/jwks.json", get(jwks))
         .route("/api/auth/me", get(me))
         .route("/admin/*rest", any(admin))

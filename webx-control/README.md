@@ -46,6 +46,7 @@ What a visitor's browser calls without signing in. Anonymous, rate-limited per a
 |---|---|
 | `POST /api/consent-logs?tenant=<key>` body `{data: {consentId, action, categories, language, path, userAgent}}` | log a cookie choice (PDPA evidence); `201 {data: {documentId, createdAt}}` |
 | `POST /api/search-stats/log?tenant=<key>` body `{q, locale, results}` | count one search on the public site, anonymously; `204` whether or not it was kept |
+| `GET /api/captcha` | `{data: {id, question}}`: a sum such as `3 + 4 = ?` for a form to ask; the answer is never sent |
 
 The choice is stored as given in the `consent-log` records collection, stamped with the workspace; text is cut at its limit
 (`path` and `userAgent` at 512 characters), unknown fields are dropped, `categories` must be an object of at most 2 KB, an
@@ -63,6 +64,11 @@ consent log's). Read with `GET /internal/records/search-stat?filter=tenantKey:eq
 token; filters `tenantKey` and `locale` eq, `query` contains; sorts `count` `results` `zeroCount` `lastAt` `query` `createdAt`),
 which is read-only here. Studio's search insights add these counts to the engine's per query
 (`webx-studio/lib/cms/stat-merge.ts`, the top 1000 queries of each); one Unicode step of Strapi's normaliser (NFC) is not applied.
+
+**Captcha** (a port of `strapi-cms/src/utils/captcha.ts`): `GET /api/captcha` makes a sum of two digits, keeps its answer here and
+sends only an `id` and the question. The form routes (not built yet) take `captchaId` and `captchaAnswer` in the body and check them
+here: one try per challenge (a wrong answer uses it up), five minutes to answer, at most 20,000 open at once (503 past that), and an
+address may ask for 30 a minute (its own allowance). Challenges are held in memory, so a restart makes the open ones fail, as in Strapi.
 
 **CORS.** The public site is on another origin than this service, so a JSON post is preflighted and the answer has to name
 that origin. Every `/api/*` route a browser calls (these and the tenant lookups; not `/api/auth/*`, `/internal` or `/admin`)
@@ -89,7 +95,7 @@ left out). Old evidence therefore stays where it was and stays visible, and the 
 cannot edit or delete a choice held here. Strapi's own copy of the table goes in C6, after an import (`records import` keeps the
 ids) and with the dual read turned off, or the migrated rows would be counted twice.
 
-Not here yet: the assistant, captcha and the forms (with their attachments, whose storage is not decided).
+Not here yet: the assistant and the forms (with their attachments, whose storage is not decided).
 
 ## Admin API
 

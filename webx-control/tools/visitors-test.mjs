@@ -127,6 +127,17 @@ try {
   check("the consent log's allowance for that address is its own", (await call("POST", "/api/consent-logs?tenant=dga", { body: consent, headers: { "x-forwarded-for": "10.2.2.2" } })).status === 201);
   check("the browser's preflight is answered for it too", (await call("OPTIONS", "/api/search-stats/log?tenant=pea", { headers: { origin: "http://localhost:3100", "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === "http://localhost:3100");
 
+  // the captcha: a sum the forms ask for; its answer never leaves the service
+  const cap = (ip, extra = {}) => call("GET", "/api/captcha", { headers: { "x-forwarded-for": ip, ...extra } });
+  const c1 = await cap("10.3.0.1", { origin: "http://localhost:3100" });
+  check("a captcha is a sum with an id and no answer, and is not cached", c1.status === 200 && /^[0-9a-f]{18}$/.test(c1.json.data.id) && /^\d \+ \d = \?$/.test(c1.json.data.question) && Object.keys(c1.json.data).length === 2 && /no-store/.test(c1.headers["cache-control"] || ""), JSON.stringify(c1));
+  check("the browser may read it from the public site's origin", c1.headers["access-control-allow-origin"] === "http://localhost:3100");
+  check("each one is new", (await cap("10.3.0.1")).json.data.id !== c1.json.data.id);
+  let capSlowed = 0;
+  for (let k = 0; k < 35; k++) if ((await cap("10.3.0.9")).status === 429) capSlowed++;
+  check("an address that asks for 35 in a minute is rate-limited after 30: 429", capSlowed === 5, `limited ${capSlowed}`);
+  check("its search allowance is its own", (await search("pea", { q: "captcha allowance", results: 1 }, "10.3.0.9")).status === 204);
+
   // a visitor's browser is on the public site's origin, not this service's: CORS names the origins that may call
   const site = "http://localhost:3100", other = "https://evil.example.com";
   const pre = await call("OPTIONS", "/api/consent-logs?tenant=pea", { headers: { origin: site, "access-control-request-method": "POST", "access-control-request-headers": "content-type" } });
