@@ -9,6 +9,7 @@ import {
   homeTH, homeEN, servicesTH, servicesEN, banners,
   news, articles, videos, awards, faqs,
 } from "./data";
+import { PUBLIC_DEFAULT_SCHEDULER_PASSWORD, schedulerSeedPassword } from "../utils/scheduler-credentials";
 
 const IMG_DIR = path.resolve(process.cwd(), "..", "site", "DGA-Website", "assets", "image");
 
@@ -911,15 +912,31 @@ export async function seedEditors(strapi: any) {
  * system caller" convention this file's own effectiveTenant() already uses
  * for seeding. Set STRAPI_SCHEDULER_EMAIL/PASSWORD in webx-studio's env to
  * match whatever this seeds. The password falls back to a fixed dev value
- * only when STRAPI_SCHEDULER_PASSWORD isn't set — a production deploy (see
- * docker-compose.yml's `strapi` service) must set it to something real, or
- * every self-hosted instance would otherwise ship the same well-known
- * super-admin credential (this repo is public). */
+ * only when STRAPI_SCHEDULER_PASSWORD isn't set AND this isn't production
+ * (utils/scheduler-credentials.ts): in production the account is NOT created
+ * without a real password, since every instance would otherwise ship the same
+ * well-known super-admin credential (this repo is public). docker-compose.yml's
+ * `strapi` service already requires the variable. */
 export async function seedScheduler(strapi: any) {
   const email = 'scheduler@webx.local';
-  const password = process.env.STRAPI_SCHEDULER_PASSWORD || 'WebxSched@2569';
   const existing = await strapi.db.query('admin::user').findOne({ where: { email } });
-  if (existing) return;
+  if (existing) {
+    // An account made earlier, while the public default was the fallback, still has it: say so loudly at every boot.
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const stillPublic = await strapi.service('admin::auth').validatePassword(PUBLIC_DEFAULT_SCHEDULER_PASSWORD, existing.password);
+        if (stillPublic) {
+          strapi.log.error(`[seed] SECURITY: ${email} (a Super Admin) still has the public default password from the repository. Anyone can sign in as it at /admin. Change its password now and set the same value in STRAPI_SCHEDULER_PASSWORD here and on webx-studio.`);
+        }
+      } catch { /* a check that cannot run must not stop the boot */ }
+    }
+    return;
+  }
+  const password = schedulerSeedPassword(process.env);
+  if (!password) {
+    strapi.log.error(`[seed] scheduler account ${email} NOT created: in production STRAPI_SCHEDULER_PASSWORD must be set to a private value (the built-in default is public). Scheduled releases, background jobs and SSO checks cannot sign in until it is.`);
+    return;
+  }
   const role = await strapi.db.query('admin::role').findOne({ where: { code: 'strapi-super-admin' } });
   if (!role) {
     strapi.log.warn('[seed] super-admin role not found — skip scheduler account seeding');

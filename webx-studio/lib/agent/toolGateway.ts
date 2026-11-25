@@ -8,7 +8,7 @@
 //
 // Pure helpers only (tests load them without a server); the two routes under
 // app/api/internal/agent-tools/ call runAsJobOwner and these.
-import { timingSafeEqual } from "node:crypto";
+import { secretMatches } from "../secretCompare";
 import { availableTools, executeTool } from "./tools";
 import type { AgentRunContext, ToolDef, ToolMode } from "./types";
 import type { AgentJobRow, JobOwner } from "./jobs/types";
@@ -87,10 +87,8 @@ export async function runGatewayTool(ctx: AgentRunContext, name: string, args: u
   return { ok: r.ok, text: r.summary + (r.ok && r.data !== undefined ? "\n" + JSON.stringify(r.data) : "") };
 }
 
-/** Bearer secret check for the gateway routes, compared without leaking its length or content by timing. */
+/** Bearer secret check for the gateway routes, compared without leaking its length or content by timing (lib/secretCompare.ts). */
 export function gatewayAuthorized(header: string | null, secret: string | undefined): boolean {
-  if (!secret) return false;
   const got = header?.startsWith("Bearer ") ? header.slice(7) : "";
-  const a = Buffer.from(got), b = Buffer.from(secret);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return secretMatches(got, secret);
 }

@@ -8,12 +8,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processDueReleases } from "@/lib/cms/governance";
 import { CmsError } from "@/lib/cms/types";
-import { WEBX_SCHEDULER_SECRET } from "@/lib/config";
+import { schedulerSecretRefusal } from "@/lib/internalAuth";
 
 export async function POST(req: NextRequest) {
-  if (!WEBX_SCHEDULER_SECRET || req.headers.get("x-internal-secret") !== WEBX_SCHEDULER_SECRET) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const refused = schedulerSecretRefusal(req);
+  if (refused) return refused;
   try {
     const result = await processDueReleases();
     // curl's own `-f` flag (release-scheduler's `curl -sf ... || echo tick
