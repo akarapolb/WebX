@@ -48,6 +48,10 @@ jobs:
         run: npm ci
       - working-directory: strapi-cms
         run: npx tsc --noEmit
+      # The unit tests under strapi-cms/tests need no Strapi runtime (the audit skip's secret check, the scheduler password
+      # rule, the form export, the assistant, search queries); nothing ran them before.
+      - working-directory: strapi-cms
+        run: npm test
       - working-directory: strapi-cms
         run: npm run build
 
