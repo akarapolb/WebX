@@ -2,6 +2,7 @@
 #   docker compose up -d --build                     # db + strapi + webx
 #   docker compose --profile wordpress up -d --build  # + WordPress engine (ORST/RoyalSociety-style tenants)
 #   docker compose --profile ai up -d --build         # + the LiteLLM gateway
+#   docker compose --profile control up -d --build    # + the WebX control plane (webx-control/README.md)
 # Copy .env.production.example -> .env and fill the secrets first.
 services:
   db:
@@ -453,6 +454,35 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
 
+  # The WebX control plane (webx-control/README.md): tenant registry, identity tokens, bookkeeping, the job queue, and the visitors'
+  # runtime routes (cookie consent, search statistics, captcha, forms with encrypted personal data and files, mail, the site
+  # assistant). Optional; one Rust binary with one SQLite file on the control-data volume (back it up like the database).
+  # To use it: give `webx` and `strapi` WEBX_CONTROL_URL=http://webx-control:1400 and the same WEBX_CONTROL_SERVICE_TOKEN, and build
+  # public-site with PUBLIC_CONTROL_URL set to this service's public address (behind your reverse proxy, which must set
+  # X-Forwarded-For: the per-address limits key on it).
+  webx-control:
+    build: ./webx-control
+    restart: unless-stopped
+    profiles: ["control"]
+    environment:
+      WEBX_CONTROL_SERVICE_TOKEN: ${WEBX_CONTROL_SERVICE_TOKEN:?set WEBX_CONTROL_SERVICE_TOKEN}
+      WEBX_CONTROL_ADMIN_TOKEN: ${WEBX_CONTROL_ADMIN_TOKEN:-}
+      WEBX_CONTROL_SIGNING_KEY: ${WEBX_CONTROL_SIGNING_KEY:-}
+      # the SAME value as strapi's PII_ENCRYPTION_KEY, so rows and files move between the two without re-encryption
+      WEBX_PII_KEY: ${PII_ENCRYPTION_KEY:?set PII_ENCRYPTION_KEY}
+      WEBX_PUBLIC_SITE_ORIGINS: ${WEBX_PUBLIC_SITE_ORIGINS:-}
+      # where the site assistant reads a Strapi workspace's content (a workspace's own engineUrl in the registry wins)
+      WEBX_ENGINE_URL: http://strapi:1337
+      WEBX_SMTP_URL: ${WEBX_SMTP_URL:-}
+      WEBX_MAIL_FROM: ${WEBX_MAIL_FROM:-}
+      WEBX_COMPLAINT_NOTIFY_EMAIL: ${COMPLAINT_NOTIFY_EMAIL:-}
+      LITELLM_URL: ${LITELLM_URL:-}
+      LITELLM_KEY: ${LITELLM_KEY:-}
+    volumes:
+      - control-data:/data
+    ports:
+      - "${WEBX_CONTROL_PORT:-1400}:1400"
+
 volumes:
   db-data:
   strapi-uploads:
@@ -461,3 +491,4 @@ volumes:
   wp-content-data:
   wp-db-backups:
   keycloak-data:
+  control-data:

@@ -1,12 +1,18 @@
 # webx-control
 
 The WebX control plane (`../docs/target-architecture.md`, decision D2). It owns
-what is about the organisations rather than their content: today the **tenant
-registry** (milestone C2); identity, bookkeeping and the visitors' runtime
-routes follow in C3 to C5. Content engines (Rust, Strapi, WordPress) keep only
-content.
+what is about the organisations rather than their content, so that the content
+engines (Rust, Strapi, WordPress) keep only content. Built so far, each part
+switched on by Studio, Strapi or the public site when a deployment is ready:
 
-One small Rust binary (axum, SQLite in the binary).
+- the **tenant registry** and its public routes (C2);
+- the **audit log**, **bookkeeping records** (page templates and versions, the agent's threads) and the **job queue and schedules** the
+  agent workers lease from (C3, C5);
+- **users, memberships and signed tokens** with a published key (C4, started: Studio's sign-in does not use them yet);
+- the **visitors' routes** (C5): cookie consent, search statistics, captcha, the four form inboxes with personal data and files
+  encrypted at rest and mail sent over SMTP, and the site assistant.
+
+One small Rust binary (axum; SQLite compiled into it; rustls for mail and model calls).
 
 ```sh
 cargo build --release
@@ -37,6 +43,30 @@ agree. Point a public-site build at it with `WEBX_CONTROL_URL=http://host:1400`;
 without that variable public-site reads the tenant routes from the content
 engine as before. The browser's own tenant lookup (`useTenantContact`) follows
 public-site's `PUBLIC_CONTROL_URL` when that is set (it is a visitors' route, below), and the CMS address until then.
+
+## Configuration
+
+Flags: `--db control.db` (the SQLite file), `--port 1400`, `--host 127.0.0.1` (the address it listens on: loopback unless told
+otherwise, so give `0.0.0.0` in a container or when a proxy on another host reaches it), `--strict-tenants` (decision D9),
+`--token-ttl 900` (seconds a signed-in user's token lives). Everything else is an environment variable:
+
+| Variable | What it does | Without it |
+|---|---|---|
+| `WEBX_CONTROL_SERVICE_TOKEN` | the bearer token of `/internal/*`: Studio, Strapi's dashboards, the workers and the migration tools | the internal API is off (503) |
+| `WEBX_CONTROL_ADMIN_TOKEN` | the bearer token of `/admin/*` (tenants, users) | the admin API is off (503) |
+| `WEBX_CONTROL_SIGNING_KEY` | base64 of 32 bytes: the key sign-in tokens are signed with | one is made and kept in the database |
+| `WEBX_PII_KEY` | base64 of 32 bytes, the **same value as Strapi's `PII_ENCRYPTION_KEY`**: personal data and files are encrypted with it | the form routes and form collections answer 503 |
+| `WEBX_PUBLIC_SITE_ORIGINS` | comma-separated origins of the public sites (or `*`) allowed to call the visitors' routes from a browser | only the local development origins |
+| `WEBX_CAPTCHA` | `off` turns the form captcha off (development only) | the captcha is asked |
+| `WEBX_SMTP_URL`, `WEBX_MAIL_FROM` | the mail server and sender for the forms' mail | mail is queued and kept, not sent |
+| `WEBX_COMPLAINT_NOTIFY_EMAIL` | where a new complaint is reported | staff are not mailed |
+| `WEBX_ENGINE_URL` | where the site assistant reads a Strapi workspace's content (a workspace's own `engineUrl` wins) | `http://localhost:1337` |
+| `LITELLM_URL`, `LITELLM_KEY`, `LITELLM_MODEL`, `LITELLM_ASK_MODEL`, `LITELLM_TIMEOUT_MS` | the model behind the site assistant | the assistant quotes the best passage |
+
+Run it in Docker with `docker compose --profile control up -d --build` (the `webx-control` service in `../docker-compose.yml`, an image built
+from `./Dockerfile`, the database on the `control-data` volume). Put it behind the reverse proxy that serves the public sites:
+the per-address limits key on the first `X-Forwarded-For` entry. The database is one SQLite file: back it up by copying it while the
+service is stopped, or with `sqlite3 control.db ".backup copy.db"`.
 
 ## Visitors' routes (C5, decision D12)
 

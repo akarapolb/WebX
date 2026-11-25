@@ -4,7 +4,7 @@
 //! and /api/tenants/resolve served, and has an admin API to manage tenants.
 //! Identity, bookkeeping and the visitors' runtime routes come in C3 to C5.
 //!
-//!   webx-control [--db control.db] [--port 1400] [--strict-tenants]   (admin API needs WEBX_CONTROL_ADMIN_TOKEN)
+//!   webx-control [--db control.db] [--port 1400] [--host 127.0.0.1] [--strict-tenants]   (admin API needs WEBX_CONTROL_ADMIN_TOKEN)
 //!   webx-control import --snapshot ../rust-engine/snapshot/snapshot.json [--db control.db]
 //!
 //! Public (no auth):
@@ -469,7 +469,7 @@ async fn mail_loop(app: Shared, mailer: Arc<mailer::Mailer>) {
             let done = match sent {
                 Ok(()) => outbox::mark_sent(&conn, mail.id, now_ms()),
                 Err(m) => {
-                    eprintln!("[webx-control] mail {} not sent (try {}): {m}", mail.id, mail.attempts + 1);
+                    eprintln!("[webx-control] mail {} not sent (try {}): {}", mail.id, mail.attempts + 1, outbox::scrub(&m));
                     outbox::mark_failed(&conn, mail.id, &m, now_ms())
                 }
             };
@@ -1266,7 +1266,9 @@ async fn main() {
     if let Some(m) = mailer {
         tokio::spawn(mail_loop(state_for_mail, Arc::new(m)));
     }
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
-    eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {}, forms {}, mail {}, assistant {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" }, if pii_on { "on" } else { "off: set WEBX_PII_KEY" }, if mail_on { "on" } else { "queued only: set WEBX_SMTP_URL" }, if state_for_log.assist.ask.is_some() { "answers by LLM" } else { "quotes only: set LITELLM_URL" });
+    // the loopback address unless told otherwise: in a container, or behind a proxy on another host, give --host 0.0.0.0
+    let host: std::net::IpAddr = arg("host", "127.0.0.1").parse().unwrap_or_else(|_| panic!("--host must be an IP address"));
+    let listener = tokio::net::TcpListener::bind((host, port)).await.unwrap_or_else(|e| panic!("bind {host}:{port}: {e}"));
+    eprintln!("[webx-control] http://{host}:{port} ({n} tenant(s) in {db}; admin API {}, internal API {}, forms {}, mail {}, assistant {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" }, if pii_on { "on" } else { "off: set WEBX_PII_KEY" }, if mail_on { "on" } else { "queued only: set WEBX_SMTP_URL" }, if state_for_log.assist.ask.is_some() { "answers by LLM" } else { "quotes only: set LITELLM_URL" });
     axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();
 }

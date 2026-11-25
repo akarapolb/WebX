@@ -2,7 +2,7 @@
 name = "webx-control"
 version = "0.1.0"
 edition = "2021"
-description = "WebX control plane: tenant registry first (docs/target-architecture.md, track C2)"
+description = "WebX control plane: tenant registry, bookkeeping, identity tokens, job queue and the visitors' runtime routes (docs/target-architecture.md, tracks C2-C5)"
 
 [dependencies]
 axum = { version = "0.7", features = ["multipart"] }

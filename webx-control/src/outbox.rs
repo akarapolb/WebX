@@ -146,13 +146,19 @@ pub fn mark_sent(conn: &Connection, id: i64, now_ms: i64) -> Result<(), String> 
     Ok(())
 }
 
+/// An error message with anything that looks like an e-mail address replaced, so a mail server that echoes the recipient back does
+/// not leave an address in a log or in the outbox.
+pub fn scrub(message: &str) -> String {
+    message.split_whitespace().map(|w| if w.contains('@') { "<address>" } else { w }).collect::<Vec<_>>().join(" ")
+}
+
 /// Not sent: one more attempt counted, the next try after a wait that doubles (a minute, two, four... at most an hour).
 pub fn mark_failed(conn: &Connection, id: i64, error: &str, now_ms: i64) -> Result<(), String> {
     let attempts: i64 = conn.query_row("SELECT attempts FROM outbox WHERE id = ?1", [id], |r| r.get(0)).map_err(e)?;
     let wait = (60_000i64 << attempts.min(6)).min(60 * 60 * 1000);
     conn.execute(
         "UPDATE outbox SET attempts = attempts + 1, next_try_ms = ?1, last_error = ?2 WHERE id = ?3",
-        rusqlite::params![now_ms + wait, error.chars().take(300).collect::<String>(), id],
+        rusqlite::params![now_ms + wait, scrub(error).chars().take(300).collect::<String>(), id],
     )
     .map_err(e)?;
     Ok(())
@@ -282,6 +288,20 @@ mod tests {
         assert_eq!(s["recent"][0]["lastError"], "connection refused");
         assert_eq!(purge(&c, now + 1).unwrap(), 0, "kept for a week so an operator can see it");
         assert_eq!(purge(&c, now + GIVE_UP_KEPT_MS + 1).unwrap(), 1);
+    }
+
+    #[test]
+    fn an_address_a_mail_server_echoes_is_not_kept() {
+        assert_eq!(scrub("permanent error (550): <somchai@example.com> no such user"), "permanent error (550): <address> no such user");
+        assert_eq!(scrub("user@x.th, other@y.th rejected"), "<address> <address> rejected");
+        assert_eq!(scrub("connection refused"), "connection refused");
+        let c = db();
+        let p = pii();
+        enqueue(&c, &p, &Mail { kind: "complaint-ack", tenant_key: None, to: "a@x.th".into(), subject: "s".into(), text: "t".into() }, 0).unwrap();
+        let d = due(&c, &p, 0, 1).unwrap();
+        mark_failed(&c, d[0].id, "550 <a@x.th> unknown", 0).unwrap();
+        let kept: String = c.query_row("SELECT last_error FROM outbox", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, "550 <address> unknown");
     }
 
     #[test]

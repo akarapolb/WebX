@@ -337,7 +337,9 @@ try {
   await submit("registrations", { email: "newuser@example.com", firstname: "ใหม่", lastname: "ผู้ใช้" });
   await submit("contact-messages", { name: "ติดต่อ", email: "contact@example.com", message: "m" });
   await submit("complaints", { subject: "ปฏิเสธ", email: "bounce@example.com" });
-  const expected = 2 + 1 + 1 + 1 + 1 + 0 /* staff + citizen; anonymous: staff; application; registration; contact: none; bounced: staff delivered, ack refused */;
+  // a subject that tries to add a header (and a recipient) to the staff mail
+  await submit("complaints", { subject: "innocent\r\nBcc: evil@example.com\r\nX-Injected: yes", name: "ผู้แจ้ง", email: "" });
+  const expected = 2 + 1 + 1 + 1 + 1 + 1 /* staff + citizen; anonymous: staff; application; registration; contact: none; bounced: staff delivered, ack refused; injection attempt: staff */;
   await waitFor(() => smtp.got.length >= early + expected, 20000);
   const mails = smtp.got.slice(early).map((g) => ({ to: g.to.join(","), ...decodeMail(g.data) }));
   check(`the mail a form calls for is sent over SMTP (${expected} mails)`, mails.length === expected, JSON.stringify(mails.map((m) => [m.to, m.subject])));
@@ -351,6 +353,9 @@ try {
   check("an application is confirmed", to("applicant@example.com").length === 1 && /^รับใบสมัครงานแล้ว \(DGA-JOB-\d{4}-\d{6}\)$/.test(to("applicant@example.com")[0].subject) && to("applicant@example.com")[0].text.includes("ตำแหน่ง: นักวิเคราะห์"), JSON.stringify(to("applicant@example.com")));
   check("a registration is welcomed with its username", to("newuser@example.com").length === 1 && /^ลงทะเบียนผู้ใช้งานสำเร็จ \(newuser\d{4}\)$/.test(to("newuser@example.com")[0].subject), JSON.stringify(to("newuser@example.com")));
   check("a contact message sends nothing", to("contact@example.com").length === 0);
+  const injected = smtp.got.slice(early).find((g) => /innocent/.test(decodeMail(g.data).subject));
+  const injectedHead = injected ? injected.data.split("\r\n\r\n")[0] : "";
+  check("a subject that tries to add a header and a recipient adds neither", injected && injected.to.join() === "staff@dga.or.th" && !/^bcc:/im.test(injectedHead) && !/^x-injected:/im.test(injectedHead), JSON.stringify(injected)?.slice(0, 500));
   check("the sender is the configured one", mails.every((m) => /no-reply@dga\.or\.th/.test(m.headers.from || "")), JSON.stringify(mails[0]?.headers));
   await new Promise((r) => setTimeout(r, 2500));
   const after = (await call("GET", "/internal/outbox", { token: SERVICE })).json.data;

@@ -179,3 +179,29 @@ jobs:
         run: node tools/rust-tenant-test.mjs
       - if: failure()
         run: tail -n 200 /tmp/strapi.log
+
+  # The webx-control image (webx-control/Dockerfile, the `webx-control` service in docker-compose.yml): it must build, start, answer
+  # its health check and take a visitor's cookie choice, so the file a deployment relies on is not one nobody has ever built.
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the webx-control image
+        run: docker build -t webx-control ./webx-control
+      - name: Run it, wait for its health check, and post a cookie choice
+        run: |
+          docker run -d --name control -p 1400:1400 \
+            -e WEBX_CONTROL_SERVICE_TOKEN=ci-service -e WEBX_CONTROL_ADMIN_TOKEN=ci-admin \
+            -e WEBX_PII_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= webx-control
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:1400/_health; then echo; break; fi
+            [ "$i" = 40 ] && { docker logs control; exit 1; }
+            sleep 1
+          done
+          curl -sf -X PUT http://localhost:1400/admin/tenants/dga -H 'authorization: Bearer ci-admin' -H 'content-type: application/json' \
+            -d '{"engine":"strapi","publicTemplate":"gov-portal"}'
+          curl -sf -X POST 'http://localhost:1400/api/consent-logs?tenant=dga' -H 'content-type: application/json' \
+            -d '{"data":{"action":"accept_all","categories":{"necessary":true}}}'
+          echo
+          docker logs control
+          test "$(docker inspect --format '{{.State.Health.Status}}' control)" != "unhealthy"
