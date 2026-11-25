@@ -243,7 +243,7 @@ jobs:
           cache-dependency-path: webx-studio/package-lock.json
       - working-directory: webx-studio
         run: npm ci
-      - name: Boot webx-studio with the audit log in the control plane
+      - name: Boot webx-studio with the audit log, records and job queue in the control plane
         working-directory: webx-studio
         env:
           STRAPI_URL: http://localhost:1337
@@ -251,6 +251,7 @@ jobs:
           STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
           WEBX_CONTROL_URL: http://localhost:1400
           WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
+          WEBX_CONTROL_QUEUE: "1"
         run: npm run dev > /tmp/webx-studio.log 2>&1 &
       - name: Wait for webx-studio to be ready
         run: |
@@ -270,7 +271,7 @@ jobs:
           STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
-        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts
+        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts
       - if: failure()
         run: |
           tail -n 100 /tmp/webx-studio.log
