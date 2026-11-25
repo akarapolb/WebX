@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sessionToken } from "@/lib/strapi";
 import { structured, llmConfigured } from "@/lib/llm";
 import { STRAPI_URL } from "@/lib/config";
+import { governed } from "@/lib/cms/governance";
+import { CmsError } from "@/lib/cms/types";
 
 // localized text fields we attempt to translate, in display order
 const CAND = ["title", "name", "subject", "question", "categoryLabel", "excerpt", "summary", "description", "answer", "body", "content"];
@@ -55,8 +57,14 @@ export async function POST(req: NextRequest) {
     payload: { targetLocale, sourceLocale: locale || "", fields },
     history: [{ to: "in_review", by: "AI translate", at: new Date().toISOString() }],
   };
-  const cr = await fetch(STRAPI_URL + "/content-manager/collection-types/api::review.review", { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!cr.ok) return NextResponse.json({ error: "Could not create review (HTTP " + cr.status + ")" }, { status: 502 });
-  const cj = await cr.json().catch(() => ({} as any)); const rv = cj.data ?? cj;
+  // Through governance like every other write of a review: it files the row in whichever store holds reviews (Strapi, or the
+  // control plane once it has them), stamped with the caller's workspace, and writes the audit row.
+  let rv: any;
+  try {
+    rv = await governed.create<any>("api::review.review", body);
+  } catch (e: any) {
+    if (e instanceof CmsError && e.status && e.status < 500) return NextResponse.json({ error: e.message }, { status: e.status });
+    return NextResponse.json({ error: "Could not create review" + (e instanceof CmsError && e.status ? " (HTTP " + e.status + ")" : "") }, { status: 502 });
+  }
   return NextResponse.json({ ok: true, targetLocale, fields, reviewId: rv?.documentId ?? rv?.id });
 }

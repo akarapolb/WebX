@@ -154,6 +154,8 @@ jobs:
         run: node webx-control/tools/forms-test.mjs
       - name: Moving Strapi's form submissions into webx-control
         run: node webx-control/tools/migrate-forms-test.mjs
+      - name: Moving Strapi's templates, versions, threads, reviews and releases into webx-control
+        run: node webx-control/tools/migrate-records-test.mjs
       - name: The visitors' assistant in webx-control
         run: node webx-control/tools/assist-test.mjs
       - name: Build webx-agent

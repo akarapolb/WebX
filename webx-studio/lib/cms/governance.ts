@@ -165,7 +165,8 @@ function controlAuditAdapter(cfg: { baseUrl: string; token: string }): CmsAdapte
   if (controlAuditCache?.key !== key) controlAuditCache = { key, adapter: createControlAuditAdapter(cfg) };
   return controlAuditCache.adapter;
 }
-// custom roles, page templates and page versions live in the control plane once it is configured (track C3)
+// page templates, page versions, the agent's threads, reviews and releases live in the control plane once it is configured
+// (track C3; CONTROL_RECORD_COLLECTIONS lists them)
 let controlRecordsCache: { key: string; adapter: CmsAdapter } | null = null;
 let controlQueueCache: { key: string; adapter: CmsAdapter } | null = null;
 function bookkeepingAdapter(uid: string): CmsAdapter {
@@ -180,6 +181,12 @@ function bookkeepingAdapter(uid: string): CmsAdapter {
   const key = cfg.baseUrl + " " + cfg.token;
   if (controlRecordsCache?.key !== key) controlRecordsCache = { key, adapter: createControlRecordsAdapter(cfg) };
   return controlRecordsCache.adapter;
+}
+/** True when the control plane holds this bookkeeping type (it is configured and the type has moved there) and Strapi does not.
+ * A row there carries its workspace's key (`tenantKey`) where Strapi's carries a `tenant` relation, so every place that scopes,
+ * stamps or checks the owner of a review or release asks this first. */
+function heldByControl(uid: string): boolean {
+  return Boolean(controlAuditConfig() && CONTROL_RECORD_COLLECTIONS[uid]);
 }
 // What visitors' browsers reported to the control plane (cookie choices, searches), read next to the engine's own rows
 // — the public site writes to one or the other until it is switched, so the screens show both (lib/cms/consent-merge.ts,
@@ -1611,6 +1618,17 @@ const TENANT_WRITE_LOCKED_FIELDS = new Set(["plan", "subscriptionStatus", "seats
 export function lockedTenantFields(data?: Record<string, any>): string[] {
   return Object.keys(data || {}).filter((k) => TENANT_WRITE_LOCKED_FIELDS.has(k));
 }
+/** A row the control plane holds (a review, a release) must be the caller's workspace's. A write also re-stamps the row with the
+ * caller's key, so without this a caller could take another workspace's row over by updating it. A row with no workspace (one
+ * migrated from before rows were stamped) is nobody's a scoped caller may be; a row that is not there answers like a foreign one,
+ * so ids cannot be probed. */
+async function assertOwnsControlRow(uid: string, id: string, eff: Tenant): Promise<void> {
+  const row: any = await strapiBookkeeping(() => bookkeepingAdapter(uid).entries.get(uid, id)).catch((e) => {
+    if (e instanceof CmsError && (e.status === 404 || e.status === 400)) return null;
+    throw e;
+  });
+  if (String(row?.tenantKey || "") !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+}
 async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff: Tenant | null, user: CurrentUser, data?: Record<string, any>): Promise<void> {
   if (!BOOKKEEPING_UIDS.has(uid)) return;
   if (GENERIC_ROUTE_WRITE_BLOCKED_UIDS.has(uid)) {
@@ -1638,9 +1656,14 @@ async function assertBookkeepingWriteAllowed(uid: string, id: string | null, eff
     if (locked.length) throw new CmsError(`Cannot set ${locked.join(", ")} directly — billing state is managed by checkout/webhooks, not editable here.`, 403);
     return;
   }
-  if (uid === RELEASE_UID && id) {
-    const owner = await trueOwnerOf(uid, id);
-    if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+  if ((uid === RELEASE_UID || uid === REVIEW_UID) && id) {
+    // Reviews had no check here at all: a scoped caller could change or delete another workspace's review by its id.
+    if (heldByControl(uid)) {
+      await assertOwnsControlRow(uid, id, eff);
+    } else {
+      const owner = await trueOwnerOf(uid, id);
+      if (owner && owner !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+    }
   }
   if (uid === MENU_ITEM_UID && id) {
     const owner = await trueOwnerOf(uid, id);
@@ -1691,6 +1714,8 @@ function tenantStamp(uid: string, eff: Tenant | null): Record<string, any> {
   // release, writable/deletable — see assertBookkeepingWriteAllowed's own
   // trueOwnerOf-based guard above, which silently no-ops on a null owner)
   // across every workspace.
+  // The control plane holds them by the workspace's key instead of a relation (heldByControl).
+  if ((uid === REVIEW_UID || uid === RELEASE_UID) && heldByControl(uid)) return { tenantKey: eff.key };
   return (SCOPED.has(uid) || uid === REVIEW_UID || uid === RELEASE_UID) ? { tenant: eff.id } : {};
 }
 
@@ -3029,8 +3054,10 @@ export const governed = {
       if (uid === REVIEW_UID) {
         // Same fail-closed convention as WP_SCOPED above, against the
         // relation's own numeric id (tenantStamp's own stamp shape) rather
-        // than a wtenant string key — -1 matches no real tenant.
-        const filter = withTenantFilter(query?.filter, "tenant.id", "eq", eff?.id ?? -1);
+        // than a wtenant string key — -1 matches no real tenant. The control plane's rows are scoped by the workspace's key.
+        const filter = heldByControl(uid)
+          ? withTenantFilter(query?.filter, "tenantKey", "eq", eff?.key ?? "__unscoped__")
+          : withTenantFilter(query?.filter, "tenant.id", "eq", eff?.id ?? -1);
         return cms.entries.list<T>(uid, { ...query, filter });
       }
       if (uid === CONSENT_LOG_UID) {
@@ -3062,8 +3089,10 @@ export const governed = {
       if (RELATION_SCOPED_BOOKKEEPING_UIDS.has(uid) && eff) {
         // See RELATION_SCOPED_BOOKKEEPING_UIDS's own comment — unlike
         // REVIEW_UID/WP_SCOPED above, no filter is added at all when eff is
-        // null (unscoped caller sees every tenant's rows, deliberately).
-        const filter = withTenantFilter(query?.filter, "tenant.id", "eq", eff.id);
+        // null (unscoped caller sees every tenant's rows, deliberately). Releases held by the control plane are scoped by key.
+        const filter = heldByControl(uid)
+          ? withTenantFilter(query?.filter, "tenantKey", "eq", eff.key)
+          : withTenantFilter(query?.filter, "tenant.id", "eq", eff.id);
         return cms.entries.list<T>(uid, { ...query, filter });
       }
       if (uid === AUDIT_UID && eff) {
@@ -3164,7 +3193,11 @@ export const governed = {
       if (WP_SCOPED.has(uid) && result && eff && (acting ? result.tenantKey !== eff.key : result.tenantKey && result.tenantKey !== eff.key)) {
         throw new CmsError("Cross-tenant operation not permitted", 403);
       }
-      if (uid === REVIEW_UID && result && eff) {
+      if ((uid === REVIEW_UID || uid === RELEASE_UID) && result && eff && heldByControl(uid) && String(result.tenantKey || "") !== eff.key) {
+        // held by the control plane: the row carries its workspace's key itself, so there is no relation to look up
+        throw new CmsError("Cross-tenant operation not permitted", 403);
+      }
+      if (uid === REVIEW_UID && result && eff && !heldByControl(uid)) {
         // The content-manager single-document GET doesn't populate a plain
         // relation field into a comparable shape (it comes back as a bare
         // {count} summary — confirmed live), so the tenant match is checked
@@ -3176,7 +3209,7 @@ export const governed = {
         });
         if (!own.data.length) throw new CmsError("Cross-tenant operation not permitted", 403);
       }
-      if (RELATION_SCOPED_BOOKKEEPING_UIDS.has(uid) && result && eff) {
+      if (RELATION_SCOPED_BOOKKEEPING_UIDS.has(uid) && result && eff && !heldByControl(uid)) {
         // Same relation-populate limitation REVIEW_UID's own branch above
         // documents — content-manager's single-document GET doesn't return
         // a comparable shape for a plain relation, so check via a filtered
@@ -3338,13 +3371,14 @@ export const governed = {
 // the scheduler token being briefly unavailable) — blocking every publish
 // because a status check itself failed would be a far worse regression than
 // the bypass this closes.
-async function assertReviewApprovedIfEngaged(uid: string, id: string): Promise<void> {
+async function assertReviewApprovedIfEngaged(uid: string, id: string, tenantKey: string | null = null): Promise<void> {
   try {
+    const filter: NonNullable<EntryQuery["filter"]> = [{ field: "documentRef", op: "eq", value: id }, { field: "contentType", op: "eq", value: uid }];
+    // A review the control plane holds names its workspace, and an entry id can repeat across workspaces (WordPress post ids),
+    // so the review that gates a publish is the publisher's own.
+    if (tenantKey && heldByControl(REVIEW_UID)) filter.push({ field: "tenantKey", op: "eq", value: tenantKey });
     const { data } = await strapiBookkeeping(() =>
-      strapiAdapter.entries.list<any>("api::review.review", {
-        pageSize: 1, sort: "updatedAt:DESC",
-        filter: [{ field: "documentRef", op: "eq", value: id }, { field: "contentType", op: "eq", value: uid }],
-      })
+      bookkeepingAdapter(REVIEW_UID).entries.list<any>(REVIEW_UID, { pageSize: 1, sort: "updatedAt:DESC", filter })
     );
     const rv = data[0];
     if (rv && rv.stage !== "approved" && rv.stage !== "published") {
@@ -3363,11 +3397,14 @@ async function assertReviewApprovedIfEngaged(uid: string, id: string): Promise<v
 // publish() path); the scheduler passes an explicit per-item adapter since
 // one release can mix engines regardless of which one this session (if any)
 // is authenticated against — see adapterFor above.
-async function doPublish(uid: string, id: string, actor: CurrentUser, opts?: { locale?: string }, adapter?: CmsAdapter): Promise<void> {
-  const eff = await resolveEffectiveTenant(actor.email);
+async function doPublish(uid: string, id: string, actor: CurrentUser, opts?: { locale?: string }, adapter?: CmsAdapter, onBehalfOf?: Tenant | null): Promise<void> {
+  // A scheduled release publishes as the scheduler, who is in no workspace: the workspace that made the release stands in for it,
+  // so the same checks run as for that workspace's own editor (an item that is another workspace's is refused) and the audit
+  // row is the workspace's own.
+  const eff = onBehalfOf ?? await resolveEffectiveTenant(actor.email);
   const crp = await resolveCustomRolePermissions(actor, eff, uid);
   if (crp && !crp.publish) throw new CmsError("Your role does not permit publishing this content", 403);
-  await assertReviewApprovedIfEngaged(uid, id);
+  await assertReviewApprovedIfEngaged(uid, id, eff?.key ?? null);
   const run = async (ad: CmsAdapter) => { await tenantGuard(uid, id, eff, ad); await ad.publish.publish(uid, id, opts); };
   // Mirrors withContentAdapter's own routing (see that function's header
   // comment) — without this, a bookkeeping uid (e.g. menu-item) published
@@ -3530,7 +3567,9 @@ export async function processDueReleases(): Promise<{ processed: number; failed:
   if (!strapiToken) throw new CmsError("Strapi service credential unavailable", 503);
   return withServiceToken(strapiToken, async () => {
     const now = Date.now();
-    const { data: due } = await strapiAdapter.entries.list<any>(RELEASE_UID, {
+    // wherever the releases are held: the control plane once it has them, Strapi until then
+    const store = bookkeepingAdapter(RELEASE_UID);
+    const { data: due } = await store.entries.list<any>(RELEASE_UID, {
       filter: [{ field: "state", op: "eq", value: "scheduled" }],
       pageSize: 50,
     });
@@ -3540,16 +3579,21 @@ export async function processDueReleases(): Promise<{ processed: number; failed:
       if (!rel.scheduledAt || new Date(rel.scheduledAt).getTime() > now) continue;
       const items = Array.isArray(rel.items) ? rel.items : [];
       const failedItems: string[] = [];
+      // A release the control plane holds names its workspace: its items publish as that workspace, which refuses an item that
+      // is another's (a release's items are only ever added by an editor, who could name any entry id). A workspace that is gone
+      // publishes nothing.
+      const owner = rel.tenantKey ? await resolveTenantByKey(String(rel.tenantKey)) : null;
       for (const it of items) {
         if (!it?.contentType || !it?.documentRef) continue;
         const adapter = adapterFor(it.contentType);
         try {
+          if (rel.tenantKey && !owner) throw new Error(`workspace ${rel.tenantKey} not found`);
           if (adapter === wordpressAdapter) {
             const wpToken = await schedulerWpToken();
             if (!wpToken) throw new Error("WordPress service credential unavailable");
-            await withServiceToken(wpToken, () => doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter));
+            await withServiceToken(wpToken, () => doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter, owner));
           } else {
-            await doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter);
+            await doPublish(it.contentType, it.documentRef, SCHEDULER_ACTOR, undefined, adapter, owner);
           }
         } catch (e: any) {
           failedItems.push(`${it.contentType}/${it.documentRef}: ${e?.message || "publish failed"}`);
@@ -3558,12 +3602,12 @@ export async function processDueReleases(): Promise<{ processed: number; failed:
       try {
         if (failedItems.length) {
           const note = `[${new Date().toISOString()}] ${failedItems.length}/${items.length} item(s) failed to publish:\n${failedItems.join("\n")}`;
-          await strapiAdapter.entries.update(RELEASE_UID, rel.documentId ?? rel.id, {
+          await store.entries.update(RELEASE_UID, rel.documentId ?? rel.id, {
             state: "failed", note: rel.note ? `${rel.note}\n\n${note}` : note,
           });
           failed++;
         } else {
-          await strapiAdapter.entries.update(RELEASE_UID, rel.documentId ?? rel.id, { state: "done", publishedAt: new Date().toISOString() });
+          await store.entries.update(RELEASE_UID, rel.documentId ?? rel.id, { state: "done", publishedAt: new Date().toISOString() });
           processed++;
         }
       } catch { /* the release row itself failed to update — nothing more this loop can do about it */ }

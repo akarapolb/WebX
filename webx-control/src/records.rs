@@ -1,6 +1,6 @@
 //! Bookkeeping records (docs/target-architecture.md, track C3): the small typed
 //! collections Studio's governance keeps about a workspace, such as custom roles,
-//! page templates and page versions. Each is a set of JSON documents in one
+//! page templates, page versions, reviews and releases. Each is a set of JSON documents in one
 //! table, addressed by collection and `documentId`. Unlike the audit log they
 //! can be changed and deleted. Rows come back in the shape Strapi gives them,
 //! so governance reads and writes them unchanged.
@@ -26,7 +26,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS records_ref ON records(collection, json_extrac
 ";
 
 /// The collections served here, by the route name Studio uses (the content type's singular name).
-pub const COLLECTIONS: [&str; 9] = ["custom-role", "page-template", "page-version", "consent-log", "complaint", "application", "registration", "contact-message", "agent-thread"];
+pub const COLLECTIONS: [&str; 11] = ["custom-role", "page-template", "page-version", "consent-log", "complaint", "application", "registration", "contact-message", "agent-thread", "review", "release"];
 
 fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()
@@ -297,6 +297,28 @@ mod tests {
         assert!(remove(&c, "custom-role", a["documentId"].as_str().unwrap()).unwrap());
         assert!(!remove(&c, "custom-role", a["documentId"].as_str().unwrap()).unwrap());
         assert_eq!(list(&c, "custom-role", &q(&[])).unwrap().1, 0);
+    }
+
+    #[test]
+    fn reviews_and_releases_keep_their_json_and_filter_by_workspace_and_stage() {
+        let c = db();
+        let items = json!([{"contentType": "api::article.article", "documentRef": "a1", "title": "T"}]);
+        let r = create(&c, "release", &json!({"tenantKey": "dga", "name": "R1", "state": "scheduled", "scheduledAt": "2026-11-25T01:00:00.000Z", "items": items}), NOW).unwrap();
+        assert_eq!(r["items"], items, "a release's items come back as they went in");
+        create(&c, "release", &json!({"tenantKey": "dga", "name": "R2", "state": "done"}), NOW).unwrap();
+        create(&c, "release", &json!({"tenantKey": "pea", "name": "R3", "state": "scheduled"}), NOW).unwrap();
+        create(&c, "review", &json!({"tenantKey": "dga", "documentRef": "a1", "contentType": "api::article.article", "stage": "in_review", "history": [{"to": "in_review"}]}), NOW).unwrap();
+        // the releases of a workspace that are still open (the entry editor's list), and the scheduler's query across workspaces
+        assert_eq!(list(&c, "release", &q(&[("tenantKey", "eq", "dga"), ("state", "ne", "done")])).unwrap().1, 1);
+        assert_eq!(list(&c, "release", &q(&[("state", "eq", "scheduled")])).unwrap().1, 2);
+        // the publish gate's lookup: the review of one entry, in its own workspace only
+        assert_eq!(list(&c, "review", &q(&[("documentRef", "eq", "a1"), ("contentType", "eq", "api::article.article")])).unwrap().1, 1);
+        assert_eq!(list(&c, "review", &q(&[("documentRef", "eq", "a1"), ("tenantKey", "eq", "pea")])).unwrap().1, 0);
+        // a row with no workspace is nobody's: a workspace filter never matches it
+        create(&c, "review", &json!({"documentRef": "a2", "stage": "in_review"}), NOW).unwrap();
+        assert_eq!(list(&c, "review", &q(&[("documentRef", "eq", "a2"), ("tenantKey", "eq", "dga")])).unwrap().1, 0);
+        assert_eq!(list(&c, "review", &q(&[("documentRef", "eq", "a2")])).unwrap().1, 1);
+        assert!(known("review") && known("release"));
     }
 
     #[test]

@@ -1,5 +1,5 @@
 // Bookkeeping records in the WebX control plane (docs/target-architecture.md,
-// track C3): page templates, page versions and the agent's threads. governance.ts
+// track C3): page templates, page versions, the agent's threads, reviews and releases. governance.ts
 // reads and writes them through a CmsAdapter, so this is one: entries.list /
 // get / create / update / remove against webx-control's /internal/records/<collection>.
 //
@@ -21,6 +21,10 @@ export const CONTROL_RECORD_COLLECTIONS: Record<string, string> = {
   "api::page-version.page-version": "page-version",
   // the agent's conversations (lib/agent/threads.ts): owner-scoped history that only Studio reads and writes
   "api::agent-thread.agent-thread": "agent-thread",
+  // the review board's rows and the release calendar's. Strapi's carry a `tenant` relation; these carry the workspace's key
+  // (`tenantKey`), which governance.ts filters, stamps and checks in its place (heldByControl)
+  "api::review.review": "review",
+  "api::release.release": "release",
 };
 
 /** Content types the control plane holds that Studio only READS from there, next to the engine's own rows: what visitors'

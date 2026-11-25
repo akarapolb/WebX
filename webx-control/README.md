@@ -6,7 +6,7 @@ engines (Rust, Strapi, WordPress) keep only content. Built so far, each part
 switched on by Studio, Strapi or the public site when a deployment is ready:
 
 - the **tenant registry** and its public routes (C2);
-- the **audit log**, **bookkeeping records** (page templates and versions, the agent's threads) and the **job queue and schedules** the
+- the **audit log**, **bookkeeping records** (page templates and versions, the agent's threads, reviews and releases) and the **job queue and schedules** the
   agent workers lease from (C3, C5);
 - **users, memberships and signed tokens** with a published key (C4, started: Studio's sign-in does not use them yet);
 - the **visitors' routes** (C5): cookie consent, search statistics, captcha, the four form inboxes with personal data and files
@@ -263,12 +263,12 @@ STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL
 ```
 
 `node tools/audit-test.mjs` checks the API on the real binary and runs Studio's
-adapter tests against it. The other bookkeeping types (releases, reviews,
-custom roles, agent jobs and so on) are still in Strapi, except those under Records below.
+adapter tests against it. The other bookkeeping types (custom roles, menu items, the tenant rows and so on)
+are still in Strapi, except those under Records below.
 
 ## Records (C3, second part)
 
-Page templates, page versions and the agent's threads are stored here as JSON documents, one
+Page templates, page versions, the agent's threads, reviews and releases are stored here as JSON documents, one
 `records` table keyed by collection, behind the same service token:
 
 | Call | Meaning |
@@ -278,19 +278,26 @@ Page templates, page versions and the agent's threads are stored here as JSON do
 | `GET`, `PUT` (merge, `null` clears), `DELETE /internal/records/<collection>/<documentId>` | one record |
 | `POST /internal/records/<collection>/import` body `[record, ...]` | migration: records keep their `documentId` and times; ones already there are skipped |
 
-`COLLECTIONS` in `src/records.rs` lists what exists: `custom-role`, `page-template`, `page-version`, `agent-thread`, and the visitors' `consent-log` and
+`COLLECTIONS` in `src/records.rs` lists what exists: `custom-role`, `page-template`, `page-version`, `agent-thread`, `review`, `release`, and the visitors' `consent-log` and
 the four form inboxes (above).
 **Studio** (`webx-studio/lib/cms/records-store.ts`) uses it for page templates, page
-versions and the agent's threads (owner-scoped conversation history, with the engine's resumable checkpoint) with the same two variables as audit. Custom roles can be stored here but Studio does
+versions, the agent's threads (owner-scoped conversation history, with the engine's resumable checkpoint), reviews and releases with the same two variables as audit.
+A review or a release names its workspace by `tenantKey` here, where Strapi's carries a `tenant` relation: Studio lists them by it, stamps it on every write
+(so a caller's update can never move a row to another workspace), refuses a read or write of another workspace's row, lets the publish gate look up an
+entry's review in its own workspace, and has the release scheduler read the due releases from here and publish their items as the workspace that made the release
+(an item that is another workspace's is refused). Custom roles can be stored here but Studio does
 **not** use that yet: Strapi's own enforcement and the WordPress mu-plugin read them from
-Strapi, so they move once that lookup is served from here. To move the existing templates and threads first:
+Strapi, so they move once that lookup is served from here. To move the existing templates, threads, reviews and releases first:
 
 ```sh
-STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL=... WEBX_CONTROL_SERVICE_TOKEN=...   node tools/migrate-records.mjs [--dry-run]
+STRAPI_URL=... STRAPI_ADMIN_EMAIL=... STRAPI_ADMIN_PASSWORD=... WEBX_CONTROL_URL=... WEBX_CONTROL_SERVICE_TOKEN=...   node tools/migrate-records.mjs [--dry-run] [--default-tenant <key>]
 ```
 
 Run it before switching: a shared template (no workspace) that is only in Strapi is invisible once Studio reads here, and so is an
-existing thread (it would show as an empty list of conversations).
+existing thread (it would show as an empty list of conversations), review (a pending approval would vanish from the board and stop
+holding back its entry's publish) or release (a scheduled one would never run). A review or release gets its workspace's key by the tool asking Strapi for each
+workspace's rows (`/api/tenants/keys`); one no workspace reaches (made before rows were stamped) is reported and left in Strapi, or filed under `--default-tenant`.
+`node tools/migrate-records-test.mjs` runs it against the real binary and a fake Strapi.
 
 ## Identity (C4, first part)
 
@@ -359,6 +366,7 @@ node tools/build-test.mjs --no-check-export                # a site build readin
 node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, CORS, summary, restart
 node tools/forms-test.mjs                                  # the form inboxes: encryption at rest, references, tracking, captcha, attachments, mail over SMTP
 node tools/migrate-forms-test.mjs                          # moving Strapi's submissions and their files here, against a fake Strapi
+node tools/migrate-records-test.mjs                        # moving Strapi's templates, versions, threads, reviews (workspace key from the relation) and releases here
 node tools/assist-test.mjs                                 # the assistant: retrieval, answers with sources, the model's failures, simplify/translate/find
 ```
 

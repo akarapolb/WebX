@@ -228,6 +228,9 @@ jobs:
           # the analytics dashboard reads the audit log and cookie counts from the control plane (src/utils/control-plane.ts)
           WEBX_CONTROL_URL: http://localhost:1400
           WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
+          # Studio's cross-tenant write guard (trueOwnerOf) asks Strapi who owns an entry; without this a background job, the
+          # release scheduler and every guarded write would run unchecked (matches STRAPI_INTERNAL_SECRET on Studio below)
+          WEBX_INTERNAL_SECRET: ci-internal-secret
         run: npx strapi develop > /tmp/strapi.log 2>&1 &
       - name: Start webx-control with its service token
         working-directory: webx-control
@@ -265,6 +268,12 @@ jobs:
           # every spec signs in from this one machine: Studio's per-address caps (10 sign-ins per 10 minutes) are for people
           WEBX_AUTH_RATE_MAX: "1000"
           WEBX_API_RATE_MAX: "6000"
+          # the cross-tenant write guard: a background job and a scheduled release fail closed without it
+          STRAPI_INTERNAL_SECRET: ci-internal-secret
+          # the release scheduler's tick (POST /api/internal/releases/process-due), which the review/release spec calls
+          WEBX_SCHEDULER_SECRET: ci-scheduler-secret
+          # a publish must not start a build of the public site on this runner
+          PUBLIC_SITE_AUTO_REBUILD: "off"
         run: npm run dev > /tmp/webx-studio.log 2>&1 &
       - name: Wait for webx-studio to be ready
         run: |
@@ -286,7 +295,8 @@ jobs:
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
           ANALYTICS_READS_CONTROL: "1"
-        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts tests/consent-control-plane.spec.ts tests/agent-job-control-plane.spec.ts
+          WEBX_SCHEDULER_SECRET: ci-scheduler-secret
+        run: npx playwright test tests/audit-control-plane.spec.ts tests/records-control-plane.spec.ts tests/queue-control-plane.spec.ts tests/consent-control-plane.spec.ts tests/agent-job-control-plane.spec.ts tests/review-release-control-plane.spec.ts
       - if: failure()
         run: |
           tail -n 100 /tmp/webx-studio.log
