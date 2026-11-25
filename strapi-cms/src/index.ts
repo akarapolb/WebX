@@ -10,6 +10,7 @@ import {
 import { seedCollectionPages } from './seed/seedCollectionPages';
 import { seedFormPages } from './seed/seedFormPages';
 import { adminTenantFor, resolveCustomRolePerms } from './utils/custom-role';
+import { auditedByWebx } from './utils/governed-audit';
 
 /** content type ที่ผูกกับ tenant (ต้อง scope) — exported so
  * api/internal/controllers/internal.ts's tenantOf() can validate its own
@@ -292,7 +293,11 @@ export default {
       // audit row ของตัวเองแล้ว หลัง action สำเร็จ) — กันไม่ให้บันทึกซ้ำสอง row ต่อ
       // การกระทำเดียว การเขียนตรงจาก Strapi admin panel (ไม่มี header นี้) ยังถูก
       // บันทึกที่นี่ตามเดิม เป็น backstop ครอบคลุมเส้นทางที่ข้าม WebX
-      const governedByWebx = (reqCtx?.get ? reqCtx.get('x-webx-governed') : reqCtx?.request?.header?.['x-webx-governed']) === '1';
+      // ...แต่ header X-WebX-Governed อย่างเดียวไม่นับ: ใครมี login ของ Strapi ก็ส่งเองได้ แล้วการเขียนของตัวเองจะไม่เหลือ
+      // audit เลย — ต้องมี X-Internal-Secret ที่ตรงกับ WEBX_INTERNAL_SECRET มาด้วย (ดู utils/governed-audit.ts)
+      const governedByWebx = auditedByWebx(
+        requestHeader(reqCtx, 'x-webx-governed'), requestHeader(reqCtx, 'x-internal-secret'), process.env.WEBX_INTERNAL_SECRET,
+      );
       if (adminEmail && WRITE_ACTIONS.has(action) && !governedByWebx) {
         try {
           await strapi.db.query('api::audit-log.audit-log').create({

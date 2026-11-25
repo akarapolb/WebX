@@ -217,7 +217,11 @@ rebuild (`webx-studio/lib/publicSiteBuild.ts`, or a webhook; see
 Auth: Studio signs in against the engine (`/admin/login` for Strapi; MFA and
 SSO are layered in Studio), keeps the token server-side, and sends
 `X-WebX-Governed` and `X-Internal-Secret` so the engine trusts governance's own
-audit writes and MFA exemption.
+audit writes and MFA exemption. The two travel as a pair: `X-WebX-Governed` alone
+is a claim anyone with an engine login can make, so an engine skips its own
+backstop audit row for it only when `X-Internal-Secret` matches its configured
+secret (Strapi: `WEBX_INTERNAL_SECRET`, compared in constant time); with no
+secret configured it audits every write.
 
 ### Rust engine's write API
 
