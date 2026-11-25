@@ -10,6 +10,10 @@ import { SESSION_COOKIE } from "@/lib/config";
 // the realistic target for a DGA/on-prem TOR deployment; a multi-instance
 // serverless deployment would need a shared store instead, out of scope here.
 const hits = new Map<string, number[]>();
+// The caps can be set: everyone behind one address (an office network whose proxy sends no X-Forwarded-For, or a test run where
+// every spec signs in from one machine) shares one bucket, and 10 sign-ins in 10 minutes is little for that.
+const AUTH_MAX = Math.max(1, Math.floor(Number(process.env.WEBX_AUTH_RATE_MAX)) || 10);
+const API_MAX = Math.max(1, Math.floor(Number(process.env.WEBX_API_RATE_MAX)) || 60);
 
 function hit(key: string, max: number, windowMs: number): boolean {
   const now = Date.now();
@@ -47,8 +51,8 @@ export function middleware(req: NextRequest) {
     // /admin/login convention (10 per 10 min). Everything else under
     // /api/* gets the broader general-abuse backstop.
     const ok = pathname.startsWith(AUTH_PREFIX)
-      ? hit("auth:" + ip, 10, 10 * 60 * 1000)
-      : hit("api:" + ip, 60, 60 * 1000);
+      ? hit("auth:" + ip, AUTH_MAX, 10 * 60 * 1000)
+      : hit("api:" + ip, API_MAX, 60 * 1000);
     if (!ok) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later." },

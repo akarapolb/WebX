@@ -41,11 +41,12 @@ test.describe("Audit log in the control plane", () => {
   let originalTitle = "";
   let restored = false;
   const startedAt = new Date().toISOString();
-  let strapiTotalBefore: number;
   let strapiJwt: string;
 
-  const strapiAuditTotal = async () => {
-    const r = await fetch(`${STRAPI_URL}/content-manager/collection-types/${AUDIT}?page=1&pageSize=1`, { headers: { Authorization: `Bearer ${strapiJwt}` } });
+  // How many rows Strapi's own table holds for one entry. Counted for the entry this spec changes, not the whole table: other
+  // specs of the same run write to Strapi directly (a fixture change made as its admin is audited there, as it should be).
+  const strapiAuditFor = async (entryId: string) => {
+    const r = await fetch(`${STRAPI_URL}/content-manager/collection-types/${AUDIT}?page=1&pageSize=1&filters[entryId][$eq]=${encodeURIComponent(entryId)}`, { headers: { Authorization: `Bearer ${strapiJwt}` } });
     expect(r.ok, `Strapi content-manager answered ${r.status}`).toBeTruthy();
     const j = await r.json();
     return (j.pagination?.total ?? 0) as number;
@@ -62,8 +63,6 @@ test.describe("Audit log in the control plane", () => {
       loginAs(browser, DGA_EDITOR_EMAIL, DGA_EDITOR_PASSWORD),
       loginAs(browser, PEA_EDITOR_EMAIL, PEA_EDITOR_PASSWORD),
     ]);
-    // after signing in: what the test itself does is what must not reach Strapi
-    strapiTotalBefore = await strapiAuditTotal();
   });
 
   test.afterAll(async () => {
@@ -123,6 +122,7 @@ test.describe("Audit log in the control plane", () => {
   });
 
   test("Strapi's own audit table got none of it", async () => {
-    expect(await strapiAuditTotal(), "no audit row was written to Strapi while the control plane was on").toBe(strapiTotalBefore);
+    expect(serviceId, "the first test changed a service").toBeTruthy();
+    expect(await strapiAuditFor(serviceId), "no audit row for what the first test changed was written to Strapi while the control plane was on").toBe(0);
   });
 });

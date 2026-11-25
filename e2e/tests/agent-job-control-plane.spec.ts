@@ -52,11 +52,13 @@ test.describe("A background job run through the control plane's queue", () => {
     expect(articleRows[0], "dga must have at least one seeded article to target").toBeTruthy();
     entryDocumentId = articleRows[0].documentId;
     originalTitle = articleRows[0].title;
-    // the agent needs a plan that has it and a level that may write drafts (dga is on "free" and "off" in the dev seed)
-    await request.put(`${STRAPI_URL}/content-manager/collection-types/api::tenant.tenant/${tenantDocumentId}`, {
+    // the agent needs a plan that has it, a level that may write drafts (dga is on "free" and "off" in the dev seed), and
+    // background jobs switched on for the workspace
+    const set = await request.put(`${STRAPI_URL}/content-manager/collection-types/api::tenant.tenant/${tenantDocumentId}`, {
       headers: { ...auth, "Content-Type": "application/json" },
-      data: { plan: "pro", features: { agent: { level: "draft", local: false } } },
+      data: { plan: "pro", features: { agent: { level: "draft", local: false, background: true } } },
     });
+    expect(set.ok(), `turning the agent on for dga answered ${set.status()}`).toBeTruthy();
 
     mockProc = spawn(process.execPath, ["--import", "tsx", "tests/harness/mockLlmServer.ts"], {
       cwd: path.join(__dirname, "..", "..", "webx-studio"),
@@ -91,12 +93,21 @@ test.describe("A background job run through the control plane's queue", () => {
   test("a job an editor starts is leased, run and finished through the queue, and its write is the agent's", async ({ browser }) => {
     const editor = await studioContext(browser, DGA_EDITOR_EMAIL, DGA_EDITOR_PASSWORD);
     try {
-      const made = await editor.request.post(`${WEBX_STUDIO}/api/agent/jobs`, {
-        data: { title: "Queue job e2e", goal: `Set the title of ${TARGET_UID} ${entryDocumentId} to "${newTitle}".`, template: "custom", lang: "en" },
-        timeout: 90_000,
-      });
-      expect(made.ok(), `creating the job answered ${made.status()}: ${await made.text()}`).toBeTruthy();
-      const job = await made.json();
+      // Studio keeps each workspace's settings for up to 30 s, so the change made in beforeAll can take that long to be seen:
+      // ask again while the answer is "turned off"
+      let status = 0, text = "";
+      for (let tries = 0; tries < 20; tries++) {
+        const made = await editor.request.post(`${WEBX_STUDIO}/api/agent/jobs`, {
+          data: { title: "Queue job e2e", goal: `Set the title of ${TARGET_UID} ${entryDocumentId} to "${newTitle}".`, template: "custom", lang: "en" },
+          timeout: 90_000,
+        });
+        status = made.status();
+        text = await made.text();
+        if (made.ok() || !/turned off|not available in this workspace|paid plan/.test(text)) break;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      expect(status >= 200 && status < 300, `creating the job answered ${status}: ${text}`).toBeTruthy();
+      const job = JSON.parse(text);
       const id = (job.data ?? job).documentId as string;
       expect(id, "the job has an id").toBeTruthy();
 
