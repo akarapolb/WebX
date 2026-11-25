@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/config";
 import { clientAddress, trustedProxies } from "@/lib/clientAddress";
+import { crossSiteRefusal, csrfExempt, parseTrustedOrigins } from "@/lib/csrf";
 
 // Basic per-IP rate limiting for the BFF's own API routes — previously
 // nothing here at all (Strapi's own API had src/middlewares/rate-limit.ts;
@@ -42,10 +43,29 @@ function clientIp(req: NextRequest): string {
 
 const AUTH_PREFIX = "/api/auth/";
 
+// Pages on other origins that may post to this API (WEBX_TRUSTED_ORIGINS, comma-separated). None unless set: the API is
+// called by Studio's own pages, which are same-origin (lib/csrf.ts).
+const TRUSTED_ORIGINS = parseTrustedOrigins(process.env.WEBX_TRUSTED_ORIGINS);
+
 // Gate every app route on the presence of a session cookie. Token *validity* is
 // re-checked server-side in the (app) layout via /admin/users/me.
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Who is asking comes before how often: a page on another site that posts with the visitor's cookie is refused before it
+  // can use up the visitor's sign-in attempts (the limits below count per address, and that address is the visitor's).
+  if (pathname.startsWith("/api/") && !csrfExempt(pathname)) {
+    const refusal = crossSiteRefusal({
+      method: req.method,
+      origin: req.headers.get("origin"),
+      secFetchSite: req.headers.get("sec-fetch-site"),
+      host: req.headers.get("host"),
+      forwardedHost: req.headers.get("x-forwarded-host"),
+    }, TRUSTED_ORIGINS);
+    if (refusal) {
+      return NextResponse.json({ error: "This request came from another site and was refused." }, { status: 403 });
+    }
+  }
 
   if (req.method === "POST" && pathname.startsWith("/api/")) {
     const ip = clientIp(req);
