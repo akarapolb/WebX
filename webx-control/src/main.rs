@@ -15,11 +15,15 @@
 //!   POST /api/consent-logs?tenant=<key>          -> 201; a visitor's cookie choice, rate-limited (see visitors.rs)
 //!   POST /api/search-stats/log?tenant=<key>      -> 204; what a visitor searched for, counted anonymously (see search_stats.rs)
 //!   GET  /api/captcha                            -> {data: {id, question}}; a sum the form routes ask to be answered (see captcha.rs)
+//!   POST /api/complaints|applications|registrations|contact-messages?tenant=<key>  -> 201; a visitor's form (see forms.rs)
+//!   GET  /api/complaints|applications/track/<ref>?tenant=<key>                      -> where a submission stands
 //!       a browser may call these from the origins in WEBX_PUBLIC_SITE_ORIGINS (and the local development ones)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 
 mod audit;
+mod forms;
+mod pii;
 mod captcha;
 mod identity;
 mod jobs;
@@ -63,6 +67,10 @@ struct App {
     origins: Vec<String>,
     /// the captcha challenges handed out and not yet answered
     captchas: Mutex<captcha::Captchas>,
+    /// whether the form routes ask for the captcha (WEBX_CAPTCHA=off turns it off, for development)
+    captcha_on: bool,
+    /// the key personal data is encrypted with (WEBX_PII_KEY); without it the form collections refuse every read and write
+    pii: Option<pii::Pii>,
 }
 type Shared = Arc<App>;
 
@@ -227,6 +235,119 @@ async fn captcha_issue(State(app): State<Shared>, headers: HeaderMap) -> Respons
         Some((id, question)) => ([(header::CACHE_CONTROL, "no-store")], Json(json!({"data": {"id": id, "question": question}}))).into_response(),
         None => error(StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable", "Too many open challenges, try again shortly"),
     }
+}
+
+/// The cipher for a collection that holds personal data: None for one that holds none, and a 503 for one that does when no key
+/// is configured (WEBX_PII_KEY), so personal data is never written, or read back, unencrypted.
+fn cipher_for<'a>(app: &'a App, collection: &str) -> Result<Option<&'a pii::Pii>, Response> {
+    if pii::fields_of(collection).is_empty() {
+        return Ok(None);
+    }
+    match &app.pii {
+        Some(p) => Ok(Some(p)),
+        None => Err(error(StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable", "this collection holds personal data: start with WEBX_PII_KEY set")),
+    }
+}
+
+/// A stored row as its readers see it: personal data decrypted.
+fn opened(app: &App, collection: &str, mut row: Value) -> Result<Value, Response> {
+    if let Some(p) = cipher_for(app, collection)? {
+        pii::open(p, collection, &mut row).map_err(|m| error(StatusCode::INTERNAL_SERVER_ERROR, "PiiError", &m))?;
+    }
+    Ok(row)
+}
+
+/// A document before it is stored: personal data encrypted (`keep_valid`: an import keeps what already decrypts).
+fn sealed(app: &App, collection: &str, doc: &Value, keep_valid: bool) -> Result<Value, Response> {
+    let mut doc = doc.clone();
+    if let (Some(p), Some(o)) = (cipher_for(app, collection)?, doc.as_object_mut()) {
+        pii::seal(p, collection, o, keep_valid).map_err(|m| error(StatusCode::INTERNAL_SERVER_ERROR, "PiiError", &m))?;
+    }
+    Ok(doc)
+}
+
+/// The captcha a form post carries (`captchaId`, `captchaAnswer`): a 400 named CaptchaError, the name the public site looks
+/// for, when it is missing, wrong, used or too old. Always passes with WEBX_CAPTCHA=off.
+fn check_captcha(app: &App, id: &str, answer: &Value) -> Result<(), Response> {
+    if !app.captcha_on || app.captchas.lock().unwrap().verify(id, answer, now_ms()) {
+        return Ok(());
+    }
+    Err((StatusCode::BAD_REQUEST, Json(json!({"data": null, "error": {"status": 400, "name": "CaptchaError", "message": "ยืนยัน CAPTCHA ไม่สำเร็จ โปรดลองใหม่", "details": {}}}))).into_response())
+}
+
+/// POST /api/<complaints|applications|registrations|contact-messages>?tenant=<key> {data: {...}, captchaId, captchaAnswer}: a
+/// visitor's form (decisions D6 and D12; a port of the four Strapi types). Rate-limited, captcha-checked, cut to what the form
+/// has (forms.rs), stored with the personal data encrypted; answers 201 with what the success screen shows: the reference number
+/// (complaint, application) or username (registration).
+fn form_submit(app: &App, collection: &'static str, headers: &HeaderMap, raw: Option<&str>, body: &[u8]) -> Response {
+    if let Err(r) = rate_limited(app, "form", headers) {
+        return r;
+    }
+    let v: Value = match serde_json::from_slice(body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+    if let Err(r) = check_captcha(app, v.get("captchaId").and_then(Value::as_str).unwrap_or(""), v.get("captchaAnswer").unwrap_or(&Value::Null)) {
+        return r;
+    }
+    let cipher = match cipher_for(app, collection) { Ok(Some(p)) => p, Ok(None) => return fail("no cipher for a form collection".into()), Err(r) => return r };
+    let conn = app.conn.lock().unwrap();
+    let key = match tenant_for(app, &conn, raw) { Ok(k) => k, Err(r) => return r };
+    let mut doc = match forms::clean(collection, &v) { Ok(d) => d, Err(m) => return bad(m) };
+    doc.insert("tenantKey".into(), json!(key));
+    match forms::create(&conn, cipher, collection, doc, &now_iso()) {
+        Ok(row) => {
+            let mut out = serde_json::Map::new();
+            for f in ["documentId", "createdAt", "ref", "username"] {
+                if let Some(x) = row.get(f) {
+                    out.insert(f.into(), x.clone());
+                }
+            }
+            (StatusCode::CREATED, Json(json!({"data": out}))).into_response()
+        }
+        Err(m) => fail(m),
+    }
+}
+
+async fn complaint_submit(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
+    form_submit(&app, "complaint", &headers, raw.as_deref(), &body)
+}
+async fn application_submit(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
+    form_submit(&app, "application", &headers, raw.as_deref(), &body)
+}
+async fn registration_submit(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
+    form_submit(&app, "registration", &headers, raw.as_deref(), &body)
+}
+async fn contact_message_submit(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
+    form_submit(&app, "contact-message", &headers, raw.as_deref(), &body)
+}
+
+/// GET /api/<complaints|applications>/track/<ref>?tenant=<key>: where a submission stands, found by its reference number alone
+/// and only inside the workspace named (a port of the two Strapi track routes): the few fields a citizen may see, never the
+/// personal data. Its own rate limit, since a reference is six digits.
+fn form_track(app: &App, collection: &'static str, headers: &HeaderMap, raw: Option<&str>, reference: &str) -> Response {
+    if let Err(r) = rate_limited(app, "track", headers) {
+        return r;
+    }
+    let reference = reference.trim().to_uppercase();
+    if reference.is_empty() {
+        return bad("ref is required".into());
+    }
+    let conn = app.conn.lock().unwrap();
+    let key = match tenant_for(app, &conn, raw) { Ok(k) => k, Err(r) => return r };
+    let shown: &[&str] = if collection == "complaint" { &["ref", "type", "subject", "date", "stage", "steps"] } else { &["ref", "jobId", "position", "date", "stage"] };
+    match records::find_by_ref(&conn, collection, &key, &reference) {
+        Ok(Some(row)) => {
+            let out: serde_json::Map<String, Value> = shown.iter().filter_map(|f| row.get(*f).map(|x| ((*f).to_string(), x.clone()))).collect();
+            Json(json!({"data": out})).into_response()
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, "NotFoundError", &format!("{collection} not found")),
+        Err(m) => fail(m),
+    }
+}
+
+async fn complaint_track(State(app): State<Shared>, headers: HeaderMap, Path(reference): Path<String>, RawQuery(raw): RawQuery) -> Response {
+    form_track(&app, "complaint", &headers, raw.as_deref(), &reference)
+}
+async fn application_track(State(app): State<Shared>, headers: HeaderMap, Path(reference): Path<String>, RawQuery(raw): RawQuery) -> Response {
+    form_track(&app, "application", &headers, raw.as_deref(), &reference)
 }
 
 /// The address a visitor's request came from, for rate limiting: the first X-Forwarded-For entry (a proxy in front of this
@@ -491,8 +612,21 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
         }
         ("GET", ["records", c]) if records::known(c) => {
             let q = match records_query(raw.as_deref()) { Ok(q) => q, Err(m) => return bad(m) };
+            if let Err(r) = cipher_for(&app, c) {
+                return r; // no key: refused even when there is nothing to read yet
+            }
+            // personal data is stored encrypted, so a filter on it would compare ciphertext
+            if let Some(f) = q.filters.iter().find(|f| pii::fields_of(c).contains(&f.field.as_str())) {
+                return bad(format!("{} holds personal data and cannot be filtered", f.field));
+            }
             match records::list(&conn, c, &q) {
-                Ok((rows, total)) => Json(json!({"data": rows, "meta": {"pagination": {"page": q.page, "pageSize": q.page_size, "pageCount": total.div_ceil(q.page_size), "total": total}}})).into_response(),
+                Ok((rows, total)) => {
+                    let mut shown = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        match opened(&app, c, row) { Ok(r) => shown.push(r), Err(r) => return r }
+                    }
+                    Json(json!({"data": shown, "meta": {"pagination": {"page": q.page, "pageSize": q.page_size, "pageCount": total.div_ceil(q.page_size), "total": total}}})).into_response()
+                }
                 Err(m) => bad(m),
             }
         }
@@ -506,7 +640,17 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
         }
         ("POST", ["records", c]) if records::known(c) => {
             let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
-            match records::create(&conn, c, v.get("data").unwrap_or(&v), &now_iso()) {
+            let doc = v.get("data").unwrap_or(&v);
+            if forms::is_form(c) {
+                // the same defaults a visitor's post gets: a reference number, a starting stage, a username; personal data sealed
+                let cipher = match cipher_for(&app, c) { Ok(Some(p)) => p, Ok(None) => return fail("no cipher for a form collection".into()), Err(r) => return r };
+                let Some(map) = doc.as_object() else { return bad("a record is an object".into()) };
+                return match forms::create(&conn, cipher, c, map.clone(), &now_iso()) {
+                    Ok(row) => match opened(&app, c, row) { Ok(r) => Json(json!({"data": r})).into_response(), Err(r) => r },
+                    Err(m) => bad(m),
+                };
+            }
+            match records::create(&conn, c, doc, &now_iso()) {
                 Ok(row) => Json(json!({"data": row})).into_response(),
                 Err(m) => bad(m),
             }
@@ -516,7 +660,9 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             let Some(rows) = v.as_array() else { return bad("body must be an array of records".into()) };
             let (mut added, mut skipped) = (0, 0);
             for (i, r) in rows.iter().enumerate() {
-                match records::import(&conn, c, r, &now_iso()) {
+                // a migration keeps personal data that is already ciphertext under this key, and encrypts what is plain
+                let r = match sealed(&app, c, r, true) { Ok(r) => r, Err(resp) => return resp };
+                match records::import(&conn, c, &r, &now_iso()) {
                     Ok(true) => added += 1,
                     Ok(false) => skipped += 1,
                     Err(m) => return bad(format!("record {i}: {m}")),
@@ -525,14 +671,15 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             Json(json!({"added": added, "skipped": skipped})).into_response()
         }
         ("GET", ["records", c, id]) if records::known(c) => match records::get(&conn, c, id) {
-            Ok(Some(row)) => Json(json!({"data": row})).into_response(),
+            Ok(Some(row)) => match opened(&app, c, row) { Ok(r) => Json(json!({"data": r})).into_response(), Err(r) => r },
             Ok(None) => not_found(),
             Err(m) => fail(m),
         },
         ("PUT", ["records", c, id]) if records::known(c) => {
             let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
-            match records::update(&conn, c, id, v.get("data").unwrap_or(&v), &now_iso()) {
-                Ok(Some(row)) => Json(json!({"data": row})).into_response(),
+            let patch = match sealed(&app, c, v.get("data").unwrap_or(&v), false) { Ok(p) => p, Err(r) => return r };
+            match records::update(&conn, c, id, &patch, &now_iso()) {
+                Ok(Some(row)) => match opened(&app, c, row) { Ok(r) => Json(json!({"data": r})).into_response(), Err(r) => r },
                 Ok(None) => not_found(),
                 Err(m) => bad(m),
             }
@@ -703,13 +850,21 @@ async fn main() {
     let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let n = registry::list(&conn).map(|l| l.len()).unwrap_or(0);
-    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default() });
+    let pii = std::env::var("WEBX_PII_KEY").ok().filter(|k| !k.trim().is_empty()).map(|k| pii::Pii::from_base64(&k).unwrap_or_else(|e| panic!("WEBX_PII_KEY: {e}")));
+    let pii_on = pii.is_some();
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii });
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
         .route("/api/consent-logs", post(consent_log).layer(axum::extract::DefaultBodyLimit::max(16 * 1024)))
         .route("/api/search-stats/log", post(search_stat_log).layer(axum::extract::DefaultBodyLimit::max(4 * 1024)))
         .route("/api/captcha", get(captcha_issue))
+        .route("/api/complaints", post(complaint_submit).layer(axum::extract::DefaultBodyLimit::max(64 * 1024)))
+        .route("/api/applications", post(application_submit).layer(axum::extract::DefaultBodyLimit::max(64 * 1024)))
+        .route("/api/registrations", post(registration_submit).layer(axum::extract::DefaultBodyLimit::max(64 * 1024)))
+        .route("/api/contact-messages", post(contact_message_submit).layer(axum::extract::DefaultBodyLimit::max(64 * 1024)))
+        .route("/api/complaints/track/:ref", get(complaint_track))
+        .route("/api/applications/track/:ref", get(application_track))
         .route("/.well-known/jwks.json", get(jwks))
         .route("/api/auth/me", get(me))
         .route("/admin/*rest", any(admin))
@@ -718,6 +873,6 @@ async fn main() {
         .with_state(state.clone())
         .layer(middleware::from_fn_with_state(state, cors));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap_or_else(|e| panic!("bind :{port}: {e}"));
-    eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" });
+    eprintln!("[webx-control] http://localhost:{port} ({n} tenant(s) in {db}; admin API {}, internal API {}, forms {})", if admin_hash.is_some() { "on" } else { "off" }, if service_hash.is_some() { "on" } else { "off" }, if pii_on { "on" } else { "off: set WEBX_PII_KEY" });
     axum::serve(listener, app).with_graceful_shutdown(async { let _ = tokio::signal::ctrl_c().await; }).await.unwrap();
 }

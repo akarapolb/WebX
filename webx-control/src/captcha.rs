@@ -50,7 +50,6 @@ impl Captchas {
 
     /// Whether `answer` solves challenge `id` at `now`. The challenge is used up either way, so a wrong guess cannot be
     /// followed by another on the same one.
-    #[allow(dead_code)] // checked by the form routes (docs/target-architecture.md, track C5), which are next
     pub fn verify(&mut self, id: &str, answer: &serde_json::Value, now: i64) -> bool {
         let Some((sum, exp)) = self.open.remove(id) else { return false };
         if exp < now {

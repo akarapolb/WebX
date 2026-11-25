@@ -21,10 +21,12 @@ CREATE TABLE IF NOT EXISTS records(
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS records_collection_tenant ON records(collection, tenant_key);
+-- a reference number (a complaint's or an application's) names one row of its collection: a visitor tracks by it
+CREATE UNIQUE INDEX IF NOT EXISTS records_ref ON records(collection, json_extract(data, '$.ref')) WHERE json_extract(data, '$.ref') IS NOT NULL;
 ";
 
 /// The collections served here, by the route name Studio uses (the content type's singular name).
-pub const COLLECTIONS: [&str; 4] = ["custom-role", "page-template", "page-version", "consent-log"];
+pub const COLLECTIONS: [&str; 8] = ["custom-role", "page-template", "page-version", "consent-log", "complaint", "application", "registration", "contact-message"];
 
 fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()
@@ -149,6 +151,13 @@ pub fn update(conn: &Connection, collection: &str, document_id: &str, v: &Value,
 
 pub fn remove(conn: &Connection, collection: &str, document_id: &str) -> Result<bool, String> {
     Ok(conn.execute("DELETE FROM records WHERE collection=?1 AND document_id=?2", [collection, document_id]).map_err(e)? > 0)
+}
+
+/// The row of a collection with this reference number (`json_extract(data, '$.ref')`, the indexed expression) in this workspace.
+pub fn find_by_ref(conn: &Connection, collection: &str, tenant_key: &str, reference: &str) -> Result<Option<Value>, String> {
+    let mut st = conn.prepare(&format!("SELECT {COLS} FROM records WHERE collection=?1 AND json_extract(data, '$.ref')=?2 AND tenant_key=?3")).map_err(e)?;
+    let mut rows = st.query_map([collection, reference, tenant_key], row_json).map_err(e)?;
+    rows.next().transpose().map_err(e)
 }
 
 pub struct Filter {
@@ -292,6 +301,21 @@ mod tests {
         assert_eq!(list(&c, "page-version", &q(&[("n", "gte", "10")])).unwrap().1, 2, "numbers order as numbers");
         assert!(list(&c, "page-version", &q(&[("tenant.key", "eq", "x")])).is_err(), "no relation paths");
         assert!(list(&c, "page-version", &q(&[("a'); DROP TABLE records;--", "eq", "x")])).is_err());
+    }
+
+    #[test]
+    fn a_reference_number_finds_its_row_in_its_workspace_and_is_unique_in_its_collection() {
+        let c = db();
+        create(&c, "complaint", &json!({"tenantKey": "pea", "ref": "DGA-CMP-2569-111111", "subject": "mine"}), NOW).unwrap();
+        create(&c, "application", &json!({"tenantKey": "pea", "ref": "DGA-CMP-2569-111111"}), NOW).unwrap();
+        assert_eq!(find_by_ref(&c, "complaint", "pea", "DGA-CMP-2569-111111").unwrap().unwrap()["subject"], "mine");
+        assert!(find_by_ref(&c, "complaint", "dga", "DGA-CMP-2569-111111").unwrap().is_none(), "another workspace does not find it");
+        assert!(find_by_ref(&c, "complaint", "pea", "DGA-CMP-2569-999999").unwrap().is_none());
+        assert!(find_by_ref(&c, "registration", "pea", "DGA-CMP-2569-111111").unwrap().is_none(), "nor does another collection");
+        let dup = create(&c, "complaint", &json!({"tenantKey": "dga", "ref": "DGA-CMP-2569-111111"}), NOW).unwrap_err();
+        assert!(dup.contains("UNIQUE"), "{dup}");
+        create(&c, "complaint", &json!({"tenantKey": "dga", "subject": "no ref at all"}), NOW).unwrap();
+        create(&c, "complaint", &json!({"tenantKey": "dga", "subject": "and another with none"}), NOW).unwrap();
     }
 
     #[test]

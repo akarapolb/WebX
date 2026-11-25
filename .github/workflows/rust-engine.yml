@@ -150,6 +150,8 @@ jobs:
         run: node webx-control/tools/jobs-test.mjs
       - name: Visitors' routes in webx-control
         run: node webx-control/tools/visitors-test.mjs
+      - name: Form inboxes in webx-control
+        run: node webx-control/tools/forms-test.mjs
       - name: Build webx-agent
         working-directory: webx-agent
         run: cargo build --release --locked

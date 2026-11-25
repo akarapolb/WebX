@@ -47,6 +47,8 @@ What a visitor's browser calls without signing in. Anonymous, rate-limited per a
 | `POST /api/consent-logs?tenant=<key>` body `{data: {consentId, action, categories, language, path, userAgent}}` | log a cookie choice (PDPA evidence); `201 {data: {documentId, createdAt}}` |
 | `POST /api/search-stats/log?tenant=<key>` body `{q, locale, results}` | count one search on the public site, anonymously; `204` whether or not it was kept |
 | `GET /api/captcha` | `{data: {id, question}}`: a sum such as `3 + 4 = ?` for a form to ask; the answer is never sent |
+| `POST /api/complaints`, `/api/applications`, `/api/registrations`, `/api/contact-messages` `?tenant=<key>` body `{data: {...}, captchaId, captchaAnswer}` | a visitor's form; `201 {data: {documentId, createdAt, ref}}` (`username` for a registration, neither for a contact message) |
+| `GET /api/complaints/track/<ref>?tenant=<key>`, `GET /api/applications/track/<ref>?tenant=<key>` | where a submission stands: `{data: {ref, type, subject, date, stage, steps}}` (an application: `ref, jobId, position, date, stage`); 404 for an unknown reference or another workspace's |
 
 The choice is stored as given in the `consent-log` records collection, stamped with the workspace; text is cut at its limit
 (`path` and `userAgent` at 512 characters), unknown fields are dropped, `categories` must be an object of at most 2 KB, an
@@ -65,8 +67,32 @@ token; filters `tenantKey` and `locale` eq, `query` contains; sorts `count` `res
 which is read-only here. Studio's search insights add these counts to the engine's per query
 (`webx-studio/lib/cms/stat-merge.ts`, the top 1000 queries of each); one Unicode step of Strapi's normaliser (NFC) is not applied.
 
+**Forms** (decisions D6 and D12; a port of Strapi's complaint, application, registration and contact-message types, same fields
+and rules). A post is rate-limited (30 a minute per address, its own allowance), checked against the captcha (a 400 named
+`CaptchaError`, the name the public site looks for; `WEBX_CAPTCHA=off` turns it off for development), then cut to the fields the
+form has (text at its limit, e-mail checked, `extra` an object of at most 4 KB, a body past 64 KB refused) and stored under the
+workspace in the URL (an unregistered one is filed under the first, or refused with `--strict-tenants`). **What the server owns
+cannot be set by a visitor:** a complaint's or application's `stage` (always 0) and `steps`, its reference `DGA-CMP-<Buddhist year>-<6
+digits>` (an application's `DGA-JOB-...`), a registration's `verified` (always false) and `username` (made from the e-mail's local
+part and 4 digits; a password is never stored), a contact message's `handled`. An anonymous complaint is stored with no name, e-mail
+or phone. A reference is unique in its collection (a taken random one is retried), and tracking finds it by that alone, inside the
+workspace named, answering only the fields shown above and never personal data; it has its own allowance (30 a minute), since a
+reference is six digits.
+
+**Personal data is encrypted at rest** (PDPA): a complaint's, application's and contact message's `name`, `email`, `phone`, a
+registration's `email`, `firstname`, `lastname`, `phone`. AES-256-GCM in Strapi's format (`iv.ciphertext.tag`, base64), under
+`WEBX_PII_KEY` (base64 of 32 bytes). **Give it the same value as Strapi's `PII_ENCRYPTION_KEY`** and a row moved from Strapi needs no
+re-encryption (checked against values made by Strapi's Node code). Without the key the form routes and the form collections of the
+records API answer 503, so personal data is never stored or read in the clear. Two differences from Strapi, on purpose: what a
+visitor or an editor sends is *always* encrypted (Strapi skipped a value that merely looked encrypted, so a name like
+`AAAA.AAAA.AAAA` was stored in the clear and broke every later read of the list), and a value that cannot be decrypted is a 500
+`PiiError` naming the field, never an empty string. Only an import keeps a value that really decrypts under the key. The reading
+side is Studio's records API (`/internal/records/complaint`, `application`, `registration`, `contact-message`; service token): rows
+come back decrypted, a create gets the same reference, stage and username a visitor's post gets, an update re-encrypts what it
+changes, and a filter on a personal-data field is a 400 (it would compare ciphertext).
+
 **Captcha** (a port of `strapi-cms/src/utils/captcha.ts`): `GET /api/captcha` makes a sum of two digits, keeps its answer here and
-sends only an `id` and the question. The form routes (not built yet) take `captchaId` and `captchaAnswer` in the body and check them
+sends only an `id` and the question. The form routes take `captchaId` and `captchaAnswer` in the body and check them
 here: one try per challenge (a wrong answer uses it up), five minutes to answer, at most 20,000 open at once (503 past that), and an
 address may ask for 30 a minute (its own allowance). Challenges are held in memory, so a restart makes the open ones fail, as in Strapi.
 
@@ -95,7 +121,8 @@ left out). Old evidence therefore stays where it was and stays visible, and the 
 cannot edit or delete a choice held here. Strapi's own copy of the table goes in C6, after an import (`records import` keeps the
 ids) and with the dual read turned off, or the migrated rows would be counted twice.
 
-Not here yet: the assistant and the forms (with their attachments, whose storage is not decided).
+Not here yet: the assistant; for the forms, the file attachment of a complaint or application (multipart, storage not decided: D14), the
+e-mails they send (an acknowledgement, a notice to staff: D15), Studio reading and editing them here, and the migration from Strapi.
 
 ## Admin API
 
@@ -229,6 +256,7 @@ cargo test                                                  # registry rules (un
 node tools/parity-test.mjs --reference http://localhost:1337   # same answers as Strapi; admin API; restart
 node tools/build-test.mjs --no-check-export                # a site build reading tenants from here is identical
 node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, CORS, summary, restart
+node tools/forms-test.mjs                                  # the form inboxes: encryption at rest, references, tracking, captcha, what the server owns
 ```
 
 `parity-test` compares the tenant list and `resolve` for every tenant in both
