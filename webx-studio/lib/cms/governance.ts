@@ -61,6 +61,7 @@ import {
 } from "../config";
 import { planLimit, seatLimitExceeded, tokenBudgetExceeded, agentUsagePercent } from "../plans";
 import { generateSecret, otpauthUri, verifyTOTP, generateRecoveryCodes, hashRecoveryCode } from "../totp";
+import { beginMfaEnrollment } from "./mfaEnrollment";
 import { keycloakAdminToken, listEnabledKeycloakEmails, realmFromIssuerUrl } from "../keycloakAdmin";
 import { dialectOf } from "../blockDialect";
 
@@ -1271,19 +1272,26 @@ function stripCustomRoleFields(crp: ResolvedCustomRolePerms | null, data: Record
  * your OWN account, not anyone else's). Generates a fresh secret and stores
  * it un-enabled; nothing about how this user logs in changes until
  * confirmMfaEnrollment verifies a real code from it. Re-enrolling
- * overwrites any previous unconfirmed secret. */
-export async function startMfaEnrollment(): Promise<{ secret: string; otpauthUri: string }> {
+ * overwrites any previous unconfirmed secret.
+ *
+ * With MFA already ON this replaces the account's second factor, so it takes
+ * a current code (`currentCode`: an authenticator code or a recovery code) —
+ * a session alone is not enough to switch a security control off on itself
+ * (lib/cms/mfaEnrollment.ts). */
+export async function startMfaEnrollment(currentCode?: string): Promise<{ secret: string; otpauthUri: string }> {
   const user = await requireUser();
   if (!user.email) throw new CmsError("Unauthenticated", 401);
   const secret = generateSecret();
   const token = await schedulerStrapiToken();
   if (!token) throw new CmsError("MFA enrollment is temporarily unavailable", 500);
-  await withServiceToken(token, async () => {
-    const existing = await findMfaRow(user.email!);
-    const data = { adminEmail: user.email!.toLowerCase(), secret, enabled: false, recoveryCodesHash: null, recoveryCodesUsed: [] };
-    if (existing) await strapiAdapter.entries.update(MFA_ENROLLMENT_UID, existing.documentId ?? existing.id, data);
-    else await strapiAdapter.entries.create(MFA_ENROLLMENT_UID, data);
-  });
+  await withServiceToken(token, () => beginMfaEnrollment(user.email!, secret, currentCode, {
+    find: findMfaRow,
+    verifyCurrent: verifyLoginMfaCode,
+    save: async (existing, data) => {
+      if (existing) await strapiAdapter.entries.update(MFA_ENROLLMENT_UID, String(existing.documentId ?? existing.id), data);
+      else await strapiAdapter.entries.create(MFA_ENROLLMENT_UID, data);
+    },
+  }));
   return { secret, otpauthUri: otpauthUri(secret, user.email) };
 }
 
