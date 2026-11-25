@@ -404,7 +404,7 @@ async fn form_submit_file(app: &App, collection: &'static str, field: &str, file
     let mut kept: Option<String> = None;
     if let Some((fname, bytes)) = file {
         let (name, mime) = match files::validate(&fname, &bytes) { Ok(x) => x, Err(m) => return bad(m) };
-        match files::store(&conn, cipher, &key, &name, mime, &bytes, &now_iso()) {
+        match files::store(&conn, cipher, &key, collection, &name, mime, &bytes, &now_iso()) {
             Ok(meta) => {
                 kept = meta.get("documentId").and_then(Value::as_str).map(str::to_string);
                 doc.insert(field.into(), meta);
@@ -869,7 +869,7 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             let name = files::clean_name(&query_param_exact(raw.as_deref(), "name").unwrap_or_default());
             let ext = name.rsplit_once('.').map(|(_, x)| x.to_lowercase()).unwrap_or_default();
             let mime = files::mime_for(&ext).unwrap_or("application/octet-stream");
-            match files::store(&conn, cipher, &query_param_exact(raw.as_deref(), "tenant").unwrap_or_default(), &name, mime, &body, &now_iso()) {
+            match files::store(&conn, cipher, &query_param_exact(raw.as_deref(), "tenant").unwrap_or_default(), &query_param_exact(raw.as_deref(), "collection").unwrap_or_default(), &name, mime, &body, &now_iso()) {
                 Ok(meta) => Json(json!({"data": meta})).into_response(),
                 Err(m) => fail(m),
             }
@@ -885,6 +885,7 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
                         (header::HeaderName::from_static("x-content-type-options"), "nosniff".to_string()),
                         (header::CACHE_CONTROL, "no-store".to_string()),
                         (header::HeaderName::from_static("x-file-tenant"), f.tenant_key.unwrap_or_default()),
+                        (header::HeaderName::from_static("x-file-collection"), f.collection.unwrap_or_default()),
                     ],
                     f.bytes,
                 )
@@ -1005,6 +1006,30 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             Ok(false) => not_found(),
             Err(m) => fail(m),
         },
+        // how many submissions each form has, for one workspace (or all) and optionally a creation window [from, before): the
+        // numbers an analytics screen shows next to the engine's own; no personal data is read, so no key is needed
+        ("GET", ["forms", "summary"]) => {
+            let (mut tenant, mut from, mut before) = (None, None, None);
+            for pair in raw.as_deref().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+                let v = percent_decode(v);
+                let time = |v: &str| jobs::parse_iso(v).map(jobs::iso).ok_or_else(|| format!("{k} is not a time"));
+                match k {
+                    "tenant" if !v.is_empty() => tenant = Some(v),
+                    "from" => from = match time(&v) { Ok(t) => Some(t), Err(m) => return bad(m) },
+                    "before" => before = match time(&v) { Ok(t) => Some(t), Err(m) => return bad(m) },
+                    _ => return bad(format!("unsupported parameter {k}")),
+                }
+            }
+            let mut out = serde_json::Map::new();
+            for c in forms::COLLECTIONS {
+                match records::count(&conn, c, tenant.as_deref(), from.as_deref(), before.as_deref()) {
+                    Ok(n) => { out.insert(c.into(), json!(n)); }
+                    Err(m) => return bad(m),
+                }
+            }
+            Json(json!({"data": out})).into_response()
+        }
         // the cookie-consent numbers an analytics screen shows: {total, accept, reject, custom}, for one workspace (or all)
         // and optionally a creation window [from, before)
         ("GET", ["consent", "summary"]) => {

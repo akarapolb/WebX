@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS files(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   document_id TEXT NOT NULL UNIQUE,
   tenant_key TEXT,
+  collection TEXT,
   name TEXT NOT NULL,
   mime TEXT NOT NULL,
   size INTEGER NOT NULL,
@@ -124,12 +125,12 @@ pub fn validate(raw_name: &str, bytes: &[u8]) -> Result<(String, &'static str), 
 }
 
 /// Keep a file (encrypted). Returns what a record keeps of it: `{documentId, name, mime, size}`.
-pub fn store(conn: &Connection, p: &Pii, tenant_key: &str, name: &str, mime: &str, bytes: &[u8], now: &str) -> Result<Value, String> {
+pub fn store(conn: &Connection, p: &Pii, tenant_key: &str, collection: &str, name: &str, mime: &str, bytes: &[u8], now: &str) -> Result<Value, String> {
     let doc = crate::records::new_document_id();
     let sealed = p.encrypt_bytes(bytes)?;
     conn.execute(
-        "INSERT INTO files(document_id, tenant_key, name, mime, size, sha256, data, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        rusqlite::params![doc, tenant_key, name, mime, bytes.len() as i64, hex(&Sha256::digest(bytes)), sealed, now],
+        "INSERT INTO files(document_id, tenant_key, collection, name, mime, size, sha256, data, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        rusqlite::params![doc, tenant_key, collection, name, mime, bytes.len() as i64, hex(&Sha256::digest(bytes)), sealed, now],
     )
     .map_err(e)?;
     Ok(json!({"documentId": doc, "name": name, "mime": mime, "size": bytes.len()}))
@@ -143,15 +144,17 @@ pub struct Stored {
     pub name: String,
     pub mime: String,
     pub tenant_key: Option<String>,
+    /// the form it was attached to (complaint, application), so a reader can be checked against that form's permissions
+    pub collection: Option<String>,
     pub bytes: Vec<u8>,
 }
 
 /// A file, decrypted.
 pub fn load(conn: &Connection, p: &Pii, document_id: &str) -> Result<Option<Stored>, String> {
-    let mut st = conn.prepare("SELECT name, mime, tenant_key, data FROM files WHERE document_id = ?1").map_err(e)?;
-    let mut rows = st.query_map([document_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, Vec<u8>>(3)?))).map_err(e)?;
+    let mut st = conn.prepare("SELECT name, mime, tenant_key, collection, data FROM files WHERE document_id = ?1").map_err(e)?;
+    let mut rows = st.query_map([document_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, Option<String>>(3)?, r.get::<_, Vec<u8>>(4)?))).map_err(e)?;
     match rows.next().transpose().map_err(e)? {
-        Some((name, mime, tenant_key, data)) => Ok(Some(Stored { name, mime, tenant_key, bytes: p.decrypt_bytes(&data)? })),
+        Some((name, mime, tenant_key, collection, data)) => Ok(Some(Stored { name, mime, tenant_key, collection, bytes: p.decrypt_bytes(&data)? })),
         None => Ok(None),
     }
 }
@@ -209,13 +212,13 @@ mod tests {
     fn a_file_is_kept_encrypted_and_comes_back_whole() {
         let c = db();
         let p = Pii::from_base64(KEY).unwrap();
-        let meta = store(&c, &p, "pea", "หลักฐาน.pdf", "application/pdf", PDF, NOW).unwrap();
+        let meta = store(&c, &p, "pea", "complaint", "หลักฐาน.pdf", "application/pdf", PDF, NOW).unwrap();
         assert_eq!((meta["name"].as_str(), meta["mime"].as_str(), meta["size"].as_u64()), (Some("หลักฐาน.pdf"), Some("application/pdf"), Some(PDF.len() as u64)));
         let raw: Vec<u8> = c.query_row("SELECT data FROM files", [], |r| r.get(0)).unwrap();
         assert!(!raw.windows(5).any(|w| w == b"%PDF-"), "the content is not in the database in the clear");
         assert_eq!(raw.len(), 12 + PDF.len() + 16, "iv, ciphertext, tag");
         let got = load(&c, &p, meta["documentId"].as_str().unwrap()).unwrap().unwrap();
-        assert_eq!((got.bytes.as_slice(), got.name.as_str(), got.tenant_key.as_deref()), (PDF, "หลักฐาน.pdf", Some("pea")));
+        assert_eq!((got.bytes.as_slice(), got.name.as_str(), got.tenant_key.as_deref(), got.collection.as_deref()), (PDF, "หลักฐาน.pdf", Some("pea"), Some("complaint")));
         let other = Pii::from_base64(&base64_of(&[9u8; 32])).unwrap();
         assert!(load(&c, &other, meta["documentId"].as_str().unwrap()).is_err(), "another key cannot read it");
         assert!(load(&c, &p, "nope").unwrap().is_none());

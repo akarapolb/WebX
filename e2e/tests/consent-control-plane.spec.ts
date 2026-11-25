@@ -13,6 +13,9 @@ import {
 //   - the choices cannot be edited or deleted through Studio;
 //   - searches are counted per query, personal data in a query is never kept, and the search insights API shows an editor
 //     their own workspace's counts only;
+//   - the form inboxes: a visitor's complaint (with a file) is taken by the control plane with its personal data encrypted, tracked
+//     by its reference number, listed to the editors of its own workspace only (next to the engine's own submissions), changed
+//     and deleted through Studio in its own workspace only, and its file is served to that workspace's editors only;
 //   - with Strapi given the same control plane (ANALYTICS_READS_CONTROL=1), the dashboard's cookie numbers and its
 //     recent activity come from there too, and the monthly report still builds.
 // Same stack as audit-control-plane.spec.ts: AUDIT_CONTROL_URL / AUDIT_CONTROL_TOKEN.
@@ -23,10 +26,11 @@ const TOKEN = process.env.AUDIT_CONTROL_TOKEN || "";
 const ADMIN = process.env.AUDIT_CONTROL_ADMIN_TOKEN || "";
 const CL = "api::consent-log.consent-log";
 const SS = "api::search-stat.search-stat";
+const COMPLAINT = "api::complaint.complaint";
 // the public site's development origin, one webx-control allows by default
 const SITE = "http://localhost:3100";
 
-test.describe("Visitors' routes in the control plane: cookie consent and search statistics", () => {
+test.describe("Visitors' routes in the control plane: cookie consent, search statistics and forms", () => {
   test.skip(
     !CONTROL || !TOKEN || !ADMIN || !DGA_EDITOR_PASSWORD || !PEA_EDITOR_PASSWORD || !STRAPI_SCHEDULER_PASSWORD,
     "AUDIT_CONTROL_URL, AUDIT_CONTROL_TOKEN, AUDIT_CONTROL_ADMIN_TOKEN, DGA_EDITOR_PASSWORD, PEA_EDITOR_PASSWORD and STRAPI_SCHEDULER_PASSWORD required"
@@ -163,6 +167,115 @@ test.describe("Visitors' routes in the control plane: cookie consent and search 
     expect(peaRows.some((r) => r.query === mine), "pea cannot read dga's statistics by naming them").toBeFalsy();
   });
 
+  // ---- the form inboxes
+  const visitorIp = () => `10.79.${stamp % 250}.${++n}`;
+  const solved = async () => {
+    const c = (await (await fetch(`${CONTROL}/api/captcha`, { headers: { "x-forwarded-for": visitorIp() } })).json()).data;
+    const [a, b] = c.question.match(/\d+/g).map(Number);
+    return { captchaId: c.id, captchaAnswer: String(a + b) };
+  };
+  const complain = async (tenant: string, data: object) =>
+    fetch(`${CONTROL}/api/complaints?tenant=${tenant}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: SITE, "x-forwarded-for": visitorIp() },
+      body: JSON.stringify({ data, ...(await solved()) }),
+    });
+  const PDF = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
+  const subjectOf = (who: string) => `e2e complaint ${who} ${word}`;
+  let dgaComplaint = { id: "", ref: "" };
+  let peaComplaint = { id: "", ref: "" };
+  let withFile = { id: "", ref: "", fileId: "" };
+  const complaints = async (ctx: BrowserContext) => {
+    const r = await ctx.request.get(`${WEBX_STUDIO}/api/cms/entries/${COMPLAINT}?pageSize=100&sort=createdAt:DESC`);
+    expect(r.ok(), `the complaints list answered ${r.status()}`).toBeTruthy();
+    return (await r.json()).data as any[];
+  };
+  const track = async (ref: string, tenant: string) => (await fetch(`${CONTROL}/api/complaints/track/${ref}?tenant=${tenant}`, { headers: { "x-forwarded-for": visitorIp() } })).json();
+  const held = async (id: string) => (await (await control(`/records/complaint/${id}`)).json()).data;
+
+  test("a visitor's complaint is taken by the control plane, tracked by its reference, and its mail is queued", async () => {
+    const mine = await complain("dga", { type: "อื่นๆ", subject: subjectOf("dga"), detail: "รายละเอียด", name: "ผู้แจ้ง ดีจีเอ", email: "citizen-dga@example.com", phone: "0811111111", date: "25/11/2569" });
+    expect(mine.status, "the visitor's post is accepted").toBe(201);
+    expect(mine.headers.get("access-control-allow-origin")).toBe(SITE);
+    const m = (await mine.json()).data;
+    expect(m.ref).toMatch(/^DGA-CMP-\d{4}-\d{6}$/);
+    dgaComplaint = { id: m.documentId, ref: m.ref };
+    const theirs = await complain("pea", { type: "อื่นๆ", subject: subjectOf("pea"), detail: "d", name: "ผู้แจ้ง พีอีเอ", email: "citizen-pea@example.com" });
+    expect(theirs.status).toBe(201);
+    const t = (await theirs.json()).data;
+    peaComplaint = { id: t.documentId, ref: t.ref };
+    expect((await track(m.ref, "dga")).data.subject, "a citizen tracks it by its reference").toBe(subjectOf("dga"));
+    expect((await track(m.ref, "pea")).error?.name, "but only in its own workspace").toBe("NotFoundError");
+    const box = (await (await control("/outbox?tenant=dga")).json()).data;
+    expect(box.recent.some((x: any) => x.kind === "complaint-ack"), "the citizen's acknowledgement is queued (no mail server is set here)").toBeTruthy();
+    expect(JSON.stringify(box), "the outbox shows no address").not.toContain("citizen-dga@example.com");
+  });
+
+  test("the Forms inbox API lists an editor their workspace's submissions with the personal data readable, and no other workspace's", async () => {
+    const mine = await complaints(dga);
+    const row = mine.find((r) => r.documentId === dgaComplaint.id);
+    expect(row, "dga sees its complaint, taken by the control plane").toBeTruthy();
+    expect([row.ref, row.subject, row.name, row.email, row.stage]).toEqual([dgaComplaint.ref, subjectOf("dga"), "ผู้แจ้ง ดีจีเอ", "citizen-dga@example.com", 0]);
+    expect(mine.some((r) => r.documentId === peaComplaint.id), "dga does not see pea's").toBeFalsy();
+    const theirs = await complaints(pea);
+    expect(theirs.some((r) => r.documentId === peaComplaint.id)).toBeTruthy();
+    expect(theirs.some((r) => r.documentId === dgaComplaint.id), "pea does not see dga's").toBeFalsy();
+  });
+
+  test("a submission is read by id inside its workspace only", async () => {
+    const own = await dga.request.get(`${WEBX_STUDIO}/api/cms/entries/${COMPLAINT}/${dgaComplaint.id}`);
+    expect(own.ok(), `own submission answered ${own.status()}`).toBeTruthy();
+    const body = await own.json();
+    expect((body.data ?? body).subject).toBe(subjectOf("dga"));
+    const other = await pea.request.get(`${WEBX_STUDIO}/api/cms/entries/${COMPLAINT}/${dgaComplaint.id}`);
+    expect(other.ok(), "another workspace must not read it").toBeFalsy();
+    expect([403, 404]).toContain(other.status());
+  });
+
+  test("an editor moves a submission on through Studio, in their own workspace only, and cannot change what the server owns", async () => {
+    const byPea = await pea.request.put(`${WEBX_STUDIO}/api/cms/entries/${COMPLAINT}/${dgaComplaint.id}`, { data: { stage: 9 } });
+    expect(byPea.ok(), "pea must not change dga's complaint").toBeFalsy();
+    expect((await held(dgaComplaint.id)).stage).toBe(0);
+    const own = await dga.request.put(`${WEBX_STUDIO}/api/cms/entries/${COMPLAINT}/${dgaComplaint.id}`, { data: { stage: 2, steps: [{ at: "2026-11-26", note: "รับเรื่อง" }], ref: "FORGED", tenantKey: "pea", name: "ผู้แจ้ง (แก้ไข)" } });
+    expect(own.ok(), `own update answered ${own.status()}`).toBeTruthy();
+    const after = await held(dgaComplaint.id);
+    expect([after.stage, after.ref, after.tenantKey, after.name]).toEqual([2, dgaComplaint.ref, "dga", "ผู้แจ้ง (แก้ไข)"]);
+    const seen = (await track(dgaComplaint.ref, "dga")).data;
+    expect([seen.stage, seen.steps?.[0]?.note], "the citizen then sees the new stage and the step").toEqual([2, "รับเรื่อง"]);
+  });
+
+  test("a file the citizen attaches is served to the workspace's editors only, and goes when the submission does", async () => {
+    const fd = new FormData();
+    fd.append("data", JSON.stringify({ type: "อื่นๆ", subject: subjectOf("file"), detail: "d", name: "ผู้แจ้ง", email: "citizen-file@example.com" }));
+    const cap = await solved();
+    fd.append("captchaId", cap.captchaId);
+    fd.append("captchaAnswer", cap.captchaAnswer);
+    fd.append("files.attachment", new Blob([PDF], { type: "application/pdf" }), "หลักฐาน.pdf");
+    const posted = await fetch(`${CONTROL}/api/complaints/submit?tenant=dga`, { method: "POST", body: fd, headers: { origin: SITE, "x-forwarded-for": visitorIp() } });
+    expect(posted.status, "a complaint with a file is accepted").toBe(201);
+    const p = (await posted.json()).data;
+    const row = (await complaints(dga)).find((r) => r.documentId === p.documentId);
+    expect(row?.attachment?.name).toBe("หลักฐาน.pdf");
+    expect(row.attachment.url, "Studio gives the file a url of its own").toBe(`/api/cms/forms-file/${row.attachment.documentId}`);
+    withFile = { id: p.documentId, ref: p.ref, fileId: row.attachment.documentId };
+    const got = await dga.request.get(WEBX_STUDIO + row.attachment.url);
+    expect(got.ok(), `the file download answered ${got.status()}`).toBeTruthy();
+    expect(Buffer.from(await got.body()).equals(PDF)).toBeTruthy();
+    expect(got.headers()["content-disposition"]).toMatch(/^attachment; filename=/);
+    expect(got.headers()["x-content-type-options"]).toBe("nosniff");
+    const other = await pea.request.get(WEBX_STUDIO + row.attachment.url);
+    expect(other.ok(), "another workspace must not download it").toBeFalsy();
+    expect(other.status()).toBe(403);
+
+    const byPea = await pea.request.delete(`${WEBX_STUDIO}/api/cms/entries/${COMPLAINT}/${withFile.id}`);
+    expect(byPea.ok(), "pea must not delete dga's complaint").toBeFalsy();
+    const own = await dga.request.delete(`${WEBX_STUDIO}/api/cms/entries/${COMPLAINT}/${withFile.id}`);
+    expect(own.ok(), `own delete answered ${own.status()}`).toBeTruthy();
+    expect((await track(withFile.ref, "dga")).error?.name, "it is gone").toBe("NotFoundError");
+    const gone = await fetch(`${CONTROL}/internal/files/${withFile.fileId}`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    expect(gone.status, "and so is its file").toBe(404);
+  });
+
   test("the dashboard's cookie numbers include the control plane's, and its recent activity comes from there", async () => {
     test.skip(!analyticsFromControl, "ANALYTICS_READS_CONTROL=1 (Strapi started with WEBX_CONTROL_URL and WEBX_CONTROL_SERVICE_TOKEN) required");
     const after = (await summary(dga, "dga")).consent;
@@ -170,6 +283,8 @@ test.describe("Visitors' routes in the control plane: cookie consent and search 
     expect(after.accept - consentBefore.accept, "and it is an accept").toBe(1);
     expect(after.reject, "pea's rejection is not counted for dga").toBe(consentBefore.reject);
 
+    const subs = (await summary(dga, "dga")).submissions;
+    expect(subs.complaints, "the complaints the control plane took are counted next to the engine's").toBeGreaterThanOrEqual(1);
     // an audit row that exists only in the control plane is what the dashboard shows as recent activity
     const marker = "e2e.analytics." + stamp;
     const made = await control("/audit", { method: "POST", body: JSON.stringify({ data: { action: marker, tenantKey: "dga", adminEmail: DGA_EDITOR_EMAIL, contentType: "e2e", at: new Date().toISOString() } }) });

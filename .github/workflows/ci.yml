@@ -232,6 +232,7 @@ jobs:
         env:
           WEBX_CONTROL_SERVICE_TOKEN: ci-audit-service-token
           WEBX_CONTROL_ADMIN_TOKEN: ci-audit-admin-token
+          WEBX_PII_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
         run: ./target/release/webx-control --db /tmp/control.db --port 1400 > /tmp/control.log 2>&1 &
       - name: Wait for Strapi to finish booting and seeding
         run: |

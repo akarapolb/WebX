@@ -61,9 +61,14 @@ export async function mergedList<T extends Row>(own: ListFn<T>, control: ListFn<
 /** The filters the control plane's consent log understands; a relation filter on the engine's `tenant` has no meaning there. */
 const CONTROL_FILTER_FIELDS = new Set(["createdAt", "action", "language", "path", "consentId", "userAgent"]);
 
-/** A query for the control plane's rows: the caller's own filters it can apply, and the workspace by key. */
-export function controlConsentQuery(query: EntryQuery | undefined, tenantKey: string | null): EntryQuery {
-  const filter = (query?.filter || []).filter((f) => CONTROL_FILTER_FIELDS.has(f.field));
+/** A query for the control plane's rows: the caller's own filters on the fields it understands (a relation filter on the engine's
+ * `tenant`, or a client-supplied `tenantKey`, is dropped), and the workspace by key when the caller is scoped to one. */
+export function scopedControlQuery(query: EntryQuery | undefined, tenantKey: string | null, allowed: ReadonlySet<string>): EntryQuery {
+  const filter = (query?.filter || []).filter((f) => allowed.has(f.field));
   if (tenantKey) filter.push({ field: "tenantKey", op: "eq", value: tenantKey });
   return { ...query, filter };
+}
+
+export function controlConsentQuery(query: EntryQuery | undefined, tenantKey: string | null): EntryQuery {
+  return scopedControlQuery(query, tenantKey, CONTROL_FILTER_FIELDS);
 }

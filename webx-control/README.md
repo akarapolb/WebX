@@ -147,8 +147,18 @@ left out). Old evidence therefore stays where it was and stays visible, and the 
 cannot edit or delete a choice held here. Strapi's own copy of the table goes in C6, after an import (`records import` keeps the
 ids) and with the dual read turned off, or the migrated rows would be counted twice.
 
-Not here yet: the assistant; for the forms, Studio reading and editing them here (its screens still read Strapi's), showing an attachment,
-and the migration from Strapi (rows, which copy as they are under the same key, and files).
+**Studio and Strapi's dashboards read the forms from here too, next to the engine's own** (nothing is copied, so the public site can be
+switched at any moment, as for the consent log): Studio's Forms inbox and the generic content screens list the submissions of both
+places as one (`webx-studio/lib/cms/form-merge.ts`), scoped to the editor's workspace by its key, with the personal data readable; a
+submission is read, changed and deleted where it lives, and an editor can change what an editor may (a stage, steps, notes) but not
+its reference, workspace or file. A file is shown with a `url` Studio serves (`/api/cms/forms-file/<id>`) after checking the
+editor's workspace and their role's permission to see that form; it is always a download. Strapi's analytics adds the counts here
+(`GET /internal/forms/summary?tenant=<key>&from=<iso>&before=<iso>`: `{data: {complaint, application, registration, contact-message}}`;
+no key needed, since no personal data is read) to its own, in the dashboard and in the monthly report. Studio's switch is the same
+two variables as the audit log (`WEBX_CONTROL_URL`, `WEBX_CONTROL_SERVICE_TOKEN`).
+
+Not here yet: the assistant; for the forms, the migration from Strapi (rows copy as they are under the same key, files through
+`POST /internal/files`) and the WordPress-native forms (decision D6). Strapi's own `console/export` still reads only Strapi's table.
 
 ## Admin API
 

@@ -1,5 +1,5 @@
 import { fetchGa4Metrics } from '../../../utils/ga4';
-import { controlConfig, controlAudit, controlConsent } from '../../../utils/control-plane';
+import { controlConfig, controlAudit, controlConsent, controlForms } from '../../../utils/control-plane';
 
 // When Studio's audit log and the public site's cookie choices live in the WebX control plane (webx-control), the
 // dashboard reads them from there: see utils/control-plane.ts. Cookie choices are read from BOTH (the control plane's
@@ -24,6 +24,7 @@ export default {
     const tenantId: number | undefined = ctx.state?.tenantId;
     const tenantKey: string | undefined = ctx.state?.tenantKey;
     const scope = tenantId ? { tenant: tenantId } : {};
+    const control = controlConfig();
 
     // นับเนื้อหาที่ "เผยแพร่แล้ว" (draft&publish → นับเฉพาะเวอร์ชัน published)
     const pub = { ...scope, publishedAt: { $notNull: true } };
@@ -45,6 +46,9 @@ export default {
       countAll('api::complaint.complaint'), countAll('api::application.application'), countAll('api::registration.registration'),
     ]);
 
+    // forms the control plane took are added to the engine's own (utils/control-plane.ts), like the cookie choices below
+    const ctlForms = control ? await controlForms(control, { tenantKey }).catch(warn('form counts')) : null;
+
     // ความยินยอมคุกกี้ (PDPA) — แยกตาม action
     const consentRows: any[] = await strapi.db.query('api::consent-log.consent-log')
       .findMany({ where: scope, select: ['action'], limit: 100000 }).catch(() => []);
@@ -55,7 +59,6 @@ export default {
       else if (a.indexOf('reject') >= 0 || a === 'none' || a === 'opt-out') consent.reject++;
       else consent.custom++;
     });
-    const control = controlConfig();
     if (control) {
       const c = await controlConsent(control, { tenantKey }).catch(warn('cookie-consent counts'));
       if (c) { consent.total += c.total; consent.accept += c.accept; consent.reject += c.reject; consent.custom += c.custom; }
@@ -108,7 +111,7 @@ export default {
       tenants,
       content: { articles, services, jobs, faqs, downloads, ebooks, galleries, banners, videos, awards, popups, polls, landings },
       contentTotal: articles + services + jobs + faqs + downloads + ebooks + galleries + banners + videos + awards + popups + polls + landings,
-      submissions: { complaints, applications, registrations, total: complaints + applications + registrations },
+      submissions: { complaints: complaints + (ctlForms?.complaint ?? 0), applications: applications + (ctlForms?.application ?? 0), registrations: registrations + (ctlForms?.registration ?? 0), total: complaints + applications + registrations + (ctlForms ? ctlForms.complaint + ctlForms.application + ctlForms.registration : 0) },
       consent,
       engagement: { totalArticleViews: totalViews, topArticles },
       polls: pollRows,
@@ -132,6 +135,7 @@ export default {
     const tenantId: number | undefined = ctx.state?.tenantId;
     const tenantKey: string | undefined = ctx.state?.tenantKey;
     const scope = tenantId ? { tenant: tenantId } : {};
+    const control = controlConfig();
 
     const m = /^(\d{4})-(\d{2})$/.exec(String(ctx.query.month || ''));
     const now = new Date();
@@ -156,7 +160,11 @@ export default {
     const submissionTypes: [string, string][] = [
       ['Complaints', 'api::complaint.complaint'], ['Applications', 'api::application.application'], ['Registrations', 'api::registration.registration'],
     ];
-    const submissionCounts = await Promise.all(submissionTypes.map(([, uid]) => countInMonth(uid)));
+    const engineSubmissionCounts = await Promise.all(submissionTypes.map(([, uid]) => countInMonth(uid)));
+    // the forms the control plane took in the month are added to the engine's own
+    const ctlForms = control ? await controlForms(control, { tenantKey, from: rangeStart.toISOString(), before: rangeEnd.toISOString() }).catch(warn('form counts')) : null;
+    const ctlOf = [ctlForms?.complaint, ctlForms?.application, ctlForms?.registration];
+    const submissionCounts = engineSubmissionCounts.map((n, i) => n + (ctlOf[i] ?? 0));
 
     const consentRows: any[] = await strapi.db.query('api::consent-log.consent-log')
       .findMany({ where: inMonth, select: ['action'], limit: 100000 }).catch(() => []);
@@ -167,7 +175,6 @@ export default {
       else if (a.indexOf('reject') >= 0 || a === 'none' || a === 'opt-out') consent.reject++;
       else consent.custom++;
     });
-    const control = controlConfig();
     if (control) {
       const c = await controlConsent(control, { tenantKey, from: rangeStart.toISOString(), before: rangeEnd.toISOString() }).catch(warn('cookie-consent counts'));
       if (c) { consent.accept += c.accept; consent.reject += c.reject; consent.custom += c.custom; }

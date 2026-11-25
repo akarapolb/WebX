@@ -211,6 +211,17 @@ pub fn list(conn: &Connection, collection: &str, q: &Query) -> Result<(Vec<Value
     Ok((out, total as usize))
 }
 
+/// How many rows a collection has, inside an optional workspace and creation window `[from, before)`.
+pub fn count(conn: &Connection, collection: &str, tenant: Option<&str>, from: Option<&str>, before: Option<&str>) -> Result<usize, String> {
+    let mut wh = vec!["collection = ?".to_string()];
+    let mut args: Vec<Sql> = vec![Sql::Text(collection.to_string())];
+    if let Some(t) = tenant { wh.push("tenant_key = ?".into()); args.push(Sql::Text(t.into())); }
+    if let Some(f) = from { wh.push("created_at >= ?".into()); args.push(Sql::Text(f.into())); }
+    if let Some(b) = before { wh.push("created_at < ?".into()); args.push(Sql::Text(b.into())); }
+    let n: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM records WHERE {}", wh.join(" AND ")), params_from_iter(args.iter()), |r| r.get(0)).map_err(e)?;
+    Ok(n as usize)
+}
+
 /// How many rows of a collection hold each value of one field (its text; None where the field is absent), inside an
 /// optional workspace and creation window `[from, before)` (times as `jobs::iso` writes them): the numbers behind an
 /// analytics screen without reading every row.
@@ -316,6 +327,20 @@ mod tests {
         assert!(dup.contains("UNIQUE"), "{dup}");
         create(&c, "complaint", &json!({"tenantKey": "dga", "subject": "no ref at all"}), NOW).unwrap();
         create(&c, "complaint", &json!({"tenantKey": "dga", "subject": "and another with none"}), NOW).unwrap();
+    }
+
+    #[test]
+    fn a_plain_count_respects_the_workspace_and_the_window() {
+        let c = db();
+        for (t, at) in [("pea", "2026-10-31T23:59:59.999Z"), ("pea", "2026-11-02T10:00:00.000Z"), ("dga", "2026-11-03T10:00:00.000Z")] {
+            create(&c, "complaint", &json!({"tenantKey": t}), at).unwrap();
+        }
+        create(&c, "application", &json!({"tenantKey": "pea"}), "2026-11-04T10:00:00.000Z").unwrap();
+        assert_eq!(count(&c, "complaint", None, None, None).unwrap(), 3);
+        assert_eq!(count(&c, "complaint", Some("pea"), None, None).unwrap(), 2);
+        assert_eq!(count(&c, "complaint", Some("pea"), Some("2026-11-01T00:00:00.000Z"), Some("2026-12-01T00:00:00.000Z")).unwrap(), 1);
+        assert_eq!(count(&c, "application", None, None, None).unwrap(), 1);
+        assert_eq!(count(&c, "registration", None, None, None).unwrap(), 0);
     }
 
     #[test]

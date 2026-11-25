@@ -30,6 +30,18 @@ export async function controlAudit(cfg: ControlConfig, o: { tenantKey?: string; 
   return (await get(cfg, '/internal/audit?' + p.join('&'))).data || [];
 }
 
+export type FormCounts = { complaint: number; application: number; registration: number; 'contact-message': number };
+
+/** How many submissions the control plane holds for each form, for one workspace (or all), optionally inside `[from, before)`. */
+export async function controlForms(cfg: ControlConfig, o: { tenantKey?: string; from?: string; before?: string }): Promise<FormCounts> {
+  const p: string[] = [];
+  if (o.tenantKey) p.push('tenant=' + encodeURIComponent(o.tenantKey));
+  if (o.from) p.push('from=' + encodeURIComponent(o.from));
+  if (o.before) p.push('before=' + encodeURIComponent(o.before));
+  const d = (await get(cfg, '/internal/forms/summary' + (p.length ? '?' + p.join('&') : ''))).data;
+  return { complaint: d.complaint, application: d.application, registration: d.registration, 'contact-message': d['contact-message'] };
+}
+
 export type ConsentCounts = { total: number; accept: number; reject: number; custom: number };
 
 /** The control plane's cookie-consent counts by kind, for one workspace (or all), optionally inside `[from, before)`. */

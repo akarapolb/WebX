@@ -253,7 +253,7 @@ try {
   const wf = await read("complaint", withFile.json.data.documentId);
   check("the row refers to the file; the personal data is still stored encrypted and read decrypted", wf.attachment?.name === "หลักฐาน 1.pdf" && wf.attachment.mime === "application/pdf" && wf.attachment.size === PDF.length && typeof wf.attachment.documentId === "string" && wf.name === complaint.name, JSON.stringify(wf));
   const dl = await download(wf.attachment.documentId);
-  check("Studio downloads the file whole, as an attachment that a browser must not sniff or show", dl.status === 200 && dl.bytes.equals(PDF) && /^attachment; filename=/.test(dl.headers["content-disposition"]) && dl.headers["content-disposition"].includes("filename*=UTF-8''%E0%B8%AB") && dl.headers["x-content-type-options"] === "nosniff" && dl.headers["content-type"] === "application/pdf" && dl.headers["cache-control"] === "no-store", JSON.stringify(dl.headers));
+  check("Studio downloads the file whole, as an attachment that a browser must not sniff or show", dl.status === 200 && dl.bytes.equals(PDF) && /^attachment; filename=/.test(dl.headers["content-disposition"]) && dl.headers["content-disposition"].includes("filename*=UTF-8''%E0%B8%AB") && dl.headers["x-content-type-options"] === "nosniff" && dl.headers["content-type"] === "application/pdf" && dl.headers["cache-control"] === "no-store" && dl.headers["x-file-tenant"] === "pea" && dl.headers["x-file-collection"] === "complaint", JSON.stringify(dl.headers));
   check("the file is for the service token only: 401", (await fetch(`${BASE}/internal/files/${wf.attachment.documentId}`)).status === 401);
   const resume = await multipart("applications", { position: "นักพัฒนา", name: "นก", email: "nok@example.com" }, { name: "cv.PDF", bytes: PDF }, { fieldName: "files.resume" });
   const rv = await read("application", resume.json.data.documentId);
@@ -293,6 +293,18 @@ try {
   check("the summary shows no address and no text", !/example\.com|@|ได้รับ|สพร/.test(JSON.stringify(box)), JSON.stringify(box).slice(0, 300));
   check("a workspace's own summary counts only its mail", (await call("GET", "/internal/outbox?tenant=pea", { token: SERVICE })).json.data.total === box.total && (await call("GET", "/internal/outbox?tenant=dga", { token: SERVICE })).json.data.total === 0, "everything queued so far was filed under pea");
   check("the outbox needs the service token: 401", (await call("GET", "/internal/outbox")).status === 401);
+
+  // ---- the numbers an analytics screen shows (no personal data is read, so no key is needed for them)
+  const sum = (q = "") => call("GET", `/internal/forms/summary${q}`, { token: SERVICE });
+  const peaSum = (await sum("?tenant=pea")).json.data;
+  const peaComplaints = (await admin("GET", `complaint?pageSize=1&filter=${encodeURIComponent("tenantKey:eq:pea")}`)).json.meta.pagination.total;
+  check("the summary counts each form's submissions for a workspace, as the list does", peaSum.complaint === peaComplaints && peaSum.application >= 2 && peaSum.registration >= 1 && peaSum["contact-message"] >= 1, JSON.stringify(peaSum));
+  check("another workspace has its own counts", (await sum("?tenant=dga")).json.data.complaint === 1 && (await sum("?tenant=dga")).json.data.application === 0);
+  check("no workspace named: all of them together", (await sum()).json.data.complaint === peaComplaints + 1);
+  check("a window that has not started has none", (await sum(`?from=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.complaint === 0);
+  check("a window around now has all but the two rows imported from 2025", (await sum(`?tenant=pea&from=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&before=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.complaint === peaComplaints - 2, "the two imported rows are from 2025");
+  check("a bad time or an unknown parameter is refused: 400", (await sum("?from=yesterday")).status === 400 && (await sum("?colour=red")).status === 400);
+  check("the summary needs the service token: 401", (await call("GET", "/internal/forms/summary")).status === 401);
 
   // ---- the browser's preflight
   check("a browser on the public site may post a form: preflight answered", (await call("OPTIONS", "/api/complaints?tenant=pea", { headers: { origin: "http://localhost:3100", "access-control-request-method": "POST" } })).headers["access-control-allow-origin"] === "http://localhost:3100");

@@ -29,7 +29,18 @@ export const CONTROL_RECORD_COLLECTIONS: Record<string, string> = {
 export const CONTROL_READ_COLLECTIONS: Record<string, string> = {
   "api::consent-log.consent-log": "consent-log",
   "api::search-stat.search-stat": "search-stat",
+  // the form inboxes (lib/cms/form-merge.ts); changed and deleted where each submission lives, through the same adapter
+  "api::complaint.complaint": "complaint",
+  "api::application.application": "application",
+  "api::registration.registration": "registration",
+  "api::contact-message.contact-message": "contact-message",
 };
+
+/** A file the control plane keeps for a form (a complaint's attachment, an application's résumé), as the response it gives: the
+ * bytes, with the workspace and form in `x-file-tenant` and `x-file-collection`. */
+export async function fetchControlFile(cfg: ControlAuditConfig, id: string): Promise<Response> {
+  return fetch(`${cfg.baseUrl}/internal/files/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${cfg.token}` }, cache: "no-store" });
+}
 
 export function createControlRecordsAdapter(cfg: ControlAuditConfig, collections: Record<string, string> = CONTROL_RECORD_COLLECTIONS): CmsAdapter {
   const collectionOf = (uid: string): string => {

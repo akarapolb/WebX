@@ -31,9 +31,10 @@ import { strapiAdapter } from "./strapi";
 import { wordpressAdapter, ensureWtenantTerm, wordpressFieldNames } from "./wordpress";
 import { CmsError } from "./types";
 import { controlAuditConfig, createControlAuditAdapter } from "./audit-store";
-import { CONTROL_READ_COLLECTIONS, CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter } from "./records-store";
+import { CONTROL_READ_COLLECTIONS, CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter, fetchControlFile } from "./records-store";
 import { controlConsentQuery, mergedList } from "./consent-merge";
 import { controlStatQuery, mergedStats, tenantKeyOf } from "./stat-merge";
+import { controlFormQuery, decorateFormRow, editableFormFields, FORM_UIDS, FORM_UID_OF_COLLECTION } from "./form-merge";
 import { controlQueueConfig, createControlQueueAdapter, QUEUE_COLLECTIONS } from "./queue-store";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
@@ -190,6 +191,18 @@ function controlReadAdapter(): CmsAdapter | null {
   const key = cfg.baseUrl + " " + cfg.token;
   if (controlReadCache?.key !== key) controlReadCache = { key, adapter: createControlRecordsAdapter(cfg, CONTROL_READ_COLLECTIONS) };
   return controlReadCache.adapter;
+}
+/** A form submission as the control plane holds it, or null when it is not there (the engine has it, or it does not exist). */
+async function controlHeldForm(uid: string, id: string): Promise<any | null> {
+  if (!FORM_UIDS.has(uid)) return null;
+  const ctl = controlReadAdapter();
+  if (!ctl) return null;
+  try {
+    return await ctl.entries.get<any>(uid, id);
+  } catch (e) {
+    if (e instanceof CmsError && (e.status === 404 || e.status === 400)) return null;
+    throw e;
+  }
 }
 const RELEASE_UID = "api::release.release";
 const MFA_ENROLLMENT_UID = "api::mfa-enrollment.mfa-enrollment";
@@ -3098,6 +3111,20 @@ export const governed = {
         const filter = withTenantFilter(query?.filter, "tenant.key", "eq", eff?.key ?? "__no_tenant__");
         return cms.entries.list<T>(uid, { ...query, filter });
       }
+      if (FORM_UIDS.has(uid)) {
+        // The engine's submissions as before (its own tenant hook scopes them), and when the control plane is configured the
+        // ones it has taken, scoped here by the workspace key; listed as one (lib/cms/form-merge.ts).
+        const ctl = controlReadAdapter();
+        if (!ctl) return cms.entries.list<T>(uid, query);
+        return mergedList<any>(
+          (q) => cms.entries.list<any>(uid, q),
+          async (q) => {
+            const r = await ctl.entries.list<any>(uid, controlFormQuery(q, eff?.key ?? null));
+            return { ...r, data: r.data.map(decorateFormRow) };
+          },
+          query,
+        ) as Promise<EntryList<T>>;
+      }
       return cms.entries.list<T>(uid, query);
     });
   },
@@ -3123,12 +3150,12 @@ export const governed = {
         result = await cms.entries.get<T>(uid, id, opts);
       } catch (e) {
         // A cookie choice the control plane took has its own ids, so the engine does not know it: look there.
-        const ctl = uid === CONSENT_LOG_UID && e instanceof CmsError && (e.status === 404 || e.status === 400) ? controlReadAdapter() : null;
+        const ctl = (uid === CONSENT_LOG_UID || FORM_UIDS.has(uid)) && e instanceof CmsError && (e.status === 404 || e.status === 400) ? controlReadAdapter() : null;
         if (!ctl) throw e;
         const row: any = await ctl.entries.get<T>(uid, id).catch(() => null);
         if (!row) throw e;
         if (eff && row.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
-        return row;
+        return FORM_UIDS.has(uid) ? decorateFormRow(row) : row;
       }
       if (acting && result && SCOPED.has(uid) && (await trueOwnerOf(uid, id)) !== eff?.key) {
         // Fail closed: an entry a background job can't confirm as its tenant's is not returned.
@@ -3171,6 +3198,28 @@ export const governed = {
       return result;
     });
   },
+  /** A file attached to a submission the control plane holds (a complaint's attachment, an application's résumé), for an editor who
+   * may see that form in that workspace. Served as a download, never inline. */
+  async formFile(id: string): Promise<Response> {
+    assertNotActing("read a submission's file");
+    const user = await requireUser();
+    const eff = await resolveEffectiveTenant(user.email);
+    const cfg = controlAuditConfig();
+    if (!cfg) throw new CmsError("Not Found", 404);
+    const r = await fetchControlFile(cfg, id);
+    if (r.status === 404) throw new CmsError("Not Found", 404);
+    if (!r.ok) throw new CmsError("The file could not be read", 502);
+    if (eff && (r.headers.get("x-file-tenant") || "") !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+    const uid = FORM_UID_OF_COLLECTION[r.headers.get("x-file-collection") || ""];
+    if (!uid) throw new CmsError("Not Found", 404);
+    const crp = await resolveCustomRolePermissions(user, eff, uid);
+    if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);
+    const keep = ["content-type", "content-disposition", "x-content-type-options"];
+    const headers = new Headers();
+    for (const h of keep) { const v = r.headers.get(h); if (v) headers.set(h, v); }
+    headers.set("cache-control", "private, no-store");
+    return new Response(r.body, { status: 200, headers });
+  },
   async create<T = any>(uid: string, data: Record<string, any>): Promise<T> {
     assertActingUid(uid);
     const user = await requireUser();
@@ -3196,6 +3245,18 @@ export const governed = {
     assertActingUid(uid);
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    const held = await controlHeldForm(uid, id);
+    if (held) {
+      // A submission the control plane took: scoped by its workspace key, changed there (personal data is encrypted by it).
+      if (eff && held.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+      const perm = await resolveCustomRolePermissions(user, eff, uid);
+      if (perm && !perm.update) throw new CmsError("Your role does not permit updating this content", 403);
+      let patch = await stripPolicyFields(user, uid, data);
+      patch = editableFormFields(stripCustomRoleFields(perm, patch));
+      const changed: any = await controlReadAdapter()!.entries.update<any>(uid, id, patch);
+      await writeAudit("update", uid, id, user, eff?.key ?? null);
+      return decorateFormRow(changed) as T;
+    }
     await assertBookkeepingWriteAllowed(uid, id, eff, user, data);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.update) throw new CmsError("Your role does not permit updating this content", 403);
@@ -3216,6 +3277,15 @@ export const governed = {
     assertNotActing("delete content");
     const user = await requireUser();
     const eff = await resolveEffectiveTenant(user.email);
+    const held = await controlHeldForm(uid, id);
+    if (held) {
+      if (eff && held.tenantKey !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
+      const perm = await resolveCustomRolePermissions(user, eff, uid);
+      if (perm && !perm.delete) throw new CmsError("Your role does not permit deleting this content", 403);
+      await controlReadAdapter()!.entries.remove(uid, id);
+      await writeAudit("delete", uid, id, user, eff?.key ?? null);
+      return;
+    }
     await assertBookkeepingWriteAllowed(uid, id, eff, user);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.delete) throw new CmsError("Your role does not permit deleting this content", 403);
