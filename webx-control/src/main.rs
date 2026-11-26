@@ -22,6 +22,13 @@
 //!       a browser may call these from the origins in WEBX_PUBLIC_SITE_ORIGINS (and the local development ones)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
+//!   GET|PUT|DELETE /admin/tenants/<key>/identity   the provider a workspace's people sign in at (see sessions.rs)
+//!   GET /admin/users, GET|PUT|DELETE /admin/users/<email>, GET|PUT /admin/users/<email>/identities
+//! Identity, in steps (docs/c4-identity-plan.md): tokens and keys are identity.rs, sessions are sessions.rs.
+//!   GET /.well-known/jwks.json, GET /api/auth/me          public / with a token
+//!   POST /internal/token, POST /internal/sessions ..., POST /internal/engine-token   WEBX_CONTROL_AUTH_TOKEN (Studio's broker credential)
+//!   GET /engine/users/<email>                               WEBX_CONTROL_ENGINE_TOKEN (read-only)
+//!   webx-control keygen                                     prints a seed for WEBX_CONTROL_SIGNING_KEY
 
 mod assist;
 mod audit;
@@ -36,6 +43,7 @@ mod identity;
 mod jobs;
 mod schedules;
 mod search_stats;
+mod sessions;
 mod visitors;
 mod records;
 mod registry;
@@ -65,10 +73,15 @@ struct App {
     /// --strict-tenants: an unknown tenant key is a 404 (decision D9); otherwise it gets the
     /// first tenant's answer, as Strapi and every engine do today (engine-contract.md, section 2)
     strict: bool,
-    /// signs the tokens issued for signed-in users (decisions D10, D11)
-    key: ed25519_dalek::SigningKey,
-    /// seconds a token lives (--token-ttl, default 900)
-    token_ttl: i64,
+    /// signs the tokens issued for signed-in users, and the key before it while a rotation settles (decisions D10, D11)
+    keys: identity::Keys,
+    /// SHA-256 of the broker credential (WEBX_CONTROL_AUTH_TOKEN), held by Studio alone: it makes tokens and sessions. None: the
+    /// session routes are off, and /internal/token takes the service token as it always did
+    auth: Option<[u8; 32]>,
+    /// SHA-256 of the engines' read-only credential (WEBX_CONTROL_ENGINE_TOKEN); None switches /engine off
+    engine: Option<[u8; 32]>,
+    /// how long tokens and sessions live (--token-ttl, --session-idle, --session-max, --refresh-grace, --engine-token-ttl)
+    sessions: sessions::Config,
     /// per-address limit on the visitors' write routes
     limiter: Mutex<visitors::RateLimiter>,
     /// how many reverse proxies of ours stand in front (WEBX_TRUSTED_PROXIES): which X-Forwarded-For entry may be believed
@@ -125,21 +138,34 @@ fn now_secs() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
-/// GET /.well-known/jwks.json: the public key that verifies tokens
+/// GET /.well-known/jwks.json: the public keys that verify tokens (the current one and, while a rotation settles, the one before).
+/// A verifier may keep the answer five minutes, and fetches again when a token names a `kid` it does not have.
 async fn jwks(State(app): State<Shared>) -> Response {
-    Json(identity::jwks(&app.key.verifying_key())).into_response()
+    ([(header::CACHE_CONTROL, "public, max-age=300")], Json(app.keys.jwks())).into_response()
 }
 
-/// GET /api/auth/me with a user token: who it is, and for which workspaces
+/// GET /api/auth/me with a user token: who it is, in which workspace, and for which. A token whose session has ended, or whose
+/// user was disabled or deleted, is refused here before it expires.
 async fn me(State(app): State<Shared>, headers: HeaderMap) -> Response {
     let Some(t) = headers.get("authorization").and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")) else {
         return error(StatusCode::UNAUTHORIZED, "UnauthorizedError", "Missing or invalid token");
     };
     let conn = app.conn.lock().unwrap();
-    match identity::verify(&conn, &app.key.verifying_key(), t, now_secs()) {
-        Ok(c) => Json(json!({"data": {"email": c["sub"], "name": c["name"], "tenants": c["tenants"], "exp": c["exp"]}})).into_response(),
+    match sessions::verify_access(&conn, &app.keys, t, now_secs()) {
+        Ok(c) => Json(json!({"data": {"email": c["sub"], "name": c["name"], "uid": c["uid"], "tenants": c["tenants"], "superAdmin": c["sa"], "tid": c["tid"], "sid": c["sid"], "role": c["role"], "crole": c["crole"], "mfa": c["mfa"], "amr": c["amr"], "exp": c["exp"]}})).into_response(),
         Err(m) => error(StatusCode::UNAUTHORIZED, "UnauthorizedError", &m),
     }
+}
+
+/// A refusal from the session code, as the broker sees it: the usual error body, and the machine-readable reason in `details`.
+fn refused(r: sessions::Refusal) -> Response {
+    let (status, name) = match r.status {
+        400 => (StatusCode::BAD_REQUEST, "ValidationError"),
+        401 => (StatusCode::UNAUTHORIZED, "UnauthorizedError"),
+        403 => (StatusCode::FORBIDDEN, "ForbiddenError"),
+        _ => (StatusCode::INTERNAL_SERVER_ERROR, "InternalServerError"),
+    };
+    (status, Json(json!({"data": null, "error": {"status": status.as_u16(), "name": name, "message": r.message, "details": {"reason": r.reason}}}))).into_response()
 }
 
 fn query_param(raw: Option<&str>, name: &str) -> Option<String> {
@@ -748,7 +774,8 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
                 Ok(v) => v,
                 Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON"),
             };
-            match identity::upsert(&conn, email, &v, &now_iso()) {
+            // a change that takes something away (disabling, a workspace, a role) also ends the user's sessions
+            match sessions::replace_user(&conn, email, &v, now_secs()) {
                 Ok(created) => {
                     let u = identity::get(&conn, email).ok().flatten().map(|u| u.to_json());
                     (if created { StatusCode::CREATED } else { StatusCode::OK }, Json(json!({"data": u}))).into_response()
@@ -756,14 +783,90 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
                 Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
             }
         }
-        ("DELETE", ["users", email]) => match identity::remove(&conn, email) {
+        ("DELETE", ["users", email]) => match sessions::remove_user(&conn, email, now_secs()) {
+            Ok(true) => Json(json!({"data": null})).into_response(),
+            Ok(false) => not_found(),
+            Err(m) => fail(m),
+        },
+        // how a person signs in: the (provider, subject) pairs that are them. Only an operator can set one for a super admin
+        ("GET", ["users", email, "identities"]) => match identity::get(&conn, email) {
+            Ok(Some(u)) => identities_response(&conn, u.id),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("PUT", ["users", email, "identities"]) => {
+            let v: Value = match serde_json::from_slice(&body) {
+                Ok(v) => v,
+                Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON"),
+            };
+            match sessions::set_identities(&conn, email, &v, now_secs()) {
+                Ok(true) => match identity::get(&conn, email) {
+                    Ok(Some(u)) => identities_response(&conn, u.id),
+                    _ => not_found(),
+                },
+                Ok(false) => not_found(),
+                Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
+            }
+        }
+        // which provider a workspace's people sign in at, and whether a person it vouches for is made on the spot
+        ("GET", ["tenants", key, "identity"]) => match sessions::policy(&conn, key) {
+            Ok(Some(p)) => Json(json!({"data": p.to_json()})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("PUT", ["tenants", key, "identity"]) => {
+            let v: Value = match serde_json::from_slice(&body) {
+                Ok(v) => v,
+                Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON"),
+            };
+            match sessions::put_policy(&conn, key, &v, now_secs()) {
+                Ok(created) => {
+                    let p = sessions::policy(&conn, key).ok().flatten().map(|p| p.to_json());
+                    (if created { StatusCode::CREATED } else { StatusCode::OK }, Json(json!({"data": p}))).into_response()
+                }
+                Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
+            }
+        }
+        ("DELETE", ["tenants", key, "identity"]) => match sessions::delete_policy(&conn, key, now_secs()) {
             Ok(true) => Json(json!({"data": null})).into_response(),
             Ok(false) => not_found(),
             Err(m) => fail(m),
         },
         ("DELETE", ["tenants", key]) => match registry::remove(&conn, key) {
-            Ok(true) => Json(json!({"data": null})).into_response(),
+            Ok(true) => match sessions::workspace_removed(&conn, key, now_secs()) {
+                Ok(()) => Json(json!({"data": null})).into_response(),
+                Err(m) => fail(m),
+            },
             Ok(false) => not_found(),
+            Err(m) => fail(m),
+        },
+        _ => not_found(),
+    }
+}
+
+fn identities_response(conn: &rusqlite::Connection, user_id: i64) -> Response {
+    match sessions::identities_of(conn, user_id) {
+        Ok(l) => Json(json!({"data": l.iter().map(|i| json!({"issuer": i.issuer, "subject": i.subject, "linkedBy": i.linked_by, "createdAt": i.created_at})).collect::<Vec<_>>()})).into_response(),
+        Err(m) => fail(m),
+    }
+}
+
+/// /engine/*, what an engine reads from the control plane with its own credential (WEBX_CONTROL_ENGINE_TOKEN). That credential only
+/// reads: anything but GET and HEAD is refused whatever it carries, so an engine that leaks it leaks no way to write.
+///   GET /engine/users/<email>   {data: {email, name, disabled, superAdmin, memberships: [{tenantKey, role}]}}: who is on a roster
+async fn engine(State(app): State<Shared>, method: Method, headers: HeaderMap, Path(rest): Path<String>) -> Response {
+    if let Err(r) = check_token(app.engine, &headers, "the engine API is off: start with WEBX_CONTROL_ENGINE_TOKEN set") {
+        return r;
+    }
+    if method != Method::GET && method != Method::HEAD {
+        return error(StatusCode::METHOD_NOT_ALLOWED, "MethodNotAllowed", "this credential only reads");
+    }
+    let conn = app.conn.lock().unwrap();
+    let parts: Vec<&str> = rest.trim_end_matches('/').split('/').collect();
+    match parts.as_slice() {
+        ["users", email] => match identity::get(&conn, email) {
+            Ok(Some(u)) => Json(json!({"data": u.to_json()})).into_response(),
+            Ok(None) => not_found(),
             Err(m) => fail(m),
         },
         _ => not_found(),
@@ -860,20 +963,83 @@ fn percent_decode(s: &str) -> String {
 ///   GET  /internal/audit?filter=field:op:value&q=&sort=at:desc&page=&pageSize=
 ///   GET  /internal/audit/<documentId>
 async fn internal(State(app): State<Shared>, method: axum::http::Method, headers: HeaderMap, Path(rest): Path<String>, RawQuery(raw): RawQuery, body: Bytes) -> Response {
-    if let Err(r) = check_token(app.service, &headers, "the internal API is off: start with WEBX_CONTROL_SERVICE_TOKEN set") {
+    let parts: Vec<&str> = rest.trim_end_matches('/').split('/').collect();
+    // What makes a person's token or session needs the broker's own credential, never the service token's (which Strapi, the
+    // workers and the tools also hold). Until WEBX_CONTROL_AUTH_TOKEN is set /internal/token takes the service token, as it
+    // always did, and the session routes are off.
+    let identity_route = matches!(parts.as_slice(), ["token"] | ["engine-token"] | ["sessions", ..] | ["users", _, "revoke"]);
+    let allowed = if identity_route && (app.auth.is_some() || parts[0] != "token") {
+        check_token(app.auth, &headers, "the identity API is off: start with WEBX_CONTROL_AUTH_TOKEN set")
+    } else {
+        check_token(app.service, &headers, "the internal API is off: start with WEBX_CONTROL_SERVICE_TOKEN set")
+    };
+    if let Err(r) = allowed {
         return r;
     }
-    let parts: Vec<&str> = rest.trim_end_matches('/').split('/').collect();
     let conn = app.conn.lock().unwrap();
     let bad = |m: String| error(StatusCode::BAD_REQUEST, "ValidationError", &m);
     match (method.as_str(), parts.as_slice()) {
-        // Studio has just signed a user in (OIDC); this issues the token engines and Studio verify
+        // Studio has just signed a user in (OIDC); this issues a token for them, tied to no session. A sign-in that
+        // should be one the person can end uses POST /internal/sessions below
         ("POST", ["token"]) => {
             let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
             let Some(email) = v.get("email").and_then(Value::as_str) else { return bad("email is required".into()) };
-            match identity::issue(&conn, &app.key, email, v.get("tenantKey").and_then(Value::as_str), app.token_ttl, now_secs()) {
+            match identity::issue(&conn, &app.keys, email, v.get("tenantKey").and_then(Value::as_str), app.sessions.access_secs, now_secs()) {
                 Ok((token, exp)) => Json(json!({"data": {"token": token, "expiresAt": exp}})).into_response(),
                 Err(m) => error(StatusCode::FORBIDDEN, "ForbiddenError", &m),
+            }
+        }
+        // sign a person in, from what the provider said: {issuer, subject, email, emailVerified, amr?, ip?, userAgent?, tenantKey}
+        ("POST", ["sessions"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let req = match sessions::SignIn::from_json(&v) { Ok(r) => r, Err(r) => return refused(r) };
+            match sessions::sign_in(&conn, &app.keys, &app.sessions, &req, now_secs()) {
+                Ok(j) => (StatusCode::CREATED, Json(json!({"data": j}))).into_response(),
+                Err(r) => refused(r),
+            }
+        }
+        // {refreshToken}: a new access token and refresh token (the old refresh token works a few seconds more)
+        ("POST", ["sessions", "refresh"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let Some(t) = v.get("refreshToken").and_then(Value::as_str) else { return bad("refreshToken is required".into()) };
+            match sessions::refresh(&conn, &app.keys, &app.sessions, t, now_secs()) {
+                Ok(j) => Json(json!({"data": j})).into_response(),
+                Err(r) => refused(r),
+            }
+        }
+        // {tenantKey}: move the session to another workspace of the same provider; a new access token
+        ("POST", ["sessions", id, "switch"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let Some(t) = v.get("tenantKey").and_then(Value::as_str) else { return bad("tenantKey is required".into()) };
+            match sessions::switch(&conn, &app.keys, &app.sessions, id, t, now_secs()) {
+                Ok(j) => Json(json!({"data": j})).into_response(),
+                Err(r) => refused(r),
+            }
+        }
+        // is the session good (Studio keeps the answer a few seconds), and the person logging out
+        ("GET", ["sessions", id]) => match sessions::status(&conn, id, now_secs()) {
+            Ok(Some(j)) => Json(json!({"data": j})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("DELETE", ["sessions", id]) => match sessions::logout(&conn, id, now_secs()) {
+            Ok(true) => Json(json!({"data": null})).into_response(),
+            Ok(false) => not_found(),
+            Err(m) => fail(m),
+        },
+        // sign a user out everywhere
+        ("POST", ["users", email, "revoke"]) => match sessions::revoke_user(&conn, email, now_secs()) {
+            Ok(Some(n)) => Json(json!({"data": {"revoked": n}})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        // the 60-second token an engine verifies: {sessionId, tenantKey?} for a person, {purpose: "job", ownerEmail, tenantKey, jobId} for a job
+        ("POST", ["engine-token"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let req = match sessions::EngineRequest::from_json(&v) { Ok(r) => r, Err(r) => return refused(r) };
+            match sessions::engine_token(&conn, &app.keys, &app.sessions, &req, now_secs()) {
+                Ok(j) => Json(json!({"data": j})).into_response(),
+                Err(r) => refused(r),
             }
         }
         ("POST", ["audit"]) => {
@@ -1219,9 +1385,23 @@ fn arg(name: &str, default: &str) -> String {
     args.iter().position(|a| a == &format!("--{name}")).and_then(|i| args.get(i + 1).cloned()).unwrap_or_else(|| default.to_string())
 }
 
+fn env_nonempty(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|t| !t.trim().is_empty())
+}
+
+/// A positive whole number from a flag, or the reason the service will not start.
+fn seconds_arg(name: &str, default: &str) -> i64 {
+    arg(name, default).parse::<i64>().ok().filter(|n| *n > 0).unwrap_or_else(|| panic!("--{name} must be a whole number of seconds, more than 0"))
+}
+
 #[tokio::main]
 async fn main() {
     let db = arg("db", "control.db");
+    if std::env::args().nth(1).as_deref() == Some("keygen") {
+        // a seed for WEBX_CONTROL_SIGNING_KEY: 32 random bytes, base64
+        println!("{}", identity::new_seed().unwrap_or_else(|e| panic!("{e}")));
+        return;
+    }
     if std::env::args().nth(1).as_deref() == Some("import") {
         let path = arg("snapshot", "../rust-engine/snapshot/snapshot.json");
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
@@ -1237,21 +1417,52 @@ async fn main() {
     conn.execute_batch(records::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(identity::DDL).unwrap_or_else(|e| panic!("{e}"));
     identity::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(sessions::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(schedules::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(search_stats::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(files::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(outbox::DDL).unwrap_or_else(|e| panic!("{e}"));
-    let key = identity::signing_key(&conn, std::env::var("WEBX_CONTROL_SIGNING_KEY").ok().as_deref()).unwrap_or_else(|e| panic!("{e}"));
-    let admin_hash = std::env::var("WEBX_CONTROL_ADMIN_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
-    let service_hash = std::env::var("WEBX_CONTROL_SERVICE_TOKEN").ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
+    let keys = identity::Keys::load(&conn, env_nonempty("WEBX_CONTROL_SIGNING_KEY").as_deref(), env_nonempty("WEBX_CONTROL_SIGNING_KEY_PREVIOUS").as_deref()).unwrap_or_else(|e| panic!("{e}"));
+    let token_hash = |name: &str| std::env::var(name).ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
+    let admin_hash = token_hash("WEBX_CONTROL_ADMIN_TOKEN");
+    let service_hash = token_hash("WEBX_CONTROL_SERVICE_TOKEN");
+    let auth_hash = token_hash("WEBX_CONTROL_AUTH_TOKEN");
+    let engine_hash = token_hash("WEBX_CONTROL_ENGINE_TOKEN");
+    // the point of separate credentials is that holding one is not holding another: the two new ones may not repeat an existing one
+    for (name, h) in [("WEBX_CONTROL_AUTH_TOKEN", auth_hash), ("WEBX_CONTROL_ENGINE_TOKEN", engine_hash)] {
+        for (other, o) in [("WEBX_CONTROL_SERVICE_TOKEN", service_hash), ("WEBX_CONTROL_ADMIN_TOKEN", admin_hash), ("WEBX_CONTROL_AUTH_TOKEN", auth_hash), ("WEBX_CONTROL_ENGINE_TOKEN", engine_hash)] {
+            if name != other && h.is_some() && h == o {
+                panic!("{name} must not be the same value as {other}: each credential opens something different");
+            }
+        }
+    }
+    let session_config = sessions::Config {
+        access_secs: seconds_arg("token-ttl", "900"),
+        idle_secs: seconds_arg("session-idle", "28800"),
+        absolute_secs: seconds_arg("session-max", "86400"),
+        grace_secs: seconds_arg("refresh-grace", "20"),
+        engine_secs: seconds_arg("engine-token-ttl", "60"),
+    };
     let n = registry::list(&conn).map(|l| l.len()).unwrap_or(0);
     let pii = std::env::var("WEBX_PII_KEY").ok().filter(|k| !k.trim().is_empty()).map(|k| pii::Pii::from_base64(&k).unwrap_or_else(|e| panic!("WEBX_PII_KEY: {e}")));
     let pii_on = pii.is_some();
     let mailer = mailer::Mailer::from_env().unwrap_or_else(|e| panic!("{e}"));
     let mail_on = mailer.is_some();
-    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), key, token_ttl: arg("token-ttl", "900").parse().expect("--token-ttl"), limiter: Default::default(), proxies: std::env::var("WEBX_TRUSTED_PROXIES").ok().filter(|v| !v.trim().is_empty()).map_or(1, |v| v.trim().parse().unwrap_or_else(|_| panic!("WEBX_TRUSTED_PROXIES must be a number (0 when no proxy is in front)"))), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), keys, auth: auth_hash, engine: engine_hash, sessions: session_config, limiter: Default::default(), proxies: std::env::var("WEBX_TRUSTED_PROXIES").ok().filter(|v| !v.trim().is_empty()).map_or(1, |v| v.trim().parse().unwrap_or_else(|_| panic!("WEBX_TRUSTED_PROXIES must be a number (0 when no proxy is in front)"))), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
     let state_for_log = state.clone();
+    {
+        let k = &state.keys;
+        let kids = k.kids();
+        eprintln!(
+            "[webx-control] identity: signing key {} ({}), previous key {}; sessions and tokens for Studio {}; engine API {}",
+            kids[0],
+            k.current_from,
+            match (kids.get(1), k.previous_from) { (Some(kid), Some(from)) => format!("{kid} ({from}), still believed until it is unset"), _ => "none".to_string() },
+            if auth_hash.is_some() { "on" } else { "off: set WEBX_CONTROL_AUTH_TOKEN" },
+            if engine_hash.is_some() { "on" } else { "off: set WEBX_CONTROL_ENGINE_TOKEN" },
+        );
+    }
     let app = Router::new()
         .route("/_health", get(|State(app): State<Shared>| async move { Json(json!({"ok": true, "service": "webx-control", "served": app.served.load(std::sync::atomic::Ordering::Relaxed)})) }))
         .route("/api/tenants/:what", get(public))
@@ -1274,6 +1485,7 @@ async fn main() {
         .route("/.well-known/jwks.json", get(jwks))
         .route("/api/auth/me", get(me))
         .route("/admin/*rest", any(admin))
+        .route("/engine/*rest", any(engine))
         .route("/internal/*rest", any(internal).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         .fallback(|| async { not_found() })
         .with_state(state.clone())

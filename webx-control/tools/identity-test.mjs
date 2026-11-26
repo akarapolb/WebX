@@ -8,7 +8,7 @@
 //
 // Needs the release build.
 import { spawn } from "node:child_process";
-import { createPublicKey, verify } from "node:crypto";
+import { createPublicKey, randomBytes, verify } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -32,8 +32,8 @@ const call = async (method, path, token, body) => {
   return { status: r.status, json: j };
 };
 let server;
-async function up(args = []) {
-  server = spawn(exe, ["--port", PORT, "--db", db, ...args], { env: { ...process.env, WEBX_CONTROL_ADMIN_TOKEN: ADMIN, WEBX_CONTROL_SERVICE_TOKEN: SERVICE }, stdio: ["ignore", "ignore", "inherit"] });
+async function up(args = [], env = {}) {
+  server = spawn(exe, ["--port", PORT, "--db", db, ...args], { env: { ...process.env, WEBX_CONTROL_ADMIN_TOKEN: ADMIN, WEBX_CONTROL_SERVICE_TOKEN: SERVICE, ...env }, stdio: ["ignore", "ignore", "inherit"] });
   server.done = new Promise((ok) => server.on("exit", ok));
   for (let n = 0; ; n++) {
     try { if ((await fetch(`${BASE}/_health`)).ok) return; } catch {}
@@ -44,16 +44,21 @@ async function up(args = []) {
 const down = async () => { server.kill("SIGTERM"); await server.done; };
 const b64 = (s) => Buffer.from(s, "base64url");
 
-/** what an engine does: fetch the key set, check the signature and expiry, read the claims */
-async function engineVerifies(token) {
-  const jwk = (await (await fetch(`${BASE}/.well-known/jwks.json`)).json()).keys[0];
+/** what an engine does: fetch the key set, take the key the token names (`kid`), check the signature, issuer, audience and
+ * the times, read the claims. A token that names a key the set does not have is refused, not tried against the others. */
+async function engineVerifies(token, aud = "webx-studio") {
+  const keys = (await (await fetch(`${BASE}/.well-known/jwks.json`)).json()).keys;
   const [h, c, s] = token.split(".");
   const header = JSON.parse(b64(h).toString());
-  if (header.alg !== "EdDSA" || header.kid !== jwk.kid) return null;
+  const jwk = keys.find((k) => k.kid === header.kid);
+  if (header.alg !== "EdDSA" || !jwk) return null;
   const ok = verify(null, Buffer.from(`${h}.${c}`), createPublicKey({ key: jwk, format: "jwk" }), b64(s));
   const claims = JSON.parse(b64(c).toString());
-  return ok && claims.exp > Date.now() / 1000 ? claims : null;
+  const now = Date.now() / 1000;
+  return ok && claims.iss === "webx-control" && claims.aud === aud && claims.exp > now && claims.nbf <= now ? claims : null;
 }
+const kidOf = (token) => JSON.parse(b64(token.split(".")[0]).toString()).kid;
+const keysNow = async () => (await (await fetch(`${BASE}/.well-known/jwks.json`)).json()).keys;
 
 try {
   await up(["--token-ttl", "2"]);
@@ -105,6 +110,44 @@ try {
   await up();
   check("a token issued before a restart verifies after it", (await call("GET", "/api/auth/me", fresh)).status === 200);
   check("delete a user", (await call("DELETE", "/admin/users/ann@example.org", ADMIN)).status === 200 && (await call("GET", "/api/auth/me", fresh)).status === 401);
+
+  // ---- token version 2: every claim, and a verifier that is strict about the rest
+  await put("ann@example.org", { name: "Ann", memberships: [{ tenantKey: "dga", role: "editor" }, { tenantKey: "pea", role: "viewer" }] });
+  const v2 = (await call("POST", "/internal/token", SERVICE, { email: "ann@example.org", tenantKey: "dga" })).json.data.token;
+  const c2 = await engineVerifies(v2);
+  check("the token has aud, uid, tid, role, crole, sa, mfa, amr, sid, nbf and jti next to what it had",
+    c2 && c2.aud === "webx-studio" && typeof c2.uid === "string" && c2.tid === "dga" && c2.role === "editor" && c2.crole === null && c2.sa === false && c2.superAdmin === false && c2.mfa === false && Array.isArray(c2.amr) && c2.sid === null && c2.nbf === c2.iat && typeof c2.jti === "string"
+    && c2.tenants.length === 1 && c2.exp - c2.iat === 900 /* the default, after the restarts above */);
+  check("/api/auth/me says superAdmin, tid and sid too", await (async () => { const m = await call("GET", "/api/auth/me", v2); return m.status === 200 && m.json.data.superAdmin === false && m.json.data.tid === "dga" && m.json.data.sid === null && m.json.data.role === "editor"; })());
+  const [vh, vc] = v2.split(".");
+  const header = JSON.parse(b64(vh).toString());
+  const forged = (h, sig = "") => `${Buffer.from(JSON.stringify(h)).toString("base64url")}.${vc}.${sig}`;
+  check("alg none, a wrong kid and a missing kid are refused at /api/auth/me", (await call("GET", "/api/auth/me", forged({ ...header, alg: "none" }))).status === 401
+    && (await call("GET", "/api/auth/me", forged({ ...header, kid: "AAAAAAAAAAA" }, v2.split(".")[2]))).status === 401
+    && (await call("GET", "/api/auth/me", forged({ alg: "EdDSA", typ: "JWT" }, v2.split(".")[2]))).status === 401);
+
+  // ---- the broker credential: once it is set it alone makes tokens (the service token is also held by Strapi, the workers and the tools)
+  const AUTH = "identity-broker-token", KEY_A = randomBytes(32).toString("base64"), KEY_B = randomBytes(32).toString("base64");
+  await down();
+  await up([], { WEBX_CONTROL_AUTH_TOKEN: AUTH, WEBX_CONTROL_SIGNING_KEY: KEY_A });
+  check("with it set, the service token no longer makes tokens, and neither does the admin token", (await call("POST", "/internal/token", SERVICE, { email: "ann@example.org" })).status === 401 && (await call("POST", "/internal/token", ADMIN, { email: "ann@example.org" })).status === 401);
+  check("the broker credential does", (await call("POST", "/internal/token", AUTH, { email: "ann@example.org", tenantKey: "dga" })).status === 200);
+  check("and does not open the rest of /internal", (await call("GET", "/internal/audit", AUTH)).status === 401 && (await call("GET", "/internal/audit", SERVICE)).status === 200);
+  const old = (await call("POST", "/internal/token", AUTH, { email: "ann@example.org", tenantKey: "dga" })).json.data.token;
+  const kidA = kidOf(old);
+  check("a token from the key in the environment verifies by its kid", (await engineVerifies(old)) !== null && (await keysNow()).length === 1);
+
+  // ---- two keys: a rotation, then the old key retired
+  await down();
+  await up([], { WEBX_CONTROL_AUTH_TOKEN: AUTH, WEBX_CONTROL_SIGNING_KEY: KEY_B, WEBX_CONTROL_SIGNING_KEY_PREVIOUS: KEY_A });
+  const two = await keysNow();
+  check("with a previous key the key set has two, the new one first", two.length === 2 && two[1].kid === kidA && two[0].kid !== kidA);
+  const fresh2 = (await call("POST", "/internal/token", AUTH, { email: "ann@example.org", tenantKey: "dga" })).json.data.token;
+  check("a verifier picks the key by kid: the old token and the new both verify", (await engineVerifies(old)) !== null && (await engineVerifies(fresh2)) !== null && kidOf(fresh2) === two[0].kid);
+  check("so does /api/auth/me", (await call("GET", "/api/auth/me", old)).status === 200 && (await call("GET", "/api/auth/me", fresh2)).status === 200);
+  await down();
+  await up([], { WEBX_CONTROL_AUTH_TOKEN: AUTH, WEBX_CONTROL_SIGNING_KEY: KEY_B });
+  check("with the old key dropped its tokens are refused, the new ones are not", (await engineVerifies(old)) === null && (await call("GET", "/api/auth/me", old)).status === 401 && (await engineVerifies(fresh2)) !== null && (await call("GET", "/api/auth/me", fresh2)).status === 200);
 } catch (e) {
   console.error(e);
   failures++;

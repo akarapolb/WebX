@@ -145,6 +145,9 @@ jobs:
       # C4: users, memberships and signed tokens an engine can verify
       - name: Identity in webx-control
         run: node webx-control/tools/identity-test.mjs
+      # C4 step 2: sessions, refresh rotation, revocation, the engine token, the separate credentials and a key rotation
+      - name: Sessions in webx-control
+        run: node webx-control/tools/sessions-test.mjs
       # C5: the job queue, and the worker with the real queue (mock model and Studio gateway)
       - name: Job queue in webx-control
         run: node webx-control/tools/jobs-test.mjs

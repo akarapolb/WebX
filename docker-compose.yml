@@ -472,7 +472,14 @@ services:
     environment:
       WEBX_CONTROL_SERVICE_TOKEN: ${WEBX_CONTROL_SERVICE_TOKEN:?set WEBX_CONTROL_SERVICE_TOKEN}
       WEBX_CONTROL_ADMIN_TOKEN: ${WEBX_CONTROL_ADMIN_TOKEN:-}
+      # identity (docs/c4-identity-plan.md, steps 1 and 2; nothing calls these yet). AUTH is Studio's alone and makes people's
+      # tokens and sessions, ENGINE is the engines' read-only credential; each must differ from every other token. SIGNING_KEY
+      # (make one with `webx-control keygen`) belongs in the environment in production; SIGNING_KEY_PREVIOUS is set only while a
+      # key rotation settles (see webx-control/README.md, Identity)
+      WEBX_CONTROL_AUTH_TOKEN: ${WEBX_CONTROL_AUTH_TOKEN:-}
+      WEBX_CONTROL_ENGINE_TOKEN: ${WEBX_CONTROL_ENGINE_TOKEN:-}
       WEBX_CONTROL_SIGNING_KEY: ${WEBX_CONTROL_SIGNING_KEY:-}
+      WEBX_CONTROL_SIGNING_KEY_PREVIOUS: ${WEBX_CONTROL_SIGNING_KEY_PREVIOUS:-}
       # the SAME value as strapi's PII_ENCRYPTION_KEY, so rows and files move between the two without re-encryption
       WEBX_PII_KEY: ${PII_ENCRYPTION_KEY:?set PII_ENCRYPTION_KEY}
       WEBX_PUBLIC_SITE_ORIGINS: ${WEBX_PUBLIC_SITE_ORIGINS:-}

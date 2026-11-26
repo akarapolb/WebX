@@ -48,13 +48,19 @@ public-site's `PUBLIC_CONTROL_URL` when that is set (it is a visitors' route, be
 
 Flags: `--db control.db` (the SQLite file), `--port 1400`, `--host 127.0.0.1` (the address it listens on: loopback unless told
 otherwise, so give `0.0.0.0` in a container or when a proxy on another host reaches it), `--strict-tenants` (decision D9),
-`--token-ttl 900` (seconds a signed-in user's token lives). Everything else is an environment variable:
+`--token-ttl 900` (seconds a signed-in user's token lives), and for sessions `--session-idle 28800` (a session nobody refreshed for this long
+ends), `--session-max 86400` (a session ends this long after it began, however busy), `--refresh-grace 20` (the refresh token that was just
+replaced still works this long) and `--engine-token-ttl 60` (an engine's acting token). `webx-control keygen` prints a fresh signing key.
+Everything else is an environment variable:
 
 | Variable | What it does | Without it |
 |---|---|---|
 | `WEBX_CONTROL_SERVICE_TOKEN` | the bearer token of `/internal/*`: Studio, Strapi's dashboards, the workers and the migration tools | the internal API is off (503) |
 | `WEBX_CONTROL_ADMIN_TOKEN` | the bearer token of `/admin/*` (tenants, users) | the admin API is off (503) |
-| `WEBX_CONTROL_SIGNING_KEY` | base64 of 32 bytes: the key sign-in tokens are signed with | one is made and kept in the database |
+| `WEBX_CONTROL_AUTH_TOKEN` | the **broker credential**, held by Studio alone: the only thing that makes a person's token or session (`/internal/token`, `/internal/sessions`, `/internal/engine-token`). Must differ from every other token here | `/internal/token` takes the service token as it always did; the session routes are off (503) |
+| `WEBX_CONTROL_ENGINE_TOKEN` | the engines' **read-only** credential for `/engine/*`: it can read, and any write is refused whatever it carries. Must differ from every other token here | `/engine/*` is off (503) |
+| `WEBX_CONTROL_SIGNING_KEY` | base64 of 32 bytes: the key sign-in tokens are signed with. Set it in production: a key kept in the database is as exposed as the database file | one is made and kept in the database |
+| `WEBX_CONTROL_SIGNING_KEY_PREVIOUS` | during a key rotation: the seed of the key being retired (or the word `database`, for the key stored in the database), still believed for the tokens it made. Only its public half is kept | no previous key |
 | `WEBX_PII_KEY` | base64 of 32 bytes, the **same value as Strapi's `PII_ENCRYPTION_KEY`**: personal data and files are encrypted with it | the form routes and form collections answer 503 |
 | `WEBX_PUBLIC_SITE_ORIGINS` | comma-separated origins of the public sites (or `*`) allowed to call the visitors' routes from a browser | only the local development origins |
 | `WEBX_TRUSTED_PROXIES` | how many reverse proxies of yours stand in front: the per-address limits use the `X-Forwarded-For` entry the outermost of them added (that many places from the right), never an entry to its left, which the caller writes. `0` when the service is reachable directly: the header is ignored and the connecting address counts | `1` |
@@ -301,31 +307,94 @@ holding back its entry's publish) or release (a scheduled one would never run). 
 workspace's rows (`/api/tenants/keys`); one no workspace reaches (made before rows were stamped) is reported and left in Strapi, or filed under `--default-tenant`.
 `node tools/migrate-records-test.mjs` runs it against the real binary and a fake Strapi.
 
-## Identity (C4, first part)
+## Identity (C4, steps 1 and 2)
 
-Decisions D10 and D11. webx-control holds **users** and their **memberships** (workspace and role) and issues the
-**tokens** that prove them. It stores no passwords: people sign in at an OIDC provider (Studio does the OIDC step
-today), and Studio then asks for a token here.
+Decisions D10 and D11; the plan is `../docs/c4-identity-plan.md`. webx-control holds **users** and their **memberships**
+(workspace and role), the **sessions** of the people signed in, and issues the **tokens** that prove them. It stores no
+passwords: people sign in at their workspace's OIDC provider, Studio completes that exchange and hands control what the provider
+said, and control decides. **Nothing calls any of this yet** (Studio's session switch is step 6): with the credentials below
+unset, every route behaves as it did before.
+
+### Credentials
+
+| Credential | Held by | Opens |
+|---|---|---|
+| `WEBX_CONTROL_ADMIN_TOKEN` | operators | `/admin/*` |
+| `WEBX_CONTROL_SERVICE_TOKEN` | Studio, Strapi's dashboards, the workers, the tools | the rest of `/internal/*` (audit, records, forms, jobs, ...) |
+| `WEBX_CONTROL_AUTH_TOKEN` (the broker credential) | Studio only | `/internal/token`, `/internal/sessions...`, `/internal/engine-token`, `/internal/users/<email>/revoke` |
+| `WEBX_CONTROL_ENGINE_TOKEN` | the engines | `GET /engine/*`, read-only |
+
+The service token is held in many places and can read personal data, so it must not also be the key that makes anyone's session: once
+`WEBX_CONTROL_AUTH_TOKEN` is set, the service token no longer makes tokens (401), and the broker credential reads no audit rows,
+records or jobs. The service refuses to start if a new credential has the same value as another one.
+
+### Users, workspaces and sign-in identities (admin API)
 
 | Call | Meaning |
 |---|---|
-| `PUT /admin/users/<email>` body `{name?, disabled?, superAdmin?, memberships: [{tenantKey, role}]}` | create (201) or replace (200); email is kept lowercase; `superAdmin` marks a user tied to no workspace (Studio's unscoped admin), who may be issued a token for any workspace |
-| `GET /admin/users`, `GET`, `DELETE /admin/users/<email>` | the users |
-| `POST /internal/token` body `{email, tenantKey?}` (service token) | a signed token for a known, enabled user; with `tenantKey` only for that workspace, which they must belong to; 403 otherwise |
-| `GET /.well-known/jwks.json` | the public key (Ed25519) engines and Studio verify tokens with |
-| `GET /api/auth/me` with `Authorization: Bearer <token>` | who the token is for; 401 if it is bad, expired, or the user was disabled or deleted |
+| `PUT /admin/users/<email>` body `{name?, disabled?, superAdmin?, memberships: [{tenantKey, role}]}` | create (201) or replace (200); email is kept lowercase; `superAdmin` marks a user tied to no workspace (Studio's unscoped admin). A change that takes something away (disabling, a workspace, a role, the super admin flag either way) ends the user's sessions; adding a workspace or changing the name does not |
+| `GET /admin/users`, `GET /admin/users/<email>`, `DELETE /admin/users/<email>` | the users; deleting ends their sessions (the audit rows stay) |
+| `PUT /admin/tenants/<key>/identity` body `{issuer, allowJit?, jitRole?, requireVerifiedEmail?}` | the OIDC provider a workspace's people sign in at (an `https` URL, matched exactly; `http` only for a provider on this machine). `allowJit` lets a person the provider vouches for be made on the spot with `jitRole` (needed with it; off by default). The e-mail must be verified by the provider unless `requireVerifiedEmail` is false. Changing the provider ends the sessions made with the old one |
+| `GET`, `DELETE /admin/tenants/<key>/identity` | read, or stop accepting sign-ins for the workspace (its people's sessions end) |
+| `GET /admin/users/<email>/identities`, `PUT` body `{identities: [{issuer, subject}]}` | how a person signs in: the (provider, subject) pairs that are them, one per provider. `PUT` replaces the list, and is the only way a **super admin** gets one: no workspace's provider can vouch for a super admin, so they sign in only through an identity an operator linked. Anything removed or changed ends the user's sessions |
 
-A token is a JWT signed with EdDSA: `iss` `webx-control`, `sub` the email, `tenants` `[{key, role}]`, `exp`. It lives
-15 minutes (`--token-ttl <seconds>`). Disabling a user cuts them off at once at `/api/auth/me`; an engine that checks
-only the signature honours a token until it expires, so engines that need instant revocation call `/api/auth/me`.
-The signing key is made on first start and kept in the database; set `WEBX_CONTROL_SIGNING_KEY` (base64, 32 bytes)
-to use your own, for example one shared by several instances. `node tools/identity-test.mjs` checks all of this on
-the real binary, verifying the tokens with Node's own crypto and the published key. `node tools/migrate-users.mjs [--dry-run]` copies Strapi's admin users (name, active flag, workspaces from each
-tenant's `adminEmails`, role as a slug; a super admin on no tenant becomes `superAdmin`) with their admin API; its mapping
-is unit-tested (`node --test tools/users-map.test.mjs`). Not done yet, and the larger part of C4: Studio's session
-trusting these tokens instead of Strapi's (with engines called by a service credential plus the acting editor), the
-OIDC provider settings per workspace, MFA here, engines verifying tokens, custom-role assignments in the migration,
-and the security review D10 and the plan require before it ships.
+### Sign-in and sessions (broker credential)
+
+| Call | Meaning |
+|---|---|
+| `POST /internal/sessions` body `{issuer, subject, email, emailVerified, tenantKey, amr?, ip?, userAgent?}` | sign a person in. 201 with `{sessionId, accessToken, accessExpiresAt, refreshToken, idleExpiresAt, absoluteExpiresAt}`, or 403 with `error.details.reason`: `issuer_mismatch` (not the workspace's own provider), `workspace_not_configured`, `email_not_verified`, `unknown_user` (nobody made on the spot), `not_a_member`, `user_disabled`, `subject_changed` (that e-mail already signs in at this provider as someone else; an operator relinks it), `super_admin_needs_operator_link`. The first sign-in of a (provider, subject) links it to the member with that e-mail; after that the e-mail is not consulted |
+| `POST /internal/sessions/refresh` body `{refreshToken}` | a new access token and a new refresh token. The one just replaced still works for `--refresh-grace` seconds and gets an access token only (two tabs, two replicas); shown again after that it was copied, and the whole session ends (`refresh_reuse`). A wrong secret is a 401 and ends nothing |
+| `POST /internal/sessions/<id>/switch` body `{tenantKey}` | move the session to another workspace the person belongs to **and whose provider is the one the session was made with** (a super admin may go anywhere); a new access token |
+| `GET /internal/sessions/<id>` | `{active, reason, tenantKey, ...}` for the revocation check Studio keeps for a few seconds; 404 if unknown |
+| `DELETE /internal/sessions/<id>` | logout (idempotent) |
+| `POST /internal/users/<email>/revoke` | sign a user out everywhere |
+| `POST /internal/engine-token` body `{sessionId, tenantKey?}` or `{purpose: "job", ownerEmail, tenantKey, jobId}` | the 60-second token (`aud` `engine`) an engine verifies: it names the person, the one workspace and the role. Needs a live session whose active workspace is the one named, or a job whose owner is still enabled and a member (the job is written to the audit table, refusals too) |
+
+Sessions end after `--session-idle` seconds without a refresh and `--session-max` seconds in all, and at once on logout, on a user's
+disabling or deletion, on a membership or role being taken away, on a changed sign-in identity or workspace provider, and on
+`refresh_reuse`. Every one of these, and every sign-in and refusal, is a row in the audit table (`sign_in`, `sign_in_refused`,
+`identity_linked`, `user_provisioned`, `refresh_reuse`, `logout`, `revoke`, `session_switch`, `engine_token_job`,
+`engine_token_refused`), each carrying the session id; the access token of an ended session is refused at `/api/auth/me` at once.
+
+### Tokens and keys
+
+| Call | Meaning |
+|---|---|
+| `POST /internal/token` body `{email, tenantKey?}` (broker credential; the service token until `WEBX_CONTROL_AUTH_TOKEN` is set) | a signed token for a known, enabled user, tied to no session; with `tenantKey` only for that workspace, which they must belong to (a super admin needs no membership); 403 otherwise |
+| `GET /.well-known/jwks.json` | the public keys (Ed25519): the current one and, during a rotation, the previous one. `Cache-Control: max-age=300` |
+| `GET /api/auth/me` with `Authorization: Bearer <token>` | who the token is for (`email, uid, tenants, superAdmin, tid, sid, role, crole, mfa, amr, exp`); 401 if it is bad, expired, its session has ended, or the user was disabled or deleted |
+| `GET /engine/users/<email>` (engine credential) | who is on a roster: `{email, name, disabled, superAdmin, memberships}`; the only thing it opens so far |
+
+A token is a JWT signed with EdDSA, header `{alg, typ, kid}`. Claims: `iss` `webx-control`; `aud` `webx-studio` (a person's session) or
+`engine` (the 60-second token); `sub` the e-mail and `uid` the user's stable id (a user deleted and made again is a different `uid`, so
+inherits nothing); `sid` the session (null for `/internal/token`); `tid` the one workspace it acts in and `role` the role there (null
+without); `crole` the custom role (null until C4 step 3); `sa` and `superAdmin` (a super admin); `mfa` (control considers the session
+multi-factor: always false until C4 step 4) and `amr` (what the sign-in used, as the provider said: informational, decide on `mfa`);
+`tenants` `[{key, role}]`; `iat`, `nbf`, `exp`, `jti`. A job's token adds `purpose` `job` and `job`.
+
+**A verifier** (Studio, an engine) takes the key named by `kid` from the key set it fetched, and refuses a token whose `alg` is not
+`EdDSA`, that names no key it has, whose signature, `iss` or `aud` is wrong, that is not valid yet (`nbf`) or has expired (`exp`), or that
+lacks any claim above. It may keep the key set five minutes, fetches it again (at most once a minute) when a token names a `kid` it
+does not have, and allows 30 seconds of clock difference. `/api/auth/me` and the tools here allow none. An engine that checks only the
+signature honours a token until it expires (at most 60 seconds for an engine token); revocation takes effect through short lives.
+
+**Rotating the signing key.** `webx-control keygen` prints a seed. (1) Put the new seed in `WEBX_CONTROL_SIGNING_KEY` and the old
+one in `WEBX_CONTROL_SIGNING_KEY_PREVIOUS` (`database` if the old key was the one control made and kept in its database), restart:
+the key set now lists both, new tokens are signed with the new key, old ones still verify. (2) Wait at least the longest token life
+(15 minutes, plus the five a verifier may cache the key set), unset `WEBX_CONTROL_SIGNING_KEY_PREVIOUS`, restart: the old key is
+refused. **If a key leaks, skip the wait**: set a new `WEBX_CONTROL_SIGNING_KEY`, leave `..._PREVIOUS` unset, restart. Every
+outstanding access token dies, and people are not signed out: a refresh token is an opaque value kept in the database, so the next
+refresh signs a new token with the new key. A key that control made and kept in its database stays in the file after you move to a
+key from the environment: remove it (`sqlite3 control.db "DELETE FROM signing_key"`, with the service stopped) once nothing needs the
+word `database` any more, and in any case when the database file itself may have been read.
+
+`node tools/identity-test.mjs` and `node tools/sessions-test.mjs` check all of this on the real binary, verifying the tokens with
+Node's own crypto and the published keys chosen by `kid`. `node tools/migrate-users.mjs [--dry-run]` copies Strapi's admin users (name,
+active flag, workspaces from each tenant's `adminEmails`, role as a slug; a super admin on no tenant becomes `superAdmin`) with their
+admin API; its mapping is unit-tested (`node --test tools/users-map.test.mjs`). **Not done yet, and the larger part of C4:** a workspace's
+provider settings beyond the issuer (client, secret, `mode`), the role catalogue and custom-role assignments (step 3); MFA here (step 4);
+Studio's session trusting these tokens, with engines called by a service credential plus the acting editor (steps 5 to 7); engines
+verifying them (steps 8 and 9); and the security review D10 and the plan require before any workspace switches.
 
 ## Job queue (C5)
 

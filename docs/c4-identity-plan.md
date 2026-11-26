@@ -1,7 +1,8 @@
 # C4 identity: plan for review
 
-Status: plan only, written 2026-11-25; nothing in it is built. A Studio session switch is security-critical
-(`docs/target-architecture.md`, Risks), so no step that changes who can sign in to Studio starts before this plan is
+Status: written 2026-11-25. Step 0 (fixes that change who can sign in nowhere) was built on 2026-11-25, and steps 1 and 2 (token v2, keys,
+credentials, sessions, in `webx-control` only, switched off, nothing calling them) on 2026-11-26; steps 3 and up are not started. A Studio session
+switch is security-critical (`docs/target-architecture.md`, Risks), so no step that changes who can sign in to Studio starts before this plan is
 reviewed. D10 (users, roles and OIDC sign-in in webx-control, no passwords) and D11 (a short-lived signed token that Studio
 and every engine verify with a public key) are taken as given; D16 to D23 at the end are what is left open.
 
@@ -272,6 +273,30 @@ About 33 working days, against 10 to 15 in the C4 row of `docs/target-architectu
   a rotated key still verifying, a retired key refused. Extend `tools/identity-test.mjs` (engine-style verify by `kid` with two
   keys, broker credential required). Rollback: previous binary; tokens last 15 min.
 
+**Step 1 status, 2026-11-26: built and tested on the real binary; nothing calls it, and no existing route changes unless a new variable is set.**
+What was built (`webx-control/src/identity.rs`, `main.rs`), and where it differs from the list:
+- Claims: `aud uid sid tid role crole sa mfa amr nbf jti` next to `tenants` and `superAdmin`, every one always present (null when it has no
+  value). `uid` is the user's id as a string; a user deleted and made again has another one, so `verify` finds the user by `uid` and
+  compares the e-mail, and a new user of the same address inherits no token. `mfa` is a boolean that means "control considers this session
+  multi-factor" (always false until step 4); `amr` is what the sign-in used as the provider said, informational. `crole` is null until step 3.
+  A token made by `/internal/token` has `sid` null. **Checks:** only `EdDSA`; `kid` must name a key in the set (a missing or unknown `kid` is
+  refused, other keys are not tried); signatures are checked with `verify_strict` (no malleable encodings); `iss`, `aud` (one string, exact),
+  `nbf` and `exp` are required and checked, and so is every claim above that a verifier relies on; a token over 32 KiB is refused before it is decoded.
+  The checks live in one function without database access (`verify_token`, with a `leeway` for verifiers that allow clock difference; control's own
+  `/api/auth/me` allows none) that Studio's step-6 client can be tested against.
+- Keys: `WEBX_CONTROL_SIGNING_KEY` signs; `WEBX_CONTROL_SIGNING_KEY_PREVIOUS` is the seed of the key being retired (only its public half is kept, it
+  never signs) **or the word `database`**, for a deployment that never set a key and so rotates off the one control made and stored. The key set
+  lists the current key first, then the previous one, with `Cache-Control: max-age=300`. `webx-control keygen` prints a seed. The rotation and the
+  emergency procedure (drop the old key, nobody is signed out because refresh tokens are not signed) are in `webx-control/README.md`.
+- Credentials: `WEBX_CONTROL_AUTH_TOKEN` (broker) is required by `/internal/token` as soon as it is set, and then the service token is refused there
+  (and the broker credential reads nothing else of `/internal`); `WEBX_CONTROL_ENGINE_TOKEN` opens `/engine/*`, reads only (a write is a 405
+  whatever it carries). The first thing it opens is `GET /engine/users/<email>`, the roster lookup Strapi's `tenant-of` does today, because a read-only
+  credential with nothing to read would be configuration for nothing; custom roles come with step 3. The service refuses to start if either new
+  credential has the value of another (an existing admin token equal to the service token is left alone, so an upgrade does not stop a deployment).
+- `/api/auth/me` also returns `uid superAdmin tid sid role crole mfa amr`.
+- **Not done:** Studio's key-set client (cache five minutes, refetch on an unknown `kid` at most once a minute, a stale key set for up to 24 hours;
+  step 6); keeping the signing key anywhere but the environment or the database file; the second-level checks the threat table lists for engines.
+
 **Step 2 - sessions** (`webx-control`).
 - Tables `sessions` (id, user, active workspace, absolute and idle expiry, refresh hash, previous hash and its grace end,
   `mfa_at`, `amr`, ip, ua, `revoked_at`), `identities` (issuer, subject, user), `auth_pending`.
@@ -282,6 +307,36 @@ About 33 working days, against 10 to 15 in the C4 row of `docs/target-architectu
 - Proof: new `tools/sessions-test.mjs` on the real binary: rotation, grace reuse, theft revokes, disable revokes and stops
   engine tokens, restart persistence, wrong issuer refused, unverified e-mail refused, unknown user refused with JIT off,
   a second subject for the same e-mail refused. Rollback: tables stay unused; previous binary.
+
+**Step 2 status, 2026-11-26: built and tested on the real binary (`webx-control/src/sessions.rs`, `tools/sessions-test.mjs`); nothing calls it.**
+The session routes are off (503) until `WEBX_CONTROL_AUTH_TOKEN` is set. Lifetimes are the D16 recommendation, as flags: 15 minutes, 8 hours idle,
+24 hours absolute, a 20-second grace, 60-second engine tokens. Where it differs from the list:
+- **`workspace_identity` starts here, in a small form** (provider, `allow_jit`, `jit_role`, `require_verified_email`; admin routes
+  `GET|PUT|DELETE /admin/tenants/<key>/identity`), because the step's own proof ("wrong issuer refused", "unknown user refused with JIT off")
+  needs a provider to be wrong against. Step 3 adds `mode`, the client, its encrypted secret and the MFA policy to the same table. **`auth_pending`
+  moves to step 4**, where MFA first uses it. A table nothing writes is not worth reviewing.
+- **Two rules the plan does not state, found while writing the decision, both tested.** (1) *A workspace's provider is believed only about its own
+  workspace.* A person who belongs to workspaces A and B has one user row; if a session made with A's provider could switch to B, whoever
+  administers A's provider could assert that person's e-mail and walk into B. So a session moves only to a workspace whose provider is the one it was
+  made with (a shared provider, such as one Keycloak realm for several workspaces, switches freely; otherwise the person signs in again there).
+  (2) *No workspace's provider can vouch for a super admin*, whose user row is tied to none: e-mail linking and "made on the spot" never apply to one,
+  and a super admin signs in only through an identity an operator linked (`PUT /admin/users/<email>/identities`, the only way to get one). Without it,
+  the administrator of any customer's provider could take over a platform operator who is also on that customer's roster. Making a user a super admin
+  (or not) ends their sessions, so a session got by e-mail link cannot become a super admin's by a promotion.
+- Ending sessions goes beyond the list: also when a workspace's provider changes or its settings are removed (the sessions made with the old
+  provider), when a workspace is deleted, and when an operator changes a user's identities. Adding a workspace or changing a name ends nothing.
+  `refresh` also looks again at the user, so a user who lost the workspace some way that did not go through the admin API is signed out at the next refresh.
+- A wrong refresh secret is a plain 401 and ends nothing: the session id is in every access token, so ending a session on a wrong guess would let anyone
+  who had seen a token sign its owner out. Only the token that was just replaced, shown again after the grace, ends it. Only one earlier token is
+  remembered: one from two refreshes ago is refused without ending the session.
+- Audit: one row per `sign_in`, `sign_in_refused` (the reason, and the address), `identity_linked`, `user_provisioned`, `refresh_reuse`, `logout`,
+  `revoke`, `session_switch`, each carrying the session id, and each written in the same transaction as the change it records (no row, no session). A
+  session's engine tokens are not audited (one per user every 45 seconds or so); a job's are, with the job id, and so are refusals.
+- `PUT /admin/users/*` and `DELETE /admin/users/*` go through the session code (`replace_user`, `remove_user`); `GET /admin/users/<email>/identities` and
+  `PUT` are new.
+- **Not done:** a list of a user's sessions for a "your sessions" screen; IdP back-channel logout; the per-IP limit on sign-in attempts stays in Studio's
+  middleware (control sees only the broker); the `enroll` scope and the MFA branch of the decision (step 4); the 30-second revocation cache and its
+  fail-closed rule are Studio's, in step 6.
 
 **Step 3 - workspace identity settings, roles, migration** (`webx-control`, `tools/`).
 - Table `workspace_identity` (workspace, `mode` `legacy|both|control`, issuer, client id, client secret encrypted under a new
