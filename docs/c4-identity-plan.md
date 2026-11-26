@@ -1,7 +1,8 @@
 # C4 identity: plan for review
 
 Status: written 2026-11-25. Step 0 (fixes that change who can sign in nowhere) was built on 2026-11-25, and steps 1 and 2 (token v2, keys,
-credentials, sessions, in `webx-control` only, switched off, nothing calling them) on 2026-11-26; steps 3 and up are not started. A Studio session
+credentials, sessions, in `webx-control` only, switched off, nothing calling them) on 2026-11-26, then step 3 (workspace sign-in settings with
+`mode`, the role catalogue, the copy from Strapi; every workspace `legacy`); steps 4 and up are described below as they stand. A Studio session
 switch is security-critical (`docs/target-architecture.md`, Risks), so no step that changes who can sign in to Studio starts before this plan is
 reviewed. D10 (users, roles and OIDC sign-in in webx-control, no passwords) and D11 (a short-lived signed token that Studio
 and every engine verify with a public key) are taken as given; D16 to D23 at the end are what is left open.
@@ -351,6 +352,38 @@ The session routes are off (503) until `WEBX_CONTROL_AUTH_TOKEN` is set. Lifetim
   (D22), and a refusal to leave a workspace with no admin.
 - Proof: unit tests for the matrix and validation; `tools/users-map.test.mjs` extended; the migration against a fake Strapi
   (pattern: `tools/migrate-forms-test.mjs`). Rollback: delete the rows; Strapi stays the source.
+
+**Step 3 status, 2026-11-26: built and tested on the real binary (`webx-control/src/roles.rs`, `secrets.rs`, `sessions.rs`, `tools/migrate-users.mjs`);
+nothing calls it, and every workspace is `legacy`.** Where it differs from the list, or goes beyond it:
+- **`mode` is enforced by control, not only read by Studio.** A workspace with no settings or with `legacy` has no sessions at all: sign-in and
+  switching into it are refused (`workspace_legacy`) for everyone, **a super admin included** (in step 2 a super admin could sign in to a workspace
+  with no settings), every session already in it is ended when it goes back to `legacy` (the rollback of D23), and a session left behind by a change
+  made some other way is not good either and ends when next used. This is what keeps, for example, a WordPress workspace off control sessions until
+  step 9: its `mode` stays `legacy`. A step-2 table is rebuilt on start (its `issuer` was required; now `legacy` settings may have none) and its rows
+  come out `legacy`.
+- `WEBX_CONTROL_SECRET_KEY` (`secrets.rs`): two keys derived from it with HMAC-SHA-256, one for AES-256-GCM sealing and one for recognising
+  (recovery codes, step 4). A sealed value is bound to what it belongs to (`client-secret:<workspace>` as associated data), so one copied into
+  another row does not open. It must differ from the signing key. **Not done:** re-sealing under a new key (a rotation tool).
+- **The client secret is read back by the broker only**, at a new route `GET /internal/tenants/<key>/identity`, and only once the workspace is past
+  `legacy` (a `legacy` workspace shows only its mode). Pulled forward from step 6 because the migration's proof needs the secret read back through the
+  real binary; Studio does not call it yet. The operator's view shows `hasClientSecret` only, and no audit row carries the value.
+- Roles: the four base roles and a table of eleven actions (`read`, `create`, `update_own`, `update_any`, `delete_own`, `delete_any`, `publish`,
+  `upload_media`, and the three management ones) in `roles.rs`; `role` must be one of them on every write (a free-text row from before stays readable
+  and may do nothing). `jitRole` cannot be one that manages people. Any change of a membership's role **or custom role** ends the user's sessions,
+  as the token names both. Custom-role keys follow Studio's slugs (Thai letters included).
+- Engine reads: `GET /engine/roles` (the table) and `GET /engine/tenants/<key>/custom-roles`; `GET /engine/users/<email>` now shows `customRole`.
+- An operator's changes are audited in the same transaction: `user_created`, `user_saved`, `user_removed`, `workspace_identity_saved`,
+  `workspace_identity_removed` (the threat table's "membership, role ... SSO changes").
+- Migration (`tools/migrate-users.mjs`, `users-map.mjs`): base roles from Strapi's (Super Admin `admin`, Editor `editor`, Author `author`, anything
+  else `viewer`, reported), custom roles from `customRoleAssignments`, inactive or blocked is disabled, SSO provider and client with the secret
+  decrypted with Studio's `WEBX_ENCRYPTION_KEY` and sealed by control, the MFA requirement with its start date, and control's custom roles made the
+  same as Strapi's (created, updated, removed). The report lists per workspace who keeps and who loses managing it; it writes nothing and stops when a
+  workspace would have no admin (`--promote tenant:email` names one), when a secret cannot be carried, or when any workspace is already past `legacy`
+  (control is then the source for its people). **A provider that is not https (for example `http://keycloak:8080` inside compose) is not copied**,
+  as control would refuse it; the rest of that workspace is. `allowJit` is copied as off: today's SSO adds anyone the provider vouches for as Editor,
+  control does not until a workspace says so; the report says this for each SSO workspace.
+- **Not done:** the Users screen writing control (step 7); per-membership admin routes for a workspace admin; the D22 change itself is only reported:
+  nobody loses anything until a workspace switches.
 
 **Step 4 - MFA in webx-control.**
 - Table `mfa`; with a user token: `POST /api/auth/mfa/start|confirm|disable`, `GET /api/auth/mfa/status`; broker route

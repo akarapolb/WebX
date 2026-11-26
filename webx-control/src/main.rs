@@ -22,13 +22,14 @@
 //!       a browser may call these from the origins in WEBX_PUBLIC_SITE_ORIGINS (and the local development ones)
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
-//!   GET|PUT|DELETE /admin/tenants/<key>/identity   the provider a workspace's people sign in at (see sessions.rs)
+//!   GET|PUT|DELETE /admin/tenants/<key>/identity   how a workspace signs in: mode, provider, client, MFA policy (see sessions.rs)
 //!   GET /admin/users, GET|PUT|DELETE /admin/users/<email>, GET|PUT /admin/users/<email>/identities
-//! Identity, in steps (docs/c4-identity-plan.md): tokens and keys are identity.rs, sessions are sessions.rs.
+//! Identity, in steps (docs/c4-identity-plan.md): tokens and keys are identity.rs, sessions are sessions.rs, roles are roles.rs.
 //!   GET /.well-known/jwks.json, GET /api/auth/me          public / with a token
-//!   POST /internal/token, POST /internal/sessions ..., POST /internal/engine-token   WEBX_CONTROL_AUTH_TOKEN (Studio's broker credential)
-//!   GET /engine/users/<email>                               WEBX_CONTROL_ENGINE_TOKEN (read-only)
-//!   webx-control keygen                                     prints a seed for WEBX_CONTROL_SIGNING_KEY
+//!   POST /internal/token, POST /internal/sessions ..., POST /internal/engine-token, GET /internal/tenants/<key>/identity
+//!                                                           WEBX_CONTROL_AUTH_TOKEN (Studio's broker credential)
+//!   GET /engine/users/<email>, /engine/roles, /engine/tenants/<key>/custom-roles   WEBX_CONTROL_ENGINE_TOKEN (read-only)
+//!   webx-control keygen                                     prints 32 random bytes, base64: a WEBX_CONTROL_SIGNING_KEY or WEBX_CONTROL_SECRET_KEY
 
 mod assist;
 mod audit;
@@ -41,8 +42,10 @@ mod pii;
 mod captcha;
 mod identity;
 mod jobs;
+mod roles;
 mod schedules;
 mod search_stats;
+mod secrets;
 mod sessions;
 mod visitors;
 mod records;
@@ -82,6 +85,9 @@ struct App {
     engine: Option<[u8; 32]>,
     /// how long tokens and sessions live (--token-ttl, --session-idle, --session-max, --refresh-grace, --engine-token-ttl)
     sessions: sessions::Config,
+    /// what control's own secrets are kept under (WEBX_CONTROL_SECRET_KEY): providers' client secrets, and MFA. None: those cannot
+    /// be stored or read
+    secrets: Option<secrets::SecretKey>,
     /// per-address limit on the visitors' write routes
     limiter: Mutex<visitors::RateLimiter>,
     /// how many reverse proxies of ours stand in front (WEBX_TRUSTED_PROXIES): which X-Forwarded-For entry may be believed
@@ -819,7 +825,7 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
                 Ok(v) => v,
                 Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON"),
             };
-            match sessions::put_policy(&conn, key, &v, now_secs()) {
+            match sessions::put_policy(&conn, app.secrets.as_ref(), key, &v, now_secs()) {
                 Ok(created) => {
                     let p = sessions::policy(&conn, key).ok().flatten().map(|p| p.to_json());
                     (if created { StatusCode::CREATED } else { StatusCode::OK }, Json(json!({"data": p}))).into_response()
@@ -853,7 +859,9 @@ fn identities_response(conn: &rusqlite::Connection, user_id: i64) -> Response {
 
 /// /engine/*, what an engine reads from the control plane with its own credential (WEBX_CONTROL_ENGINE_TOKEN). That credential only
 /// reads: anything but GET and HEAD is refused whatever it carries, so an engine that leaks it leaks no way to write.
-///   GET /engine/users/<email>   {data: {email, name, disabled, superAdmin, memberships: [{tenantKey, role}]}}: who is on a roster
+///   GET /engine/users/<email>                 {data: {email, name, disabled, superAdmin, memberships: [{tenantKey, role, customRole}]}}
+///   GET /engine/roles                         {data: {roles: {admin: [action...], ...}, actions, management}}: the base roles (roles.rs)
+///   GET /engine/tenants/<key>/custom-roles    {data: [{roleKey, name, permissions, ...}]}: the workspace's custom roles
 async fn engine(State(app): State<Shared>, method: Method, headers: HeaderMap, Path(rest): Path<String>) -> Response {
     if let Err(r) = check_token(app.engine, &headers, "the engine API is off: start with WEBX_CONTROL_ENGINE_TOKEN set") {
         return r;
@@ -869,6 +877,14 @@ async fn engine(State(app): State<Shared>, method: Method, headers: HeaderMap, P
             Ok(None) => not_found(),
             Err(m) => fail(m),
         },
+        ["roles"] => Json(json!({"data": roles::catalogue()})).into_response(),
+        ["tenants", key, "custom-roles"] if identity::valid_tenant(key) => {
+            let q = records::Query { filters: vec![records::Filter { field: "tenantKey".into(), op: "eq".into(), value: key.to_string() }], sort: Some(("roleKey".into(), false)), page: 1, page_size: 500 };
+            match records::list(&conn, "custom-role", &q) {
+                Ok((rows, _)) => Json(json!({"data": rows})).into_response(),
+                Err(m) => fail(m),
+            }
+        }
         _ => not_found(),
     }
 }
@@ -967,7 +983,7 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
     // What makes a person's token or session needs the broker's own credential, never the service token's (which Strapi, the
     // workers and the tools also hold). Until WEBX_CONTROL_AUTH_TOKEN is set /internal/token takes the service token, as it
     // always did, and the session routes are off.
-    let identity_route = matches!(parts.as_slice(), ["token"] | ["engine-token"] | ["sessions", ..] | ["users", _, "revoke"]);
+    let identity_route = matches!(parts.as_slice(), ["token"] | ["engine-token"] | ["sessions", ..] | ["users", _, "revoke"] | ["tenants", _, "identity"]);
     let allowed = if identity_route && (app.auth.is_some() || parts[0] != "token") {
         check_token(app.auth, &headers, "the identity API is off: start with WEBX_CONTROL_AUTH_TOKEN set")
     } else {
@@ -1026,6 +1042,12 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             Ok(true) => Json(json!({"data": null})).into_response(),
             Ok(false) => not_found(),
             Err(m) => fail(m),
+        },
+        // where to send a person to sign in to a workspace: its mode, and for one that signs in through control its provider and client
+        ("GET", ["tenants", key, "identity"]) => match sessions::sign_in_settings(&conn, app.secrets.as_ref(), key) {
+            Ok(Some(j)) => Json(json!({"data": j})).into_response(),
+            Ok(None) => not_found(),
+            Err(m) => error(StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable", &m),
         },
         // sign a user out everywhere
         ("POST", ["users", email, "revoke"]) => match sessions::revoke_user(&conn, email, now_secs()) {
@@ -1398,7 +1420,7 @@ fn seconds_arg(name: &str, default: &str) -> i64 {
 async fn main() {
     let db = arg("db", "control.db");
     if std::env::args().nth(1).as_deref() == Some("keygen") {
-        // a seed for WEBX_CONTROL_SIGNING_KEY: 32 random bytes, base64
+        // 32 random bytes, base64: a WEBX_CONTROL_SIGNING_KEY, or a WEBX_CONTROL_SECRET_KEY (run it once for each)
         println!("{}", identity::new_seed().unwrap_or_else(|e| panic!("{e}")));
         return;
     }
@@ -1418,6 +1440,7 @@ async fn main() {
     conn.execute_batch(identity::DDL).unwrap_or_else(|e| panic!("{e}"));
     identity::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(sessions::DDL).unwrap_or_else(|e| panic!("{e}"));
+    sessions::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(schedules::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(search_stats::DDL).unwrap_or_else(|e| panic!("{e}"));
@@ -1437,6 +1460,13 @@ async fn main() {
             }
         }
     }
+    // the key control's own secrets are kept under; it is not the signing key, so that one leaking is not the other
+    let secret_key = env_nonempty("WEBX_CONTROL_SECRET_KEY");
+    if secret_key.is_some() && secret_key.as_deref().map(str::trim) == env_nonempty("WEBX_CONTROL_SIGNING_KEY").as_deref().map(str::trim) {
+        panic!("WEBX_CONTROL_SECRET_KEY must not be the same value as WEBX_CONTROL_SIGNING_KEY: run webx-control keygen for each");
+    }
+    let secrets = secret_key.map(|k| secrets::SecretKey::from_base64(&k).unwrap_or_else(|e| panic!("{e}")));
+    let secrets_on = secrets.is_some();
     let session_config = sessions::Config {
         access_secs: seconds_arg("token-ttl", "900"),
         idle_secs: seconds_arg("session-idle", "28800"),
@@ -1449,18 +1479,19 @@ async fn main() {
     let pii_on = pii.is_some();
     let mailer = mailer::Mailer::from_env().unwrap_or_else(|e| panic!("{e}"));
     let mail_on = mailer.is_some();
-    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), keys, auth: auth_hash, engine: engine_hash, sessions: session_config, limiter: Default::default(), proxies: std::env::var("WEBX_TRUSTED_PROXIES").ok().filter(|v| !v.trim().is_empty()).map_or(1, |v| v.trim().parse().unwrap_or_else(|_| panic!("WEBX_TRUSTED_PROXIES must be a number (0 when no proxy is in front)"))), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), keys, auth: auth_hash, engine: engine_hash, sessions: session_config, secrets, limiter: Default::default(), proxies: std::env::var("WEBX_TRUSTED_PROXIES").ok().filter(|v| !v.trim().is_empty()).map_or(1, |v| v.trim().parse().unwrap_or_else(|_| panic!("WEBX_TRUSTED_PROXIES must be a number (0 when no proxy is in front)"))), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
     let state_for_log = state.clone();
     {
         let k = &state.keys;
         let kids = k.kids();
         eprintln!(
-            "[webx-control] identity: signing key {} ({}), previous key {}; sessions and tokens for Studio {}; engine API {}",
+            "[webx-control] identity: signing key {} ({}), previous key {}; sessions and tokens for Studio {}; engine API {}; client secrets and MFA {}",
             kids[0],
             k.current_from,
             match (kids.get(1), k.previous_from) { (Some(kid), Some(from)) => format!("{kid} ({from}), still believed until it is unset"), _ => "none".to_string() },
             if auth_hash.is_some() { "on" } else { "off: set WEBX_CONTROL_AUTH_TOKEN" },
             if engine_hash.is_some() { "on" } else { "off: set WEBX_CONTROL_ENGINE_TOKEN" },
+            if secrets_on { "on" } else { "off: set WEBX_CONTROL_SECRET_KEY" },
         );
     }
     let app = Router::new()

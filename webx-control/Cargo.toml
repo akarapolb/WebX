@@ -10,6 +10,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 serde_json = { version = "1", features = ["preserve_order"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
+# HMAC (derived keys, recovery codes) and SHA-1 (TOTP, RFC 6238's default, what every authenticator app uses): C4 steps 3 and 4
+hmac = "0.12"
+sha1 = "0.10"
 getrandom = "0.2"
 ed25519-dalek = "2"
 base64 = "0.22"

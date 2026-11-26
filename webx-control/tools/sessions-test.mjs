@@ -27,7 +27,7 @@ const DGA = "https://idp.example/realms/dga", PEA = "https://idp.example/realms/
 const dir = mkdtempSync(join(tmpdir(), "webx-sessions-"));
 const db = join(dir, "control.db");
 const seed = () => randomBytes(32).toString("base64");
-const KEY_A = seed(), KEY_B = seed();
+const KEY_A = seed(), KEY_B = seed(), SECRET_KEY = seed();
 let failures = 0;
 const check = (name, ok, extra = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " " + extra}`); if (!ok) failures++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,7 +37,7 @@ const call = async (method, path, token, body) => {
   return { status: r.status, json: j, headers: r.headers };
 };
 let server;
-const baseEnv = (extra = {}) => ({ ...process.env, WEBX_CONTROL_ADMIN_TOKEN: ADMIN, WEBX_CONTROL_SERVICE_TOKEN: SERVICE, WEBX_CONTROL_AUTH_TOKEN: AUTH, WEBX_CONTROL_ENGINE_TOKEN: ENGINE, WEBX_CONTROL_SIGNING_KEY: KEY_A, ...extra });
+const baseEnv = (extra = {}) => ({ ...process.env, WEBX_CONTROL_ADMIN_TOKEN: ADMIN, WEBX_CONTROL_SERVICE_TOKEN: SERVICE, WEBX_CONTROL_AUTH_TOKEN: AUTH, WEBX_CONTROL_ENGINE_TOKEN: ENGINE, WEBX_CONTROL_SIGNING_KEY: KEY_A, WEBX_CONTROL_SECRET_KEY: SECRET_KEY, ...extra });
 async function up(args = [], env = {}) {
   server = spawn(exe, ["--port", PORT, "--db", db, "--refresh-grace", "2", "--session-idle", "6", ...args], { env: baseEnv(env), stdio: ["ignore", "ignore", "inherit"] });
   server.done = new Promise((ok) => server.on("exit", ok));
@@ -72,12 +72,17 @@ const engineToken = (body) => call("POST", "/internal/engine-token", AUTH, body)
 const putUser = (email, body) => call("PUT", `/admin/users/${encodeURIComponent(email)}`, ADMIN, body);
 const audit = async (filter) => (await call("GET", `/internal/audit?pageSize=200&sort=${encodeURIComponent("at:asc")}&filter=${encodeURIComponent(filter)}`, SERVICE)).json.data;
 const reason = (r) => r.json?.error?.details?.reason;
+// a workspace that signs in through control (step 3: anything else is legacy, and has no sessions)
+const ws = (issuer, extra = {}) => ({ mode: "both", issuer, clientId: "webx-studio", ...extra });
+const ORST = "https://idp.example/realms/orst";
 const ANN = (disabled = false, pea = true) => ({ name: "Ann", disabled, memberships: [{ tenantKey: "dga", role: "editor" }, ...(pea ? [{ tenantKey: "pea", role: "viewer" }] : [])] });
 
 try {
   // ---- a start-up that refuses to give two credentials the same value, and a seed for the signing key
   const clash = spawnSync(exe, ["--port", "1", "--db", join(dir, "clash.db")], { env: baseEnv({ WEBX_CONTROL_AUTH_TOKEN: SERVICE }), encoding: "utf8", timeout: 10_000 });
   check("a broker credential equal to the service token stops the start", clash.status !== 0 && /must not be the same value/.test(clash.stderr), clash.stderr);
+  const sameKey = spawnSync(exe, ["--port", "1", "--db", join(dir, "same.db")], { env: baseEnv({ WEBX_CONTROL_SECRET_KEY: KEY_A }), encoding: "utf8", timeout: 10_000 });
+  check("a secret key equal to the signing key stops the start", sameKey.status !== 0 && /WEBX_CONTROL_SECRET_KEY must not be the same value/.test(sameKey.stderr), sameKey.stderr);
   const k1 = spawnSync(exe, ["keygen"], { encoding: "utf8" }), k2 = spawnSync(exe, ["keygen"], { encoding: "utf8" });
   check("keygen prints a new 32-byte seed each time", k1.status === 0 && Buffer.from(k1.stdout.trim(), "base64").length === 32 && k1.stdout !== k2.stdout);
 
@@ -93,11 +98,13 @@ try {
   check("and the broker credential does not read the audit log or the queue", (await call("GET", "/internal/audit", AUTH)).status === 401 && (await call("GET", "/internal/jobs", AUTH)).status === 401 && (await call("GET", "/internal/audit", SERVICE)).status === 200);
 
   // ---- what a workspace accepts, and its people
-  check("no settings, no sign-in: the settings are an admin matter", (await call("PUT", "/admin/tenants/dga/identity", SERVICE, { issuer: DGA })).status === 401);
-  check("a workspace's provider is set (201), then changed (200)", (await call("PUT", "/admin/tenants/dga/identity", ADMIN, { issuer: DGA })).status === 201 && (await call("PUT", "/admin/tenants/pea/identity", ADMIN, { issuer: PEA })).status === 201 && (await call("PUT", "/admin/tenants/dga/identity", ADMIN, { issuer: DGA })).status === 200);
+  check("no settings, no sign-in: the settings are an admin matter", (await call("PUT", "/admin/tenants/dga/identity", SERVICE, ws(DGA))).status === 401);
+  check("a workspace's provider is set (201), then changed (200)", (await call("PUT", "/admin/tenants/dga/identity", ADMIN, ws(DGA))).status === 201 && (await call("PUT", "/admin/tenants/pea/identity", ADMIN, ws(PEA))).status === 201 && (await call("PUT", "/admin/tenants/dga/identity", ADMIN, ws(DGA))).status === 200 && (await call("PUT", "/admin/tenants/orst/identity", ADMIN, ws(ORST))).status === 201);
   const got = await call("GET", "/admin/tenants/dga/identity", ADMIN);
-  check("and read back: verified e-mail required, nobody made on the spot", got.json.data.issuer === DGA && got.json.data.requireVerifiedEmail === true && got.json.data.allowJit === false);
-  check("a provider that is not an https URL is refused, and making people on the spot needs a role", (await call("PUT", "/admin/tenants/dga/identity", ADMIN, { issuer: "http://idp.example" })).status === 400 && (await call("PUT", "/admin/tenants/dga/identity", ADMIN, { issuer: DGA, allowJit: true })).status === 400);
+  check("and read back: verified e-mail required, nobody made on the spot", got.json.data.issuer === DGA && got.json.data.mode === "both" && got.json.data.requireVerifiedEmail === true && got.json.data.allowJit === false);
+  check("settings with only a provider are legacy, the default", (await call("PUT", "/admin/tenants/nsm/identity", ADMIN, { issuer: DGA })).status === 201 && (await call("GET", "/admin/tenants/nsm/identity", ADMIN)).json.data.mode === "legacy");
+  check("both and control need a provider and a client", (await call("PUT", "/admin/tenants/nsm/identity", ADMIN, { mode: "both", issuer: DGA })).status === 400 && (await call("PUT", "/admin/tenants/nsm/identity", ADMIN, { mode: "control", clientId: "x" })).status === 400);
+  check("a provider that is not an https URL is refused, and making people on the spot needs a role", (await call("PUT", "/admin/tenants/dga/identity", ADMIN, { issuer: "http://idp.example" })).status === 400 && (await call("PUT", "/admin/tenants/dga/identity", ADMIN, ws(DGA, { allowJit: true }))).status === 400 && (await call("PUT", "/admin/tenants/dga/identity", ADMIN, ws(DGA, { allowJit: true, jitRole: "admin" }))).status === 400);
   await putUser("ann@example.org", ANN());
   await putUser("bob@example.org", { name: "Bob", memberships: [{ tenantKey: "pea", role: "admin" }] });
   await putUser("root@example.org", { name: "Root", superAdmin: true, memberships: [{ tenantKey: "dga", role: "admin" }] });
@@ -105,7 +112,8 @@ try {
   // ---- refusals, each with its reason
   const refusals = [
     ["another workspace's provider", { issuer: PEA }, "issuer_mismatch"],
-    ["a workspace with no settings", { tenantKey: "orst" }, "workspace_not_configured"],
+    ["a workspace with no settings", { tenantKey: "opdc" }, "workspace_not_configured"],
+    ["a workspace that is still legacy", { tenantKey: "nsm" }, "workspace_legacy"],
     ["an e-mail the provider did not verify", { emailVerified: false }, "email_not_verified"],
     ["a user who does not exist, with no one made on the spot", { email: "new@example.org", subject: "sub-new" }, "unknown_user"],
     ["a member of another workspace only", { email: "bob@example.org", subject: "sub-bob" }, "not_a_member"],
@@ -116,7 +124,17 @@ try {
     check(`refused (403 ${why}): ${what}`, r.status === 403 && reason(r) === why, JSON.stringify(r.json));
   }
   check("a malformed sign-in is a 400", (await signIn({ email: "nope" })).status === 400 && (await signIn({ issuer: "ftp://x" })).status === 400 && (await signIn({ tenantKey: "BAD" })).status === 400);
-  check("each refusal is in the audit table with its reason", (await audit("action:eq:sign_in_refused")).filter((r) => /issuer_mismatch|workspace_not_configured|email_not_verified|unknown_user|not_a_member|super_admin_needs_operator_link/.test(r.targetRef)).length === refusals.length);
+  check("each refusal is in the audit table with its reason", (await audit("action:eq:sign_in_refused")).filter((r) => /issuer_mismatch|workspace_not_configured|workspace_legacy|email_not_verified|unknown_user|not_a_member|super_admin_needs_operator_link/.test(r.targetRef)).length === refusals.length);
+
+  // ---- step 3: the provider's client secret, kept sealed, read only by the broker and only once the workspace switches
+  check("a client secret is set, and the operator's view says only that it is there", (await call("PUT", "/admin/tenants/nsm/identity", ADMIN, { issuer: DGA, clientId: "nsm-studio", clientSecret: "nsm-s3cret" })).status === 200 && (await call("GET", "/admin/tenants/nsm/identity", ADMIN)).json.data.hasClientSecret === true && !JSON.stringify((await call("GET", "/admin/tenants/nsm/identity", ADMIN)).json).includes("nsm-s3cret"));
+  check("while the workspace is legacy the broker learns its mode and nothing else", JSON.stringify((await call("GET", "/internal/tenants/nsm/identity", AUTH)).json.data) === JSON.stringify({ tenantKey: "nsm", mode: "legacy" }));
+  await call("PUT", "/admin/tenants/nsm/identity", ADMIN, { mode: "both", issuer: DGA, clientId: "nsm-studio" });
+  const settings = await call("GET", "/internal/tenants/nsm/identity", AUTH);
+  check("once it switches the broker reads the provider, the client and the secret (a save without the secret kept it)", settings.status === 200 && settings.json.data.clientSecret === "nsm-s3cret" && settings.json.data.clientId === "nsm-studio" && settings.json.data.issuer === DGA && settings.json.data.mode === "both");
+  check("only the broker reads it: not the service token, the admin token, the engine credential or no token", (await Promise.all([SERVICE, ADMIN, ENGINE, null].map((t) => call("GET", "/internal/tenants/nsm/identity", t)))).every((r) => r.status === 401));
+  check("a workspace with no settings is a 404", (await call("GET", "/internal/tenants/opdc/identity", AUTH)).status === 404);
+  check("no audit row carries the secret, and each change is there", (await audit("action:eq:workspace_identity_saved")).every((r) => !r.targetRef.includes("nsm-s3cret")) && (await audit("action:eq:workspace_identity_saved")).some((r) => r.tenantKey === "nsm" && /secret=set/.test(r.targetRef)));
 
   // ---- a sign-in, and what its token says
   const s1 = await signIn();
@@ -198,27 +216,42 @@ try {
   check("a changed role does too", (await status(s6.sessionId)).json.data.active === false);
   await putUser("ann@example.org", ANN());
 
+  // ---- step 3: roles are the catalogue's, and a custom role is named in the token
+  check("a free-text role is refused", (await putUser("cy@example.org", { memberships: [{ tenantKey: "dga", role: "Lead Editor" }] })).status === 400);
+  await putUser("cy@example.org", { memberships: [{ tenantKey: "dga", role: "editor", customRole: "reviewer" }] });
+  const cy = await signIn({ email: "cy@example.org", subject: "sub-cy" });
+  check("a custom role is named in the token (crole)", cy.status === 201 && (await engineVerifies(cy.json.data.accessToken, "webx-studio")).crole === "reviewer" && (await me(cy.json.data.accessToken)).json.data.crole === "reviewer");
+  await putUser("cy@example.org", { memberships: [{ tenantKey: "dga", role: "editor" }] });
+  check("taking the custom role away ends the session: the token named it", (await status(cy.json.data.sessionId)).json.data.active === false);
+
   // ---- a super admin signs in only through an identity an operator linked
   check("an operator links the platform's provider to a super admin", (await call("PUT", "/admin/users/root@example.org/identities", ADMIN, { identities: [{ issuer: PLATFORM, subject: "sub-root" }] })).status === 200);
   check("the link is read back as the operator's", (await call("GET", "/admin/users/root@example.org/identities", ADMIN)).json.data[0].linkedBy === "admin");
   check("a subject belongs to one person", (await call("PUT", "/admin/users/ann@example.org/identities", ADMIN, { identities: [{ issuer: PLATFORM, subject: "sub-root" }] })).status === 400);
   const rs = await signIn({ issuer: PLATFORM, subject: "sub-root", email: "root@example.org", tenantKey: "orst" });
   const rc = rs.status === 201 ? await engineVerifies(rs.json.data.accessToken, "webx-studio") : null;
-  check("then they sign in, to any workspace, as a super admin with no role there", rc && rc.sa === true && rc.superAdmin === true && rc.tid === "orst" && rc.role === null, JSON.stringify(rs.json));
+  check("then they sign in, to a workspace that signs in through control whatever its provider, as a super admin with no role there", rc && rc.sa === true && rc.superAdmin === true && rc.tid === "orst" && rc.role === null, JSON.stringify(rs.json));
   const rsw = await call("POST", `/internal/sessions/${rs.json.data.sessionId}/switch`, AUTH, { tenantKey: "dga" });
-  check("and move to any other", rsw.status === 200 && (await engineVerifies(rsw.json.data.accessToken, "webx-studio")).tid === "dga");
+  check("and move to another such workspace", rsw.status === 200 && (await engineVerifies(rsw.json.data.accessToken, "webx-studio")).tid === "dga");
+
+  // ---- step 3: a workspace set back to legacy (a rollback) ends every session in it, a super admin's too
+  const annIn = (await signIn()).json.data;
+  await call("PUT", "/admin/tenants/dga/identity", ADMIN, { mode: "legacy", issuer: DGA, clientId: "webx-studio" });
+  check("back to legacy: every session in the workspace ends, a super admin's too", (await status(annIn.sessionId)).json.data.reason === "revoked: workspace_legacy" && (await status(rs.json.data.sessionId)).json.data.reason === "revoked: workspace_legacy" && (await me(annIn.accessToken)).status === 401);
+  check("and nobody signs in there", reason(await signIn()) === "workspace_legacy");
+  await call("PUT", "/admin/tenants/dga/identity", ADMIN, ws(DGA));
 
   // ---- people made on the spot, only where the workspace says so
-  check("a workspace opts in to people made on the spot, with a role", (await call("PUT", "/admin/tenants/pea/identity", ADMIN, { issuer: PEA, allowJit: true, jitRole: "viewer" })).status === 200);
+  check("a workspace opts in to people made on the spot, with a role", (await call("PUT", "/admin/tenants/pea/identity", ADMIN, ws(PEA, { allowJit: true, jitRole: "viewer" }))).status === 200);
   const jit = await signIn({ issuer: PEA, tenantKey: "pea", email: "new@example.org", subject: "sub-new" });
   check("a new person is made, with that role", jit.status === 201 && (await engineVerifies(jit.json.data.accessToken, "webx-studio")).role === "viewer" && (await call("GET", "/admin/users/new@example.org", ADMIN)).json.data.memberships[0].role === "viewer");
   check("it is in the audit table", (await audit("action:eq:user_provisioned")).some((r) => r.adminEmail === "new@example.org"));
 
   // ---- changing a workspace's provider ends the sessions made with the old one
   const pea = (await signIn({ issuer: PEA, tenantKey: "pea", subject: "sub-ann-pea" })).json.data;
-  await call("PUT", "/admin/tenants/pea/identity", ADMIN, { issuer: "https://new-idp.example/realms/pea" });
+  await call("PUT", "/admin/tenants/pea/identity", ADMIN, ws("https://new-idp.example/realms/pea"));
   check("a new provider for the workspace ends its sessions, and the old one is refused", (await status(pea.sessionId)).json.data.active === false && reason(await signIn({ issuer: PEA, tenantKey: "pea", subject: "sub-ann-pea" })) === "issuer_mismatch");
-  await call("PUT", "/admin/tenants/pea/identity", ADMIN, { issuer: PEA });
+  await call("PUT", "/admin/tenants/pea/identity", ADMIN, ws(PEA));
 
   // ---- idle expiry (--session-idle 6) and a restart
   const idle = (await signIn()).json.data;
@@ -226,6 +259,7 @@ try {
   await down();
   await up();
   check("a restart loses no session: the refresh token still works", (await refresh(keep.refreshToken)).status === 200);
+  check("and the client secret opens after it, under the same key", (await call("GET", "/internal/tenants/nsm/identity", AUTH)).json.data.clientSecret === "nsm-s3cret");
   await sleep(6500);
   const expired = await refresh(idle.refreshToken);
   check("a session nobody refreshed for 6 seconds is over", expired.status === 401 && reason(expired) === "session_ended" && (await status(idle.sessionId)).json.data.reason === "expired");
@@ -252,6 +286,13 @@ try {
   const writes = await Promise.all(["POST", "PUT", "DELETE", "PATCH"].map((m) => call(m, "/engine/users/root@example.org", ENGINE, {})));
   check("but writes nothing, whatever it sends", writes.every((r) => r.status === 405) && (await call("GET", "/admin/users/root@example.org", ENGINE)).status === 401 && (await call("GET", "/internal/audit", ENGINE)).status === 401);
   check("and only it opens /engine", (await Promise.all([ADMIN, SERVICE, AUTH, null].map((t) => call("GET", "/engine/users/root@example.org", t)))).every((r) => r.status === 401));
+  const cat = await call("GET", "/engine/roles", ENGINE);
+  check("an engine reads the role catalogue: four base roles, only admin manages", cat.status === 200 && Object.keys(cat.json.data.roles).join() === "admin,editor,author,viewer" && cat.json.data.roles.admin.includes("manage_people") && !cat.json.data.roles.editor.includes("manage_people") && cat.json.data.roles.viewer.join() === "read" && cat.json.data.management.length === 3);
+  await call("POST", "/internal/records/custom-role", SERVICE, { data: { tenantKey: "dga", roleKey: "reviewer", name: "Reviewer", permissions: { "api::faq.faq": { view: true } } } });
+  await call("POST", "/internal/records/custom-role", SERVICE, { data: { tenantKey: "pea", roleKey: "other", name: "Other", permissions: {} } });
+  const crs = await call("GET", "/engine/tenants/dga/custom-roles", ENGINE);
+  check("an engine reads a workspace's custom roles, and only that workspace's", crs.status === 200 && crs.json.data.length === 1 && crs.json.data[0].roleKey === "reviewer" && crs.json.data[0].permissions["api::faq.faq"].view === true);
+  check("a bad workspace key is a 404, and the custom roles need the engine credential", (await call("GET", "/engine/tenants/BAD/custom-roles", ENGINE)).status === 404 && (await call("GET", "/engine/tenants/dga/custom-roles", SERVICE)).status === 401);
 
   // ---- rotating the signing key (A -> B, then A retired); refresh tokens are not signed, so they outlive both
   const rot = (await signIn({ issuer: PLATFORM, subject: "sub-root", email: "root@example.org", tenantKey: "orst" })).json.data;
@@ -268,6 +309,15 @@ try {
   check("once the old key is dropped its tokens are refused, by the service and by an engine", (await engineVerifies(rot.accessToken, "webx-studio")) === null && (await me(rot.accessToken)).status === 401);
   const survive = await refresh(rr.json.data.refreshToken);
   check("and the session carries on: the refresh token is not a signed token", survive.status === 200 && (await engineVerifies(survive.json.data.accessToken, "webx-studio")) !== null);
+
+  // ---- step 3: without WEBX_CONTROL_SECRET_KEY no client secret is stored or read, and nothing else changes
+  await down();
+  await up([], { WEBX_CONTROL_SIGNING_KEY: KEY_B, WEBX_CONTROL_SECRET_KEY: "" });
+  check("without the key the secret cannot be read (503) or set (400)", (await call("GET", "/internal/tenants/nsm/identity", AUTH)).status === 503 && (await call("PUT", "/admin/tenants/nsm/identity", ADMIN, { mode: "both", issuer: DGA, clientId: "nsm-studio", clientSecret: "x" })).status === 400);
+  check("and sessions go on", (await refresh(survive.json.data.refreshToken)).status === 200);
+  await down();
+  await up([], { WEBX_CONTROL_SIGNING_KEY: KEY_B, WEBX_CONTROL_SECRET_KEY: seed() });
+  check("under another key it does not open: 503, not a wrong secret", (await call("GET", "/internal/tenants/nsm/identity", AUTH)).status === 503);
 } catch (e) {
   console.error(e);
   failures++;

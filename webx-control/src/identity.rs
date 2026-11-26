@@ -11,8 +11,8 @@
 //!   aud  "webx-studio" for a signed-in person's token, "engine" for the 60-second token an engine verifies
 //!   sub  the e-mail; uid the user's stable id (a deleted and re-created user is a different uid); name
 //!   sid  the session this token belongs to (null for a token made without one)
-//!   tid  the one workspace the token acts in (null: no workspace chosen); role the user's role there (null if none);
-//!        crole the custom role there (null: none; custom roles come with C4 step 3)
+//!   tid  the one workspace the token acts in (null: no workspace chosen); role the user's base role there (roles.rs; null if
+//!        none); crole the custom role there (null: none), which can only take away from what the base role allows
 //!   sa   the user is a super admin (tied to no workspace); `superAdmin` says the same, for what read the first version
 //!   mfa  control considers the session multi-factor; amr what the sign-in used. `amr` is informational: decide on `mfa`
 //!   tenants [{key, role}] (kept from the first version), iat nbf exp jti
@@ -20,6 +20,7 @@
 //!
 //! A verifier takes the key named by `kid` from the set it fetched (the current key and, while a rotation settles,
 //! the previous one), checks `alg`, the signature, `iss`, `aud`, `nbf` and `exp`, and refuses anything missing.
+use crate::roles;
 use base64::{engine::general_purpose::STANDARD, engine::general_purpose::URL_SAFE_NO_PAD as B64, Engine};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use rusqlite::Connection;
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS memberships(
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   tenant_key TEXT NOT NULL,
   role TEXT NOT NULL,
+  custom_role TEXT,
   PRIMARY KEY(user_id, tenant_key)
 );
 CREATE TABLE IF NOT EXISTS signing_key(id INTEGER PRIMARY KEY CHECK (id = 1), seed BLOB NOT NULL);
@@ -56,11 +58,19 @@ fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()
 }
 
-/// A database made before `super_admin` existed gets the column (idempotent).
+/// Whether `table` exists and lacks `column`.
+fn lacks_column(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
+    let count = |sql: &str, args: &[&str]| conn.query_row(sql, rusqlite::params_from_iter(args), |r| r.get::<_, i64>(0)).map_err(e);
+    Ok(count("SELECT COUNT(*) FROM pragma_table_info(?1)", &[table])? > 0 && count("SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name=?2", &[table, column])? == 0)
+}
+
+/// A database made before `super_admin` or `custom_role` existed gets the column (idempotent).
 pub fn migrate(conn: &Connection) -> Result<(), String> {
-    let has: bool = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='super_admin'", [], |r| r.get::<_, i64>(0)).map_err(e)? > 0;
-    if !has {
+    if lacks_column(conn, "users", "super_admin")? {
         conn.execute("ALTER TABLE users ADD COLUMN super_admin INTEGER NOT NULL DEFAULT 0", []).map_err(e)?;
+    }
+    if lacks_column(conn, "memberships", "custom_role")? {
+        conn.execute("ALTER TABLE memberships ADD COLUMN custom_role TEXT", []).map_err(e)?;
     }
     Ok(())
 }
@@ -70,9 +80,6 @@ pub fn valid_email(s: &str) -> bool {
 }
 pub fn valid_tenant(k: &str) -> bool {
     (2..=32).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-}
-pub fn valid_role(r: &str) -> bool {
-    (1..=64).contains(&r.len()) && r.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b' ')
 }
 
 // ---------------------------------------------------------------- keys
@@ -187,7 +194,10 @@ impl Keys {
 
 pub struct Membership {
     pub tenant_key: String,
+    /// one of roles::BASE_ROLES (a row from before the catalogue may hold free text, which may do nothing)
     pub role: String,
+    /// the workspace's own role that narrows the base role (`custom-role` records, by `roleKey`)
+    pub custom_role: Option<String>,
 }
 pub struct User {
     pub id: i64,
@@ -201,11 +211,15 @@ pub struct User {
 impl User {
     pub fn to_json(&self) -> Value {
         json!({"email": self.email, "name": self.name, "disabled": self.disabled, "superAdmin": self.super_admin,
-               "memberships": self.memberships.iter().map(|m| json!({"tenantKey": m.tenant_key, "role": m.role})).collect::<Vec<_>>()})
+               "memberships": self.memberships.iter().map(|m| json!({"tenantKey": m.tenant_key, "role": m.role, "customRole": m.custom_role})).collect::<Vec<_>>()})
     }
     /// The user's role in `tenant`, if they are a member of it.
     pub fn role_in(&self, tenant: &str) -> Option<&str> {
         self.memberships.iter().find(|m| m.tenant_key == tenant).map(|m| m.role.as_str())
+    }
+    /// The user's custom role in `tenant`, if they are a member of it and have one.
+    pub fn custom_role_in(&self, tenant: &str) -> Option<&str> {
+        self.memberships.iter().find(|m| m.tenant_key == tenant).and_then(|m| m.custom_role.as_deref())
     }
     /// May the user act in `tenant`: a member of it, or a super admin.
     pub fn may_act_in(&self, tenant: &str) -> bool {
@@ -214,7 +228,7 @@ impl User {
 }
 
 /// Create or replace a user and their memberships. Returns true when it was created.
-/// body: {name?, disabled?, superAdmin?, memberships: [{tenantKey, role}]}
+/// body: {name?, disabled?, superAdmin?, memberships: [{tenantKey, role, customRole?}]}; `role` is one of roles::BASE_ROLES.
 pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result<bool, String> {
     let email = email.to_lowercase();
     if !valid_email(&email) {
@@ -227,19 +241,24 @@ pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result
     };
     let disabled = body.get("disabled").and_then(Value::as_bool).unwrap_or(false);
     let super_admin = body.get("superAdmin").and_then(Value::as_bool).unwrap_or(false);
-    let mut members: Vec<(String, String)> = Vec::new();
+    let mut members: Vec<(String, String, Option<String>)> = Vec::new();
     for m in body.get("memberships").and_then(Value::as_array).ok_or("memberships must be a list")? {
         let (k, r) = (m.get("tenantKey").and_then(Value::as_str).unwrap_or(""), m.get("role").and_then(Value::as_str).unwrap_or(""));
         if !valid_tenant(k) {
             return Err(format!("tenantKey {k:?} is not valid"));
         }
-        if !valid_role(r) {
-            return Err(format!("role {r:?} is not valid"));
+        if !roles::is_base_role(r) {
+            return Err(format!("role {r:?} is not one of {}", roles::BASE_ROLES.join(", ")));
         }
-        if members.iter().any(|(x, _)| x == k) {
+        let custom = match m.get("customRole") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(c)) if roles::valid_custom_role_key(c) => Some(c.clone()),
+            Some(c) => return Err(format!("customRole {c} is not a custom role's key")),
+        };
+        if members.iter().any(|(x, _, _)| x == k) {
             return Err(format!("tenantKey {k} is listed twice"));
         }
-        members.push((k.to_string(), r.to_string()));
+        members.push((k.to_string(), r.to_string(), custom));
     }
     let existing: Option<i64> = conn.query_row("SELECT id FROM users WHERE email=?1", [&email], |r| r.get(0)).ok();
     let id = match existing {
@@ -253,16 +272,16 @@ pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result
             conn.last_insert_rowid()
         }
     };
-    for (k, r) in &members {
-        conn.execute("INSERT INTO memberships(user_id, tenant_key, role) VALUES (?1,?2,?3)", rusqlite::params![id, k, r]).map_err(e)?;
+    for (k, r, c) in &members {
+        conn.execute("INSERT INTO memberships(user_id, tenant_key, role, custom_role) VALUES (?1,?2,?3,?4)", rusqlite::params![id, k, r, c]).map_err(e)?;
     }
     Ok(existing.is_none())
 }
 
 fn load_user(conn: &Connection, row: Option<(i64, String, Option<String>, bool, bool)>) -> Result<Option<User>, String> {
     let Some((id, email, name, disabled, super_admin)) = row else { return Ok(None) };
-    let mut st = conn.prepare("SELECT tenant_key, role FROM memberships WHERE user_id=?1 ORDER BY tenant_key").map_err(e)?;
-    let memberships = st.query_map([id], |r| Ok(Membership { tenant_key: r.get(0)?, role: r.get(1)? })).map_err(e)?.collect::<Result<Vec<_>, _>>().map_err(e)?;
+    let mut st = conn.prepare("SELECT tenant_key, role, custom_role FROM memberships WHERE user_id=?1 ORDER BY tenant_key").map_err(e)?;
+    let memberships = st.query_map([id], |r| Ok(Membership { tenant_key: r.get(0)?, role: r.get(1)?, custom_role: r.get(2)? })).map_err(e)?.collect::<Result<Vec<_>, _>>().map_err(e)?;
     Ok(Some(User { id, email, name, disabled, super_admin, memberships }))
 }
 
@@ -329,11 +348,12 @@ pub fn issue_token(keys: &Keys, user: &User, grant: &Grant, now_secs: i64) -> Re
     }
     let tenants: Vec<Value> = user.memberships.iter().filter(|m| grant.tenant.is_none_or(|t| t == m.tenant_key)).map(|m| json!({"key": m.tenant_key, "role": m.role})).collect();
     let role = grant.tenant.and_then(|t| user.role_in(t));
+    let crole = grant.tenant.and_then(|t| user.custom_role_in(t));
     let exp = now_secs + grant.ttl;
     let header = json!({"alg": "EdDSA", "typ": "JWT", "kid": kid(&keys.signing.verifying_key())});
     let mut claims = json!({
         "iss": ISSUER, "aud": grant.aud, "sub": user.email, "uid": user.id.to_string(), "name": user.name,
-        "sid": grant.sid, "tid": grant.tenant, "role": role, "crole": null,
+        "sid": grant.sid, "tid": grant.tenant, "role": role, "crole": crole,
         "sa": user.super_admin, "superAdmin": user.super_admin, "mfa": grant.mfa, "amr": grant.amr,
         "tenants": tenants, "iat": now_secs, "nbf": now_secs, "exp": exp, "jti": new_jti(),
     });
@@ -450,10 +470,46 @@ mod tests {
             ("a@b.co", json!({})),
             ("a@b.co", json!({"memberships": [{"tenantKey": "X", "role": "editor"}]})),
             ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": ""}]})),
-            ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "a"}, {"tenantKey": "dga", "role": "b"}]})),
+            ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "editor"}, {"tenantKey": "dga", "role": "viewer"}]})),
+            // roles are the catalogue's (roles.rs), no longer free text
+            ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "Lead Editor"}]})),
+            ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "super_admin"}]})),
+            ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "editor", "customRole": "Has Spaces"}]})),
+            ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "editor", "customRole": 7}]})),
         ] {
             assert!(upsert(&c, email, &body, NOW).is_err(), "{email} {body}");
         }
+        assert_eq!(c.query_row("SELECT COUNT(*) FROM users", [], |r| r.get::<_, i64>(0)).unwrap(), 0, "nothing half-written");
+    }
+
+    #[test]
+    fn a_custom_role_is_kept_per_membership_and_named_in_the_token() {
+        let (c, k) = db();
+        upsert(&c, "ann@example.org", &json!({"memberships": [{"tenantKey": "dga", "role": "editor", "customRole": "ผู้ตรวจ"}, {"tenantKey": "pea", "role": "viewer", "customRole": null}]}), NOW).unwrap();
+        let u = get(&c, "ann@example.org").unwrap().unwrap();
+        assert_eq!((u.custom_role_in("dga"), u.custom_role_in("pea"), u.custom_role_in("orst")), (Some("ผู้ตรวจ"), None, None));
+        assert_eq!(u.to_json()["memberships"][0]["customRole"], json!("ผู้ตรวจ"));
+        let (t, _) = issue(&c, &k, "ann@example.org", Some("dga"), 900, 1_000).unwrap();
+        assert_eq!(verify(&c, &k, &t, AUD_STUDIO, 1_000).unwrap()["crole"], json!("ผู้ตรวจ"));
+        let (t, _) = issue(&c, &k, "ann@example.org", Some("pea"), 900, 1_000).unwrap();
+        assert_eq!(verify(&c, &k, &t, AUD_STUDIO, 1_000).unwrap()["crole"], Value::Null);
+    }
+
+    #[test]
+    fn an_old_database_gets_the_new_columns_and_keeps_its_rows() {
+        let c = Connection::open_in_memory().unwrap();
+        // the tables as the first version made them
+        c.execute_batch("CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT, disabled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+                         CREATE TABLE memberships(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, tenant_key TEXT NOT NULL, role TEXT NOT NULL, PRIMARY KEY(user_id, tenant_key));
+                         INSERT INTO users(email, created_at, updated_at) VALUES ('old@example.org', 'x', 'x');
+                         INSERT INTO memberships VALUES (1, 'dga', 'Lead Editor');").unwrap();
+        c.execute_batch(DDL).unwrap();
+        migrate(&c).unwrap();
+        migrate(&c).unwrap();
+        let u = get(&c, "old@example.org").unwrap().unwrap();
+        // a free-text role from before the catalogue is read as it is: it may do nothing (roles::allowed), and the next write must name a base role
+        assert_eq!((u.super_admin, u.role_in("dga"), u.custom_role_in("dga")), (false, Some("Lead Editor"), None));
+        assert!(roles::allowed("Lead Editor").is_empty());
     }
 
     #[test]
@@ -643,6 +699,7 @@ mod tests {
         migrate(&c).unwrap();
         migrate(&c).unwrap();
         c.execute_batch("CREATE TABLE IF NOT EXISTS memberships(user_id INTEGER NOT NULL, tenant_key TEXT NOT NULL, role TEXT NOT NULL, PRIMARY KEY(user_id, tenant_key));").unwrap();
+        migrate(&c).unwrap();
         assert!(!get(&c, "old@example.org").unwrap().unwrap().super_admin);
     }
 

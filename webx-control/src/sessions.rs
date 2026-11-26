@@ -9,6 +9,8 @@
 //! sign-in identity or a workspace's provider, and logging out end sessions at once, each with a row in the audit table.
 //!
 //! Who may sign in, for a workspace:
+//!  - The workspace must sign in through control: its `mode` is `both` or `control`. A workspace with no settings here, or with
+//!    `legacy` (the default), has no sessions at all, a super admin's included; setting it back to `legacy` ends them (rollback).
 //!  - The provider must be the workspace's own (`workspace_identity.issuer`, exact match), and the e-mail verified by it (unless
 //!    the workspace says otherwise). A provider is believed about the people of its own workspace, and about nobody else's.
 //!  - A person is found by (issuer, subject). The first time, they are linked by e-mail if they hold a membership, or made on
@@ -20,20 +22,32 @@
 use crate::audit;
 use crate::identity::{self, Grant, Keys, User, AUD_ENGINE, AUD_STUDIO};
 use crate::jobs;
+use crate::roles;
+use crate::secrets::SecretKey;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as B64, Engine};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-pub const DDL: &str = "
+/// How a workspace signs in (step 3): `mode` legacy (Studio's old way only; control makes no session), both, or control.
+const WORKSPACE_IDENTITY: &str = "
 CREATE TABLE IF NOT EXISTS workspace_identity(
   tenant_key TEXT PRIMARY KEY,
-  issuer TEXT NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'legacy' CHECK (mode IN ('legacy', 'both', 'control')),
+  issuer TEXT,
+  client_id TEXT,
+  client_secret TEXT,
   allow_jit INTEGER NOT NULL DEFAULT 0,
   jit_role TEXT,
   require_verified_email INTEGER NOT NULL DEFAULT 1,
+  mfa_required INTEGER NOT NULL DEFAULT 0,
+  mfa_required_at TEXT,
+  accept_idp_mfa INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL
-);
+);";
+
+/// The other tables; `migrate` makes `workspace_identity` (and brings one from step 2 up to date).
+pub const DDL: &str = "
 CREATE TABLE IF NOT EXISTS identities(
   issuer TEXT NOT NULL,
   subject TEXT NOT NULL,
@@ -64,6 +78,28 @@ CREATE TABLE IF NOT EXISTS sessions(
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 ";
+
+/// Make `workspace_identity`, or bring the one step 2 made up to date: that one had no `mode`, client or MFA policy, and needed an
+/// issuer. Its rows keep their provider and come out `legacy`: no workspace signs in through control until an operator says so.
+/// Idempotent, and in one transaction.
+pub fn migrate(conn: &Connection) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(e)?;
+    let exists = tx.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workspace_identity'", [], |r| r.get::<_, i64>(0)).map_err(e)? > 0;
+    let has_mode = tx.query_row("SELECT COUNT(*) FROM pragma_table_info('workspace_identity') WHERE name='mode'", [], |r| r.get::<_, i64>(0)).map_err(e)? > 0;
+    if exists && !has_mode {
+        tx.execute_batch(&format!(
+            "ALTER TABLE workspace_identity RENAME TO workspace_identity_step2;
+             {WORKSPACE_IDENTITY}
+             INSERT INTO workspace_identity(tenant_key, mode, issuer, allow_jit, jit_role, require_verified_email, updated_at)
+               SELECT tenant_key, 'legacy', issuer, allow_jit, jit_role, require_verified_email, updated_at FROM workspace_identity_step2;
+             DROP TABLE workspace_identity_step2;"
+        ))
+        .map_err(e)?;
+    } else {
+        tx.execute_batch(WORKSPACE_IDENTITY).map_err(e)?;
+    }
+    tx.commit().map_err(e)
+}
 
 /// How long things live (decision D16; the flags in main.rs).
 #[derive(Clone, Copy)]
@@ -150,22 +186,46 @@ fn clean(s: Option<&str>, max: usize) -> Option<String> {
 /// One row in the audit table for something that happened to a session or a sign-in. `sid` is the session it concerns, if any
 /// (every event of a session carries it).
 fn audit_event(conn: &Connection, now: i64, action: &str, email: Option<&str>, tenant: Option<&str>, sid: Option<&str>, actor: &str, detail: &str) -> Result<(), String> {
+    audit_row(conn, now, action, "webx::session", sid, email, tenant, actor, detail)
+}
+
+/// One row in the audit table, written in the caller's transaction: `entry` is what it is about (a session, a workspace, a user).
+#[allow(clippy::too_many_arguments)]
+fn audit_row(conn: &Connection, now: i64, action: &str, content_type: &str, entry: Option<&str>, email: Option<&str>, tenant: Option<&str>, actor: &str, detail: &str) -> Result<(), String> {
     let at = stamp(now);
-    audit::create(conn, &json!({"action": action, "contentType": "webx::session", "entryId": sid, "adminEmail": email, "tenantKey": tenant, "actor": actor, "targetRef": detail, "at": at}), &at).map(|_| ())
+    audit::create(conn, &json!({"action": action, "contentType": content_type, "entryId": entry, "adminEmail": email, "tenantKey": tenant, "actor": actor, "targetRef": detail, "at": at}), &at).map(|_| ())
 }
 
 // ---------------------------------------------------------------- what a workspace accepts
 
 pub struct Policy {
     pub tenant_key: String,
-    pub issuer: String,
+    /// `legacy` (control makes no session here), `both` or `control`
+    pub mode: String,
+    pub issuer: Option<String>,
+    pub client_id: Option<String>,
+    /// the provider's client secret, sealed (secrets.rs); never shown, only said to be there
+    client_secret: Option<String>,
     pub allow_jit: bool,
     pub jit_role: Option<String>,
     pub require_verified_email: bool,
+    /// a second factor is required of everyone in the workspace, since `mfa_required_at` (the grace period counts from then)
+    pub mfa_required: bool,
+    pub mfa_required_at: Option<String>,
+    /// a second factor the provider says it checked counts (step 4)
+    pub accept_idp_mfa: bool,
+    pub updated_at: String,
 }
 impl Policy {
+    /// The workspace signs in through control.
+    pub fn signs_in(&self) -> bool {
+        self.mode != "legacy"
+    }
+    /// The operator's view: everything but the client secret, which only shows as there or not.
     pub fn to_json(&self) -> Value {
-        json!({"tenantKey": self.tenant_key, "issuer": self.issuer, "allowJit": self.allow_jit, "jitRole": self.jit_role, "requireVerifiedEmail": self.require_verified_email})
+        json!({"tenantKey": self.tenant_key, "mode": self.mode, "issuer": self.issuer, "clientId": self.client_id, "hasClientSecret": self.client_secret.is_some(),
+               "allowJit": self.allow_jit, "jitRole": self.jit_role, "requireVerifiedEmail": self.require_verified_email,
+               "mfaRequired": self.mfa_required, "mfaRequiredAt": self.mfa_required_at, "acceptIdpMfa": self.accept_idp_mfa, "updatedAt": self.updated_at})
     }
 }
 
@@ -194,66 +254,179 @@ fn valid_subject(s: &str) -> bool {
     (1..=255).contains(&s.len()) && !s.chars().any(char::is_control)
 }
 
+const POLICY_COLS: &str = "tenant_key, mode, issuer, client_id, client_secret, allow_jit, jit_role, require_verified_email, mfa_required, mfa_required_at, accept_idp_mfa, updated_at";
+
 pub fn policy(conn: &Connection, tenant: &str) -> Result<Option<Policy>, String> {
-    conn.query_row("SELECT tenant_key, issuer, allow_jit, jit_role, require_verified_email FROM workspace_identity WHERE tenant_key=?1", [tenant], |r| {
-        Ok(Policy { tenant_key: r.get(0)?, issuer: r.get(1)?, allow_jit: r.get(2)?, jit_role: r.get(3)?, require_verified_email: r.get(4)? })
+    conn.query_row(&format!("SELECT {POLICY_COLS} FROM workspace_identity WHERE tenant_key=?1"), [tenant], |r| {
+        Ok(Policy {
+            tenant_key: r.get(0)?,
+            mode: r.get(1)?,
+            issuer: r.get(2)?,
+            client_id: r.get(3)?,
+            client_secret: r.get(4)?,
+            allow_jit: r.get(5)?,
+            jit_role: r.get(6)?,
+            require_verified_email: r.get(7)?,
+            mfa_required: r.get(8)?,
+            mfa_required_at: r.get(9)?,
+            accept_idp_mfa: r.get(10)?,
+            updated_at: r.get(11)?,
+        })
     })
     .optional()
     .map_err(e)
 }
 
-/// Set what a workspace accepts. body: {issuer, allowJit?, jitRole?, requireVerifiedEmail?}. Returns true when it was created.
-/// Changing the provider ends the sessions that were made with the old one.
-pub fn put_policy(conn: &Connection, tenant: &str, body: &Value, now: i64) -> Result<bool, String> {
+/// What the provider's client secret is sealed for: its own workspace, so it does not open in another row.
+fn secret_context(tenant: &str) -> String {
+    format!("client-secret:{tenant}")
+}
+
+/// Sessions exist only in a workspace that signs in through control: none for one with no settings here or in `legacy`.
+fn open_for_sessions(p: Option<Policy>) -> Result<Policy, (&'static str, &'static str)> {
+    match p {
+        None => Err(("workspace_not_configured", "this workspace does not sign in through webx-control")),
+        Some(p) if !p.signs_in() => Err(("workspace_legacy", "this workspace does not sign in through webx-control yet (mode legacy)")),
+        Some(p) => Ok(p),
+    }
+}
+
+/// Set how a workspace signs in, as an operator. body: {mode?, issuer?, clientId?, clientSecret?, allowJit?, jitRole?,
+/// requireVerifiedEmail?, mfaRequired?, mfaRequiredAt?, acceptIdpMfa?}. A field left out takes its default (`mode` legacy, nothing
+/// required), except `clientSecret`, which stays as it was when left out and is removed by `null`. `both` and `control` need an issuer
+/// and a client id. Returns true when the row was created. Going back to `legacy` ends every session in the workspace (a super admin's
+/// too); a new provider ends the sessions of the people tied to the old one.
+pub fn put_policy(conn: &Connection, secrets: Option<&SecretKey>, tenant: &str, body: &Value, now: i64) -> Result<bool, String> {
     if !identity::valid_tenant(tenant) {
         return Err(format!("tenantKey {tenant:?} is not valid"));
     }
-    let issuer = body.get("issuer").and_then(Value::as_str).unwrap_or("");
-    if !valid_issuer(issuer) {
+    if !body.is_object() {
+        return Err("body must be an object".into());
+    }
+    let flag = |k: &str, default: bool| -> Result<bool, String> {
+        match body.get(k) {
+            None | Some(Value::Null) => Ok(default),
+            Some(Value::Bool(b)) => Ok(*b),
+            _ => Err(format!("{k} must be true or false")),
+        }
+    };
+    let text = |k: &str| -> Result<Option<&str>, String> {
+        match body.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(s)) => Ok(Some(s.as_str())),
+            _ => Err(format!("{k} must be text")),
+        }
+    };
+    let mode = text("mode")?.unwrap_or("legacy");
+    if !["legacy", "both", "control"].contains(&mode) {
+        return Err("mode must be legacy, both or control".into());
+    }
+    let issuer = text("issuer")?;
+    if issuer.is_some_and(|i| !valid_issuer(i)) {
         return Err("issuer must be an https URL without a query or fragment".into());
     }
-    let allow_jit = match body.get("allowJit") {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        _ => return Err("allowJit must be true or false".into()),
-    };
-    let require_verified = match body.get("requireVerifiedEmail") {
-        None | Some(Value::Null) => true,
-        Some(Value::Bool(b)) => *b,
-        _ => return Err("requireVerifiedEmail must be true or false".into()),
-    };
-    let jit_role = match body.get("jitRole") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(r)) if identity::valid_role(r) => Some(r.clone()),
-        _ => return Err("jitRole is not a valid role".into()),
-    };
+    let client_id = text("clientId")?;
+    if client_id.is_some_and(|c| !(1..=255).contains(&c.len()) || !c.bytes().all(|b| b.is_ascii_graphic())) {
+        return Err("clientId must be 1 to 255 visible characters".into());
+    }
+    if mode != "legacy" && (issuer.is_none() || client_id.is_none()) {
+        return Err(format!("mode {mode} needs an issuer and a clientId: the provider people sign in at"));
+    }
+    let allow_jit = flag("allowJit", false)?;
+    let require_verified = flag("requireVerifiedEmail", true)?;
+    let jit_role = text("jitRole")?;
+    if let Some(r) = jit_role {
+        if !roles::is_base_role(r) {
+            return Err(format!("jitRole must be one of {}", roles::BASE_ROLES.join(", ")));
+        }
+        if roles::may(r, None, "manage_people") {
+            return Err(format!("jitRole cannot be {r}: anyone the provider vouches for would manage the workspace's people"));
+        }
+    }
     if allow_jit && jit_role.is_none() {
         return Err("allowJit needs a jitRole: the role a person made on the spot gets".into());
     }
+    let mfa_required = flag("mfaRequired", false)?;
+    let mfa_from = match text("mfaRequiredAt")? {
+        None => None,
+        Some(s) => Some(jobs::parse_iso(s).ok_or("mfaRequiredAt is not a time (ISO 8601, UTC)")?),
+    };
+    if mfa_from.is_some() && !mfa_required {
+        return Err("mfaRequiredAt needs mfaRequired".into());
+    }
+    if mfa_from.is_some_and(|ms| ms > now * 1000) {
+        return Err("mfaRequiredAt cannot be in the future".into());
+    }
+    let accept_idp_mfa = flag("acceptIdpMfa", false)?;
     let tx = conn.unchecked_transaction().map_err(e)?;
     let before = policy(&tx, tenant)?;
+    let (client_secret, secret_note) = match body.get("clientSecret") {
+        None => (before.as_ref().and_then(|b| b.client_secret.clone()), "kept"),
+        Some(Value::Null) => (None, "removed"),
+        Some(Value::String(s)) if (1..=1024).contains(&s.len()) && !s.chars().any(char::is_control) => {
+            let key = secrets.ok_or("clientSecret needs WEBX_CONTROL_SECRET_KEY: control keeps it only encrypted")?;
+            (Some(key.seal(&secret_context(tenant), s)?), "set")
+        }
+        Some(_) => return Err("clientSecret must be 1 to 1024 characters of text".into()),
+    };
+    // the grace period counts from when MFA was first required: saving again while it is on does not start it again
+    let mfa_required_at = match (mfa_required, mfa_from) {
+        (false, _) => None,
+        (true, Some(ms)) => Some(jobs::iso(ms)),
+        (true, None) => before.as_ref().filter(|b| b.mfa_required).and_then(|b| b.mfa_required_at.clone()).or_else(|| Some(stamp(now))),
+    };
     tx.execute(
-        "INSERT INTO workspace_identity(tenant_key, issuer, allow_jit, jit_role, require_verified_email, updated_at) VALUES (?1,?2,?3,?4,?5,?6)
-         ON CONFLICT(tenant_key) DO UPDATE SET issuer=?2, allow_jit=?3, jit_role=?4, require_verified_email=?5, updated_at=?6",
-        params![tenant, issuer, allow_jit, jit_role, require_verified, stamp(now)],
+        &format!(
+            "INSERT INTO workspace_identity({POLICY_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
+             ON CONFLICT(tenant_key) DO UPDATE SET mode=?2, issuer=?3, client_id=?4, client_secret=?5, allow_jit=?6, jit_role=?7,
+               require_verified_email=?8, mfa_required=?9, mfa_required_at=?10, accept_idp_mfa=?11, updated_at=?12"
+        ),
+        params![tenant, mode, issuer, client_id, client_secret, allow_jit, jit_role, require_verified, mfa_required, mfa_required_at, accept_idp_mfa, stamp(now)],
     )
     .map_err(e)?;
-    if before.as_ref().is_some_and(|b| b.issuer != issuer) {
-        end_where(&tx, now, "tenant_key=?1 AND issuer<>?2 AND user_id IN (SELECT id FROM users WHERE super_admin=0)", params![tenant, issuer], "issuer_changed", "admin")?;
+    if let Some(b) = &before {
+        if b.signs_in() && mode == "legacy" {
+            end_where(&tx, now, "tenant_key=?1", params![tenant], "workspace_legacy", "admin")?;
+        } else if let (Some(i), true) = (issuer, b.issuer.as_deref() != issuer) {
+            end_where(&tx, now, "tenant_key=?1 AND issuer<>?2 AND user_id IN (SELECT id FROM users WHERE super_admin=0)", params![tenant, i], "issuer_changed", "admin")?;
+        }
     }
+    let detail = format!(
+        "mode={mode} issuer={} client={} secret={secret_note} jit={} verified_email={require_verified} mfa_required={mfa_required} accept_idp_mfa={accept_idp_mfa}",
+        issuer.unwrap_or("-"),
+        client_id.unwrap_or("-"),
+        if allow_jit { jit_role.unwrap_or("-") } else { "off" },
+    );
+    audit_row(&tx, now, "workspace_identity_saved", "webx::workspace-identity", Some(tenant), None, Some(tenant), "admin", &detail)?;
     tx.commit().map_err(e)?;
     Ok(before.is_none())
 }
 
-/// Stop accepting sign-ins for a workspace; the sessions of its people end.
+/// Stop signing in through control for a workspace (the same as `legacy`, with the provider forgotten): every session in it ends.
 pub fn delete_policy(conn: &Connection, tenant: &str, now: i64) -> Result<bool, String> {
     let tx = conn.unchecked_transaction().map_err(e)?;
     let had = tx.execute("DELETE FROM workspace_identity WHERE tenant_key=?1", [tenant]).map_err(e)? > 0;
     if had {
-        end_where(&tx, now, "tenant_key=?1 AND user_id IN (SELECT id FROM users WHERE super_admin=0)", params![tenant], "workspace_identity_removed", "admin")?;
+        end_where(&tx, now, "tenant_key=?1", params![tenant], "workspace_identity_removed", "admin")?;
+        audit_row(&tx, now, "workspace_identity_removed", "webx::workspace-identity", Some(tenant), None, Some(tenant), "admin", "removed")?;
     }
     tx.commit().map_err(e)?;
     Ok(had)
+}
+
+/// What Studio needs to send a person to the workspace's provider (step 6; the broker credential only): the mode, and for a workspace
+/// that signs in through control the issuer, client id and client secret. A `legacy` workspace shows only its mode: nothing should
+/// need control's copy of its client until it switches. None when the workspace has no settings here.
+pub fn sign_in_settings(conn: &Connection, secrets: Option<&SecretKey>, tenant: &str) -> Result<Option<Value>, String> {
+    let Some(p) = policy(conn, tenant)? else { return Ok(None) };
+    if !p.signs_in() {
+        return Ok(Some(json!({"tenantKey": p.tenant_key, "mode": p.mode})));
+    }
+    let secret = match &p.client_secret {
+        None => None,
+        Some(sealed) => Some(secrets.ok_or("the client secret is kept encrypted: start with WEBX_CONTROL_SECRET_KEY set")?.open(&secret_context(tenant), sealed)?),
+    };
+    Ok(Some(json!({"tenantKey": p.tenant_key, "mode": p.mode, "issuer": p.issuer, "clientId": p.client_id, "clientSecret": secret})))
 }
 
 /// A workspace that is gone: nothing signs in to it, and every session in it ends (a super admin's too).
@@ -370,7 +543,8 @@ fn session(conn: &Connection, sid: &str) -> Result<Option<Session>, String> {
     .map_err(e)
 }
 
-/// The user of a session that is still good, or why it is not: "revoked", "expired", "user_disabled" or "membership_removed".
+/// The user of a session that is still good, or why it is not: "revoked", "expired", "user_deleted", "user_disabled",
+/// "membership_removed", or "workspace_not_configured" / "workspace_legacy" (the workspace no longer signs in through control).
 fn check_live(conn: &Connection, s: &Session, now: i64) -> Result<User, String> {
     if s.revoked_at.is_some() {
         return Err(s.revoked_reason.clone().map_or("revoked".to_string(), |r| format!("revoked: {r}")));
@@ -386,9 +560,13 @@ fn check_live(conn: &Connection, s: &Session, now: i64) -> Result<User, String> 
         if !user.may_act_in(t) {
             return Err("membership_removed".into());
         }
+        open_for_sessions(policy(conn, t)?).map_err(|(reason, _)| reason.to_string())?;
     }
     Ok(user)
 }
+
+/// Reasons `check_live` gives for a session that a change made elsewhere has left behind: the session is ended when it is next used.
+const LEFT_BEHIND: [&str; 5] = ["user_disabled", "membership_removed", "user_deleted", "workspace_not_configured", "workspace_legacy"];
 
 /// The access token of a session, for its active workspace.
 fn access_for(keys: &Keys, cfg: &Config, user: &User, s: &Session, now: i64) -> Result<(String, i64), String> {
@@ -468,14 +646,11 @@ struct Decision {
 
 fn decide(conn: &Connection, req: &SignIn) -> Result<Decision, (&'static str, &'static str)> {
     let db = |_: String| ("internal_error", "the identity store could not be read");
-    let policy = policy(conn, &req.tenant).map_err(db)?;
+    // the workspace has to sign in through control at all, for everyone
+    let workspace = open_for_sessions(policy(conn, &req.tenant).map_err(db)?);
     let linked: Option<(i64, String)> = conn.query_row("SELECT user_id, linked_by FROM identities WHERE issuer=?1 AND subject=?2", params![req.issuer, req.subject], |r| Ok((r.get(0)?, r.get(1)?))).optional().map_err(|x| db(x.to_string()))?;
-    // the provider has to be the workspace's own, for everyone but a super admin (checked below)
-    let own_provider = |p: &Option<Policy>| match p {
-        None => Err(("workspace_not_configured", "this workspace does not sign in through webx-control")),
-        Some(p) if p.issuer != req.issuer => Err(("issuer_mismatch", "that provider is not this workspace's provider")),
-        Some(_) => Ok(()),
-    };
+    // and the provider has to be the workspace's own, for everyone but a super admin (checked below)
+    let own_provider = |p: &Policy| if p.issuer.as_deref() == Some(req.issuer.as_str()) { Ok(()) } else { Err(("issuer_mismatch", "that provider is not this workspace's provider")) };
     if let Some((uid, linked_by)) = linked {
         let user = identity::get_by_id(conn, uid).map_err(db)?.ok_or(("internal_error", "the identity store could not be read"))?;
         if user.disabled {
@@ -485,10 +660,11 @@ fn decide(conn: &Connection, req: &SignIn) -> Result<Decision, (&'static str, &'
             if linked_by != "admin" {
                 return Err(("super_admin_needs_operator_link", "a super admin signs in only through an identity an operator linked"));
             }
+            workspace?;
             return Ok(Decision { user: Some(user), add_membership: None, link_by: None, how: "identity" });
         }
+        let policy = workspace?;
         own_provider(&policy)?;
-        let policy = policy.expect("checked by own_provider");
         if user.role_in(&req.tenant).is_some() {
             return Ok(Decision { user: Some(user), add_membership: None, link_by: None, how: "identity" });
         }
@@ -498,8 +674,8 @@ fn decide(conn: &Connection, req: &SignIn) -> Result<Decision, (&'static str, &'
         };
     }
     // first sign-in of this (issuer, subject)
+    let policy = workspace?;
     own_provider(&policy)?;
-    let policy = policy.expect("checked by own_provider");
     if policy.require_verified_email && !req.email_verified {
         return Err(("email_not_verified", "the provider has not verified that e-mail address"));
     }
@@ -609,8 +785,8 @@ pub fn refresh(conn: &Connection, keys: &Keys, cfg: &Config, token: &str, now: i
     let user = match check_live(conn, &s, now) {
         Ok(u) => u,
         Err(why) => {
-            // a user who is gone or lost the workspace ends the session here, if the change did not already
-            if matches!(why.as_str(), "user_disabled" | "membership_removed" | "user_deleted") {
+            // a user who is gone or lost the workspace, or a workspace that left control, ends the session here if the change did not already
+            if LEFT_BEHIND.contains(&why.as_str()) {
                 let tx = conn.unchecked_transaction()?;
                 end_where(&tx, now, "id=?1", params![sid], &why, "control")?;
                 tx.commit()?;
@@ -652,12 +828,10 @@ pub fn switch(conn: &Connection, keys: &Keys, cfg: &Config, sid: &str, tenant: &
     if !user.may_act_in(tenant) {
         return Err(Refusal::denied("not_a_member", "this account is not a member of that workspace"));
     }
-    if !user.super_admin {
-        match policy(conn, tenant)? {
-            None => return Err(Refusal::denied("workspace_not_configured", "that workspace does not sign in through webx-control")),
-            Some(p) if p.issuer != s.issuer => return Err(Refusal::denied("issuer_mismatch", "this session was not made with that workspace's provider: sign in there")),
-            Some(_) => {}
-        }
+    // like signing in: only into a workspace that signs in through control, and (but for a super admin) one of the same provider
+    let target = open_for_sessions(policy(conn, tenant)?).map_err(|(reason, message)| Refusal::denied(reason, message))?;
+    if !user.super_admin && target.issuer.as_deref() != Some(s.issuer.as_str()) {
+        return Err(Refusal::denied("issuer_mismatch", "this session was not made with that workspace's provider: sign in there"));
     }
     let tx = conn.unchecked_transaction()?;
     tx.execute("UPDATE sessions SET tenant_key=?2 WHERE id=?1", params![sid, tenant])?;
@@ -703,25 +877,34 @@ pub fn revoke_user(conn: &Connection, email: &str, now: i64) -> Result<Option<us
 
 // ---------------------------------------------------------------- users changed by an operator
 
-/// Did `after` lose anything `before` had: enabled, a workspace, a role, or its place as (not) a super admin. Gaining a
-/// workspace loses nothing.
+/// Did `after` lose anything `before` had, or might it have: enabled, a workspace, a role or custom role there (any change of either:
+/// the token names both), or its place as (not) a super admin. Gaining a workspace loses nothing.
 fn access_changed(before: &User, after: &User) -> bool {
     (!before.disabled && after.disabled)
         || before.super_admin != after.super_admin
-        || before.memberships.iter().any(|m| after.role_in(&m.tenant_key) != Some(m.role.as_str()))
+        || before.memberships.iter().any(|m| after.role_in(&m.tenant_key) != Some(m.role.as_str()) || after.custom_role_in(&m.tenant_key) != m.custom_role.as_deref())
 }
 
-/// `identity::upsert`, and the user's sessions end if what it did takes anything away (see access_changed).
+/// What an audit row says about a user as saved: enabled or not, super admin or not, and each workspace with its role.
+fn user_summary(u: &User) -> String {
+    let ms: Vec<String> = u.memberships.iter().map(|m| format!("{}/{}{}", m.tenant_key, m.role, m.custom_role.as_deref().map(|c| format!("+{c}")).unwrap_or_default())).collect();
+    format!("{}{} memberships=[{}]", if u.disabled { "disabled" } else { "enabled" }, if u.super_admin { " super_admin" } else { "" }, ms.join(","))
+}
+
+/// `identity::upsert`, and the user's sessions end if what it did takes anything away (see access_changed). An audit row records what
+/// the user became, in the same transaction.
 pub fn replace_user(conn: &Connection, email: &str, body: &Value, now: i64) -> Result<bool, String> {
     let tx = conn.unchecked_transaction().map_err(e)?;
     let before = identity::get(&tx, email)?;
     let created = identity::upsert(&tx, email, body, &stamp(now))?;
-    if let (Some(b), Some(a)) = (before, identity::get(&tx, email)?) {
-        if access_changed(&b, &a) {
-            let reason = if !b.disabled && a.disabled { "user_disabled" } else { "user_changed" };
-            end_where(&tx, now, "user_id=?1", params![a.id], reason, "admin")?;
+    let after = identity::get(&tx, email)?.ok_or("user vanished")?;
+    if let Some(b) = &before {
+        if access_changed(b, &after) {
+            let reason = if !b.disabled && after.disabled { "user_disabled" } else { "user_changed" };
+            end_where(&tx, now, "user_id=?1", params![after.id], reason, "admin")?;
         }
     }
+    audit_row(&tx, now, if created { "user_created" } else { "user_saved" }, "webx::user", Some(&after.id.to_string()), Some(&after.email), None, "admin", &user_summary(&after))?;
     tx.commit().map_err(e)?;
     Ok(created)
 }
@@ -731,6 +914,7 @@ pub fn remove_user(conn: &Connection, email: &str, now: i64) -> Result<bool, Str
     let tx = conn.unchecked_transaction().map_err(e)?;
     if let Some(u) = identity::get(&tx, email)? {
         end_where(&tx, now, "user_id=?1", params![u.id], "user_deleted", "admin")?;
+        audit_row(&tx, now, "user_removed", "webx::user", Some(&u.id.to_string()), Some(&u.email), None, "admin", &user_summary(&u))?;
     }
     let removed = identity::remove(&tx, email)?;
     tx.commit().map_err(e)?;
@@ -795,6 +979,10 @@ pub fn engine_token(conn: &Connection, keys: &Keys, cfg: &Config, req: &EngineRe
             if !user.may_act_in(tenant) {
                 return refuse("owner_revoked", "the job's owner is no longer a member of that workspace");
             }
+            // control acts for nobody in a workspace that does not sign in through it: its jobs run the old way
+            if let Err((reason, message)) = open_for_sessions(policy(conn, tenant)?) {
+                return refuse(reason, message);
+            }
             let (token, exp) = identity::issue_token(keys, &user, &Grant { aud: AUD_ENGINE, tenant: Some(tenant), sid: None, mfa: false, amr: &[], ttl: cfg.engine_secs, job: Some(job) }, now)?;
             audit_event(conn, now, "engine_token_job", Some(&user.email), Some(tenant), Some(job), "job", "minted")?;
             Ok(json!({"token": token, "expiresAt": exp}))
@@ -820,14 +1008,27 @@ mod tests {
     const DGA: &str = "https://idp.example/realms/dga";
     const PEA: &str = "https://idp.example/realms/pea";
 
-    fn setup() -> (Connection, Keys, Config) {
+    /// A workspace that signs in through control (`both`) at `issuer`, with `extra` settings on top.
+    fn open(c: &Connection, tenant: &str, issuer: &str, extra: Value, now: i64) -> Result<bool, String> {
+        let mut body = json!({"mode": "both", "issuer": issuer, "clientId": "webx-studio"});
+        for (k, v) in extra.as_object().unwrap() {
+            body[k] = v.clone();
+        }
+        put_policy(c, None, tenant, &body, now)
+    }
+    fn tables() -> Connection {
         let c = Connection::open_in_memory().unwrap();
         c.execute_batch(audit::DDL).unwrap();
         c.execute_batch(identity::DDL).unwrap();
         c.execute_batch(DDL).unwrap();
+        migrate(&c).unwrap();
+        c
+    }
+    fn setup() -> (Connection, Keys, Config) {
+        let c = tables();
         let keys = Keys::load(&c, None, None).unwrap();
-        put_policy(&c, "dga", &json!({"issuer": DGA}), T0).unwrap();
-        put_policy(&c, "pea", &json!({"issuer": PEA}), T0).unwrap();
+        open(&c, "dga", DGA, json!({}), T0).unwrap();
+        open(&c, "pea", PEA, json!({}), T0).unwrap();
         identity::upsert(&c, "ann@example.org", &json!({"name": "Ann", "memberships": [{"tenantKey": "dga", "role": "editor"}, {"tenantKey": "pea", "role": "viewer"}]}), &stamp(T0)).unwrap();
         (c, keys, Config::default())
     }
@@ -840,8 +1041,9 @@ mod tests {
     fn reason(r: Result<Value, Refusal>) -> &'static str {
         r.unwrap_err().reason
     }
+    /// The audit rows about sessions and sign-ins (not the operator's changes to settings and users), oldest first.
     fn actions(c: &Connection) -> Vec<(String, Option<String>)> {
-        let mut st = c.prepare("SELECT action, entry_id FROM audit ORDER BY id").unwrap();
+        let mut st = c.prepare("SELECT action, entry_id FROM audit WHERE content_type='webx::session' ORDER BY id").unwrap();
         st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect()
     }
     fn count(c: &Connection, sql: &str) -> i64 {
@@ -893,10 +1095,10 @@ mod tests {
         let mut r = req("ann@example.org", "sub-ann", "dga");
         r.email_verified = false;
         assert_eq!(reason(sign_in(&c, &k, &cfg, &r, T0)), "email_not_verified");
-        put_policy(&c, "dga", &json!({"issuer": DGA, "requireVerifiedEmail": false}), T0).unwrap();
+        open(&c, "dga", DGA, json!({"requireVerifiedEmail": false}), T0).unwrap();
         assert!(sign_in(&c, &k, &cfg, &r, T0).is_ok());
         // an identity already linked does not need the e-mail again
-        put_policy(&c, "dga", &json!({"issuer": DGA}), T0).unwrap();
+        open(&c, "dga", DGA, json!({}), T0).unwrap();
         assert!(sign_in(&c, &k, &cfg, &r, T0 + 1).is_ok());
     }
 
@@ -906,12 +1108,12 @@ mod tests {
         let r = req("new@example.org", "sub-new", "dga");
         assert_eq!(reason(sign_in(&c, &k, &cfg, &r, T0)), "unknown_user");
         assert_eq!(count(&c, "SELECT COUNT(*) FROM users"), 1, "nobody was made");
-        put_policy(&c, "dga", &json!({"issuer": DGA, "allowJit": true, "jitRole": "viewer"}), T0).unwrap();
+        open(&c, "dga", DGA, json!({"allowJit": true, "jitRole": "viewer"}), T0).unwrap();
         let s = sign_in(&c, &k, &cfg, &r, T0).unwrap();
         let claims = identity::verify(&c, &k, s["accessToken"].as_str().unwrap(), AUD_STUDIO, T0).unwrap();
         assert_eq!((claims["role"].clone(), claims["sub"].clone()), (json!("viewer"), json!("new@example.org")), "with the role the workspace names");
         assert!(actions(&c).iter().any(|(a, _)| a == "user_provisioned"));
-        assert!(put_policy(&c, "dga", &json!({"issuer": DGA, "allowJit": true}), T0).is_err(), "on the spot needs a role to give");
+        assert!(open(&c, "dga", DGA, json!({"allowJit": true}), T0).is_err(), "on the spot needs a role to give");
     }
 
     #[test]
@@ -920,7 +1122,7 @@ mod tests {
         identity::upsert(&c, "bob@example.org", &json!({"memberships": [{"tenantKey": "pea", "role": "admin"}]}), &stamp(T0)).unwrap();
         let r = req("bob@example.org", "sub-bob", "dga");
         assert_eq!(reason(sign_in(&c, &k, &cfg, &r, T0)), "not_a_member");
-        put_policy(&c, "dga", &json!({"issuer": DGA, "allowJit": true, "jitRole": "viewer"}), T0).unwrap();
+        open(&c, "dga", DGA, json!({"allowJit": true, "jitRole": "viewer"}), T0).unwrap();
         let s = sign_in(&c, &k, &cfg, &r, T0).unwrap();
         assert_eq!(identity::verify(&c, &k, s["accessToken"].as_str().unwrap(), AUD_STUDIO, T0).unwrap()["role"], json!("viewer"));
         assert_eq!(identity::get(&c, "bob@example.org").unwrap().unwrap().role_in("pea"), Some("admin"), "and nothing changed in pea");
@@ -964,8 +1166,13 @@ mod tests {
         // the operator links the platform's provider
         let platform = "https://id.platform.example/realms/ops";
         assert!(set_identities(&c, "root@example.org", &json!({"identities": [{"issuer": platform, "subject": "sub-root"}]}), T0).unwrap());
-        let mut r = req("root@example.org", "sub-root", "orst"); // any workspace, even one with no settings
+        // a workspace that signs in through control, whatever its own provider; not one with no settings, nor one that is legacy
+        let mut r = req("root@example.org", "sub-root", "orst");
         r.issuer = platform.into();
+        assert_eq!(reason(sign_in(&c, &k, &cfg, &r, T0)), "workspace_not_configured");
+        put_policy(&c, None, "orst", &json!({"mode": "legacy", "issuer": DGA}), T0).unwrap();
+        assert_eq!(reason(sign_in(&c, &k, &cfg, &r, T0)), "workspace_legacy", "a super admin too");
+        open(&c, "orst", DGA, json!({}), T0).unwrap();
         let s = sign_in(&c, &k, &cfg, &r, T0).unwrap();
         let claims = identity::verify(&c, &k, s["accessToken"].as_str().unwrap(), AUD_STUDIO, T0).unwrap();
         assert_eq!((claims["sa"].clone(), claims["tid"].clone(), claims["role"].clone()), (json!(true), json!("orst"), Value::Null));
@@ -1192,9 +1399,9 @@ mod tests {
         let (c, k, cfg) = setup();
         let s = ann_signs_in(&c, &k, &cfg, T0);
         let sid = s["sessionId"].as_str().unwrap();
-        put_policy(&c, "dga", &json!({"issuer": DGA, "requireVerifiedEmail": false}), T0 + 1).unwrap();
+        open(&c, "dga", DGA, json!({"requireVerifiedEmail": false}), T0 + 1).unwrap();
         assert_eq!(status(&c, sid, T0 + 2).unwrap().unwrap()["active"], json!(true), "same provider, settings changed");
-        assert!(!put_policy(&c, "dga", &json!({"issuer": "https://new-idp.example/realms/dga"}), T0 + 3).unwrap());
+        assert!(!open(&c, "dga", "https://new-idp.example/realms/dga", json!({}), T0 + 3).unwrap());
         assert_eq!(status(&c, sid, T0 + 4).unwrap().unwrap()["reason"], json!("revoked: issuer_changed"));
         assert_eq!(reason(sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 5)), "issuer_mismatch", "the linked identity belongs to the old provider");
         // removing the settings, and the workspace itself
@@ -1206,7 +1413,7 @@ mod tests {
         assert_eq!(status(&c, p["sessionId"].as_str().unwrap(), T0 + 8).unwrap().unwrap()["active"], json!(false));
         let q = sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 9);
         assert!(q.is_err());
-        put_policy(&c, "dga", &json!({"issuer": DGA}), T0 + 9).unwrap();
+        open(&c, "dga", DGA, json!({}), T0 + 9).unwrap();
         let q = ann_signs_in(&c, &k, &cfg, T0 + 10);
         workspace_removed(&c, "dga", T0 + 11).unwrap();
         assert_eq!(status(&c, q["sessionId"].as_str().unwrap(), T0 + 12).unwrap().unwrap()["active"], json!(false));
@@ -1223,10 +1430,10 @@ mod tests {
         // pea has its own provider: the dga session cannot be moved there, though Ann is a member of both
         assert_eq!(switch(&c, &k, &cfg, sid, "pea", T0 + 1).unwrap_err().reason, "issuer_mismatch");
         // a workspace she is not in
-        put_policy(&c, "orst", &json!({"issuer": DGA}), T0).unwrap();
+        open(&c, "orst", DGA, json!({}), T0).unwrap();
         assert_eq!(switch(&c, &k, &cfg, sid, "orst", T0 + 1).unwrap_err().reason, "not_a_member");
         // pea changes to dga's provider (a shared one): now it works
-        put_policy(&c, "pea", &json!({"issuer": DGA}), T0 + 2).unwrap();
+        open(&c, "pea", DGA, json!({}), T0 + 2).unwrap();
         let m = switch(&c, &k, &cfg, sid, "pea", T0 + 3).unwrap();
         let claims = identity::verify(&c, &k, m["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 4).unwrap();
         assert_eq!((claims["tid"].clone(), claims["role"].clone(), claims["tenants"].clone()), (json!("pea"), json!("viewer"), json!([{"key": "pea", "role": "viewer"}])));
@@ -1295,10 +1502,15 @@ mod tests {
             let e = engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: who, tenant, job: "job-2" }, T0).unwrap_err();
             assert_eq!((e.status, e.reason), (403, "owner_revoked"), "{who} {tenant}");
         }
+        // a workspace that does not sign in through control: its jobs run the old way, control makes them no token
+        identity::upsert(&c, "bo@example.org", &json!({"memberships": [{"tenantKey": "orst", "role": "editor"}]}), &stamp(T0)).unwrap();
+        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "bo@example.org", tenant: "orst", job: "job-4" }, T0).unwrap_err().reason, "workspace_not_configured");
+        put_policy(&c, None, "orst", &json!({"issuer": DGA}), T0).unwrap();
+        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "bo@example.org", tenant: "orst", job: "job-5" }, T0).unwrap_err().reason, "workspace_legacy");
         set_user(&c, "ann@example.org", json!({"disabled": true, "memberships": [{"tenantKey": "dga", "role": "editor"}]}), T0 + 1);
         assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "ann@example.org", tenant: "dga", job: "job-3" }, T0 + 2).unwrap_err().reason, "owner_revoked");
         let refused = actions(&c).iter().filter(|(a, j)| a == "engine_token_refused" && j.is_some()).count();
-        assert_eq!(refused, 3, "each refusal is on the record with the job's id");
+        assert_eq!(refused, 5, "each refusal is on the record with the job's id");
         // no session was made for any of it
         assert_eq!(count(&c, "SELECT COUNT(*) FROM sessions"), 0);
     }
@@ -1387,23 +1599,193 @@ mod tests {
 
     #[test]
     fn what_counts_as_taking_something_away() {
-        let user = |disabled: bool, sa: bool, ms: &[(&str, &str)]| User {
+        let user = |disabled: bool, sa: bool, ms: &[(&str, &str, Option<&str>)]| User {
             id: 1,
             email: "a@b.co".into(),
             name: None,
             disabled,
             super_admin: sa,
-            memberships: ms.iter().map(|(t, r)| identity::Membership { tenant_key: t.to_string(), role: r.to_string() }).collect(),
+            memberships: ms.iter().map(|(t, r, c)| identity::Membership { tenant_key: t.to_string(), role: r.to_string(), custom_role: c.map(String::from) }).collect(),
         };
-        let both = [("dga", "editor"), ("pea", "viewer")];
+        let both = [("dga", "editor", None), ("pea", "viewer", None)];
         let base = user(false, false, &both);
-        assert!(!access_changed(&base, &user(false, false, &[("pea", "viewer"), ("dga", "editor")])), "the order is nothing");
-        assert!(!access_changed(&base, &user(false, false, &[("dga", "editor"), ("pea", "viewer"), ("orst", "viewer")])), "a new workspace");
+        assert!(!access_changed(&base, &user(false, false, &[("pea", "viewer", None), ("dga", "editor", None)])), "the order is nothing");
+        assert!(!access_changed(&base, &user(false, false, &[("dga", "editor", None), ("pea", "viewer", None), ("orst", "viewer", Some("x"))])), "a new workspace");
         assert!(!access_changed(&user(true, false, &both), &user(false, false, &both)), "enabling");
         assert!(access_changed(&base, &user(true, false, &both)), "disabling");
         assert!(access_changed(&base, &user(false, true, &both)), "promotion");
         assert!(access_changed(&user(false, true, &both), &user(false, false, &both)), "demotion");
-        assert!(access_changed(&base, &user(false, false, &[("dga", "editor")])), "a workspace gone");
-        assert!(access_changed(&base, &user(false, false, &[("dga", "admin"), ("pea", "viewer")])), "a role changed");
+        assert!(access_changed(&base, &user(false, false, &[("dga", "editor", None)])), "a workspace gone");
+        assert!(access_changed(&base, &user(false, false, &[("dga", "admin", None), ("pea", "viewer", None)])), "a role changed");
+        // the token names the custom role too: giving one, taking one away or changing it all count
+        let restricted = [("dga", "editor", Some("reviewer")), ("pea", "viewer", None)];
+        assert!(access_changed(&base, &user(false, false, &restricted)), "a custom role given");
+        assert!(access_changed(&user(false, false, &restricted), &base), "a custom role taken away");
+        assert!(access_changed(&user(false, false, &restricted), &user(false, false, &[("dga", "editor", Some("writer")), ("pea", "viewer", None)])), "a custom role changed");
+        assert!(!access_changed(&user(false, false, &restricted), &user(false, false, &restricted)), "the same custom role");
+    }
+
+    // ---------------------------------------------------------------- step 3: how a workspace signs in
+
+    fn secret_key() -> SecretKey {
+        use base64::engine::general_purpose::STANDARD;
+        SecretKey::from_base64(&STANDARD.encode([7u8; 32])).unwrap()
+    }
+
+    #[test]
+    fn a_workspace_has_sessions_only_while_it_signs_in_through_control() {
+        let (c, k, cfg) = setup();
+        // settings with only a provider are legacy, the default: nobody signs in through control there
+        put_policy(&c, None, "orst", &json!({"issuer": DGA}), T0).unwrap();
+        assert_eq!(policy(&c, "orst").unwrap().unwrap().mode, "legacy");
+        identity::upsert(&c, "bo@example.org", &json!({"memberships": [{"tenantKey": "orst", "role": "editor"}, {"tenantKey": "dga", "role": "editor"}]}), &stamp(T0)).unwrap();
+        assert_eq!(reason(sign_in(&c, &k, &cfg, &req("bo@example.org", "sub-bo", "orst"), T0)), "workspace_legacy");
+        // and a session cannot move into it
+        let s = sign_in(&c, &k, &cfg, &req("bo@example.org", "sub-bo", "dga"), T0).unwrap();
+        let sid = s["sessionId"].as_str().unwrap().to_string();
+        assert_eq!(switch(&c, &k, &cfg, &sid, "orst", T0 + 1).unwrap_err().reason, "workspace_legacy");
+        // a super admin's session in dga too
+        identity::upsert(&c, "root@example.org", &json!({"superAdmin": true, "memberships": []}), &stamp(T0)).unwrap();
+        set_identities(&c, "root@example.org", &json!({"identities": [{"issuer": PEA, "subject": "sub-root"}]}), T0).unwrap();
+        let mut r = req("root@example.org", "sub-root", "dga");
+        r.issuer = PEA.into();
+        let root = sign_in(&c, &k, &cfg, &r, T0).unwrap();
+        let root_sid = root["sessionId"].as_str().unwrap().to_string();
+        // dga goes back to legacy (a rollback): every session in it ends at once, the super admin's too
+        put_policy(&c, None, "dga", &json!({"mode": "legacy", "issuer": DGA, "clientId": "webx-studio"}), T0 + 2).unwrap();
+        for id in [&sid, &root_sid] {
+            let st = status(&c, id, T0 + 3).unwrap().unwrap();
+            assert_eq!((st["active"].clone(), st["reason"].clone()), (json!(false), json!("revoked: workspace_legacy")), "{id}");
+        }
+        assert_eq!(reason(refresh(&c, &k, &cfg, s["refreshToken"].as_str().unwrap(), T0 + 3)), "session_ended");
+        // a session left behind some other way (a row changed under it) is not good either, and ends when it is next used
+        open(&c, "dga", DGA, json!({}), T0 + 4).unwrap();
+        let s2 = ann_signs_in(&c, &k, &cfg, T0 + 4);
+        c.execute("UPDATE workspace_identity SET mode='legacy' WHERE tenant_key='dga'", []).unwrap();
+        let sid2 = s2["sessionId"].as_str().unwrap();
+        assert_eq!(status(&c, sid2, T0 + 5).unwrap().unwrap()["reason"], json!("workspace_legacy"));
+        assert!(verify_access(&c, &k, s2["accessToken"].as_str().unwrap(), T0 + 5).is_err());
+        assert_eq!(reason(refresh(&c, &k, &cfg, s2["refreshToken"].as_str().unwrap(), T0 + 5)), "session_ended");
+        assert_eq!(status(&c, sid2, T0 + 6).unwrap().unwrap()["reason"], json!("revoked: workspace_legacy"));
+        // removing the settings ends everything too
+        open(&c, "dga", DGA, json!({}), T0 + 7).unwrap();
+        let root2 = sign_in(&c, &k, &cfg, &r, T0 + 7).unwrap();
+        assert!(delete_policy(&c, "dga", T0 + 8).unwrap());
+        assert_eq!(status(&c, root2["sessionId"].as_str().unwrap(), T0 + 9).unwrap().unwrap()["reason"], json!("revoked: workspace_identity_removed"));
+    }
+
+    #[test]
+    fn what_an_operator_sets_is_checked() {
+        let c = tables();
+        let refused = |body: Value| put_policy(&c, None, "dga", &body, T0).unwrap_err();
+        assert!(refused(json!({"mode": "open"})).contains("mode"));
+        assert!(refused(json!({"mode": "both", "issuer": DGA})).contains("clientId"), "both needs the client");
+        assert!(refused(json!({"mode": "control", "clientId": "x"})).contains("issuer"), "control needs the provider");
+        assert!(refused(json!({"issuer": "http://idp.example"})).contains("issuer"));
+        assert!(refused(json!({"clientId": "has space"})).contains("clientId"));
+        assert!(refused(json!({"clientId": ""})).contains("clientId"));
+        assert!(refused(json!({"allowJit": true, "jitRole": "admin"})).contains("manage"), "nobody is made an admin on the spot");
+        assert!(refused(json!({"allowJit": true, "jitRole": "Lead Editor"})).contains("jitRole"));
+        assert!(refused(json!({"allowJit": "yes", "jitRole": "viewer"})).contains("allowJit"));
+        assert!(refused(json!({"mfaRequiredAt": "2026-01-01T00:00:00.000Z"})).contains("mfaRequired"), "a start needs the requirement");
+        assert!(refused(json!({"mfaRequired": true, "mfaRequiredAt": "yesterday"})).contains("time"));
+        assert!(refused(json!({"mfaRequired": true, "mfaRequiredAt": "2099-01-01T00:00:00.000Z"})).contains("future"));
+        assert!(refused(json!({"clientSecret": "s"})).contains("WEBX_CONTROL_SECRET_KEY"), "no key, no secret");
+        assert!(refused(json!({"clientSecret": ""})).contains("clientSecret"));
+        assert!(refused(json!([])).contains("object"));
+        assert!(put_policy(&c, None, "BAD KEY", &json!({}), T0).is_err());
+        assert!(policy(&c, "dga").unwrap().is_none(), "nothing was written");
+        // the smallest settings: legacy, nothing required, a verified e-mail asked for
+        assert!(put_policy(&c, None, "dga", &json!({}), T0).unwrap());
+        let p = policy(&c, "dga").unwrap().unwrap();
+        assert_eq!(p.to_json(), json!({"tenantKey": "dga", "mode": "legacy", "issuer": null, "clientId": null, "hasClientSecret": false, "allowJit": false, "jitRole": null, "requireVerifiedEmail": true, "mfaRequired": false, "mfaRequiredAt": null, "acceptIdpMfa": false, "updatedAt": stamp(T0)}));
+    }
+
+    #[test]
+    fn the_client_secret_is_kept_sealed_and_shown_only_to_the_broker_once_the_workspace_switches() {
+        let c = tables();
+        let key = secret_key();
+        let ks = Some(&key);
+        put_policy(&c, ks, "dga", &json!({"issuer": DGA, "clientId": "webx-studio", "clientSecret": "s3cret-value"}), T0).unwrap();
+        let stored: String = c.query_row("SELECT client_secret FROM workspace_identity WHERE tenant_key='dga'", [], |r| r.get(0)).unwrap();
+        assert!(stored.starts_with("v1.") && !stored.contains("s3cret"), "only the sealed value is stored");
+        let p = policy(&c, "dga").unwrap().unwrap();
+        assert_eq!((p.to_json()["hasClientSecret"].clone(), p.to_json().get("clientSecret").is_none()), (json!(true), true), "the operator's view says it is there, never what it is");
+        // legacy: the broker learns the mode and nothing else
+        assert_eq!(sign_in_settings(&c, ks, "dga").unwrap().unwrap(), json!({"tenantKey": "dga", "mode": "legacy"}));
+        assert!(sign_in_settings(&c, ks, "pea").unwrap().is_none());
+        // switched: the provider, the client and the secret, opened
+        put_policy(&c, ks, "dga", &json!({"mode": "both", "issuer": DGA, "clientId": "webx-studio"}), T0 + 1).unwrap();
+        assert_eq!(sign_in_settings(&c, ks, "dga").unwrap().unwrap(), json!({"tenantKey": "dga", "mode": "both", "issuer": DGA, "clientId": "webx-studio", "clientSecret": "s3cret-value"}), "a save without clientSecret keeps it");
+        assert!(sign_in_settings(&c, None, "dga").unwrap_err().contains("WEBX_CONTROL_SECRET_KEY"), "without the key it cannot be read");
+        // sealed for its own workspace: copied into another row it does not open
+        put_policy(&c, ks, "pea", &json!({"mode": "both", "issuer": PEA, "clientId": "c"}), T0).unwrap();
+        c.execute("UPDATE workspace_identity SET client_secret=?1 WHERE tenant_key='pea'", [&stored]).unwrap();
+        assert!(sign_in_settings(&c, ks, "pea").is_err());
+        // a new one replaces it; null removes it
+        put_policy(&c, ks, "dga", &json!({"mode": "both", "issuer": DGA, "clientId": "webx-studio", "clientSecret": "rotated"}), T0 + 2).unwrap();
+        assert_eq!(sign_in_settings(&c, ks, "dga").unwrap().unwrap()["clientSecret"], json!("rotated"));
+        put_policy(&c, ks, "dga", &json!({"mode": "both", "issuer": DGA, "clientId": "webx-studio", "clientSecret": null}), T0 + 3).unwrap();
+        assert_eq!(sign_in_settings(&c, ks, "dga").unwrap().unwrap()["clientSecret"], Value::Null);
+        // and no audit row carries it
+        let details: Vec<String> = c.prepare("SELECT target_ref FROM audit").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+        assert!(details.iter().all(|d| !d.contains("s3cret") && !d.contains("rotated")), "{details:?}");
+        assert!(details.iter().any(|d| d.contains("secret=set")) && details.iter().any(|d| d.contains("secret=kept")) && details.iter().any(|d| d.contains("secret=removed")));
+    }
+
+    #[test]
+    fn the_mfa_grace_period_counts_from_when_it_was_first_required() {
+        let c = tables();
+        let at = |c: &Connection| policy(c, "dga").unwrap().unwrap().mfa_required_at;
+        put_policy(&c, None, "dga", &json!({"mfaRequired": true}), T0).unwrap();
+        assert_eq!(at(&c), Some(stamp(T0)));
+        put_policy(&c, None, "dga", &json!({"mfaRequired": true, "acceptIdpMfa": true}), T0 + 100).unwrap();
+        assert_eq!(at(&c), Some(stamp(T0)), "saving again does not start it again");
+        put_policy(&c, None, "dga", &json!({"mfaRequired": false}), T0 + 200).unwrap();
+        assert_eq!(at(&c), None);
+        put_policy(&c, None, "dga", &json!({"mfaRequired": true}), T0 + 300).unwrap();
+        assert_eq!(at(&c), Some(stamp(T0 + 300)), "off and on again starts a new one");
+        // what a migration carries over from Strapi's tenant row is kept, in the one format
+        put_policy(&c, None, "dga", &json!({"mfaRequired": true, "mfaRequiredAt": "2026-03-01T08:00:00Z"}), T0 + 400).unwrap();
+        assert_eq!(at(&c), Some("2026-03-01T08:00:00.000Z".to_string()));
+    }
+
+    #[test]
+    fn a_table_from_step_two_is_brought_up_to_date_and_comes_out_legacy() {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(audit::DDL).unwrap();
+        c.execute_batch(identity::DDL).unwrap();
+        c.execute_batch(DDL).unwrap();
+        c.execute_batch("CREATE TABLE workspace_identity(tenant_key TEXT PRIMARY KEY, issuer TEXT NOT NULL, allow_jit INTEGER NOT NULL DEFAULT 0, jit_role TEXT, require_verified_email INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL);
+                         INSERT INTO workspace_identity VALUES ('dga', 'https://idp.example/realms/dga', 1, 'viewer', 0, '2026-11-26T00:00:00.000Z');").unwrap();
+        migrate(&c).unwrap();
+        migrate(&c).unwrap();
+        let p = policy(&c, "dga").unwrap().unwrap();
+        assert_eq!((p.mode.as_str(), p.issuer.as_deref(), p.allow_jit, p.jit_role.as_deref(), p.require_verified_email, p.mfa_required), ("legacy", Some(DGA), true, Some("viewer"), false, false));
+        // and the new table takes what the old one could not
+        put_policy(&c, None, "pea", &json!({}), T0).unwrap();
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM sqlite_master WHERE name='workspace_identity_step2'"), 0);
+    }
+
+    #[test]
+    fn an_operators_changes_leave_rows_in_the_audit_table() {
+        let c = tables();
+        assert!(replace_user(&c, "Ann@Example.org", &json!({"memberships": [{"tenantKey": "dga", "role": "editor", "customRole": "reviewer"}]}), T0).unwrap());
+        assert!(!replace_user(&c, "ann@example.org", &json!({"disabled": true, "memberships": [{"tenantKey": "dga", "role": "viewer"}]}), T0 + 1).unwrap());
+        assert!(remove_user(&c, "ann@example.org", T0 + 2).unwrap());
+        put_policy(&c, None, "dga", &json!({"mode": "both", "issuer": DGA, "clientId": "studio", "allowJit": true, "jitRole": "viewer", "mfaRequired": true}), T0 + 3).unwrap();
+        delete_policy(&c, "dga", T0 + 4).unwrap();
+        let rows: Vec<(String, String, String)> = c.prepare("SELECT action, content_type, target_ref FROM audit ORDER BY id").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().map(Result::unwrap).collect();
+        let want = [
+            ("user_created", "webx::user", "enabled memberships=[dga/editor+reviewer]"),
+            ("user_saved", "webx::user", "disabled memberships=[dga/viewer]"),
+            ("user_removed", "webx::user", "disabled memberships=[dga/viewer]"),
+            ("workspace_identity_saved", "webx::workspace-identity", "mode=both issuer=https://idp.example/realms/dga client=studio secret=kept jit=viewer verified_email=true mfa_required=true accept_idp_mfa=false"),
+            ("workspace_identity_removed", "webx::workspace-identity", "removed"),
+        ];
+        assert_eq!(rows.len(), want.len(), "{rows:?}");
+        for (row, (a, t, d)) in rows.iter().zip(want) {
+            assert_eq!((row.0.as_str(), row.1.as_str(), row.2.as_str()), (a, t, d));
+        }
     }
 }
