@@ -1,8 +1,9 @@
 # C4 identity: plan for review
 
 Status: written 2026-11-25. Step 0 (fixes that change who can sign in nowhere) was built on 2026-11-25, and steps 1 and 2 (token v2, keys,
-credentials, sessions, in `webx-control` only, switched off, nothing calling them) on 2026-11-26, then step 3 (workspace sign-in settings with
-`mode`, the role catalogue, the copy from Strapi; every workspace `legacy`); steps 4 and up are described below as they stand. A Studio session
+credentials, sessions, in `webx-control` only, switched off, nothing calling them) on 2026-11-26, then steps 3 to 5 (workspace sign-in settings
+with `mode`, the role catalogue and the copy from Strapi; MFA in webx-control; Studio's engine calls behind one module), none of which changes who
+can sign in: every workspace is `legacy`. Steps 6 and up are not started and wait for the review. A Studio session
 switch is security-critical (`docs/target-architecture.md`, Risks), so no step that changes who can sign in to Studio starts before this plan is
 reviewed. D10 (users, roles and OIDC sign-in in webx-control, no passwords) and D11 (a short-lived signed token that Studio
 and every engine verify with a public key) are taken as given; D16 to D23 at the end are what is left open.
@@ -396,6 +397,33 @@ nothing calls it, and every workspace is `legacy`.** Where it differs from the l
   a migrated user passes with the old authenticator; `tools/mfa-test.mjs`. Rollback: unused until a workspace leaves
   `legacy`; Strapi's rows are untouched.
 
+**Step 4 status, 2026-11-26: built and tested on the real binary (`webx-control/src/mfa.rs`, `sessions.rs`, `tools/migrate-mfa.mjs`,
+`tools/mfa-test.mjs`); nothing calls it, and no workspace is past `legacy`.** As listed, and where it differs or goes further:
+- **Signing in with a second factor** is two broker calls: `POST /internal/sessions` answers 202 `{pendingId}` instead of a session, and
+  `POST /internal/sessions/mfa {pendingId, code}` makes it (the plan's `/internal/auth/mfa/verify`, named after the session it completes).
+  `auth_pending` (moved here from step 2) keeps only the SHA-256 of the opaque id and what the provider said, for 5 minutes; the sign-in is
+  **decided again** when the code comes, so a person disabled or removed in those minutes is refused with the right code.
+- Who is asked: everyone who has a second factor, at every sign-in, whatever the workspace requires (what Studio's password sign-in does
+  today), unless the workspace sets `acceptIdpMfa` and **its own** provider puts `mfa` in `amr` (a super admin's platform provider is not
+  believed about a workspace; only `mfa` counts, other `amr` values are informational). **Unverified:** whether Keycloak 26 sends `amr` at all.
+- The **`enroll` scope** is a session state (`sessions.scope`) and a token claim (`scope`): such a session gets no engine token and may only
+  use `/api/auth/mfa/*`; confirming a new authenticator makes the same session multi-factor and full (it has just seen the factor). Beyond
+  the list: a session opened inside the grace period **ends when the deadline passes** (`mfa_required`, so the person signs in again and lands
+  in `enroll`), so does a session made without the factor of a person who has one, and **moving a session takes on the requirement of the
+  workspace it moves to** (it can neither leave its `enroll` scope behind nor carry it where it is not needed). A background job of an
+  overdue owner gets no engine token.
+- Lockout: failures are counted per person in the `mfa` table across sign-in, replacing and switching off; 8 within 10 minutes lock the codes
+  (a right one too) until the 10 minutes are over. Each failure, lock and used recovery code is an audit row.
+- Replacing an authenticator keeps the old one working until the new one is confirmed (pending secret), which is the step-0 gap left for here;
+  a code used once is never accepted again (the last step is kept), which is the other. Recovery codes are HMAC tags bound to their user.
+  Strapi's SHA-256 recovery hashes are **accepted once each** (as any recovery code) and dropped when a new set is made: "re-hashed" in the list
+  cannot apply to a code that is used up by being accepted.
+- Beyond the list: an operator can see and **take away** a person's factor (`GET|DELETE /admin/users/<email>/mfa`; a lost phone, no code left),
+  which ends their sessions; `PUT` is the copy's import. The copy (`tools/migrate-mfa.mjs`) takes finished enrolments only, leaves a factor already
+  in control alone (`--replace` overwrites), and reports people control does not have yet.
+- **Not done:** Studio's screens calling these (steps 6 and 7); WebAuthn or any factor but TOTP; asking for the factor again before sensitive
+  changes (the threat table's `auth_time` for user, role, SSO and MFA changes); re-sealing under a new `WEBX_CONTROL_SECRET_KEY`.
+
 **Step 5 - engine calls stop using the user's engine token** (pure refactor in Studio).
 - New `lib/engineAuth.ts` returns `{credential, acting?}`; the legacy implementation is today's cookie token. The adapters
   (`lib/cms/strapi.ts:17-35`, `lib/cms/wordpress.ts:203-207`, `lib/cms/rust.ts`) use it. Convert every direct caller:
@@ -405,6 +433,23 @@ nothing calls it, and every workspace is `legacy`.** Where it differs from the l
   it for people would switch those job-only limits on for them. Interactive calls get their own store.
 - Switch: none. Proof: `npm test`; the CI cross-tenant spec unchanged; a test that fails if `sessionToken(` appears outside
   `lib/strapi.ts` and `lib/engineAuth.ts`. Rollback: revert.
+
+**Step 5 status, 2026-11-26: built; `npm test` 358 of 358 (340 before) and the type check pass.** `webx-studio/lib/engineAuth.ts` returns
+`{credential, acting?}` (null without a credential) and `engineAuthHeaders(engine, auth)` the headers a call carries (Strapi: Bearer plus the
+acting headers; WordPress: Basic). The only implementation is the legacy one: the `withServiceToken` credential first, else the session cookie;
+`acting` only inside a background job, from `actingSession()`, which is not set or reused for people. Converted: both adapters, the layout,
+`app/api/ai/{audit,translate,index,search,generate}`, the `/api/strapi` proxy, and `lib/vectorstore.ts` (a hidden caller: `ai/index` and
+`ai/search` handed it the session token). `lib/cms/rust.ts` reads no session token. `tests/engine-auth.test.ts`: a scan of every `.ts`/`.tsx`
+file for `sessionToken(` outside the two files; the legacy implementation's credential and acting identity; the adapters' headers byte for byte as
+before. **`ai/audit` now takes its workspace from the session** (`resolveRequestTenantKey` in governance, the `assertCanActOnTenant` rule): a
+caller with a workspace audits that one and naming another is a 403; an unscoped super admin names any. Its test runs the route in a request scope
+made from Next's own request store (`next/dist/server/app-render/work-*-async-storage.external`), which a Next upgrade could break, loudly.
+Behaviour that changed, in `ai/audit` only: a caller with a workspace who names none is now filtered to it (Strapi scoped those reads by the
+caller's token already) and gets the brand-colour check; a session the engine rejects is a 401 where it was a 200 that scanned nothing; a person
+on two rosters audits only the one governance maps them to (as `/api/cms/compliance` already does). **Left for step 6** (found here):
+`layout.tsx` and `/api/console/context` identify the person by the engine credential, which under a service credential would be the service
+account; `resolveEffectiveTenant` treats a caller as unscoped when the workspace list cannot be read, which a service credential would turn into
+a cross-workspace read; Strapi's `/api/console/*` takes the caller from the token and ignores acting headers.
 
 **Step 6 - sign in through webx-control, next to the old session** (Studio).
 - New `lib/identity.ts` (control client, JWKS cache, verify, revocation cache, one in-flight refresh per session) and config
