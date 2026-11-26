@@ -16,10 +16,13 @@ const langName = (c: string) => (c.toLowerCase().startsWith("en") ? "English" : 
 export async function POST(req: NextRequest) {
   const auth = await engineAuth();
   if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-  if (!llmConfigured()) return NextResponse.json({ error: "AI not configured" }, { status: 503 });
-
   const { uid, docId, locale, targetLocale } = await req.json().catch(() => ({} as any));
   if (!uid || !docId || !targetLocale) return NextResponse.json({ error: "uid, docId, targetLocale required" }, { status: 400 });
+  // both go into the engine's URL: a content type's uid and an entry's id, and nothing that could change the request
+  if (typeof uid !== "string" || !/^api::[a-z0-9-]+\.[a-z0-9-]+$/.test(uid) || typeof docId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(docId)) {
+    return NextResponse.json({ error: "uid or docId is not valid" }, { status: 400 });
+  }
+  if (!llmConfigured()) return NextResponse.json({ error: "AI not configured" }, { status: 503 });
   const headers = engineAuthHeaders("strapi", auth);
 
   // 1. load the source entry

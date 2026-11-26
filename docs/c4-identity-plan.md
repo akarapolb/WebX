@@ -451,6 +451,39 @@ on two rosters audits only the one governance maps them to (as `/api/cms/complia
 account; `resolveEffectiveTenant` treats a caller as unscoped when the workspace list cannot be read, which a service credential would turn into
 a cross-workspace read; Strapi's `/api/console/*` takes the caller from the token and ignores acting headers.
 
+**Code review of steps 1 to 5, 2026-11-26.** Three reviewers who had not written the code read it apart from each other (tokens, keys and
+credentials; sessions and MFA; the copy tools and Studio's change), each finding checked against the code and most proven with a test or a
+request against the binary. Nothing critical or high was found; 6 medium and 11 low, all fixed the same day except the last one below, each fix with
+a test and a deliberate breakage of it that the tests catch:
+- *Medium.* A workspace's provider could adopt an existing person who was not one of its members by making them "on the spot" (`allowJit`): their
+  account got the membership and the identity link, and with `acceptIdpMfa` their own second factor was skipped (and their codes could be locked
+  from there). **Now a provider makes only new people on the spot; an account that exists needs a membership first** (`not_a_member`).
+- *Medium.* `migrate-users.mjs` checked only Strapi's workspaces before refusing, and could strip memberships and custom roles of a workspace only
+  control knows. **It now refuses while any workspace control has settings for is past `legacy` (new `GET /admin/identities`), keeps memberships and
+  custom roles of workspaces Strapi does not know, and removes stale custom roles only at the very end.**
+- *Medium.* Copying Studio's MFA again brought back a factor an operator had taken away (a lost phone) or the person had switched off. **A removed
+  factor now leaves a record (`removed_at`), and a copy never writes over anything control already knows about a person's factor** (`--replace` does,
+  and then ends their sessions).
+- *Medium.* The content audit's new workspace rule could be bypassed through `contentType` (put into the engine's URL unencoded; a `#` dropped the
+  workspace filter), harmless with the person's own token, a cross-workspace read under step 6's service credential; `ai/index` and `ai/translate`
+  had the same pattern. **Content types now come only from each route's list; `ai/translate` takes only a content type's uid and an entry's id.**
+- *Medium.* The D22 report missed people: today every member may manage people, custom roles and SSO, custom role or not (only security and the
+  agent's policy need none). **The report now counts every active member as managing today.**
+- *Medium.* A token without a session (`/internal/token`) kept a removed role or super-admin flag until it expired. **Control's check now compares a
+  token's workspace, role, custom role, super-admin flag and listed memberships with the account as it is now.**
+- *Low, all fixed:* a session's token from before a move, a change of scope or of the second factor kept passing (**a session's token must now match
+  its workspace, scope and second factor**); switching the factor off or replacing it ended no other session and left the session counted as
+  multi-factor (**both now end the person's other sessions; switching off unmarks the current one, which ends it where a factor is required**); linking
+  a sign-in identity (a super admin's included) and deleting a workspace left no audit row, and the delete was two transactions (**rows added, one
+  transaction**); the copy's dry run accepted workspace keys, addresses and provider URLs control refuses (**it checks what control checks, names
+  cut to control's 200 bytes**); `author` read every entry while Strapi's Author reads its own (**`read_own` for `author`; part of D22**); the layout
+  read the engine token outside `lib/engineAuth.ts` and the guard test could not see it (**passed in; the test also refuses session-cookie reads
+  outside the sign-in routes**); an engine outage looked like "signed out" (**502 now, from both adapters' user lookup**); credentials differing only
+  by spaces at their ends counted as different (**trimmed**) and were compared with `==` (**constant time**); `"disabled": "true"` (text) left a
+  user enabled (**refused**).
+- **Deferred to step 7:** a job's engine token (`/internal/engine-token` with `purpose: job`) is not tied to a stored job and its owner. Nothing calls
+  it today; before step 7 makes a caller, the token has to be minted from the job row (owner, workspace, runnable state), not from the request.
+
 **Step 6 - sign in through webx-control, next to the old session** (Studio).
 - New `lib/identity.ts` (control client, JWKS cache, verify, revocation cache, one in-flight refresh per session) and config
   (cookie names, `WEBX_CONTROL_IDENTITY`, `WEBX_CONTROL_AUTH_TOKEN`). Control branches in

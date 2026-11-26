@@ -240,8 +240,14 @@ pub fn upsert(conn: &Connection, email: &str, body: &Value, now: &str) -> Result
         Some(Value::String(s)) if s.len() <= 200 => Some(s.clone()),
         _ => return Err("name must be text of at most 200 characters".into()),
     };
-    let disabled = body.get("disabled").and_then(Value::as_bool).unwrap_or(false);
-    let super_admin = body.get("superAdmin").and_then(Value::as_bool).unwrap_or(false);
+    // true or false only: "true" as text (or anything else) is refused, never read as false
+    let flag = |k: &str| match body.get(k) {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(format!("{k} must be true or false")),
+    };
+    let disabled = flag("disabled")?;
+    let super_admin = flag("superAdmin")?;
     let mut members: Vec<(String, String, Option<String>)> = Vec::new();
     for m in body.get("memberships").and_then(Value::as_array).ok_or("memberships must be a list")? {
         let (k, r) = (m.get("tenantKey").and_then(Value::as_str).unwrap_or(""), m.get("role").and_then(Value::as_str).unwrap_or(""));
@@ -414,14 +420,29 @@ pub fn verify_token(keys: &Keys, token: &str, aud: &str, now_secs: i64, leeway_s
 }
 
 /// `verify_token` for `aud`, and the user it names must still exist, be enabled and still have that e-mail: disabling a user cuts
-/// them off before their token expires, and a user who was deleted and made again does not inherit the old one's tokens.
+/// them off before their token expires, and a user who was deleted and made again does not inherit the old one's tokens. What the
+/// token says about the user must also still be true (a token tied to no session can be ended no other way): the super admin flag,
+/// and the workspace, role and custom role it acts with, and every membership it lists. A change since it was made refuses it.
 pub fn verify(conn: &Connection, keys: &Keys, token: &str, aud: &str, now_secs: i64) -> Result<Value, String> {
     let claims = verify_token(keys, token, aud, now_secs, 0)?;
     let id: i64 = claims["uid"].as_str().and_then(|s| s.parse().ok()).ok_or("not a token")?;
-    match get_by_id(conn, id)? {
-        Some(u) if !u.disabled && claims["sub"] == u.email.as_str() => Ok(claims),
-        _ => Err("user is unknown or disabled".into()),
+    let Some(u) = get_by_id(conn, id)?.filter(|u| !u.disabled && claims["sub"] == u.email.as_str()) else {
+        return Err("user is unknown or disabled".into());
+    };
+    still_true(&claims, &u).then_some(claims).ok_or_else(|| "the account has changed since the token was made".to_string())
+}
+
+/// Whether what `claims` say about the user still holds for `u` as stored now.
+fn still_true(claims: &Value, u: &User) -> bool {
+    if claims["sa"] != json!(u.super_admin) {
+        return false;
     }
+    if let Some(t) = claims["tid"].as_str() {
+        if !u.may_act_in(t) || claims["role"] != json!(u.role_in(t)) || claims["crole"] != json!(u.custom_role_in(t)) {
+            return false;
+        }
+    }
+    claims["tenants"].as_array().is_some_and(|list| list.iter().all(|m| m["key"].as_str().is_some_and(|k| u.role_in(k).is_some_and(|r| m["role"] == r))))
 }
 
 #[cfg(test)]
@@ -479,6 +500,10 @@ mod tests {
             ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "super_admin"}]})),
             ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "editor", "customRole": "Has Spaces"}]})),
             ("a@b.co", json!({"memberships": [{"tenantKey": "dga", "role": "editor", "customRole": 7}]})),
+            // flags are true or false: "true" as text is not read as false
+            ("a@b.co", json!({"disabled": "true", "memberships": []})),
+            ("a@b.co", json!({"disabled": 1, "memberships": []})),
+            ("a@b.co", json!({"superAdmin": "yes", "memberships": []})),
         ] {
             assert!(upsert(&c, email, &body, NOW).is_err(), "{email} {body}");
         }
@@ -712,6 +737,40 @@ mod tests {
         editor(&c);
         assert_eq!(issue(&c, &k, "ann@example.org", Some("orst"), 900, 1).unwrap_err(), "user is not a member of that workspace");
         assert_eq!(issue(&c, &k, "nobody@example.org", None, 900, 1).unwrap_err(), "unknown user");
+    }
+
+    #[test]
+    fn a_token_stops_working_when_what_it_says_is_no_longer_true() {
+        let (c, k) = db();
+        editor(&c);
+        let token = |tenant: Option<&str>| issue(&c, &k, "ann@example.org", tenant, 900, 1_000).unwrap().0;
+        let (dga, all) = (token(Some("dga")), token(None));
+        let ok = |t: &str| verify(&c, &k, t, AUD_STUDIO, 1_100).is_ok();
+        assert!(ok(&dga) && ok(&all));
+        // gaining a workspace takes nothing away: both still hold
+        upsert(&c, "ann@example.org", &json!({"name": "Ann", "memberships": [{"tenantKey": "dga", "role": "editor"}, {"tenantKey": "pea", "role": "viewer"}, {"tenantKey": "orst", "role": "viewer"}]}), NOW).unwrap();
+        assert!(ok(&dga) && ok(&all));
+        // a custom role given in dga: the dga token said none, and the token listing every workspace still holds (it names no custom role)
+        upsert(&c, "ann@example.org", &json!({"memberships": [{"tenantKey": "dga", "role": "editor", "customRole": "reviewer"}, {"tenantKey": "pea", "role": "viewer"}]}), NOW).unwrap();
+        assert!(!ok(&dga) && ok(&all));
+        // a role changed in pea: the token that lists pea as viewer is refused
+        upsert(&c, "ann@example.org", &json!({"memberships": [{"tenantKey": "dga", "role": "editor"}, {"tenantKey": "pea", "role": "admin"}]}), NOW).unwrap();
+        assert!(ok(&dga) && !ok(&all));
+        // a workspace taken away
+        upsert(&c, "ann@example.org", &json!({"memberships": [{"tenantKey": "pea", "role": "viewer"}]}), NOW).unwrap();
+        assert!(!ok(&dga));
+        // a super admin demoted: their token acted in a workspace they never belonged to
+        upsert(&c, "root@example.org", &json!({"superAdmin": true, "memberships": []}), NOW).unwrap();
+        let root = issue(&c, &k, "root@example.org", Some("dga"), 900, 1_000).unwrap().0;
+        assert!(ok(&root));
+        upsert(&c, "root@example.org", &json!({"superAdmin": false, "memberships": [{"tenantKey": "dga", "role": "admin"}]}), NOW).unwrap();
+        assert!(!ok(&root), "no longer a super admin, though now an admin of the same workspace");
+        // only the flag changes: a super admin who is also dga's admin keeps that role and loses the flag
+        upsert(&c, "both@example.org", &json!({"superAdmin": true, "memberships": [{"tenantKey": "dga", "role": "admin"}]}), NOW).unwrap();
+        let both = issue(&c, &k, "both@example.org", Some("dga"), 900, 1_000).unwrap().0;
+        assert!(ok(&both));
+        upsert(&c, "both@example.org", &json!({"superAdmin": false, "memberships": [{"tenantKey": "dga", "role": "admin"}]}), NOW).unwrap();
+        assert!(!ok(&both), "the same role in the same workspace, but no longer a super admin");
     }
 
     #[test]

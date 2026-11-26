@@ -9,8 +9,9 @@
 //     node tools/migrate-mfa.mjs [--dry-run] [--replace]
 //
 // Only finished enrolments are copied (one Strapi holds as not enabled was never confirmed). A person who is not in webx-control yet
-// is reported: run tools/migrate-users.mjs first. A person who already has a second factor in webx-control is left alone, as they may
-// have set it up there since; --replace overwrites it. webx-control needs WEBX_CONTROL_SECRET_KEY: it seals each secret under it.
+// is reported: run tools/migrate-users.mjs first. A person whose second factor webx-control already knows anything about is left alone:
+// one set up there since, a set-up started there, or one taken away there (a lost phone) or switched off, which a copy must never bring
+// back. --replace overwrites it. webx-control needs WEBX_CONTROL_SECRET_KEY: it seals each secret under it.
 //
 // Exit code: 0 done, 1 something failed or someone could not be copied (said on stderr), 2 a setting is missing.
 
@@ -60,7 +61,7 @@ async function main() {
     const j = await r.json().catch(() => null);
     if (!r.ok) { failed.push(`${email}: HTTP ${r.status} ${j?.error?.message ?? ""}`); continue; }
     if (j?.data?.imported) { copied++; console.log(`copied ${email}: authenticator, ${unused.length} unused recovery code(s)`); }
-    else { kept++; console.log(`kept ${email}: already has a second factor in webx-control (--replace to overwrite)`); }
+    else { kept++; console.log(`kept ${email}: webx-control already has this person's second factor, or its history (one taken away or switched off stays so); --replace overwrites it`); }
   }
   console.log(dry ? `dry run: ${rows.length} enrolment(s) read from Strapi, nothing written` : `${copied} copied, ${kept} left as they were, ${unfinished} never confirmed`);
   for (const m of missing) console.error(`not in webx-control: ${m} (run tools/migrate-users.mjs first)`);

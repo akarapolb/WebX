@@ -26,6 +26,8 @@ type Lib = {
   gov: typeof import("../lib/cms/governance");
   types: typeof import("../lib/cms/types");
   audit: typeof import("../app/api/ai/audit/route");
+  index: typeof import("../app/api/ai/index/route");
+  translate: typeof import("../app/api/ai/translate/route");
   NextRequest: typeof import("next/server").NextRequest;
   workAsyncStorage: { run<T>(store: unknown, fn: () => T): T };
   workUnitAsyncStorage: { run<T>(store: unknown, fn: () => T): T };
@@ -75,6 +77,8 @@ before(async () => {
     gov: await import("../lib/cms/governance"),
     types: await import("../lib/cms/types"),
     audit: await import("../app/api/ai/audit/route"),
+    index: await import("../app/api/ai/index/route"),
+    translate: await import("../app/api/ai/translate/route"),
     NextRequest: (await import("next/server")).NextRequest,
     workAsyncStorage: work.workAsyncStorage as unknown as Lib["workAsyncStorage"],
     workUnitAsyncStorage: workUnit.workUnitAsyncStorage as unknown as Lib["workUnitAsyncStorage"],
@@ -109,16 +113,28 @@ describe("the session token reader", () => {
     }
   });
 
-  it("is called only in lib/strapi.ts and lib/engineAuth.ts, and imported only by lib/engineAuth.ts", () => {
+  it("is called only in lib/engineAuth.ts (lib/strapi.ts only defines it), and imported only there", () => {
     const call = /\bsessionToken\s*\(/;
     const named = /import\s+(?:type\s+)?\{[^}]*\bsessionToken\b[^}]*\}\s*from/;
     const problems: string[] = [];
+    // the code, without its comments (which may name the function); "//" after a colon is a URL, not a comment
+    const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
     for (const f of files) {
-      const src = fs.readFileSync(path.join(root, f), "utf8");
-      if (!allowed.has(f) && call.test(src)) problems.push(`${f}: calls it`);
+      let src = code(fs.readFileSync(path.join(root, f), "utf8"));
+      if (f === "lib/strapi.ts") src = src.replace(/function\s+sessionToken\s*\(/, "");
+      if (!allowed.has(f) || f === "lib/strapi.ts") {
+        if (call.test(src)) problems.push(`${f}: calls it`);
+      }
       if (f !== "lib/engineAuth.ts" && named.test(src)) problems.push(`${f}: imports it`);
     }
     assert.deepEqual(problems, [], "engine calls must get their credential from lib/engineAuth.ts");
+  });
+
+  it("and nothing else reads the session cookie: only the sign-in routes, the middleware's check that it is there, and the reader itself", () => {
+    const read = /\.get\(\s*SESSION_COOKIE\b/;
+    const ok = (f: string) => f === "lib/strapi.ts" || f === "middleware.ts" || f.startsWith("app/api/auth/");
+    const problems = files.filter((f) => !ok(f) && read.test(fs.readFileSync(path.join(root, f), "utf8")));
+    assert.deepEqual(problems, [], "read the person's engine credential through lib/engineAuth.ts");
   });
 });
 
@@ -294,5 +310,59 @@ describe("ai/audit works on the caller's own workspace", () => {
     for (const c of contentReads()) assert.ok(c.url.endsWith("&status=published"), c.url);
     assert.deepEqual(brandReads(), []);
     assert.equal(res.json.brandContrast, null);
+  });
+
+  it("a content type not on the list is refused before anything is read: it would go into the engine's URL", async () => {
+    // a "#" would make the workspace filter that follows it a fragment, which is never sent
+    for (const contentType of ["api::article.article?filters[tenant][key][$eq]=beta#", "api::secret.secret", 7]) {
+      calls = [];
+      const res = await audit("webx_session=alpha-token", { contentType });
+      assert.equal(res.status, 400, String(contentType));
+      assert.deepEqual(res.json, { error: "Unknown content type" });
+      assert.equal(calls.length, 0);
+    }
+    const one = await audit("webx_session=alpha-token", { contentType: "api::faq.faq" });
+    assert.equal(one.status, 200);
+    assert.deepEqual(contentReads().map((c) => c.url.split("?")[0]), [STRAPI + "/content-manager/collection-types/api::faq.faq"]);
+  });
+
+  it("an engine that does not answer is the engine's trouble (502), not a sign-out (401)", async () => {
+    respond = (call) => (call.url === STRAPI + "/admin/users/me" ? new Response("{}", { status: 503 }) : strapiFake(call));
+    const res = await audit("webx_session=alpha-token", {});
+    assert.equal(res.status, 502);
+    assert.equal(contentReads().length, 0);
+  });
+});
+
+describe("ai/index and ai/translate take only what may go into the engine's URL", () => {
+  const post = async (route: { POST: (req: any) => Promise<Response> }, url: string, body: unknown) => {
+    const req = new lib.NextRequest(url, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+    const res = await inRequest("webx_session=alpha-token", () => route.POST(req));
+    return { status: res.status, json: await res.json() };
+  };
+
+  it("ai/index: a content type not on the list is a 400, before anything else", async () => {
+    for (const contentType of ["api::article.article#", "api::secret.secret"]) {
+      const res = await post(lib.index, "http://studio.test/api/ai/index", { contentType });
+      assert.deepEqual([res.status, res.json], [400, { error: "Unknown content type" }], contentType);
+    }
+    // one on the list goes on (and stops at the missing model, in this test)
+    assert.equal((await post(lib.index, "http://studio.test/api/ai/index", { contentType: "api::faq.faq" })).status, 503);
+    assert.equal(calls.length, 0);
+  });
+
+  it("ai/translate: the uid and the id must be a content type's and an entry's", async () => {
+    for (const body of [
+      { uid: "api::article.article/../../admin/users", docId: "abc", targetLocale: "en" },
+      { uid: "api::article.article?x=1", docId: "abc", targetLocale: "en" },
+      { uid: "api::article.article", docId: "abc#x", targetLocale: "en" },
+      { uid: "api::article.article", docId: "a/b", targetLocale: "en" },
+      { uid: 7, docId: "abc", targetLocale: "en" },
+    ]) {
+      const res = await post(lib.translate, "http://studio.test/api/ai/translate", body);
+      assert.deepEqual([res.status, res.json], [400, { error: "uid or docId is not valid" }], JSON.stringify(body));
+    }
+    assert.equal((await post(lib.translate, "http://studio.test/api/ai/translate", { uid: "api::article.article", docId: "k3s9a8b7c6d5e4f3g2h1i0j9", targetLocale: "en" })).status, 503);
+    assert.equal(calls.length, 0);
   });
 });

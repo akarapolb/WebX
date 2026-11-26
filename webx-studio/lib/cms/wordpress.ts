@@ -494,7 +494,9 @@ export const wordpressAdapter: CmsAdapter = {
   auth: {
     async me(): Promise<CurrentUser | null> {
       const r = await fetch(BASE + "/wp/v2/users/me?context=edit", { headers: await authHeaders(), cache: "no-store" });
-      if (!r.ok) return null;
+      // turned down: nobody is signed in; anything else is the engine's trouble, said as such rather than as "signed out"
+      if (r.status === 401 || r.status === 403) return null;
+      if (!r.ok) throw new CmsError("The content engine did not answer (HTTP " + r.status + ")", 502);
       const u = await json(r);
       if (!u) return null;
       const roles: string[] = u.roles || [];

@@ -101,7 +101,7 @@ try {
   await call("POST", "/internal/records/custom-role", SERVICE, { data: { tenantKey: "dga", roleKey: "stale", name: "Stale", permissions: {} } });
 
   const dry = await run(["--dry-run"]);
-  check("a dry run reports who keeps and who loses managing each workspace", /dga: 3 member\(s\); admin: sue@example\.org/.test(dry.out) && /no longer manages people, roles, sign-in, security or the agent: bob@example\.org \(editor\)/.test(dry.out), dry.all);
+  check("a dry run reports who keeps and who loses managing each workspace (today every member manages people, roles and SSO)", /dga: 3 member\(s\); admin: sue@example\.org/.test(dry.out) && /no longer manages people, roles, sign-in, security or the agent: ann@example\.org \(editor \+ reviewer\), bob@example\.org \(editor\)/.test(dry.out), dry.all);
   check("it names what a Strapi role with no base role became, and today's on-the-spot accounts", /olu@example\.org: Strapi role "Author Lite" has no base role, read as viewer/.test(dry.out) && /dga: today SSO adds anyone the provider vouches for as Editor/.test(dry.out), dry.all);
   check("a workspace that would be left with no admin stops it (exit 1), naming today's managers", dry.code === 1 && /stop: pea would have no admin.*--promote pea:<email> \(today's: olu@example\.org, pat@example\.org\)/.test(dry.err), dry.all);
   check("and nothing was written", (await call("GET", "/admin/users", ADMIN)).json.data.length === 0 && (await call("GET", "/admin/tenants/dga/identity", ADMIN)).status === 404 && (await roles()).length === 1);
@@ -111,8 +111,18 @@ try {
   check("a promotion of someone who is not a member stops it", (await run(["--promote", "pea:sue@example.org", "--dry-run"])).err.includes("sue@example.org is not a member of pea"));
   check("a secret it cannot decrypt stops it", /does not decrypt/.test((await run(["--promote", "pea:pat@example.org"], { WEBX_ENCRYPTION_KEY: randomBytes(32).toString("base64") })).err) && (await call("GET", "/admin/users", ADMIN)).json.data.length === 0);
 
+  // a workspace only webx-control knows (a Rust-engine one, say), with Ann in it and a custom role of its own
+  await call("PUT", "/admin/tenants/lab/identity", ADMIN, { mode: "both", issuer: "https://idp.example/realms/lab", clientId: "lab" });
+  await call("PUT", "/admin/users/ann@example.org", ADMIN, { memberships: [{ tenantKey: "lab", role: "editor", customRole: "lab-role" }] });
+  await call("POST", "/internal/records/custom-role", SERVICE, { data: { tenantKey: "lab", roleKey: "lab-role", name: "Lab", permissions: {} } });
+  const labOn = await run(["--promote", "pea:pat@example.org"]);
+  check("while any workspace control knows signs in through it, one Strapi does not know included, the copy stops", labOn.code === 1 && /already signs in through webx-control: lab \(both\)/.test(labOn.err) && (await user("ann@example.org")).memberships.length === 1, labOn.all);
+  await call("PUT", "/admin/tenants/lab/identity", ADMIN, { issuer: "https://idp.example/realms/lab", clientId: "lab" });
+
   const first = await run(["--promote", "pea:pat@example.org"]);
-  check("with an admin named for pea the copy runs", first.code === 0 && /7 user\(s\): 7 created, 0 replaced; 1 workspace setting\(s\); custom roles: 1 made, 0 brought up to date, 1 removed/.test(first.out), first.all);
+  check("with an admin named for pea the copy runs", first.code === 0 && /7 user\(s\): 6 created, 1 replaced; 1 workspace setting\(s\); custom roles: 1 made, 0 brought up to date, 1 removed/.test(first.out), first.all);
+  const annNow = await user("ann@example.org");
+  check("a person keeps the workspace only webx-control knows, and its custom role is left alone", annNow.memberships.some((m) => m.tenantKey === "lab" && m.customRole === "lab-role") && /ann@example\.org: keeps lab/.test(first.out) && (await roles()).some((r) => r.tenantKey === "lab" && r.roleKey === "lab-role"), JSON.stringify(annNow));
   const ann = await user("ann@example.org"), bob = await user("bob@example.org"), sue = await user("sue@example.org"), rootU = await user("root@example.org");
   check("base roles from Strapi's, the custom role from the assignment", ann.memberships[0].role === "editor" && ann.memberships[0].customRole === "reviewer" && bob.memberships[0].role === "editor" && bob.memberships[0].customRole === null && sue.memberships[0].role === "admin", JSON.stringify([ann, bob, sue]));
   check("a super admin on no tenant is one here", rootU.superAdmin === true && rootU.memberships.length === 0);
@@ -121,21 +131,29 @@ try {
   const dga = (await call("GET", "/admin/tenants/dga/identity", ADMIN)).json.data;
   check("dga's sign-in settings: legacy, its provider and client, the secret held, MFA required since when Studio said", dga.mode === "legacy" && dga.issuer === "https://idp.example/realms/dga" && dga.clientId === "studio-dga" && dga.hasClientSecret === true && dga.mfaRequired === true && dga.mfaRequiredAt === "2026-10-01T00:00:00.000Z" && dga.allowJit === false, JSON.stringify(dga));
   check("pea, with nothing to carry, has no settings", (await call("GET", "/admin/tenants/pea/identity", ADMIN)).status === 404);
-  const rs = await roles();
+  const rs = (await roles()).filter((r) => r.tenantKey !== "lab");
   check("custom roles are Strapi's: the same id, key, name and permissions, and the stale one gone", rs.length === 1 && rs[0].documentId === "crole00000000000000000001" && rs[0].roleKey === "reviewer" && rs[0].permissions["api::faq.faq"].update === true && rs[0].createdAt === "2026-01-01T00:00:00.000Z", JSON.stringify(rs));
 
   // a second run brings everything up to date and adds nothing
   strapi.roles[0].name = "Reviewer (renamed)";
   strapi.users[1].isActive = false;
   const second = await run(["--promote", "pea:pat@example.org"]);
-  check("run again: users replaced, custom roles brought up to date", second.code === 0 && /7 user\(s\): 0 created, 7 replaced; 1 workspace setting\(s\); custom roles: 0 made, 1 brought up to date, 0 removed/.test(second.out) && (await roles())[0].name === "Reviewer (renamed)" && (await user("bob@example.org")).disabled === true, second.all);
+  check("run again: users replaced, custom roles brought up to date", second.code === 0 && /7 user\(s\): 0 created, 7 replaced; 1 workspace setting\(s\); custom roles: 0 made, 1 brought up to date, 0 removed/.test(second.out) && (await roles()).find((r) => r.tenantKey === "dga").name === "Reviewer (renamed)" && (await user("bob@example.org")).disabled === true, second.all);
+
+  // something control would refuse stops the dry run too, so a real run never stops half-way after removing things
+  strapi.tenants.push({ key: "department-of-something-very-long-name", adminEmails: ["zoe@example.org"] });
+  strapi.users.push({ email: "zoe@example.org", isActive: true, roles: [role.sup] });
+  const tooLong = await run(["--promote", "pea:pat@example.org", "--dry-run"]);
+  check("a workspace key control does not take stops the dry run", tooLong.code === 1 && /workspace key "department-of-something-very-long-name" is not one webx-control accepts/.test(tooLong.err), tooLong.all);
+  strapi.tenants.pop();
+  strapi.users.pop();
 
   // the secret went from Studio's key to control's: once dga switches, the broker reads it as it was
   await call("PUT", "/admin/tenants/dga/identity", ADMIN, { mode: "both", issuer: "https://idp.example/realms/dga", clientId: "studio-dga" });
   const settings = await call("GET", "/internal/tenants/dga/identity", AUTH);
   check("once dga switches the broker reads the client secret Studio had", settings.status === 200 && settings.json.data.clientSecret === "dga-client-secret", JSON.stringify(settings.json));
   const after = await run(["--promote", "pea:pat@example.org"]);
-  check("and the copy refuses to run over a workspace that signs in through webx-control", after.code === 1 && /dga already signs in through webx-control \(mode both\)/.test(after.err) && (await call("GET", "/admin/tenants/dga/identity", ADMIN)).json.data.mode === "both", after.all);
+  check("and the copy refuses to run over a workspace that signs in through webx-control", after.code === 1 && /already signs in through webx-control: dga \(both\)/.test(after.err) && (await call("GET", "/admin/tenants/dga/identity", ADMIN)).json.data.mode === "both", after.all);
   check("each change the copy made is in control's audit table", (await call("GET", `/internal/audit?pageSize=100&filter=${encodeURIComponent("action:eq:user_created")}`, SERVICE)).json.data.length === 7);
 } catch (e) {
   console.error(e);

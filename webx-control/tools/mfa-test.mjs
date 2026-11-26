@@ -135,7 +135,9 @@ try {
   const t3 = (await finish(p3.json.data.pendingId, recovery[1])).json.data.accessToken;
   check("switching off without the right code is refused", reason(await mine("POST", "disable", t3, { code: wrongCode(secret) })) === "mfa_invalid" && (await mine("POST", "disable", t3, {})).status === 400);
   check("replacing it needs a code too", (await mine("POST", "start", t3, {})).status === 400);
-  check("with a recovery code it goes", (await mine("POST", "disable", t3, { code: recovery[2] })).status === 200 && (await mine("GET", "status", t3)).json.data.enrolled === false);
+  const off = await mine("POST", "disable", t3, { code: recovery[2] });
+  check("with a recovery code it goes; where the workspace requires a factor that session is over (no new token)", off.status === 200 && off.json.data.enrolled === false && off.json.data.accessToken === undefined && (await call("GET", "/admin/users/ann@example.org/mfa", ADMIN)).json.data.enrolled === false && (await mine("GET", "status", t3)).status === 401, JSON.stringify(off.json));
+  check("and the person's other sessions end", (await call("GET", `/internal/sessions/${done.json.data.sessionId}`, AUTH)).json.data.reason === "revoked: mfa_disabled");
 
   // ---- eight wrong codes lock the codes
   const cy = (await signIn("cy@example.org", "sub-cy")).json.data.accessToken;
@@ -171,8 +173,15 @@ try {
   await up();
   check("with it back, the sign-in that waited completes", (await finish(waiting, totp(bobSecret, step() + 1))).status === 201);
 
+  // ---- a factor taken away here (a lost phone) is not brought back by copying Strapi's again
+  check("an operator takes bob's factor away", (await call("DELETE", "/admin/users/bob@example.org/mfa", ADMIN)).status === 200 && (await call("GET", "/admin/users/bob@example.org/mfa", ADMIN)).json.data.enrolled === false);
+  const recopy = await migrate();
+  check("copying Strapi's again leaves it gone", /kept bob@example.org/.test(recopy.out) && (await call("GET", "/admin/users/bob@example.org/mfa", ADMIN)).json.data.enrolled === false, recopy.all);
+  const forced = await migrate("--replace");
+  check("only --replace brings it back", /copied bob@example.org/.test(forced.out) && (await call("GET", "/admin/users/bob@example.org/mfa", ADMIN)).json.data.enrolled === true, forced.all);
+
   // ---- the trail
-  const trail = await Promise.all(["mfa_enrolment_started", "mfa_enabled", "mfa_failed", "mfa_locked", "mfa_recovery_used", "mfa_disabled", "mfa_imported", "sign_in_mfa_pending"].map(async (a) => [a, (await audit(a)).length]));
+  const trail = await Promise.all(["mfa_enrolment_started", "mfa_enabled", "mfa_failed", "mfa_locked", "mfa_recovery_used", "mfa_disabled", "mfa_imported", "mfa_reset", "sign_in_mfa_pending"].map(async (a) => [a, (await audit(a)).length]));
   check("every step is in the audit table", trail.every(([, n]) => n > 0), JSON.stringify(trail));
   check("a sign-in with a code says how", (await audit("sign_in")).some((r) => /mfa=totp/.test(r.targetRef)) && (await audit("sign_in")).some((r) => /mfa=recovery/.test(r.targetRef)) && (await audit("sign_in")).some((r) => /scope=enroll/.test(r.targetRef)));
 } catch (e) {

@@ -329,16 +329,18 @@ and with the credentials below unset every route behaves as it did before.
 
 The service token is held in many places and can read personal data, so it must not also be the key that makes anyone's session: once
 `WEBX_CONTROL_AUTH_TOKEN` is set, the service token no longer makes tokens (401), and the broker credential reads no audit rows,
-records or jobs. The service refuses to start if a new credential has the same value as another one.
+records or jobs. The service refuses to start if a new credential has the same value as another one. Each credential's value is taken without
+spaces at either end (HTTP drops them from a header, so they cannot be part of one), and checked in constant time.
 
 ### Users, workspaces and sign-in identities (admin API)
 
 | Call | Meaning |
 |---|---|
-| `PUT /admin/users/<email>` body `{name?, disabled?, superAdmin?, memberships: [{tenantKey, role, customRole?}]}` | create (201) or replace (200); email is kept lowercase; `role` is one of the four base roles below (no longer free text); `customRole` the key of one of the workspace's custom roles; `superAdmin` marks a user tied to no workspace (Studio's unscoped admin). A change that takes something away or may (disabling, a workspace, a role or custom role changed either way, the super admin flag either way) ends the user's sessions; adding a workspace or changing the name does not |
+| `PUT /admin/users/<email>` body `{name?, disabled?, superAdmin?, memberships: [{tenantKey, role, customRole?}]}` | create (201) or replace (200); email is kept lowercase; `role` is one of the four base roles below (no longer free text); `customRole` the key of one of the workspace's custom roles; `superAdmin` marks a user tied to no workspace (Studio's unscoped admin); `disabled` and `superAdmin` are `true` or `false` (text such as `"true"` is refused, never read as false). A change that takes something away or may (disabling, a workspace, a role or custom role changed either way, the super admin flag either way) ends the user's sessions; adding a workspace or changing the name does not |
 | `GET /admin/users`, `GET /admin/users/<email>`, `DELETE /admin/users/<email>` | the users; deleting ends their sessions (the audit rows stay) |
-| `PUT /admin/tenants/<key>/identity` body `{mode?, issuer?, clientId?, clientSecret?, allowJit?, jitRole?, requireVerifiedEmail?, mfaRequired?, mfaRequiredAt?, acceptIdpMfa?}` | how a workspace signs in. `mode`: `legacy` (the default: Studio's old way only, and **no session here, a super admin's included**), `both` or `control`; the last two need `issuer` (an `https` URL, matched exactly; `http` only for a provider on this machine) and `clientId`. `clientSecret` is sealed under `WEBX_CONTROL_SECRET_KEY`, never shown again (the view says `hasClientSecret`); left out it is kept, `null` removes it. `allowJit` lets a person the provider vouches for be made on the spot with `jitRole` (needed with it, never a role that manages people; off by default). The e-mail must be verified unless `requireVerifiedEmail` is false. `mfaRequired` asks everyone for a second factor (step 4), counting the grace period from `mfaRequiredAt` (kept while it stays on; a migration may give it); `acceptIdpMfa` lets a second factor the provider checked count. Every other field left out takes its default. Setting `legacy` again ends every session in the workspace (a rollback); a new provider ends the sessions made with the old one |
+| `PUT /admin/tenants/<key>/identity` body `{mode?, issuer?, clientId?, clientSecret?, allowJit?, jitRole?, requireVerifiedEmail?, mfaRequired?, mfaRequiredAt?, acceptIdpMfa?}` | how a workspace signs in. `mode`: `legacy` (the default: Studio's old way only, and **no session here, a super admin's included**), `both` or `control`; the last two need `issuer` (an `https` URL, matched exactly; `http` only for a provider on this machine) and `clientId`. `clientSecret` is sealed under `WEBX_CONTROL_SECRET_KEY`, never shown again (the view says `hasClientSecret`); left out it is kept, `null` removes it. `allowJit` lets a person with no account yet whom the provider vouches for be made on the spot with `jitRole` (needed with it, never a role that manages people; off by default); an account that exists is never adopted this way, it needs a membership first. The e-mail must be verified unless `requireVerifiedEmail` is false. `mfaRequired` asks everyone for a second factor (step 4), counting the grace period from `mfaRequiredAt` (kept while it stays on; a migration may give it); `acceptIdpMfa` lets a second factor the provider checked count. Every other field left out takes its default. Setting `legacy` again ends every session in the workspace (a rollback); a new provider ends the sessions made with the old one |
 | `GET`, `DELETE /admin/tenants/<key>/identity` | read, or forget the settings: the same as `legacy`, every session in the workspace ends |
+| `GET /admin/identities` | every workspace's sign-in settings (the copy from Strapi reads it to refuse running once any workspace has switched) |
 | `GET /admin/users/<email>/identities`, `PUT` body `{identities: [{issuer, subject}]}` | how a person signs in: the (provider, subject) pairs that are them, one per provider. `PUT` replaces the list, and is the only way a **super admin** gets one: no workspace's provider can vouch for a super admin, so they sign in only through an identity an operator linked. Anything removed or changed ends the user's sessions |
 
 ### Sign-in and sessions (broker credential)
@@ -346,7 +348,7 @@ records or jobs. The service refuses to start if a new credential has the same v
 | Call | Meaning |
 |---|---|
 | `GET /internal/tenants/<key>/identity` | where to send a person to sign in: `{tenantKey, mode}`, and once the workspace is `both` or `control` also `{issuer, clientId, clientSecret}` (opened; 503 without the secret key). A `legacy` workspace shows nothing more: nothing should need control's copy of its client until it switches. 404 with no settings |
-| `POST /internal/sessions` body `{issuer, subject, email, emailVerified, tenantKey, amr?, ip?, userAgent?}` | sign a person in. 201 with `{sessionId, accessToken, accessExpiresAt, refreshToken, idleExpiresAt, absoluteExpiresAt, scope, mfa, mfaDeadline}`; **202** with `{mfaRequired: true, pendingId, expiresAt}` when the person has a second factor (below); or 403 with `error.details.reason`: `workspace_not_configured` or `workspace_legacy` (it does not sign in through control), `issuer_mismatch` (not the workspace's own provider), `email_not_verified`, `unknown_user` (nobody made on the spot), `not_a_member`, `user_disabled`, `subject_changed` (that e-mail already signs in at this provider as someone else; an operator relinks it), `super_admin_needs_operator_link`. The first sign-in of a (provider, subject) links it to the member with that e-mail; after that the e-mail is not consulted |
+| `POST /internal/sessions` body `{issuer, subject, email, emailVerified, tenantKey, amr?, ip?, userAgent?}` | sign a person in. 201 with `{sessionId, accessToken, accessExpiresAt, refreshToken, idleExpiresAt, absoluteExpiresAt, scope, mfa, mfaDeadline}`; **202** with `{mfaRequired: true, pendingId, expiresAt}` when the person has a second factor (below); or 403 with `error.details.reason`: `workspace_not_configured` or `workspace_legacy` (it does not sign in through control), `issuer_mismatch` (not the workspace's own provider), `email_not_verified`, `unknown_user` (nobody made on the spot), `not_a_member`, `user_disabled`, `subject_changed` (that e-mail already signs in at this provider as someone else; an operator relinks it), `super_admin_needs_operator_link`. The first sign-in of a (provider, subject) links it to the member with that e-mail (someone who has an account and is not a member here is `not_a_member`, even where people are made on the spot); after that the e-mail is not consulted |
 | `POST /internal/sessions/mfa` body `{pendingId, code}` | the second step of a sign-in that waited: the code from the person's authenticator, or a recovery code. 201 with the session (multi-factor); 401 `mfa_invalid` (counted), `mfa_pending_expired` (5 minutes, or used); 429 `mfa_locked`; 503 `mfa_unavailable` (no secret key). The sign-in is decided again, so a change in the minutes between counts |
 | `POST /internal/sessions/refresh` body `{refreshToken}` | a new access token and a new refresh token. The one just replaced still works for `--refresh-grace` seconds and gets an access token only (two tabs, two replicas); shown again after that it was copied, and the whole session ends (`refresh_reuse`). A wrong secret is a 401 and ends nothing |
 | `POST /internal/sessions/<id>/switch` body `{tenantKey}` | move the session to another workspace the person belongs to, that signs in through control, **and whose provider is the one the session was made with** (a super admin may go to any such workspace); a new access token |
@@ -388,7 +390,11 @@ it moves to. A background job of an overdue owner gets no engine token (`owner_m
 | `POST /api/auth/mfa/confirm` body `{code}` | a code from the new authenticator: `{recoveryCodes, accessToken, accessExpiresAt}` (the codes are shown this once; the session is multi-factor and whole from now) |
 | `POST /api/auth/mfa/disable` body `{code}` | switch it off |
 | `GET /admin/users/<email>/mfa`, `DELETE` | an operator sees whether a person has one (and a lock), or takes it away (a lost phone): their sessions end |
-| `PUT /admin/users/<email>/mfa` body `{secret, legacyRecoveryHashes?, replace?}` | copy a factor from Strapi (below); one already here is left alone unless `replace` |
+| `PUT /admin/users/<email>/mfa` body `{secret, legacyRecoveryHashes?, replace?}` | copy a factor from Strapi (below). A person whose factor control knows anything about (one set up here, a set-up started, one taken away or switched off) is left alone unless `replace`, which then ends their sessions |
+
+Switching the factor off ends the person's other sessions and the current one stops being multi-factor (where its workspace requires a
+factor past the grace period that ends it too; otherwise the answer carries a new access token). Replacing it ends their other sessions:
+they were made with the factor that is gone. A factor taken away or switched off leaves a record, so a copy from Strapi never brings it back.
 
 These routes take a session's token in either scope, and only that (a token from `/internal/token` has no session). Each step is a row in
 the audit table (content type `webx::mfa`): `mfa_enrolment_started`, `mfa_enabled`, `mfa_disabled`, `mfa_recovery_used`, `mfa_failed`,
@@ -409,7 +415,7 @@ A member has one of four **base roles**, fixed in `src/roles.rs` (a role written
 |---|---|---|---|---|---|---|---|---|---|
 | `admin` | yes | yes | yes | yes | yes | yes | yes | yes | yes, **without a custom role only** |
 | `editor` | yes | yes | yes | yes | yes | yes | yes | yes | no |
-| `author` | yes | yes | yes | no | yes | no | no | yes | no |
+| `author` | own entries only (as Strapi's Author) | yes | yes | no | yes | no | no | yes | no |
 | `viewer` | yes | no | no | no | no | no | no | no | no |
 
 A **custom role** (the records collection `custom-role`: `{tenantKey, roleKey, name, permissions}` per content type) narrows the content a
@@ -443,6 +449,9 @@ else); `iat`, `nbf`, `exp`, `jti`. A job's token adds `purpose` `job` and `job`.
 lacks any claim above. It may keep the key set five minutes, fetches it again (at most once a minute) when a token names a `kid` it
 does not have, and allows 30 seconds of clock difference. `/api/auth/me` and the tools here allow none. An engine that checks only the
 signature honours a token until it expires (at most 60 seconds for an engine token); revocation takes effect through short lives.
+Control's own check (`/api/auth/me`, the person's MFA routes) also refuses a token that no longer says what is true: its workspace, role,
+custom role, super-admin flag or listed memberships against the account as it is now, and a session's token against its session (the
+workspace it is in, its scope, its second factor). After a move or any such change the next refresh gives the right one.
 
 **Rotating the signing key.** `webx-control keygen` prints a seed. (1) Put the new seed in `WEBX_CONTROL_SIGNING_KEY` and the old
 one in `WEBX_CONTROL_SIGNING_KEY_PREVIOUS` (`database` if the old key was the one control made and kept in its database), restart:
@@ -467,13 +476,15 @@ WEBX_ENCRYPTION_KEY=<Studio's> node tools/migrate-users.mjs --dry-run [--promote
 It copies Strapi's admin users (workspaces from each tenant's `adminEmails`; base role from the Strapi role: Super Admin `admin`, Editor
 `editor`, Author `author`, anything else `viewer`; the custom role from `customRoleAssignments`; inactive or blocked is disabled; a super
 admin on no tenant becomes `superAdmin`), each workspace's sign-in settings as `legacy` (the SSO provider and client, the client secret
-decrypted with Studio's `WEBX_ENCRYPTION_KEY` and sealed here, the MFA requirement and its start) and the custom roles (control's copy made
-the same as Strapi's). First it prints, per workspace, who keeps managing it and **who no longer does**: today every member without a
-custom role may add people, change roles, SSO, security and the agent's policy; here only an `admin` without a custom role may. It writes
-nothing and stops when a workspace would be left with no admin (name one with `--promote`), when a client secret cannot be carried, or
-when a workspace already signs in through control. Today's SSO adds anyone the provider vouches for as Editor; control does not unless
-the workspace sets `allowJit`. Its mapping is unit-tested (`node --test tools/users-map.test.mjs`) and `node tools/migrate-users-test.mjs`
-runs it against the real binary and a fake Strapi.
+decrypted with Studio's `WEBX_ENCRYPTION_KEY` and sealed here, the MFA requirement and its start) and the custom roles (control's copy of
+Strapi's workspaces' roles made the same as Strapi's, stale ones removed last). It speaks for Strapi's workspaces only: a person keeps the
+memberships of workspaces only control knows, and their custom roles are left alone. First it prints, per workspace, who keeps managing it
+and **who no longer does**: today every member may add people, change roles and SSO, custom role or not, and those without one also security
+and the agent's policy; here only an `admin` without a custom role may. It writes nothing and stops when a workspace would be left with no
+admin (name one with `--promote`), when a client secret cannot be carried, when control would refuse something (a workspace key, an
+address, a custom role's key), or when any workspace control knows already signs in through it. Today's SSO adds anyone the provider
+vouches for as Editor; control does not unless the workspace sets `allowJit`, and then only for people with no account yet. Its mapping
+is unit-tested (`node --test tools/users-map.test.mjs`) and `node tools/migrate-users-test.mjs` runs it against the real binary and a fake Strapi.
 
 **Not done yet, and the larger part of C4:** Studio's session trusting these tokens, with engines called by a service credential plus
 the acting editor (steps 6 and 7; step 5 put every engine call of Studio's behind one place, `webx-studio/lib/engineAuth.ts`); engines verifying them (steps 8 and 9); and the security review D10 and the plan

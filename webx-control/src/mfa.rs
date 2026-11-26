@@ -34,9 +34,19 @@ CREATE TABLE IF NOT EXISTS mfa(
   failures_since INTEGER,
   enabled_at INTEGER,
   source TEXT,
+  removed_at INTEGER,
   updated_at INTEGER NOT NULL
 );
 ";
+
+/// A table made before `removed_at` existed gets it (idempotent).
+pub fn migrate(conn: &Connection) -> Result<(), String> {
+    let has = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('mfa') WHERE name='removed_at'", [], |r| r.get::<_, i64>(0)).map_err(|e| e.to_string())? > 0;
+    if !has {
+        conn.execute("ALTER TABLE mfa ADD COLUMN removed_at INTEGER", []).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 
 /// How long an unenrolled person may keep working after a workspace starts requiring a second factor (Studio's MFA_GRACE_DAYS).
 pub const GRACE_SECS: i64 = 14 * 86_400;
@@ -205,15 +215,17 @@ struct Factor {
     legacy_recovery: Vec<String>,
     failures: i64,
     failures_since: Option<i64>,
+    /// when the factor was taken away or switched off, if it was
+    removed_at: Option<i64>,
 }
 
 fn load(conn: &Connection, user_id: i64) -> Result<Option<Factor>, String> {
     conn.query_row(
-        "SELECT enabled, secret, pending_secret, pending_at, last_step, recovery, legacy_recovery, failures, failures_since FROM mfa WHERE user_id=?1",
+        "SELECT enabled, secret, pending_secret, pending_at, last_step, recovery, legacy_recovery, failures, failures_since, removed_at FROM mfa WHERE user_id=?1",
         [user_id],
         |r| {
             let list = |i: usize| -> rusqlite::Result<Vec<String>> { Ok(serde_json::from_str(&r.get::<_, String>(i)?).unwrap_or_default()) };
-            Ok(Factor { enabled: r.get(0)?, secret: r.get(1)?, pending_secret: r.get(2)?, pending_at: r.get(3)?, last_step: r.get(4)?, recovery: list(5)?, legacy_recovery: list(6)?, failures: r.get(7)?, failures_since: r.get(8)? })
+            Ok(Factor { enabled: r.get(0)?, secret: r.get(1)?, pending_secret: r.get(2)?, pending_at: r.get(3)?, last_step: r.get(4)?, recovery: list(5)?, legacy_recovery: list(6)?, failures: r.get(7)?, failures_since: r.get(8)?, removed_at: r.get(9)? })
         },
     )
     .optional()
@@ -315,8 +327,9 @@ pub fn start(conn: &Connection, keys: Option<&SecretKey>, user_id: i64, account:
 }
 
 /// Confirm the pending authenticator with a code from it: it becomes the factor, the old one (if any) and every old recovery code
-/// stop working, and eight new recovery codes are made and returned (shown once; only their tags are kept).
-pub fn confirm(conn: &Connection, keys: Option<&SecretKey>, user_id: i64, code: &str, now: i64) -> Result<Vec<String>, MfaError> {
+/// stop working, and eight new recovery codes are made and returned (shown once; only their tags are kept), with whether an old
+/// factor was replaced.
+pub fn confirm(conn: &Connection, keys: Option<&SecretKey>, user_id: i64, code: &str, now: i64) -> Result<(Vec<String>, bool), MfaError> {
     let keys = keys.ok_or(MfaError::NoKey)?;
     let f = load(conn, user_id)?.ok_or(MfaError::NotStarted)?;
     if let Some(until) = locked_until(&f, now) {
@@ -337,22 +350,37 @@ pub fn confirm(conn: &Connection, keys: Option<&SecretKey>, user_id: i64, code: 
     let tags: Vec<String> = codes.iter().map(|c| keys.tag(&ctx, &normalise(c))).collect();
     conn.execute(
         "UPDATE mfa SET enabled=1, secret=pending_secret, pending_secret=NULL, pending_at=NULL, last_step=?2, recovery=?3, legacy_recovery='[]',
-           failures=0, failures_since=NULL, enabled_at=?4, source='control', updated_at=?4 WHERE user_id=?1",
+           failures=0, failures_since=NULL, enabled_at=?4, source='control', removed_at=NULL, updated_at=?4 WHERE user_id=?1",
         params![user_id, step, json!(tags).to_string(), now],
     )?;
-    Ok(codes)
+    Ok((codes, f.enabled))
 }
 
 /// Switch the second factor off, with a current code or a recovery code. Returns how the code was accepted.
 pub fn disable(conn: &Connection, keys: Option<&SecretKey>, user_id: i64, code: &str, now: i64) -> Result<Accepted, MfaError> {
     let a = check(conn, keys, user_id, code, now)?;
-    conn.execute("DELETE FROM mfa WHERE user_id=?1", [user_id])?;
+    remove(conn, user_id, now)?;
     Ok(a)
 }
 
 /// An operator takes a person's second factor away (a lost phone, no recovery code left). Returns false when there was none.
-pub fn reset(conn: &Connection, user_id: i64) -> Result<bool, String> {
-    Ok(conn.execute("DELETE FROM mfa WHERE user_id=?1", [user_id]).map_err(|e| e.to_string())? > 0)
+pub fn reset(conn: &Connection, user_id: i64, now: i64) -> Result<bool, String> {
+    if !enrolled(conn, user_id)? {
+        return Ok(false);
+    }
+    remove(conn, user_id, now)?;
+    Ok(true)
+}
+
+/// The factor is gone, and the row says when: a copy from Strapi (`import`) never brings back a factor that was taken away here.
+fn remove(conn: &Connection, user_id: i64, now: i64) -> Result<(), String> {
+    conn.execute(
+        "UPDATE mfa SET enabled=0, secret=NULL, pending_secret=NULL, pending_at=NULL, last_step=NULL, recovery='[]', legacy_recovery='[]',
+           failures=0, failures_since=NULL, enabled_at=NULL, removed_at=?2, updated_at=?2 WHERE user_id=?1",
+        params![user_id, now],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// What a person's own MFA screen shows.
@@ -363,12 +391,14 @@ pub fn status(conn: &Connection, user_id: i64, now: i64) -> Result<Value, String
         "pendingEnrolment": f.as_ref().is_some_and(|f| f.pending_at.is_some_and(|a| now <= a + PENDING_SECS)),
         "recoveryCodesLeft": f.as_ref().filter(|f| f.enabled).map_or(0, |f| f.recovery.len() + f.legacy_recovery.len()),
         "lockedUntil": f.as_ref().and_then(|f| locked_until(f, now)),
+        "removedAt": f.as_ref().and_then(|f| f.removed_at),
     }))
 }
 
 /// Copy a factor from Strapi's `mfa-enrollment` (tools/migrate-mfa.mjs): the secret as it was (so the person's authenticator goes on
-/// working) and the hashes of the recovery codes they have not used. An enabled factor already here is left alone unless `replace`.
-/// Returns false when it was left alone.
+/// working) and the hashes of the recovery codes they have not used. A person whose second factor control already knows anything about
+/// (one set up here, a set-up started, one taken away or switched off) is left alone unless `replace`: what happened here is newer than
+/// Strapi's copy, and a factor taken away for a lost phone must not come back. Returns false when it was left alone.
 pub fn import(conn: &Connection, keys: Option<&SecretKey>, user_id: i64, body: &Value, replace: bool, now: i64) -> Result<bool, MfaError> {
     let keys = keys.ok_or(MfaError::NoKey)?;
     let secret = body.get("secret").and_then(Value::as_str).unwrap_or("");
@@ -378,14 +408,14 @@ pub fn import(conn: &Connection, keys: Option<&SecretKey>, user_id: i64, body: &
         Some(Value::Array(a)) => a.iter().map(|h| h.as_str().filter(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())).map(str::to_lowercase).ok_or_else(|| MfaError::Internal("legacyRecoveryHashes must be SHA-256 hex".into()))).collect::<Result<_, _>>()?,
         _ => return Err(MfaError::Internal("legacyRecoveryHashes must be a list".into())),
     };
-    if !replace && enrolled(conn, user_id)? {
+    if !replace && load(conn, user_id)?.is_some() {
         return Ok(false);
     }
     let sealed = keys.seal(&secret_context(user_id), &base32_encode(&decoded))?;
     conn.execute(
         "INSERT INTO mfa(user_id, enabled, secret, recovery, legacy_recovery, enabled_at, source, updated_at) VALUES (?1, 1, ?2, '[]', ?3, ?4, 'strapi', ?4)
          ON CONFLICT(user_id) DO UPDATE SET enabled=1, secret=?2, pending_secret=NULL, pending_at=NULL, last_step=NULL, recovery='[]', legacy_recovery=?3,
-           failures=0, failures_since=NULL, enabled_at=?4, source='strapi', updated_at=?4",
+           failures=0, failures_since=NULL, enabled_at=?4, source='strapi', removed_at=NULL, updated_at=?4",
         params![user_id, sealed, json!(hashes).to_string(), now],
     )?;
     Ok(true)
@@ -428,7 +458,8 @@ mod tests {
     /// enrol user 1 and return the secret and recovery codes
     fn enrol(c: &Connection, k: &SecretKey) -> (String, Vec<String>) {
         let (secret, _, _) = start(c, Some(k), 1, "ann@example.org", None, T).unwrap();
-        let codes = confirm(c, Some(k), 1, &code_at(&secret, T), T).unwrap();
+        let (codes, replaced) = confirm(c, Some(k), 1, &code_at(&secret, T), T).unwrap();
+        assert!(!replaced, "a first factor replaces nothing");
         (secret, codes)
     }
 
@@ -528,7 +559,8 @@ mod tests {
         // not confirmed yet: the old authenticator still signs in, the new one does not
         assert_eq!(check(&c, Some(&k), 1, &code_at(&new, T + 90), T + 90), Err(MfaError::Invalid));
         assert_eq!(check(&c, Some(&k), 1, &code_at(&old, T + 90), T + 90), Ok(Accepted::Totp));
-        let fresh = confirm(&c, Some(&k), 1, &code_at(&new, T + 120), T + 120).unwrap();
+        let (fresh, replaced) = confirm(&c, Some(&k), 1, &code_at(&new, T + 120), T + 120).unwrap();
+        assert!(replaced, "the old factor was replaced");
         assert_eq!(check(&c, Some(&k), 1, &code_at(&old, T + 150), T + 150), Err(MfaError::Invalid), "the old one is gone");
         assert_eq!(check(&c, Some(&k), 1, &codes[0], T + 150), Err(MfaError::Invalid), "and its recovery codes");
         assert_eq!(check(&c, Some(&k), 1, &fresh[0], T + 150), Ok(Accepted::Recovery { left: 7 }));
@@ -592,6 +624,40 @@ mod tests {
         for bad in [json!({"secret": "short"}), json!({"secret": "JBSWY3DPEHPK3PXP", "legacyRecoveryHashes": ["nothex"]}), json!({"secret": "1111"})] {
             assert!(import(&c, Some(&k), 2, &bad, false, T).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_factor_taken_away_here_is_not_brought_back_by_a_copy() {
+        let (c, k) = (db(), key());
+        let strapi = json!({"secret": "JBSWY3DPEHPK3PXP"});
+        // copied, then taken away by an operator (a lost phone)
+        assert!(import(&c, Some(&k), 1, &strapi, false, T).unwrap());
+        assert!(reset(&c, 1, T + 10).unwrap());
+        assert!(!reset(&c, 1, T + 11).unwrap(), "nothing left to take away");
+        assert_eq!((enrolled(&c, 1).unwrap(), status(&c, 1, T + 12).unwrap()["removedAt"].clone()), (false, json!(T + 10)));
+        // the same copy run again leaves it gone; the lost phone's codes do not work
+        assert!(!import(&c, Some(&k), 1, &strapi, false, T + 20).unwrap());
+        assert_eq!(check(&c, Some(&k), 1, &code_at("JBSWY3DPEHPK3PXP", T + 30), T + 30), Err(MfaError::NotEnrolled));
+        // nor after the person switches their own factor off, or only started one here
+        let (secret, _) = enrol_user(&c, &k, 2);
+        disable(&c, Some(&k), 2, &code_at(&secret, T + 60), T + 60).unwrap();
+        assert!(!import(&c, Some(&k), 2, &strapi, false, T + 70).unwrap());
+        c.execute("INSERT INTO users(id) VALUES (3)", []).unwrap();
+        start(&c, Some(&k), 3, "a", None, T).unwrap();
+        assert!(!import(&c, Some(&k), 3, &strapi, false, T + 80).unwrap());
+        // an operator who means it says so
+        assert!(import(&c, Some(&k), 1, &strapi, true, T + 90).unwrap());
+        assert!(enrolled(&c, 1).unwrap());
+        assert_eq!(status(&c, 1, T + 91).unwrap()["removedAt"], Value::Null);
+        // a factor set up again here after a removal clears it too
+        let (_, _) = enrol_user(&c, &k, 2);
+        assert_eq!(status(&c, 2, T + 92).unwrap()["removedAt"], Value::Null);
+    }
+    /// enrol `user` and return the secret and recovery codes
+    fn enrol_user(c: &Connection, k: &SecretKey, user: i64) -> (String, Vec<String>) {
+        let (secret, _, _) = start(c, Some(k), user, "someone", None, T).unwrap();
+        let (codes, _) = confirm(c, Some(k), user, &code_at(&secret, T), T).unwrap();
+        (secret, codes)
     }
 
     #[test]

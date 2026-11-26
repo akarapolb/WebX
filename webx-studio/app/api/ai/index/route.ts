@@ -21,8 +21,11 @@ const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")
 export async function POST(req: NextRequest) {
   const auth = await engineAuth();
   if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-  if (!llmConfigured()) return NextResponse.json({ error: "LLM not configured" }, { status: 503 });
   const { tenant: requestedTenant, contentType } = await req.json().catch(() => ({} as any));
+  // a content type from the body only from the list: it goes into the engine's URL, where anything else could change the query
+  // (a "#" there would drop the workspace filter that follows it)
+  if (contentType != null && !INDEXABLE.includes(contentType)) return NextResponse.json({ error: "Unknown content type" }, { status: 400 });
+  if (!llmConfigured()) return NextResponse.json({ error: "LLM not configured" }, { status: 503 });
   let tenant: string;
   try {
     await requireUser();

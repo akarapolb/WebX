@@ -122,9 +122,8 @@ export async function strapiMe(token: string) {
   return j?.data ?? null;
 }
 
-/** Authenticated GET against Strapi using the current session cookie. Returns null on any failure. */
-export async function strapiGet<T = any>(path: string): Promise<T | null> {
-  const token = await sessionToken();
+/** Authenticated GET against Strapi with the engine credential the caller got from lib/engineAuth.ts. Returns null on any failure. */
+export async function strapiGet<T = any>(path: string, token: string): Promise<T | null> {
   if (!token) return null;
   try {
     const r = await fetch(`${STRAPI_URL}${path.startsWith("/") ? "" : "/"}${path}`, {

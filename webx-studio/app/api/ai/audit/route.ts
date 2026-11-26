@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
   const auth = await engineAuth();
   if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   const { tenant: requestedTenant, contentType } = await req.json().catch(() => ({} as any));
+  // a content type from the body only from the list: it goes into the engine's URL ahead of the workspace filter, and anything else
+  // could change the query (a "#" would drop that filter)
+  if (contentType != null && !TYPES.includes(contentType)) return NextResponse.json({ error: "Unknown content type" }, { status: 400 });
   let tenant: string | null;
   try {
     tenant = await resolveRequestTenantKey(typeof requestedTenant === "string" ? requestedTenant : undefined);

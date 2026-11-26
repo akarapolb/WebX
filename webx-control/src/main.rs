@@ -169,7 +169,7 @@ async fn me(State(app): State<Shared>, headers: HeaderMap) -> Response {
 ///   GET  status            {enrolled, pendingEnrolment, recoveryCodesLeft, lockedUntil, required, deadline, overdue, scope, sessionMfa}
 ///   POST start   {code?}   {secret, otpauthUri}; with a factor already set up, a code from it or a recovery code
 ///   POST confirm {code}    {recoveryCodes, accessToken, accessExpiresAt}: the session is multi-factor and full from now
-///   POST disable {code}    {enrolled: false}
+///   POST disable {code}    {enrolled: false, accessToken?}: the person's other sessions end; this one is no longer multi-factor
 async fn my_mfa(State(app): State<Shared>, method: Method, headers: HeaderMap, Path(what): Path<String>, body: Bytes) -> Response {
     let Some(t) = headers.get("authorization").and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")) else {
         return error(StatusCode::UNAUTHORIZED, "UnauthorizedError", "Missing or invalid token");
@@ -181,7 +181,7 @@ async fn my_mfa(State(app): State<Shared>, method: Method, headers: HeaderMap, P
         ("GET", "status", _) => sessions::mfa_status(&conn, &app.keys, t, now),
         ("POST", "start", code) => sessions::mfa_start(&conn, &app.keys, app.secrets.as_ref(), t, code.as_deref(), now),
         ("POST", "confirm", Some(c)) => sessions::mfa_confirm(&conn, &app.keys, &app.sessions, app.secrets.as_ref(), t, &c, now),
-        ("POST", "disable", Some(c)) => sessions::mfa_disable(&conn, &app.keys, app.secrets.as_ref(), t, &c, now),
+        ("POST", "disable", Some(c)) => sessions::mfa_disable(&conn, &app.keys, &app.sessions, app.secrets.as_ref(), t, &c, now),
         ("POST", "confirm" | "disable", None) => return bad("code is required".into()),
         _ => return not_found(),
     };
@@ -764,7 +764,7 @@ fn check_token(want: Option<[u8; 32]>, headers: &HeaderMap, off: &str) -> Result
     let got = headers.get("authorization").and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer "));
     // compare hashes, not the tokens themselves
     match got.map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes()))) {
-        Some(h) if h == want => Ok(()),
+        Some(h) if secrets::same(&h, &want) => Ok(()),
         _ => Err(error(StatusCode::UNAUTHORIZED, "UnauthorizedError", "Missing or invalid token")),
     }
 }
@@ -871,6 +871,11 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
             Ok(_) => not_found(),
             Err(m) => fail(m),
         },
+        // every workspace's sign-in settings (the copy from Strapi checks no workspace is past legacy, ones Strapi does not know included)
+        ("GET", ["identities"]) => match sessions::policies(&conn) {
+            Ok(l) => Json(json!({"data": l.iter().map(|p| p.to_json()).collect::<Vec<_>>()})).into_response(),
+            Err(m) => fail(m),
+        },
         // which provider a workspace's people sign in at, and whether a person it vouches for is made on the spot
         ("GET", ["tenants", key, "identity"]) => match sessions::policy(&conn, key) {
             Ok(Some(p)) => Json(json!({"data": p.to_json()})).into_response(),
@@ -895,14 +900,23 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
             Ok(false) => not_found(),
             Err(m) => fail(m),
         },
-        ("DELETE", ["tenants", key]) => match registry::remove(&conn, key) {
-            Ok(true) => match sessions::workspace_removed(&conn, key, now_secs()) {
-                Ok(()) => Json(json!({"data": null})).into_response(),
+        // the workspace, its sign-in settings and every session in it go together, or none of them does
+        ("DELETE", ["tenants", key]) => {
+            let removed = (|| -> Result<bool, String> {
+                let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+                if !registry::remove(&tx, key)? {
+                    return Ok(false);
+                }
+                sessions::workspace_removed(&tx, key, now_secs())?;
+                tx.commit().map_err(|e| e.to_string())?;
+                Ok(true)
+            })();
+            match removed {
+                Ok(true) => Json(json!({"data": null})).into_response(),
+                Ok(false) => not_found(),
                 Err(m) => fail(m),
-            },
-            Ok(false) => not_found(),
-            Err(m) => fail(m),
-        },
+            }
+        }
         _ => not_found(),
     }
 }
@@ -1510,13 +1524,16 @@ async fn main() {
     conn.execute_batch(sessions::DDL).unwrap_or_else(|e| panic!("{e}"));
     sessions::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(mfa::DDL).unwrap_or_else(|e| panic!("{e}"));
+    mfa::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(schedules::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(search_stats::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(files::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(outbox::DDL).unwrap_or_else(|e| panic!("{e}"));
     let keys = identity::Keys::load(&conn, env_nonempty("WEBX_CONTROL_SIGNING_KEY").as_deref(), env_nonempty("WEBX_CONTROL_SIGNING_KEY_PREVIOUS").as_deref()).unwrap_or_else(|e| panic!("{e}"));
-    let token_hash = |name: &str| std::env::var(name).ok().filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
+    // trimmed: spaces at either end can never be sent (HTTP drops them from a header), so they are not part of a credential, and two
+    // values that differ only there are the same credential
+    let token_hash = |name: &str| std::env::var(name).ok().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).map(|t| <[u8; 32]>::from(Sha256::digest(t.as_bytes())));
     let admin_hash = token_hash("WEBX_CONTROL_ADMIN_TOKEN");
     let service_hash = token_hash("WEBX_CONTROL_SERVICE_TOKEN");
     let auth_hash = token_hash("WEBX_CONTROL_AUTH_TOKEN");

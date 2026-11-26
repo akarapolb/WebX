@@ -10,8 +10,9 @@ use serde_json::{json, Value};
 
 pub const BASE_ROLES: [&str; 4] = ["admin", "editor", "author", "viewer"];
 
-/// What a base role may do, content first, then managing the workspace.
-pub const ACTIONS: [&str; 11] = ["read", "create", "update_own", "update_any", "delete_own", "delete_any", "publish", "upload_media", "manage_people", "manage_sign_in", "manage_agent"];
+/// What a base role may do, content first, then managing the workspace. `read` is every entry of the workspace, `read_own` the entries
+/// the person made (Strapi's Author reads only those, and so does `author` here).
+pub const ACTIONS: [&str; 12] = ["read", "read_own", "create", "update_own", "update_any", "delete_own", "delete_any", "publish", "upload_media", "manage_people", "manage_sign_in", "manage_agent"];
 
 /// The actions that manage the workspace rather than its content: never with a custom role.
 pub const MANAGEMENT: [&str; 3] = ["manage_people", "manage_sign_in", "manage_agent"];
@@ -21,7 +22,7 @@ pub fn allowed(role: &str) -> &'static [&'static str] {
     match role {
         "admin" => &ACTIONS,
         "editor" => &["read", "create", "update_own", "update_any", "delete_own", "delete_any", "publish", "upload_media"],
-        "author" => &["read", "create", "update_own", "delete_own", "upload_media"],
+        "author" => &["read_own", "create", "update_own", "delete_own", "upload_media"],
         "viewer" => &["read"],
         _ => &[],
     }
@@ -56,15 +57,16 @@ mod tests {
 
     #[test]
     fn the_matrix() {
-        // every role reads; only admin manages; publishing is editor and up; an author changes only their own
+        // every role reads (an author only what they made, as Strapi's Author); only admin manages; publishing is editor and up;
+        // an author changes only their own
         let row = |r: &str| ACTIONS.iter().map(|a| if may(r, None, a) { '1' } else { '.' }).collect::<String>();
-        //                          r c u U d D p m P S A
-        assert_eq!(row("admin"), "11111111111");
-        assert_eq!(row("editor"), "11111111...");
-        assert_eq!(row("author"), "111.1..1...");
-        assert_eq!(row("viewer"), "1..........");
-        assert_eq!(row("Lead Editor"), "...........");
-        assert_eq!(row(""), "...........");
+        //                          r o c u U d D p m P S A
+        assert_eq!(row("admin"), "111111111111");
+        assert_eq!(row("editor"), "1.1111111...");
+        assert_eq!(row("author"), ".111.1..1...");
+        assert_eq!(row("viewer"), "1...........");
+        assert_eq!(row("Lead Editor"), "............");
+        assert_eq!(row(""), "............");
     }
 
     #[test]
@@ -86,7 +88,7 @@ mod tests {
         assert!(MANAGEMENT.iter().all(|m| ACTIONS.contains(m)));
         for r in BASE_ROLES {
             assert!(allowed(r).iter().all(|a| ACTIONS.contains(a)), "{r}");
-            assert!(allowed(r).contains(&"read"), "{r}");
+            assert!(allowed(r).contains(&"read") || allowed(r).contains(&"read_own"), "{r}");
         }
     }
 

@@ -13,9 +13,10 @@
 //!    `legacy` (the default), has no sessions at all, a super admin's included; setting it back to `legacy` ends them (rollback).
 //!  - The provider must be the workspace's own (`workspace_identity.issuer`, exact match), and the e-mail verified by it (unless
 //!    the workspace says otherwise). A provider is believed about the people of its own workspace, and about nobody else's.
-//!  - A person is found by (issuer, subject). The first time, they are linked by e-mail if they hold a membership, or made on
-//!    the spot if the workspace allows that (`allow_jit`), with the role it names. A second subject for an e-mail that is
-//!    already linked to another is refused: that is what a provider that re-used an address looks like.
+//!  - A person is found by (issuer, subject). The first time, they are linked by e-mail if they hold a membership here; someone with
+//!    no account yet is made on the spot if the workspace allows that (`allow_jit`), with the role it names; an account that exists
+//!    and is not a member here is never adopted. A second subject for an e-mail that is already linked to another is refused: that is
+//!    what a provider that re-used an address looks like.
 //!  - A super admin is tied to no workspace, so no workspace's provider may vouch for one. They sign in only through an identity
 //!    an operator linked (`PUT /admin/users/<email>/identities`), never by e-mail or on the spot.
 //!  - A session may move to another workspace only if that workspace's provider is the one the session was made with.
@@ -295,6 +296,14 @@ pub fn policy(conn: &Connection, tenant: &str) -> Result<Option<Policy>, String>
     .map_err(e)
 }
 
+/// Every workspace's sign-in settings, by key (the operator's view; tools/migrate-users.mjs reads it to refuse running once any
+/// workspace, one Strapi does not know included, signs in through control).
+pub fn policies(conn: &Connection) -> Result<Vec<Policy>, String> {
+    let mut st = conn.prepare("SELECT tenant_key FROM workspace_identity ORDER BY tenant_key").map_err(e)?;
+    let keys = st.query_map([], |r| r.get::<_, String>(0)).map_err(e)?.collect::<Result<Vec<_>, _>>().map_err(e)?;
+    keys.iter().filter_map(|k| policy(conn, k).transpose()).collect()
+}
+
 /// What the provider's client secret is sealed for: its own workspace, so it does not open in another row.
 fn secret_context(tenant: &str) -> String {
     format!("client-secret:{tenant}")
@@ -447,12 +456,12 @@ pub fn sign_in_settings(conn: &Connection, secrets: Option<&SecretKey>, tenant: 
     Ok(Some(json!({"tenantKey": p.tenant_key, "mode": p.mode, "issuer": p.issuer, "clientId": p.client_id, "clientSecret": secret})))
 }
 
-/// A workspace that is gone: nothing signs in to it, and every session in it ends (a super admin's too).
-pub fn workspace_removed(conn: &Connection, tenant: &str, now: i64) -> Result<(), String> {
-    let tx = conn.unchecked_transaction().map_err(e)?;
-    tx.execute("DELETE FROM workspace_identity WHERE tenant_key=?1", [tenant]).map_err(e)?;
-    end_where(&tx, now, "tenant_key=?1", params![tenant], "workspace_removed", "admin")?;
-    tx.commit().map_err(e)
+/// A workspace that is gone: nothing signs in to it, every session in it ends (a super admin's too), and the audit table says so. Runs in
+/// the caller's transaction, the one that removes the workspace from the registry, so the two happen together or not at all.
+pub fn workspace_removed(tx: &Connection, tenant: &str, now: i64) -> Result<(), String> {
+    let had = tx.execute("DELETE FROM workspace_identity WHERE tenant_key=?1", [tenant]).map_err(e)? > 0;
+    let ended = end_where(tx, now, "tenant_key=?1", params![tenant], "workspace_removed", "admin")?;
+    audit_row(tx, now, "workspace_removed", "webx::workspace-identity", Some(tenant), None, Some(tenant), "admin", &format!("sign-in settings {}; {ended} session(s) ended", if had { "removed" } else { "none" }))
 }
 
 // ---------------------------------------------------------------- identities
@@ -509,6 +518,15 @@ pub fn set_identities(conn: &Connection, email: &str, body: &Value, now: i64) ->
             tx.execute("INSERT INTO identities(issuer, subject, user_id, linked_by, created_at) VALUES (?1,?2,?3,'admin',?4)", params![iss, sub, user.id, stamp(now)]).map_err(e)?;
         }
         end_where(&tx, now, "user_id=?1", params![user.id], "identity_changed", "admin")?;
+        // who may sign in as this person, and how, changed: the only way a super admin gets an identity, so it is on the record
+        let list = |l: &mut dyn Iterator<Item = (&str, &str)>| l.map(|(i, s)| format!("{i}#{s}")).collect::<Vec<_>>().join(", ");
+        let detail = format!(
+            "{}from [{}] to [{}]",
+            if user.super_admin { "super admin; " } else { "" },
+            list(&mut before.iter().map(|b| (b.issuer.as_str(), b.subject.as_str()))),
+            list(&mut wanted.iter().map(|(i, s)| (i.as_str(), s.as_str()))),
+        );
+        audit_row(&tx, now, "identities_saved", "webx::user", Some(&user.id.to_string()), Some(&user.email), None, "admin", &detail)?;
     }
     tx.commit().map_err(e)?;
     Ok(true)
@@ -747,10 +765,10 @@ fn decide(conn: &Connection, req: &SignIn) -> Result<Decision, (&'static str, &'
             if user.role_in(&req.tenant).is_some() {
                 return Ok(Decision { user: Some(user), add_membership: None, link_by: Some("email"), how: "email_link" });
             }
-            match (policy.allow_jit, policy.jit_role) {
-                (true, Some(role)) => Ok(Decision { add_membership: Some((req.tenant.clone(), role)), user: Some(user), link_by: Some("email"), how: "email_link_jit" }),
-                _ => Err(("not_a_member", "this account is not a member of that workspace")),
-            }
+            // An account that exists and is not a member here is someone else's person: it may belong to other workspaces, with their
+            // own providers and its own second factor. A workspace's provider makes new people on the spot; it never adopts one, or
+            // whoever administers it could take over the account of anyone whose e-mail they know. A membership comes first.
+            Err(("not_a_member", "this account is not a member of that workspace: an administrator has to add it first"))
         }
         None => match (policy.allow_jit, policy.jit_role) {
             (true, Some(role)) => Ok(Decision { user: None, add_membership: Some((req.tenant.clone(), role)), link_by: Some("jit"), how: "jit" }),
@@ -1145,54 +1163,78 @@ pub fn mfa_start(conn: &Connection, keys: &Keys, secrets: Option<&SecretKey>, to
 }
 
 /// Confirm the new authenticator with a code from it: {recoveryCodes (shown once), accessToken, accessExpiresAt}. The session has just
-/// seen the second factor, so it is multi-factor from now and has its full scope.
+/// seen the second factor, so it is multi-factor from now and has its full scope. When it replaced an older factor, the person's
+/// other sessions end: they were made with the factor that is gone (perhaps a lost or stolen phone).
 pub fn mfa_confirm(conn: &Connection, keys: &Keys, cfg: &Config, secrets: Option<&SecretKey>, token: &str, code: &str, now: i64) -> Result<Value, Refusal> {
     let (user, s) = own_session(conn, keys, token, now)?;
     let tenant = s.tenant.as_deref();
     let tx = conn.unchecked_transaction()?;
     let r = mfa::confirm(&tx, secrets, user.id, code, now);
     match &r {
-        Ok(_) => {
+        Ok((_, replaced)) => {
             tx.execute("UPDATE sessions SET mfa_at=?2, scope='full' WHERE id=?1", params![s.id, now])?;
-            mfa_row(&tx, now, "mfa_enabled", &user, tenant, "user", &format!("session {}", s.id))?;
+            if *replaced {
+                end_where(&tx, now, "user_id=?1 AND id<>?2", params![user.id, s.id], "mfa_replaced", "user")?;
+            }
+            mfa_row(&tx, now, "mfa_enabled", &user, tenant, "user", &format!("session {}{}", s.id, if *replaced { ", replacing the old factor" } else { "" }))?;
         }
         Err(err @ mfa::MfaError::Invalid) => audit_code(&tx, now, &user, tenant, "confirming the authenticator", &Err(err.clone()))?,
         Err(_) => {}
     }
     tx.commit()?;
-    let codes = r.map_err(mfa_refusal)?;
+    let (codes, _) = r.map_err(mfa_refusal)?;
     let upgraded = session(conn, &s.id)?.ok_or("session vanished")?;
     let (access, exp) = access_for(keys, cfg, &user, &upgraded, now)?;
     Ok(json!({"recoveryCodes": codes, "accessToken": access, "accessExpiresAt": exp}))
 }
 
-/// Switch the second factor off, with a current code or a recovery code (never a password).
-pub fn mfa_disable(conn: &Connection, keys: &Keys, secrets: Option<&SecretKey>, token: &str, code: &str, now: i64) -> Result<Value, Refusal> {
+/// Switch the second factor off, with a current code or a recovery code (never a password). The person's other sessions end, and this
+/// one is no longer multi-factor (where its workspace requires a second factor past the grace period, that ends it too). Returns
+/// {enrolled: false} and, while this session lives on, a new access token for it.
+pub fn mfa_disable(conn: &Connection, keys: &Keys, cfg: &Config, secrets: Option<&SecretKey>, token: &str, code: &str, now: i64) -> Result<Value, Refusal> {
     let (user, s) = own_session(conn, keys, token, now)?;
     let tenant = s.tenant.as_deref();
     let tx = conn.unchecked_transaction()?;
     let r = mfa::disable(&tx, secrets, user.id, code, now);
     audit_code(&tx, now, &user, tenant, "switching the factor off", &r)?;
     if r.is_ok() {
+        tx.execute("UPDATE sessions SET mfa_at=NULL WHERE id=?1", [&s.id])?;
+        end_where(&tx, now, "user_id=?1 AND id<>?2", params![user.id, s.id], "mfa_disabled", "user")?;
         mfa_row(&tx, now, "mfa_disabled", &user, tenant, "user", &format!("session {}", s.id))?;
     }
     tx.commit()?;
     r.map_err(mfa_refusal)?;
-    Ok(json!({"enrolled": false}))
+    let mut out = json!({"enrolled": false});
+    let current = session(conn, &s.id)?.ok_or("session vanished")?;
+    if check_live(conn, &current, now).is_ok() {
+        let (access, exp) = access_for(keys, cfg, &user, &current, now)?;
+        out["accessToken"] = json!(access);
+        out["accessExpiresAt"] = json!(exp);
+    }
+    Ok(out)
 }
 
 /// An operator copies a person's factor from Strapi (tools/migrate-mfa.mjs; mfa::import). None for an unknown user, else whether it
-/// was written (an enabled factor here is left alone unless the body says `replace`).
+/// was written (a person whose factor control already has any history of is left alone unless the body says `replace`, and a
+/// replacement of a factor they had ends their sessions).
 pub fn mfa_import(conn: &Connection, secrets: Option<&SecretKey>, email: &str, body: &Value, now: i64) -> Result<Option<bool>, Refusal> {
     let Some(user) = identity::get(conn, email)? else { return Ok(None) };
-    let replace = body.get("replace").and_then(Value::as_bool).unwrap_or(false);
+    let replace = match body.get("replace") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => return Err(Refusal::bad("replace must be true or false")),
+    };
     let tx = conn.unchecked_transaction()?;
+    let had = mfa::enrolled(&tx, user.id)?;
     let written = mfa::import(&tx, secrets, user.id, body, replace, now).map_err(|err| match err {
         mfa::MfaError::Internal(m) => Refusal { status: 400, reason: "bad_request", message: m },
         other => mfa_refusal(other),
     })?;
     if written {
-        mfa_row(&tx, now, "mfa_imported", &user, None, "admin", "from Strapi")?;
+        if had {
+            end_where(&tx, now, "user_id=?1", params![user.id], "mfa_replaced", "admin")?;
+        }
+        mfa_row(&tx, now, "mfa_imported", &user, None, "admin", if had { "from Strapi, replacing the factor here" } else { "from Strapi" })?;
     }
     tx.commit()?;
     Ok(Some(written))
@@ -1203,7 +1245,7 @@ pub fn mfa_import(conn: &Connection, secrets: Option<&SecretKey>, email: &str, b
 pub fn mfa_reset(conn: &Connection, email: &str, now: i64) -> Result<Option<bool>, String> {
     let Some(user) = identity::get(conn, email)? else { return Ok(None) };
     let tx = conn.unchecked_transaction().map_err(e)?;
-    let had = mfa::reset(&tx, user.id)?;
+    let had = mfa::reset(&tx, user.id, now)?;
     if had {
         end_where(&tx, now, "user_id=?1", params![user.id], "mfa_reset", "admin")?;
         mfa_row(&tx, now, "mfa_reset", &user, None, "admin", "removed by an operator")?;
@@ -1297,6 +1339,16 @@ pub fn verify_access(conn: &Connection, keys: &Keys, token: &str, now: i64) -> R
     if let Some(sid) = claims["sid"].as_str() {
         let s = session(conn, sid)?.ok_or("session has ended")?;
         check_live(conn, &s, now).map_err(|_| "session has ended".to_string())?;
+        // and the token has to describe the session as it is now: its person, the workspace it is in, its scope and its second
+        // factor. One made before a move, before the session became whole, or before the second factor changed is refused; the
+        // session's next refresh (or the answer to the change) gives the right one
+        let current = claims["uid"].as_str() == Some(s.user_id.to_string().as_str())
+            && claims["tid"].as_str() == s.tenant.as_deref()
+            && claims["scope"].as_str() == Some(s.scope.as_str())
+            && claims["mfa"].as_bool() == Some(s.mfa_at.is_some());
+        if !current {
+            return Err("the token is older than its session's state: refresh it".into());
+        }
     }
     Ok(claims)
 }
@@ -1425,15 +1477,29 @@ mod tests {
     }
 
     #[test]
-    fn a_member_of_another_workspace_gets_in_here_only_where_people_are_made_on_the_spot() {
+    fn a_workspaces_provider_never_adopts_a_person_who_exists_elsewhere() {
         let (c, k, cfg) = setup();
+        let key = secret_key();
+        // Bob is pea's, with a second factor of his own
         identity::upsert(&c, "bob@example.org", &json!({"memberships": [{"tenantKey": "pea", "role": "admin"}]}), &stamp(T0)).unwrap();
-        let r = req("bob@example.org", "sub-bob", "dga");
+        let bob = identity::get(&c, "bob@example.org").unwrap().unwrap();
+        mfa::import(&c, Some(&key), bob.id, &json!({"secret": "JBSWY3DPEHPK3PXP"}), false, T0).unwrap();
+        let mut r = req("bob@example.org", "sub-bob", "dga");
         assert_eq!(reason(sign_in(&c, &k, &cfg, &r, T0)), "not_a_member");
-        open(&c, "dga", DGA, json!({"allowJit": true, "jitRole": "viewer"}), T0).unwrap();
-        let s = sign_in(&c, &k, &cfg, &r, T0).unwrap();
-        assert_eq!(identity::verify(&c, &k, s["accessToken"].as_str().unwrap(), AUD_STUDIO, T0).unwrap()["role"], json!("viewer"));
-        assert_eq!(identity::get(&c, "bob@example.org").unwrap().unwrap().role_in("pea"), Some("admin"), "and nothing changed in pea");
+        // even where dga makes people on the spot and believes its provider's second factor
+        open(&c, "dga", DGA, json!({"allowJit": true, "jitRole": "viewer", "acceptIdpMfa": true}), T0).unwrap();
+        r.amr = vec!["mfa".into()];
+        assert_eq!(reason(super::sign_in(&c, &k, &cfg, &r, T0 + 1).map(|_| json!({}))), "not_a_member");
+        let bob = identity::get(&c, "bob@example.org").unwrap().unwrap();
+        assert_eq!((bob.role_in("dga"), bob.role_in("pea")), (None, Some("admin")), "nothing was added to his account");
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM identities"), 0, "and nothing was linked");
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM auth_pending"), 0, "nor could dga's provider start a sign-in that burns his codes");
+        // once dga's administrator makes him a member, dga's provider is believed about him (and he gives his own code)
+        identity::upsert(&c, "bob@example.org", &json!({"memberships": [{"tenantKey": "pea", "role": "admin"}, {"tenantKey": "dga", "role": "viewer"}]}), &stamp(T0)).unwrap();
+        r.amr = vec!["pwd".into()];
+        assert!(matches!(super::sign_in(&c, &k, &cfg, &r, T0 + 2).unwrap(), Begun::MfaRequired(_)));
+        // a new person, on the other hand, is made on the spot
+        assert_eq!(sign_in(&c, &k, &cfg, &req("new@example.org", "sub-new", "dga"), T0 + 3).unwrap()["scope"], json!("full"));
     }
 
     #[test]
@@ -1745,6 +1811,9 @@ mod tests {
         let m = switch(&c, &k, &cfg, sid, "pea", T0 + 3).unwrap();
         let claims = identity::verify(&c, &k, m["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 4).unwrap();
         assert_eq!((claims["tid"].clone(), claims["role"].clone(), claims["tenants"].clone()), (json!("pea"), json!("viewer"), json!([{"key": "pea", "role": "viewer"}])));
+        // the token for dga, from before the move, is the session's no longer: whatever happens to dga now, it cannot be used there
+        assert!(verify_access(&c, &k, s["accessToken"].as_str().unwrap(), T0 + 4).is_err());
+        assert!(verify_access(&c, &k, m["accessToken"].as_str().unwrap(), T0 + 4).is_ok());
         assert_eq!(status(&c, sid, T0 + 4).unwrap().unwrap()["tenantKey"], json!("pea"));
         assert!(actions(&c).contains(&("session_switch".to_string(), Some(sid.to_string()))));
         assert_eq!(switch(&c, &k, &cfg, "no-such", "pea", T0 + 4).unwrap_err().reason, "session_ended");
@@ -2241,6 +2310,9 @@ mod tests {
         let claims = identity::verify(&c, &k, r["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 20).unwrap();
         assert_eq!((claims["scope"].clone(), claims["mfa"].clone()), (json!("full"), json!(false)));
         assert!(engine_token(&c, &k, &cfg, &EngineRequest::Session { sid: &sid, tenant: None }, T0 + 21).is_ok());
+        // the token from when the session could only set up a factor says a scope the session no longer has: only the new one passes
+        assert!(verify_access(&c, &k, s["accessToken"].as_str().unwrap(), T0 + 21).is_err());
+        assert!(verify_access(&c, &k, r["accessToken"].as_str().unwrap(), T0 + 21).is_ok());
     }
 
     #[test]
@@ -2315,15 +2387,92 @@ mod tests {
         let t = s["accessToken"].as_str().unwrap();
         assert_eq!(mfa_start(&c, &k, None, t, None, T0 + 3).unwrap_err().reason, "mfa_unavailable");
         assert_eq!(mfa_confirm(&c, &k, &cfg, Some(&key), t, "123456", T0 + 3).unwrap_err().reason, "mfa_not_started");
-        assert_eq!(mfa_disable(&c, &k, Some(&key), t, "123456", T0 + 3).unwrap_err().reason, "mfa_not_enrolled");
+        assert_eq!(mfa_disable(&c, &k, &cfg, Some(&key), t, "123456", T0 + 3).unwrap_err().reason, "mfa_not_enrolled");
         // replacing a factor that is on needs a code; switching it off too
         let secret = mfa_start(&c, &k, Some(&key), t, None, T0 + 3).unwrap()["secret"].as_str().unwrap().to_string();
-        mfa_confirm(&c, &k, &cfg, Some(&key), t, &code(&secret, T0 + 3), T0 + 3).unwrap();
+        let done = mfa_confirm(&c, &k, &cfg, Some(&key), t, &code(&secret, T0 + 3), T0 + 3).unwrap();
+        assert_eq!(mfa_status(&c, &k, t, T0 + 4).unwrap_err().status, 401, "the token from before the session became multi-factor is out of date");
+        let t = done["accessToken"].as_str().unwrap();
         assert_eq!(mfa_start(&c, &k, Some(&key), t, None, T0 + 40).unwrap_err().status, 400);
-        assert_eq!(mfa_disable(&c, &k, Some(&key), t, &wrong(&secret, T0 + 40), T0 + 40).unwrap_err().reason, "mfa_invalid");
-        assert_eq!(mfa_disable(&c, &k, Some(&key), t, &code(&secret, T0 + 40), T0 + 40).unwrap(), json!({"enrolled": false}));
+        assert_eq!(mfa_disable(&c, &k, &cfg, Some(&key), t, &wrong(&secret, T0 + 40), T0 + 40).unwrap_err().reason, "mfa_invalid");
+        let off = mfa_disable(&c, &k, &cfg, Some(&key), t, &code(&secret, T0 + 40), T0 + 40).unwrap();
+        assert_eq!(off["enrolled"], json!(false));
+        // the session lives on (dga requires nothing), no longer multi-factor, with a token that says so
+        let after = identity::verify(&c, &k, off["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 41).unwrap();
+        assert_eq!(after["mfa"], json!(false));
+        assert!(verify_access(&c, &k, t, T0 + 41).is_err(), "the token that said multi-factor is out of date");
         let rows: Vec<String> = c.prepare("SELECT action FROM audit WHERE content_type='webx::mfa' ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
         assert_eq!(rows, ["mfa_enrolment_started", "mfa_enabled", "mfa_failed", "mfa_disabled"]);
+    }
+
+    #[test]
+    fn switching_the_factor_off_or_replacing_it_ends_the_persons_other_sessions() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        // dga requires a second factor and its grace period is over
+        open(&c, "dga", DGA, json!({"mfaRequired": true, "mfaRequiredAt": "2020-01-01T00:00:00.000Z"}), T0).unwrap();
+        let (secret, recovery) = ann_enrols(&c, &k, &cfg, &key, T0);
+        // two sessions with the code: a laptop and a phone
+        let laptop_id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 60).unwrap());
+        let laptop = complete_mfa(&c, &k, &cfg, Some(&key), &laptop_id, &code(&secret, T0 + 60), T0 + 60).unwrap();
+        let phone_id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 61).unwrap());
+        let phone = complete_mfa(&c, &k, &cfg, Some(&key), &phone_id, &recovery[0], T0 + 61).unwrap();
+        // replacing the factor from the laptop ends the phone's session (it was made with the factor that is gone)
+        let t = laptop["accessToken"].as_str().unwrap();
+        let new_secret = mfa_start(&c, &k, Some(&key), t, Some(&code(&secret, T0 + 90)), T0 + 90).unwrap()["secret"].as_str().unwrap().to_string();
+        let replaced = mfa_confirm(&c, &k, &cfg, Some(&key), t, &code(&new_secret, T0 + 91), T0 + 91).unwrap();
+        assert_eq!(status(&c, phone["sessionId"].as_str().unwrap(), T0 + 92).unwrap().unwrap()["reason"], json!("revoked: mfa_replaced"));
+        assert_eq!(status(&c, laptop["sessionId"].as_str().unwrap(), T0 + 92).unwrap().unwrap()["active"], json!(true));
+        // switching it off: the laptop's session is no longer multi-factor, and where a factor is required that ends it, no engine token
+        let t = replaced["accessToken"].as_str().unwrap();
+        let other = complete_mfa(&c, &k, &cfg, Some(&key), &pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 120).unwrap()), &code(&new_secret, T0 + 150), T0 + 120).unwrap();
+        let off = mfa_disable(&c, &k, &cfg, Some(&key), t, &code(&new_secret, T0 + 180), T0 + 180).unwrap();
+        assert!(off.get("accessToken").is_none(), "no token: the session no longer meets dga's requirement");
+        let laptop_sid = laptop["sessionId"].as_str().unwrap();
+        assert_eq!(status(&c, laptop_sid, T0 + 181).unwrap().unwrap()["reason"], json!("mfa_required"));
+        assert!(engine_token(&c, &k, &cfg, &EngineRequest::Session { sid: laptop_sid, tenant: None }, T0 + 181).is_err());
+        assert_eq!(status(&c, other["sessionId"].as_str().unwrap(), T0 + 181).unwrap().unwrap()["reason"], json!("revoked: mfa_disabled"));
+    }
+
+    #[test]
+    fn an_operators_copy_over_a_factor_ends_the_sessions_made_with_the_old_one() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        let (secret, _) = ann_enrols(&c, &k, &cfg, &key, T0);
+        let id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 60).unwrap());
+        let s = complete_mfa(&c, &k, &cfg, Some(&key), &id, &code(&secret, T0 + 60), T0 + 60).unwrap();
+        // without replace nothing is written, and nothing ends
+        assert_eq!(mfa_import(&c, Some(&key), "ann@example.org", &json!({"secret": "JBSWY3DPEHPK3PXP"}), T0 + 70).unwrap(), Some(false));
+        assert_eq!(status(&c, s["sessionId"].as_str().unwrap(), T0 + 71).unwrap().unwrap()["active"], json!(true));
+        // with it, the factor is Strapi's and the sessions the old one stood behind end
+        assert_eq!(mfa_import(&c, Some(&key), "ann@example.org", &json!({"secret": "JBSWY3DPEHPK3PXP", "replace": true}), T0 + 80).unwrap(), Some(true));
+        assert_eq!(status(&c, s["sessionId"].as_str().unwrap(), T0 + 81).unwrap().unwrap()["reason"], json!("revoked: mfa_replaced"));
+        assert_eq!(mfa_import(&c, Some(&key), "ann@example.org", &json!({"secret": "JBSWY3DPEHPK3PXP", "replace": "yes"}), T0 + 82).unwrap_err().status, 400);
+        assert_eq!(mfa_import(&c, Some(&key), "nobody@example.org", &json!({"secret": "JBSWY3DPEHPK3PXP"}), T0 + 83).unwrap(), None);
+    }
+
+    #[test]
+    fn linking_an_identity_and_removing_a_workspace_are_on_the_record() {
+        let (c, k, cfg) = setup();
+        identity::upsert(&c, "root@example.org", &json!({"superAdmin": true, "memberships": []}), &stamp(T0)).unwrap();
+        set_identities(&c, "root@example.org", &json!({"identities": [{"issuer": PEA, "subject": "sub-root"}]}), T0).unwrap();
+        // the same again changes nothing and writes nothing
+        set_identities(&c, "root@example.org", &json!({"identities": [{"issuer": PEA, "subject": "sub-root"}]}), T0 + 1).unwrap();
+        let rows: Vec<String> = c.prepare("SELECT target_ref FROM audit WHERE action='identities_saved'").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+        assert_eq!(rows, [format!("super admin; from [] to [{PEA}#sub-root]")]);
+        // a workspace removed: its settings and sessions go in the caller's transaction, with a row that says so
+        let s = ann_signs_in(&c, &k, &cfg, T0 + 2);
+        let tx = c.unchecked_transaction().unwrap();
+        workspace_removed(&tx, "dga", T0 + 3).unwrap();
+        tx.rollback().unwrap();
+        assert_eq!(status(&c, s["sessionId"].as_str().unwrap(), T0 + 4).unwrap().unwrap()["active"], json!(true), "rolled back with its caller");
+        let tx = c.unchecked_transaction().unwrap();
+        workspace_removed(&tx, "dga", T0 + 5).unwrap();
+        tx.commit().unwrap();
+        assert!(policy(&c, "dga").unwrap().is_none());
+        assert_eq!(status(&c, s["sessionId"].as_str().unwrap(), T0 + 6).unwrap().unwrap()["reason"], json!("revoked: workspace_removed"));
+        let removed: String = c.query_row("SELECT target_ref FROM audit WHERE action='workspace_removed'", [], |r| r.get(0)).unwrap();
+        assert_eq!(removed, "sign-in settings removed; 1 session(s) ended");
     }
 
     #[test]

@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // (multi-tenant switching only works within one engine — see the Phase 6
   // plan) — a WordPress session always gets the single-workspace fallback,
   // now resolved to that org's real tenant record rather than a placeholder.
-  const ctx = wp ? null : await strapiGet<any>("/api/console/context");
+  const ctx = wp || !auth ? null : await strapiGet<any>("/api/console/context", auth.credential);
   const rawTenants = ctx?.tenants ?? ctx?.data?.tenants ?? [];
   let tenants =
     Array.isArray(rawTenants) && rawTenants.length

@@ -246,7 +246,10 @@ export const strapiAdapter: CmsAdapter = {
   auth: {
     async me(): Promise<CurrentUser | null> {
       const r = await fetch(BASE + "/admin/users/me", { headers: await authHeaders(), cache: "no-store" });
-      if (!r.ok) return null;
+      // the engine turned the credential down: nobody is signed in. Anything else is the engine's trouble, not the person's, and is
+      // said as such rather than as "signed out"
+      if (r.status === 401 || r.status === 403) return null;
+      if (!r.ok) throw new CmsError("The content engine did not answer (HTTP " + r.status + ")", 502);
       const j = await json(r);
       const u = j?.data ?? j;
       if (!u) return null;

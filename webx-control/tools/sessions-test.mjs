@@ -81,6 +81,8 @@ try {
   // ---- a start-up that refuses to give two credentials the same value, and a seed for the signing key
   const clash = spawnSync(exe, ["--port", "1", "--db", join(dir, "clash.db")], { env: baseEnv({ WEBX_CONTROL_AUTH_TOKEN: SERVICE }), encoding: "utf8", timeout: 10_000 });
   check("a broker credential equal to the service token stops the start", clash.status !== 0 && /must not be the same value/.test(clash.stderr), clash.stderr);
+  const spaced = spawnSync(exe, ["--port", "1", "--db", join(dir, "spaced.db")], { env: baseEnv({ WEBX_CONTROL_AUTH_TOKEN: SERVICE + " " }), encoding: "utf8", timeout: 10_000 });
+  check("so does one that differs only by a space at the end (HTTP drops it, so it is the same credential)", spaced.status !== 0 && /must not be the same value/.test(spaced.stderr), spaced.stderr);
   const sameKey = spawnSync(exe, ["--port", "1", "--db", join(dir, "same.db")], { env: baseEnv({ WEBX_CONTROL_SECRET_KEY: KEY_A }), encoding: "utf8", timeout: 10_000 });
   check("a secret key equal to the signing key stops the start", sameKey.status !== 0 && /WEBX_CONTROL_SECRET_KEY must not be the same value/.test(sameKey.stderr), sameKey.stderr);
   const k1 = spawnSync(exe, ["keygen"], { encoding: "utf8" }), k2 = spawnSync(exe, ["keygen"], { encoding: "utf8" });
@@ -233,6 +235,7 @@ try {
   check("then they sign in, to a workspace that signs in through control whatever its provider, as a super admin with no role there", rc && rc.sa === true && rc.superAdmin === true && rc.tid === "orst" && rc.role === null, JSON.stringify(rs.json));
   const rsw = await call("POST", `/internal/sessions/${rs.json.data.sessionId}/switch`, AUTH, { tenantKey: "dga" });
   check("and move to another such workspace", rsw.status === 200 && (await engineVerifies(rsw.json.data.accessToken, "webx-studio")).tid === "dga");
+  check("the token from before the move is no longer the session's", (await me(rs.json.data.accessToken)).status === 401 && (await me(rsw.json.data.accessToken)).status === 200);
 
   // ---- step 3: a workspace set back to legacy (a rollback) ends every session in it, a super admin's too
   const annIn = (await signIn()).json.data;
@@ -246,6 +249,8 @@ try {
   const jit = await signIn({ issuer: PEA, tenantKey: "pea", email: "new@example.org", subject: "sub-new" });
   check("a new person is made, with that role", jit.status === 201 && (await engineVerifies(jit.json.data.accessToken, "webx-studio")).role === "viewer" && (await call("GET", "/admin/users/new@example.org", ADMIN)).json.data.memberships[0].role === "viewer");
   check("it is in the audit table", (await audit("action:eq:user_provisioned")).some((r) => r.adminEmail === "new@example.org"));
+  const adopt = await signIn({ issuer: PEA, tenantKey: "pea", email: "cy@example.org", subject: "sub-cy-at-pea" });
+  check("but a person who exists elsewhere is never adopted on the spot: a membership comes first", adopt.status === 403 && reason(adopt) === "not_a_member" && (await call("GET", "/admin/users/cy@example.org", ADMIN)).json.data.memberships.every((m) => m.tenantKey !== "pea"));
 
   // ---- changing a workspace's provider ends the sessions made with the old one
   const pea = (await signIn({ issuer: PEA, tenantKey: "pea", subject: "sub-ann-pea" })).json.data;
