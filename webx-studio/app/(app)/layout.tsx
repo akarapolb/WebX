@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { sessionToken, sessionEngine, strapiMe, strapiGet } from "@/lib/strapi";
+import { sessionEngine, strapiMe, strapiGet } from "@/lib/strapi";
+import { engineAuth } from "@/lib/engineAuth";
 import { wordpressMe } from "@/lib/wordpress";
 import { resolveMyTenant, mfaEnforcementStatus } from "@/lib/cms/governance";
 import Shell from "@/components/Shell";
@@ -8,10 +9,10 @@ import { TenantProvider } from "@/components/TenantProvider";
 import { AgentProvider } from "@/components/agent/AgentProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const token = await sessionToken();
+  const auth = await engineAuth();
   const engine = await sessionEngine();
   const wp = engine === "wordpress";
-  const me = token ? await (wp ? wordpressMe(token) : strapiMe(token)) : null;
+  const me = auth ? await (wp ? wordpressMe(auth.credential) : strapiMe(auth.credential)) : null;
   if (!me) redirect("/login");
 
   // Tenants come from the WebX console endpoint when present; otherwise a

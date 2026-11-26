@@ -22,7 +22,7 @@
 // admin/* and content-manager/* for any uid other than the one read-only
 // exception below.
 import { NextRequest, NextResponse } from "next/server";
-import { sessionToken } from "@/lib/strapi";
+import { engineAuth, engineAuthHeaders } from "@/lib/engineAuth";
 import { STRAPI_URL } from "@/lib/config";
 
 const ALLOWED_EXACT: Record<string, Set<string>> = {
@@ -49,12 +49,12 @@ function isAllowed(path: string[], method: string): boolean {
 }
 
 async function handle(req: NextRequest, path: string[]) {
-  const token = await sessionToken();
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const auth = await engineAuth();
+  if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!isAllowed(path, req.method)) return NextResponse.json({ error: "Not allowed through this proxy" }, { status: 403 });
 
   const target = `${STRAPI_URL}/${path.join("/")}${req.nextUrl.search}`;
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  const headers: Record<string, string> = engineAuthHeaders("strapi", auth);
   const ct = req.headers.get("content-type");
   if (ct) headers["Content-Type"] = ct; // preserve multipart boundary for file uploads
   const init: RequestInit = { method: req.method, headers, cache: "no-store" };

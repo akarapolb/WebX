@@ -8,7 +8,7 @@
 // tenant's search results. Fixed the same way: derive tenant from the
 // caller's own session instead of trusting the body.
 import { NextRequest, NextResponse } from "next/server";
-import { sessionToken } from "@/lib/strapi";
+import { engineAuth, engineAuthHeaders } from "@/lib/engineAuth";
 import { embed, llmConfigured } from "@/lib/llm";
 import { STRAPI_URL } from "@/lib/config";
 import { vectorUpsert, vectorBackend, type VecUpsert } from "@/lib/vectorstore";
@@ -19,8 +19,8 @@ const INDEXABLE = ["api::article.article", "api::service.service", "api::faq.faq
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 export async function POST(req: NextRequest) {
-  const token = await sessionToken();
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const auth = await engineAuth();
+  if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!llmConfigured()) return NextResponse.json({ error: "LLM not configured" }, { status: 503 });
   const { tenant: requestedTenant, contentType } = await req.json().catch(() => ({} as any));
   let tenant: string;
@@ -39,12 +39,12 @@ export async function POST(req: NextRequest) {
   }
   const types: string[] = contentType ? [contentType] : INDEXABLE;
   const tf = tenant ? "&filters[tenant][key][$eq]=" + encodeURIComponent(tenant) : "";
-  const auth = { Authorization: "Bearer " + token };
+  const headers = engineAuthHeaders("strapi", auth);
 
   const docs: { documentRef: string; contentType: string; title: string; text: string }[] = [];
   for (const uid of types) {
     try {
-      const r = await fetch(STRAPI_URL + "/content-manager/collection-types/" + uid + "?page=1&pageSize=100&status=published" + tf, { headers: auth, cache: "no-store" });
+      const r = await fetch(STRAPI_URL + "/content-manager/collection-types/" + uid + "?page=1&pageSize=100&status=published" + tf, { headers, cache: "no-store" });
       if (!r.ok) continue;
       const j = await r.json();
       for (const e of (j.results ?? j.data ?? [])) {
@@ -65,6 +65,6 @@ export async function POST(req: NextRequest) {
     try { vectors = await embed(batch.map((d) => d.text)); } catch { break; }
     for (let k = 0; k < batch.length; k++) { const v = vectors[k]; if (v) toUpsert.push({ ...batch[k], vector: v }); }
   }
-  const indexed = await vectorUpsert(toUpsert, { token, tenant });
+  const indexed = await vectorUpsert(toUpsert, { auth, tenant });
   return NextResponse.json({ ok: true, indexed, backend: vectorBackend() });
 }

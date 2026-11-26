@@ -530,6 +530,16 @@ export async function resolveMyTenant(): Promise<Tenant | null> {
   return resolveEffectiveTenant(user.email);
 }
 
+/** The workspace a request from the signed-in caller works on, by the rule every per-workspace call here follows
+ * (assertCanActOnTenant): a caller with a workspace of their own gets it, and naming another one is refused with 403;
+ * an unscoped caller gets the one they name, or null when they name none. 401 without a signed-in caller. */
+export async function resolveRequestTenantKey(requested?: string): Promise<string | null> {
+  const caller = await requireUser();
+  const eff = await resolveEffectiveTenant(caller.email);
+  if (requested) assertCanActOnTenant(eff, requested);
+  return eff ? eff.key : requested || null;
+}
+
 /** The Status page's "Rebuild now" button — any authenticated admin can
  * force one, engine-agnostic and not tenant-scoped (a rebuild regenerates
  * the whole public site, same as an automatic publish-triggered one would).

@@ -3,7 +3,7 @@
 // Reviews board. It never writes the entry directly — a human approves and
 // Applies it (safe agentic write-op, human-in-the-loop).
 import { NextRequest, NextResponse } from "next/server";
-import { sessionToken } from "@/lib/strapi";
+import { engineAuth, engineAuthHeaders } from "@/lib/engineAuth";
 import { structured, llmConfigured } from "@/lib/llm";
 import { STRAPI_URL } from "@/lib/config";
 import { governed } from "@/lib/cms/governance";
@@ -14,17 +14,17 @@ const CAND = ["title", "name", "subject", "question", "categoryLabel", "excerpt"
 const langName = (c: string) => (c.toLowerCase().startsWith("en") ? "English" : "Thai");
 
 export async function POST(req: NextRequest) {
-  const token = await sessionToken();
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const auth = await engineAuth();
+  if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!llmConfigured()) return NextResponse.json({ error: "AI not configured" }, { status: 503 });
 
   const { uid, docId, locale, targetLocale } = await req.json().catch(() => ({} as any));
   if (!uid || !docId || !targetLocale) return NextResponse.json({ error: "uid, docId, targetLocale required" }, { status: 400 });
-  const auth = { Authorization: "Bearer " + token };
+  const headers = engineAuthHeaders("strapi", auth);
 
   // 1. load the source entry
   const src = locale ? "?locale=" + encodeURIComponent(locale) : "";
-  const r = await fetch(STRAPI_URL + "/content-manager/collection-types/" + uid + "/" + docId + src, { headers: auth, cache: "no-store" });
+  const r = await fetch(STRAPI_URL + "/content-manager/collection-types/" + uid + "/" + docId + src, { headers, cache: "no-store" });
   if (!r.ok) return NextResponse.json({ error: "Could not load source entry (HTTP " + r.status + ")" }, { status: 502 });
   const j = await r.json(); const e = j.data ?? j;
 

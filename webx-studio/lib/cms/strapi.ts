@@ -8,30 +8,29 @@ import type {
   CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, MediaAssetList, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
-import { actingSession, sessionToken } from "../strapi";
+import { engineAuth, engineAuthHeaders } from "../engineAuth";
 import { STRAPI_URL, STRAPI_INTERNAL_SECRET } from "../config";
 import { genTempPassword } from "./genPassword";
 
 const BASE = STRAPI_URL;
 
 async function authHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
-  const token = await sessionToken();
-  if (!token) throw new CmsError("Unauthenticated", 401);
+  const auth = await engineAuth();
+  if (!auth) throw new CmsError("Unauthenticated", 401);
   // Tags every request this adapter makes as WebX-governed, so Strapi's own
   // documents.use() hook skips its own audit-log write for it (governance.ts
   // writes that row instead) — see strapi-cms/src/index.ts.
   // A background job runs on the scheduler's token, which Strapi doesn't
-  // scope; naming the owner lets strapi-cms's hook scope and field-police the
-  // write as them (strapi-cms/src/index.ts's actingIdentity).
-  const acting = actingSession();
-  const actingHeaders: Record<string, string> = acting ? { "X-WebX-Acting-Email": acting.email, "X-WebX-Acting-Tenant": acting.tenantKey } : {};
+  // scope; engineAuthHeaders names the owner (X-WebX-Acting-Email/-Tenant),
+  // which lets strapi-cms's hook scope and field-police the write as them
+  // (strapi-cms/src/index.ts's actingIdentity).
   // Every call this adapter makes hits Strapi's admin content-manager
   // surface, which admin-mfa.ts now gates behind MFA by default (a
   // 2026-09-12 audit fix) — this exempts this trusted backend the same way
   // lib/strapi.ts's own internalHeader() does for /admin/login. See that
   // file's comment for why this doesn't reopen the original gap.
   const internalHeaders: Record<string, string> = STRAPI_INTERNAL_SECRET ? { "X-Internal-Secret": STRAPI_INTERNAL_SECRET } : {};
-  return { Authorization: "Bearer " + token, "X-WebX-Governed": "1", ...actingHeaders, ...internalHeaders, ...(extra || {}) };
+  return { ...engineAuthHeaders("strapi", auth), "X-WebX-Governed": "1", ...internalHeaders, ...(extra || {}) };
 }
 
 /** Strapi's own file shape (from /upload or /api/media-meta) -> MediaAsset.

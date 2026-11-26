@@ -9,15 +9,15 @@
 // the tenant from the caller's own session (resolveMyTenant()) the same way
 // every governed.* call does, same as the earlier /api/cms/content-usage fix.
 import { NextRequest, NextResponse } from "next/server";
-import { sessionToken } from "@/lib/strapi";
+import { engineAuth } from "@/lib/engineAuth";
 import { embed, generate, llmConfigured } from "@/lib/llm";
 import { vectorQuery, vectorBackend } from "@/lib/vectorstore";
 import { requireUser, resolveMyTenant } from "@/lib/cms/governance";
 import { CmsError } from "@/lib/cms/types";
 
 export async function POST(req: NextRequest) {
-  const token = await sessionToken();
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const auth = await engineAuth();
+  if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!llmConfigured()) return NextResponse.json({ error: "LLM not configured" }, { status: 503 });
   const { query, tenant: requestedTenant } = await req.json().catch(() => ({} as any));
   if (!query || typeof query !== "string") return NextResponse.json({ error: "query required" }, { status: 400 });
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
   try {
     const [qv] = await embed([query]);
-    const top = await vectorQuery(qv, { token, tenant, k: 5 });
+    const top = await vectorQuery(qv, { auth, tenant, k: 5 });
     if (!top.length) return NextResponse.json({ ok: true, answer: "", citations: [], backend: vectorBackend() });
     const ctx = top.map((s, i) => "[" + (i + 1) + "] " + s.title + "\n" + s.text).join("\n\n");
     const answer = await generate({

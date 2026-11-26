@@ -1,9 +1,15 @@
 // Read-only content-audit agent: deterministic rule checks (always) + optional
 // LLM insights (when configured). Safe by design — it reports, never writes.
+//
+// The workspace comes from the session, not from the body's `tenant`: the reads below must not count on the engine to
+// scope them by the caller's own credential (with a service credential that would read another workspace). A caller
+// with a workspace audits that one, and naming another is refused (403); an unscoped super admin may name any.
 import { NextRequest, NextResponse } from "next/server";
-import { sessionToken } from "@/lib/strapi";
+import { engineAuth, engineAuthHeaders } from "@/lib/engineAuth";
 import { structured, llmConfigured } from "@/lib/llm";
 import { STRAPI_URL } from "@/lib/config";
+import { resolveRequestTenantKey } from "@/lib/cms/governance";
+import { CmsError } from "@/lib/cms/types";
 
 const TYPES = ["api::article.article", "api::service.service", "api::faq.faq", "api::landing.landing", "api::blog.blog"];
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -28,18 +34,25 @@ function contrastRatio(hexA: string, hexB: string): number | null {
 }
 
 export async function POST(req: NextRequest) {
-  const token = await sessionToken();
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-  const { tenant, contentType } = await req.json().catch(() => ({} as any));
+  const auth = await engineAuth();
+  if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const { tenant: requestedTenant, contentType } = await req.json().catch(() => ({} as any));
+  let tenant: string | null;
+  try {
+    tenant = await resolveRequestTenantKey(typeof requestedTenant === "string" ? requestedTenant : undefined);
+  } catch (e: any) {
+    if (e instanceof CmsError) return NextResponse.json({ error: e.message }, { status: e.status || 401 });
+    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  }
   const types: string[] = contentType ? [contentType] : TYPES;
   const tf = tenant ? "&filters[tenant][key][$eq]=" + encodeURIComponent(tenant) : "";
-  const auth = { Authorization: "Bearer " + token };
+  const headers = engineAuthHeaders("strapi", auth);
   const now = Date.now();
 
   const entries: { docId: string; uid: string; title: string; body: string; bodyHtml: string; meta: string; updatedAt: string }[] = [];
   for (const uid of types) {
     try {
-      const r = await fetch(STRAPI_URL + "/content-manager/collection-types/" + uid + "?page=1&pageSize=100&status=published" + tf, { headers: auth, cache: "no-store" });
+      const r = await fetch(STRAPI_URL + "/content-manager/collection-types/" + uid + "?page=1&pageSize=100&status=published" + tf, { headers, cache: "no-store" });
       if (!r.ok) continue;
       const j = await r.json();
       for (const e of (j.results ?? j.data ?? [])) {
@@ -71,7 +84,7 @@ export async function POST(req: NextRequest) {
   let brandContrast: { ratio: number; ok: boolean } | null = null;
   if (tenant) {
     try {
-      const r = await fetch(STRAPI_URL + "/content-manager/collection-types/api::tenant.tenant?filters[key][$eq]=" + encodeURIComponent(tenant) + "&pageSize=1", { headers: auth, cache: "no-store" });
+      const r = await fetch(STRAPI_URL + "/content-manager/collection-types/api::tenant.tenant?filters[key][$eq]=" + encodeURIComponent(tenant) + "&pageSize=1", { headers, cache: "no-store" });
       if (r.ok) {
         const j = await r.json();
         const hex = (j.results ?? j.data ?? [])[0]?.brand?.primaryColor;

@@ -21,7 +21,7 @@ import type {
   CmsAdapter, EntryQuery, EntryList, ContentTypeInfo, MediaAsset, MediaAssetList, CurrentUser, AdminUser, NewUserInput,
 } from "./types";
 import { CmsError } from "./types";
-import { sessionToken } from "../strapi";
+import { engineAuth, engineAuthHeaders } from "../engineAuth";
 import { WORDPRESS_URL, WEBX_WP_PII_KEY } from "../config";
 import { genTempPassword } from "./genPassword";
 
@@ -201,9 +201,9 @@ function decodeJsonFields(uid: string, entry: any): any {
 }
 
 async function authHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
-  const token = await sessionToken(); // the Basic-auth string itself, see lib/wordpress.ts
-  if (!token) throw new CmsError("Unauthenticated", 401);
-  return { Authorization: "Basic " + token, ...(extra || {}) };
+  const auth = await engineAuth(); // the credential is the Basic-auth string itself, see lib/wordpress.ts
+  if (!auth) throw new CmsError("Unauthenticated", 401);
+  return { ...engineAuthHeaders("wordpress", auth), ...(extra || {}) };
 }
 
 function richText(field: any): string {

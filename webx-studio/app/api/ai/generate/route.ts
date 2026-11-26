@@ -1,11 +1,11 @@
 // BFF AI endpoint — auth-gated, server-side keys, provider-agnostic via lib/llm.
 import { NextRequest, NextResponse } from "next/server";
-import { sessionToken } from "@/lib/strapi";
+import { engineAuth } from "@/lib/engineAuth";
 import { generate, structured, llmConfigured } from "@/lib/llm";
 
 export async function POST(req: NextRequest) {
-  const token = await sessionToken();
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const auth = await engineAuth();
+  if (!auth) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!llmConfigured()) return NextResponse.json({ error: "LLM not configured" }, { status: 503 });
   const { prompt, system, model, schema, cache } = await req.json().catch(() => ({}));
   if (!prompt || typeof prompt !== "string") return NextResponse.json({ error: "prompt required" }, { status: 400 });

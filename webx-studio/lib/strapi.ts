@@ -22,9 +22,11 @@ function internalHeader(): Record<string, string> {
 // Lets a caller with no incoming request/cookies (the Phase 5 release
 // scheduler — see lib/cms/governance.ts's processDueReleases, which has no
 // admin session to read a cookie from) supply a token explicitly for the
-// duration of an async call tree. cms/{strapi,wordpress}.ts both read
-// whichever engine's token they need through this same sessionToken(), so
-// one override point covers either adapter.
+// duration of an async call tree. cms/{strapi,wordpress}.ts both get
+// whichever engine's token they need from lib/engineAuth.ts, which reads it
+// through this same sessionToken(), so one override point covers either
+// adapter. Outside this file only lib/engineAuth.ts calls sessionToken(),
+// and engine calls get their credential there (tests/engine-auth.test.ts).
 const tokenOverride = new AsyncLocalStorage<string>();
 export function withServiceToken<T>(token: string, fn: () => Promise<T>): Promise<T> {
   return tokenOverride.run(token, fn);
