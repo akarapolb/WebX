@@ -161,6 +161,8 @@ jobs:
         run: node webx-control/tools/migrate-records-test.mjs
       - name: Copying Strapi's users, sign-in settings and custom roles into webx-control
         run: node webx-control/tools/migrate-users-test.mjs
+      - name: The second factor in webx-control, and copying Strapi's
+        run: node webx-control/tools/mfa-test.mjs
       - name: The visitors' assistant in webx-control
         run: node webx-control/tools/assist-test.mjs
       - name: Build webx-agent

@@ -22,6 +22,7 @@
 use crate::audit;
 use crate::identity::{self, Grant, Keys, User, AUD_ENGINE, AUD_STUDIO};
 use crate::jobs;
+use crate::mfa;
 use crate::roles;
 use crate::secrets::SecretKey;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as B64, Engine};
@@ -74,10 +75,21 @@ CREATE TABLE IF NOT EXISTS sessions(
   ip TEXT,
   ua TEXT,
   revoked_at INTEGER,
-  revoked_reason TEXT
+  revoked_reason TEXT,
+  scope TEXT NOT NULL DEFAULT 'full'
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+CREATE TABLE IF NOT EXISTS auth_pending(
+  id_hash BLOB PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
 ";
+
+/// A sign-in that waits for the person's second factor lasts this long (Studio's MFA cookie did too).
+const PENDING_SECS: i64 = 300;
 
 /// Make `workspace_identity`, or bring the one step 2 made up to date: that one had no `mode`, client or MFA policy, and needed an
 /// issuer. Its rows keep their provider and come out `legacy`: no workspace signs in through control until an operator says so.
@@ -97,6 +109,12 @@ pub fn migrate(conn: &Connection) -> Result<(), String> {
         .map_err(e)?;
     } else {
         tx.execute_batch(WORKSPACE_IDENTITY).map_err(e)?;
+    }
+    // sessions made before step 4 had no scope: they were all full
+    let has_scope = tx.query_row("SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='scope'", [], |r| r.get::<_, i64>(0)).map_err(e)? > 0;
+    let has_sessions = tx.query_row("SELECT COUNT(*) FROM pragma_table_info('sessions')", [], |r| r.get::<_, i64>(0)).map_err(e)? > 0;
+    if has_sessions && !has_scope {
+        tx.execute("ALTER TABLE sessions ADD COLUMN scope TEXT NOT NULL DEFAULT 'full'", []).map_err(e)?;
     }
     tx.commit().map_err(e)
 }
@@ -514,9 +532,11 @@ struct Session {
     last_used_at: i64,
     revoked_at: Option<i64>,
     revoked_reason: Option<String>,
+    /// "full", or "enroll" (it may only set up a second factor)
+    scope: String,
 }
 
-const SESSION_COLS: &str = "id, user_id, tenant_key, issuer, idle_expires_at, absolute_expires_at, refresh_hash, previous_hash, previous_until, mfa_at, amr, created_at, last_used_at, revoked_at, revoked_reason";
+const SESSION_COLS: &str = "id, user_id, tenant_key, issuer, idle_expires_at, absolute_expires_at, refresh_hash, previous_hash, previous_until, mfa_at, amr, created_at, last_used_at, revoked_at, revoked_reason, scope";
 
 fn session(conn: &Connection, sid: &str) -> Result<Option<Session>, String> {
     conn.query_row(&format!("SELECT {SESSION_COLS} FROM sessions WHERE id=?1"), [sid], |r| {
@@ -537,6 +557,7 @@ fn session(conn: &Connection, sid: &str) -> Result<Option<Session>, String> {
             last_used_at: r.get(12)?,
             revoked_at: r.get(13)?,
             revoked_reason: r.get(14)?,
+            scope: r.get(15)?,
         })
     })
     .optional()
@@ -560,17 +581,44 @@ fn check_live(conn: &Connection, s: &Session, now: i64) -> Result<User, String> 
         if !user.may_act_in(t) {
             return Err("membership_removed".into());
         }
-        open_for_sessions(policy(conn, t)?).map_err(|(reason, _)| reason.to_string())?;
+        let p = open_for_sessions(policy(conn, t)?).map_err(|(reason, _)| reason.to_string())?;
+        // a session that no longer meets the workspace's MFA requirement (its grace period ended while it was open) is over: the
+        // person signs in again, and is asked for the code or sent to set one up
+        match scope_for(conn, &p, user.id, s.mfa_at, now)? {
+            Err(_) => return Err("mfa_required".into()),
+            Ok("enroll") if s.scope != "enroll" => return Err("mfa_required".into()),
+            Ok(_) => {}
+        }
     }
     Ok(user)
 }
 
 /// Reasons `check_live` gives for a session that a change made elsewhere has left behind: the session is ended when it is next used.
-const LEFT_BEHIND: [&str; 5] = ["user_disabled", "membership_removed", "user_deleted", "workspace_not_configured", "workspace_legacy"];
+const LEFT_BEHIND: [&str; 6] = ["user_disabled", "membership_removed", "user_deleted", "workspace_not_configured", "workspace_legacy", "mfa_required"];
+
+/// The scope a session should have in workspace `p` (step 4): "enroll" when the workspace requires a second factor, its grace period
+/// is over, the session was made without one and the person has none; "full" otherwise. A person who has a second factor but a
+/// session made without it gets Err: that session cannot be used there, they sign in again and give the code.
+fn scope_for(conn: &Connection, p: &Policy, user_id: i64, mfa_at: Option<i64>, now: i64) -> Result<Result<&'static str, (&'static str, &'static str)>, String> {
+    if mfa_at.is_some() {
+        return Ok(Ok("full"));
+    }
+    match mfa::requirement(p.mfa_required, p.mfa_required_at.as_deref(), now) {
+        Some((_, true)) if mfa::enrolled(conn, user_id)? => Ok(Err(("mfa_required", "this workspace requires a second factor: sign in again and give the code"))),
+        Some((_, true)) => Ok(Ok("enroll")),
+        _ => Ok(Ok("full")),
+    }
+}
+
+/// Whether the provider says it checked a second factor, and the workspace believes it: `acceptIdpMfa`, the workspace's own provider
+/// (a provider is believed only about its own workspace), and `mfa` in `amr` (RFC 8176).
+fn idp_checked_mfa(p: &Policy, req: &SignIn) -> bool {
+    p.accept_idp_mfa && p.issuer.as_deref() == Some(req.issuer.as_str()) && req.amr.iter().any(|a| a == "mfa")
+}
 
 /// The access token of a session, for its active workspace.
 fn access_for(keys: &Keys, cfg: &Config, user: &User, s: &Session, now: i64) -> Result<(String, i64), String> {
-    identity::issue_token(keys, user, &Grant { aud: AUD_STUDIO, tenant: s.tenant.as_deref(), sid: Some(&s.id), mfa: s.mfa_at.is_some(), amr: &s.amr, ttl: cfg.access_secs, job: None }, now)
+    identity::issue_token(keys, user, &Grant { aud: AUD_STUDIO, tenant: s.tenant.as_deref(), sid: Some(&s.id), mfa: s.mfa_at.is_some(), amr: &s.amr, scope: &s.scope, ttl: cfg.access_secs, job: None }, now)
 }
 
 /// End the sessions matching `filter` (an SQL condition on the `sessions` table, with `args` as ?1, ?2, ...) that are not yet over,
@@ -632,6 +680,11 @@ impl SignIn {
             user_agent: clean(v.get("userAgent").and_then(Value::as_str), 200),
             tenant: tenant.to_string(),
         })
+    }
+
+    /// As the broker sent it (kept while a sign-in waits for the second factor, and read back with `from_json`).
+    fn to_json(&self) -> Value {
+        json!({"issuer": self.issuer, "subject": self.subject, "email": self.email, "emailVerified": self.email_verified, "amr": self.amr, "ip": self.ip, "userAgent": self.user_agent, "tenantKey": self.tenant})
     }
 }
 
@@ -713,19 +766,118 @@ fn detail(what: &str, ip: &Option<String>) -> String {
     }
 }
 
-/// Sign a person in: decide as the module's comment says, and on success make the session. Returns
-/// {sessionId, accessToken, accessExpiresAt, refreshToken, idleExpiresAt, absoluteExpiresAt}.
-pub fn sign_in(conn: &Connection, keys: &Keys, cfg: &Config, req: &SignIn, now: i64) -> Result<Value, Refusal> {
-    let decision = match decide(conn, req) {
-        Ok(d) => d,
+/// `decide`, with a refusal written to the audit table.
+fn decide_or_refuse(conn: &Connection, req: &SignIn, now: i64) -> Result<Decision, Refusal> {
+    match decide(conn, req) {
+        Ok(d) => Ok(d),
         Err((reason, message)) => {
             if reason == "internal_error" {
                 return Err(Refusal::new(500, reason, message));
             }
             audit_event(conn, now, "sign_in_refused", Some(&req.email), Some(&req.tenant), None, "user", &detail(reason, &req.ip))?;
-            return Err(Refusal::denied(reason, message));
+            Err(Refusal::denied(reason, message))
         }
+    }
+}
+
+/// What a sign-in leads to.
+pub enum Begun {
+    /// {sessionId, accessToken, accessExpiresAt, refreshToken, idleExpiresAt, absoluteExpiresAt, scope, mfaDeadline}
+    Session(Value),
+    /// the person has a second factor: {mfaRequired: true, pendingId, expiresAt}. Studio asks for the code and calls `complete_mfa`
+    MfaRequired(Value),
+}
+
+/// Sign a person in: decide as the module's comment says, then the second factor (step 4). A person who has one gives it before any
+/// session exists, unless their provider checked one and the workspace believes it (`acceptIdpMfa`); a person who has none, in a
+/// workspace that requires one and whose grace period is over, gets a session that may only set one up (scope `enroll`).
+pub fn sign_in(conn: &Connection, keys: &Keys, cfg: &Config, req: &SignIn, now: i64) -> Result<Begun, Refusal> {
+    let decision = decide_or_refuse(conn, req, now)?;
+    let policy = policy(conn, &req.tenant)?.ok_or("the workspace's settings vanished")?;
+    let idp_mfa = idp_checked_mfa(&policy, req);
+    if let Some(u) = &decision.user {
+        if !idp_mfa && mfa::enrolled(conn, u.id)? {
+            // the opaque id is all Studio keeps (a cookie); only its hash is stored, with what the provider said
+            let id = random_b64(32);
+            let tx = conn.unchecked_transaction()?;
+            tx.execute("DELETE FROM auth_pending WHERE expires_at <= ?1", [now])?;
+            tx.execute("INSERT INTO auth_pending(id_hash, user_id, request, created_at, expires_at) VALUES (?1,?2,?3,?4,?5)", params![sha(&id), u.id, req.to_json().to_string(), now, now + PENDING_SECS])?;
+            audit_event(&tx, now, "sign_in_mfa_pending", Some(&u.email), Some(&req.tenant), None, "user", &detail(decision.how, &req.ip))?;
+            tx.commit()?;
+            return Ok(Begun::MfaRequired(json!({"mfaRequired": true, "pendingId": id, "expiresAt": now + PENDING_SECS})));
+        }
+    }
+    let how = if idp_mfa { "mfa=provider" } else { "" };
+    open_session(conn, keys, cfg, req, &decision, &policy, idp_mfa.then_some(now), how, now).map(Begun::Session)
+}
+
+/// The second step of a sign-in that waited for a code: the pending id and the code (the authenticator's, or a recovery code). A
+/// wrong code is counted against the person (mfa.rs: 8 in 10 minutes lock their codes). The sign-in is decided again, as anything
+/// may have changed in the minutes between, and the session is made.
+pub fn complete_mfa(conn: &Connection, keys: &Keys, cfg: &Config, secrets: Option<&SecretKey>, pending_id: &str, code: &str, now: i64) -> Result<Value, Refusal> {
+    let expired = || Refusal::new(401, "mfa_pending_expired", "the sign-in has expired: start again");
+    if pending_id.is_empty() || pending_id.len() > 128 {
+        return Err(expired());
+    }
+    let hash = sha(pending_id);
+    let row: Option<(i64, String, i64)> = conn.query_row("SELECT user_id, request, expires_at FROM auth_pending WHERE id_hash=?1", [&hash], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).optional()?;
+    let Some((user_id, request, expires_at)) = row else { return Err(expired()) };
+    if now >= expires_at {
+        conn.execute("DELETE FROM auth_pending WHERE id_hash=?1", [&hash])?;
+        return Err(expired());
+    }
+    let req = SignIn::from_json(&serde_json::from_str(&request).map_err(e)?)?;
+    let user = identity::get_by_id(conn, user_id)?.ok_or_else(expired)?;
+    // the code first, in a transaction of its own: a wrong one is counted whatever happens next
+    let tx = conn.unchecked_transaction()?;
+    let accepted = mfa::check(&tx, secrets, user_id, code, now);
+    audit_code(&tx, now, &user, Some(&req.tenant), "sign_in", &accepted)?;
+    tx.commit()?;
+    let how = match accepted.map_err(mfa_refusal)? {
+        mfa::Accepted::Totp => "mfa=totp",
+        mfa::Accepted::Recovery { .. } => "mfa=recovery",
     };
+    let decision = decide_or_refuse(conn, &req, now)?;
+    if decision.user.as_ref().map(|u| u.id) != Some(user_id) {
+        return Err(Refusal::denied("account_changed", "the account changed during the sign-in: start again"));
+    }
+    conn.execute("DELETE FROM auth_pending WHERE id_hash=?1", [&hash])?;
+    let policy = policy(conn, &req.tenant)?.ok_or("the workspace's settings vanished")?;
+    open_session(conn, keys, cfg, &req, &decision, &policy, Some(now), how, now)
+}
+
+/// A refusal for a code that was not accepted.
+fn mfa_refusal(e: mfa::MfaError) -> Refusal {
+    match e {
+        mfa::MfaError::Invalid => Refusal::new(401, "mfa_invalid", "that code is not right"),
+        mfa::MfaError::Locked { until } => Refusal { status: 429, reason: "mfa_locked", message: format!("too many wrong codes: try again after {}", stamp(until)) },
+        mfa::MfaError::NotEnrolled => Refusal::new(409, "mfa_not_enrolled", "this account has no second factor"),
+        mfa::MfaError::CodeRequired => Refusal::bad("a current code (or a recovery code) is needed to change the second factor"),
+        mfa::MfaError::NotStarted => Refusal::new(409, "mfa_not_started", "start setting up the authenticator first (or again: it was too long ago)"),
+        mfa::MfaError::NoKey => Refusal::new(503, "mfa_unavailable", "second factors are kept encrypted: start with WEBX_CONTROL_SECRET_KEY set"),
+        mfa::MfaError::Internal(m) => Refusal::from(m),
+    }
+}
+
+/// The audit row for a code given for `what`: a used recovery code, a wrong code, and the lock it led to.
+fn audit_code(conn: &Connection, now: i64, user: &User, tenant: Option<&str>, what: &str, r: &Result<mfa::Accepted, mfa::MfaError>) -> Result<(), String> {
+    let row = |action: &str, d: String| audit_row(conn, now, action, "webx::mfa", Some(&user.id.to_string()), Some(&user.email), tenant, "user", &d);
+    match r {
+        Ok(mfa::Accepted::Recovery { left }) => row("mfa_recovery_used", format!("{what}; {left} left")),
+        Err(mfa::MfaError::Invalid) => {
+            row("mfa_failed", what.to_string())?;
+            match mfa::check_locked(conn, user.id, now)? {
+                Some(until) => row("mfa_locked", format!("until {}", stamp(until))),
+                None => Ok(()),
+            }
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Make the session `decision` allows (the users, links and membership it says first), with the second factor checked at `mfa_at`.
+#[allow(clippy::too_many_arguments)]
+fn open_session(conn: &Connection, keys: &Keys, cfg: &Config, req: &SignIn, decision: &Decision, policy: &Policy, mfa_at: Option<i64>, mfa_how: &str, now: i64) -> Result<Value, Refusal> {
     let tx = conn.unchecked_transaction()?;
     tx.execute("DELETE FROM sessions WHERE absolute_expires_at < ?1 OR (revoked_at IS NOT NULL AND revoked_at < ?1)", [now - 7 * 86_400])?;
     let (user_id, created) = match &decision.user {
@@ -741,14 +893,18 @@ pub fn sign_in(conn: &Connection, keys: &Keys, cfg: &Config, req: &SignIn, now: 
     if let Some(by) = decision.link_by {
         tx.execute("INSERT INTO identities(issuer, subject, user_id, linked_by, created_at) VALUES (?1,?2,?3,?4,?5)", params![req.issuer, req.subject, user_id, by, stamp(now)])?;
     }
+    // the second factor: a person who has one but did not give it never gets this far; one who has none, where it is overdue, may
+    // only set one up
+    let scope = scope_for(&tx, policy, user_id, mfa_at, now)?.map_err(|(reason, message)| Refusal::denied(reason, message))?;
+    let deadline = if mfa_at.is_none() && !mfa::enrolled(&tx, user_id)? { mfa::requirement(policy.mfa_required, policy.mfa_required_at.as_deref(), now).map(|(d, _)| d) } else { None };
     let sid = random_b64(16);
     let secret = random_b64(32);
     let idle = (now + cfg.idle_secs).min(now + cfg.absolute_secs);
     let absolute = now + cfg.absolute_secs;
     tx.execute(
-        "INSERT INTO sessions(id, user_id, tenant_key, issuer, created_at, last_used_at, idle_expires_at, absolute_expires_at, refresh_hash, mfa_at, amr, ip, ua)
-         VALUES (?1,?2,?3,?4,?5,?5,?6,?7,?8,NULL,?9,?10,?11)",
-        params![sid, user_id, req.tenant, req.issuer, now, idle, absolute, sha(&secret), json!(req.amr).to_string(), req.ip, req.user_agent],
+        "INSERT INTO sessions(id, user_id, tenant_key, issuer, created_at, last_used_at, idle_expires_at, absolute_expires_at, refresh_hash, mfa_at, amr, ip, ua, scope)
+         VALUES (?1,?2,?3,?4,?5,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+        params![sid, user_id, req.tenant, req.issuer, now, idle, absolute, sha(&secret), mfa_at, json!(req.amr).to_string(), req.ip, req.user_agent, scope],
     )?;
     let user = identity::get_by_id(&tx, user_id)?.ok_or("user vanished")?;
     if created {
@@ -757,11 +913,12 @@ pub fn sign_in(conn: &Connection, keys: &Keys, cfg: &Config, req: &SignIn, now: 
     if decision.link_by.is_some() {
         audit_event(&tx, now, "identity_linked", Some(&user.email), Some(&req.tenant), Some(&sid), "user", &detail(decision.how, &req.ip))?;
     }
-    audit_event(&tx, now, "sign_in", Some(&user.email), Some(&req.tenant), Some(&sid), "user", &detail(decision.how, &req.ip))?;
+    let how = [decision.how, mfa_how, if scope == "enroll" { "scope=enroll" } else { "" }].iter().filter(|s| !s.is_empty()).copied().collect::<Vec<_>>().join(" ");
+    audit_event(&tx, now, "sign_in", Some(&user.email), Some(&req.tenant), Some(&sid), "user", &detail(&how, &req.ip))?;
     let s = session(&tx, &sid)?.ok_or("session vanished")?;
     let (access, access_exp) = access_for(keys, cfg, &user, &s, now)?;
     tx.commit()?;
-    Ok(json!({"sessionId": sid, "accessToken": access, "accessExpiresAt": access_exp, "refreshToken": format!("{sid}.{secret}"), "idleExpiresAt": idle, "absoluteExpiresAt": absolute}))
+    Ok(json!({"sessionId": sid, "accessToken": access, "accessExpiresAt": access_exp, "refreshToken": format!("{sid}.{secret}"), "idleExpiresAt": idle, "absoluteExpiresAt": absolute, "scope": scope, "mfa": mfa_at.is_some(), "mfaDeadline": deadline}))
 }
 
 // ---------------------------------------------------------------- refresh, switch, status, end
@@ -801,6 +958,16 @@ pub fn refresh(conn: &Connection, keys: &Keys, cfg: &Config, token: &str, now: i
         tx.commit()?;
         return Err(Refusal::ended("refresh_reuse"));
     }
+    // a session that could only set up a second factor gets its full scope back when the workspace no longer requires one of it
+    let mut s = s;
+    if s.scope == "enroll" {
+        if let Some(p) = s.tenant.as_deref().map(|t| policy(conn, t)).transpose()?.flatten() {
+            if let Ok(Ok("full")) = scope_for(conn, &p, user.id, s.mfa_at, now) {
+                conn.execute("UPDATE sessions SET scope='full' WHERE id=?1", [sid])?;
+                s.scope = "full".into();
+            }
+        }
+    }
     // the new access token first: if it cannot be made nothing is rotated, so the person's refresh token is still the right one
     let (access, exp) = access_for(keys, cfg, &user, &s, now)?;
     let mut out = json!({"sessionId": sid, "accessToken": access, "accessExpiresAt": exp, "idleExpiresAt": s.idle_expires_at, "absoluteExpiresAt": s.absolute_expires_at});
@@ -833,8 +1000,11 @@ pub fn switch(conn: &Connection, keys: &Keys, cfg: &Config, sid: &str, tenant: &
     if !user.super_admin && target.issuer.as_deref() != Some(s.issuer.as_str()) {
         return Err(Refusal::denied("issuer_mismatch", "this session was not made with that workspace's provider: sign in there"));
     }
+    // the second factor as that workspace requires it: a session cannot leave its `enroll` scope behind by moving, nor carry it
+    // into a workspace that does not ask
+    let scope = scope_for(conn, &target, user.id, s.mfa_at, now)?.map_err(|(reason, message)| Refusal::denied(reason, message))?;
     let tx = conn.unchecked_transaction()?;
-    tx.execute("UPDATE sessions SET tenant_key=?2 WHERE id=?1", params![sid, tenant])?;
+    tx.execute("UPDATE sessions SET tenant_key=?2, scope=?3 WHERE id=?1", params![sid, tenant, scope])?;
     audit_event(&tx, now, "session_switch", Some(&user.email), Some(tenant), Some(sid), "user", &format!("from {}", s.tenant.as_deref().unwrap_or("-")))?;
     let moved = session(&tx, sid)?.ok_or("session vanished")?;
     let (access, exp) = access_for(keys, cfg, &user, &moved, now)?;
@@ -849,7 +1019,7 @@ pub fn status(conn: &Connection, sid: &str, now: i64) -> Result<Option<Value>, S
     Ok(Some(json!({
         "sessionId": s.id, "active": live.is_ok(), "reason": live.as_ref().err(), "tenantKey": s.tenant,
         "createdAt": s.created_at, "lastUsedAt": s.last_used_at, "idleExpiresAt": s.idle_expires_at, "absoluteExpiresAt": s.absolute_expires_at,
-        "revokedAt": s.revoked_at, "mfa": s.mfa_at.is_some(),
+        "revokedAt": s.revoked_at, "mfa": s.mfa_at.is_some(), "scope": s.scope,
     })))
 }
 
@@ -921,6 +1091,127 @@ pub fn remove_user(conn: &Connection, email: &str, now: i64) -> Result<bool, Str
     Ok(removed)
 }
 
+// ---------------------------------------------------------------- a person's own second factor (step 4)
+
+/// The person and session an access token names, for their own MFA: a session's token only (one from /internal/token has no session),
+/// in either scope (an `enroll` session is for exactly this).
+fn own_session(conn: &Connection, keys: &Keys, token: &str, now: i64) -> Result<(User, Session), Refusal> {
+    let unauth = || Refusal::new(401, "unauthenticated", "a signed-in person's token is needed");
+    let claims = verify_access(conn, keys, token, now).map_err(|_| unauth())?;
+    let sid = claims["sid"].as_str().ok_or_else(unauth)?;
+    let s = session(conn, sid)?.ok_or_else(unauth)?;
+    let user = identity::get_by_id(conn, s.user_id)?.ok_or_else(unauth)?;
+    Ok((user, s))
+}
+
+fn mfa_row(conn: &Connection, now: i64, action: &str, user: &User, tenant: Option<&str>, actor: &str, detail: &str) -> Result<(), String> {
+    audit_row(conn, now, action, "webx::mfa", Some(&user.id.to_string()), Some(&user.email), tenant, actor, detail)
+}
+
+/// What the person's MFA screen shows: {enrolled, pendingEnrolment, recoveryCodesLeft, lockedUntil, required, deadline, overdue,
+/// scope, sessionMfa}.
+pub fn mfa_status(conn: &Connection, keys: &Keys, token: &str, now: i64) -> Result<Value, Refusal> {
+    let (user, s) = own_session(conn, keys, token, now)?;
+    let mut v = mfa::status(conn, user.id, now)?;
+    let p = s.tenant.as_deref().map(|t| policy(conn, t)).transpose()?.flatten();
+    let req = p.as_ref().and_then(|p| mfa::requirement(p.mfa_required, p.mfa_required_at.as_deref(), now));
+    let enrolled = v["enrolled"].as_bool().unwrap_or(false);
+    v["required"] = json!(req.is_some());
+    v["deadline"] = json!(req.map(|(d, _)| d));
+    v["overdue"] = json!(req.is_some_and(|(_, past)| past) && !enrolled);
+    v["scope"] = json!(s.scope);
+    v["sessionMfa"] = json!(s.mfa_at.is_some());
+    Ok(v)
+}
+
+/// Begin setting up an authenticator: {secret, otpauthUri}. With one already set up, `current` (a code from it, or a recovery code).
+pub fn mfa_start(conn: &Connection, keys: &Keys, secrets: Option<&SecretKey>, token: &str, current: Option<&str>, now: i64) -> Result<Value, Refusal> {
+    let (user, s) = own_session(conn, keys, token, now)?;
+    let tenant = s.tenant.as_deref();
+    let tx = conn.unchecked_transaction()?;
+    let r = mfa::start(&tx, secrets, user.id, &user.email, current, now);
+    match &r {
+        Ok((_, _, used)) => {
+            if let Some(a) = used {
+                audit_code(&tx, now, &user, tenant, "replacing the authenticator", &Ok(a.clone()))?;
+            }
+            mfa_row(&tx, now, "mfa_enrolment_started", &user, tenant, "user", if used.is_some() { "replacing" } else { "first" })?;
+        }
+        Err(err) => audit_code(&tx, now, &user, tenant, "replacing the authenticator", &Err(err.clone()))?,
+    }
+    tx.commit()?;
+    let (secret, uri, _) = r.map_err(mfa_refusal)?;
+    Ok(json!({"secret": secret, "otpauthUri": uri}))
+}
+
+/// Confirm the new authenticator with a code from it: {recoveryCodes (shown once), accessToken, accessExpiresAt}. The session has just
+/// seen the second factor, so it is multi-factor from now and has its full scope.
+pub fn mfa_confirm(conn: &Connection, keys: &Keys, cfg: &Config, secrets: Option<&SecretKey>, token: &str, code: &str, now: i64) -> Result<Value, Refusal> {
+    let (user, s) = own_session(conn, keys, token, now)?;
+    let tenant = s.tenant.as_deref();
+    let tx = conn.unchecked_transaction()?;
+    let r = mfa::confirm(&tx, secrets, user.id, code, now);
+    match &r {
+        Ok(_) => {
+            tx.execute("UPDATE sessions SET mfa_at=?2, scope='full' WHERE id=?1", params![s.id, now])?;
+            mfa_row(&tx, now, "mfa_enabled", &user, tenant, "user", &format!("session {}", s.id))?;
+        }
+        Err(err @ mfa::MfaError::Invalid) => audit_code(&tx, now, &user, tenant, "confirming the authenticator", &Err(err.clone()))?,
+        Err(_) => {}
+    }
+    tx.commit()?;
+    let codes = r.map_err(mfa_refusal)?;
+    let upgraded = session(conn, &s.id)?.ok_or("session vanished")?;
+    let (access, exp) = access_for(keys, cfg, &user, &upgraded, now)?;
+    Ok(json!({"recoveryCodes": codes, "accessToken": access, "accessExpiresAt": exp}))
+}
+
+/// Switch the second factor off, with a current code or a recovery code (never a password).
+pub fn mfa_disable(conn: &Connection, keys: &Keys, secrets: Option<&SecretKey>, token: &str, code: &str, now: i64) -> Result<Value, Refusal> {
+    let (user, s) = own_session(conn, keys, token, now)?;
+    let tenant = s.tenant.as_deref();
+    let tx = conn.unchecked_transaction()?;
+    let r = mfa::disable(&tx, secrets, user.id, code, now);
+    audit_code(&tx, now, &user, tenant, "switching the factor off", &r)?;
+    if r.is_ok() {
+        mfa_row(&tx, now, "mfa_disabled", &user, tenant, "user", &format!("session {}", s.id))?;
+    }
+    tx.commit()?;
+    r.map_err(mfa_refusal)?;
+    Ok(json!({"enrolled": false}))
+}
+
+/// An operator copies a person's factor from Strapi (tools/migrate-mfa.mjs; mfa::import). None for an unknown user, else whether it
+/// was written (an enabled factor here is left alone unless the body says `replace`).
+pub fn mfa_import(conn: &Connection, secrets: Option<&SecretKey>, email: &str, body: &Value, now: i64) -> Result<Option<bool>, Refusal> {
+    let Some(user) = identity::get(conn, email)? else { return Ok(None) };
+    let replace = body.get("replace").and_then(Value::as_bool).unwrap_or(false);
+    let tx = conn.unchecked_transaction()?;
+    let written = mfa::import(&tx, secrets, user.id, body, replace, now).map_err(|err| match err {
+        mfa::MfaError::Internal(m) => Refusal { status: 400, reason: "bad_request", message: m },
+        other => mfa_refusal(other),
+    })?;
+    if written {
+        mfa_row(&tx, now, "mfa_imported", &user, None, "admin", "from Strapi")?;
+    }
+    tx.commit()?;
+    Ok(Some(written))
+}
+
+/// An operator takes a person's second factor away (a lost phone and no recovery code): their sessions end, and they set one up
+/// again when their workspace requires it. None for an unknown user, else whether there was one.
+pub fn mfa_reset(conn: &Connection, email: &str, now: i64) -> Result<Option<bool>, String> {
+    let Some(user) = identity::get(conn, email)? else { return Ok(None) };
+    let tx = conn.unchecked_transaction().map_err(e)?;
+    let had = mfa::reset(&tx, user.id)?;
+    if had {
+        end_where(&tx, now, "user_id=?1", params![user.id], "mfa_reset", "admin")?;
+        mfa_row(&tx, now, "mfa_reset", &user, None, "admin", "removed by an operator")?;
+    }
+    tx.commit().map_err(e)?;
+    Ok(Some(had))
+}
+
 // ---------------------------------------------------------------- engine tokens
 
 pub enum EngineRequest<'a> {
@@ -964,7 +1255,11 @@ pub fn engine_token(conn: &Connection, keys: &Keys, cfg: &Config, req: &EngineRe
             if tenant.is_some_and(|t| t != active) {
                 return Err(Refusal::denied("workspace_mismatch", "the session is active in another workspace: switch it first"));
             }
-            let (token, exp) = identity::issue_token(keys, &user, &Grant { aud: AUD_ENGINE, tenant: Some(active), sid: Some(&s.id), mfa: s.mfa_at.is_some(), amr: &s.amr, ttl: cfg.engine_secs, job: None }, now)?;
+            // a session that may only set up a second factor reaches no engine
+            if s.scope == "enroll" {
+                return Err(Refusal::denied("mfa_enrolment_required", "this workspace requires a second factor: set one up first"));
+            }
+            let (token, exp) = identity::issue_token(keys, &user, &Grant { aud: AUD_ENGINE, tenant: Some(active), sid: Some(&s.id), mfa: s.mfa_at.is_some(), amr: &s.amr, scope: "full", ttl: cfg.engine_secs, job: None }, now)?;
             Ok(json!({"token": token, "expiresAt": exp}))
         }
         EngineRequest::Job { owner_email, tenant, job } => {
@@ -980,10 +1275,15 @@ pub fn engine_token(conn: &Connection, keys: &Keys, cfg: &Config, req: &EngineRe
                 return refuse("owner_revoked", "the job's owner is no longer a member of that workspace");
             }
             // control acts for nobody in a workspace that does not sign in through it: its jobs run the old way
-            if let Err((reason, message)) = open_for_sessions(policy(conn, tenant)?) {
-                return refuse(reason, message);
+            let p = match open_for_sessions(policy(conn, tenant)?) {
+                Ok(p) => p,
+                Err((reason, message)) => return refuse(reason, message),
+            };
+            // nor for an owner who is overdue with the second factor the workspace requires: their work waits until they have one
+            if mfa::requirement(p.mfa_required, p.mfa_required_at.as_deref(), now).is_some_and(|(_, overdue)| overdue) && !mfa::enrolled(conn, user.id)? {
+                return refuse("owner_mfa_required", "the job's owner has not set up the second factor this workspace requires");
             }
-            let (token, exp) = identity::issue_token(keys, &user, &Grant { aud: AUD_ENGINE, tenant: Some(tenant), sid: None, mfa: false, amr: &[], ttl: cfg.engine_secs, job: Some(job) }, now)?;
+            let (token, exp) = identity::issue_token(keys, &user, &Grant { aud: AUD_ENGINE, tenant: Some(tenant), sid: None, mfa: false, amr: &[], scope: "full", ttl: cfg.engine_secs, job: Some(job) }, now)?;
             audit_event(conn, now, "engine_token_job", Some(&user.email), Some(tenant), Some(job), "job", "minted")?;
             Ok(json!({"token": token, "expiresAt": exp}))
         }
@@ -1022,6 +1322,7 @@ mod tests {
         c.execute_batch(identity::DDL).unwrap();
         c.execute_batch(DDL).unwrap();
         migrate(&c).unwrap();
+        c.execute_batch(mfa::DDL).unwrap();
         c
     }
     fn setup() -> (Connection, Keys, Config) {
@@ -1034,6 +1335,13 @@ mod tests {
     }
     fn req(email: &str, subject: &str, tenant: &str) -> SignIn {
         SignIn { issuer: if tenant == "pea" { PEA } else { DGA }.into(), subject: subject.into(), email: email.into(), email_verified: true, amr: vec!["pwd".into()], ip: Some("203.0.113.9".into()), user_agent: Some("test".into()), tenant: tenant.into() }
+    }
+    /// `sign_in` for a person without a second factor: the session it makes (the tests of step 4 call `super::sign_in` themselves)
+    fn sign_in(c: &Connection, k: &Keys, cfg: &Config, r: &SignIn, now: i64) -> Result<Value, Refusal> {
+        match super::sign_in(c, k, cfg, r, now)? {
+            Begun::Session(v) => Ok(v),
+            Begun::MfaRequired(v) => panic!("expected a session, not a wait for the second factor: {v}"),
+        }
     }
     fn ann_signs_in(c: &Connection, k: &Keys, cfg: &Config, now: i64) -> Value {
         sign_in(c, k, cfg, &req("ann@example.org", "sub-ann", "dga"), now).unwrap()
@@ -1765,6 +2073,257 @@ mod tests {
         // and the new table takes what the old one could not
         put_policy(&c, None, "pea", &json!({}), T0).unwrap();
         assert_eq!(count(&c, "SELECT COUNT(*) FROM sqlite_master WHERE name='workspace_identity_step2'"), 0);
+    }
+
+    // ---------------------------------------------------------------- step 4: the second factor
+
+    fn code(secret: &str, t: i64) -> String {
+        mfa::hotp(&mfa::base32_decode(secret).unwrap(), (t / 30) as u64, 6)
+    }
+    /// a 6-digit code that is no step's code around `t`
+    fn wrong(secret: &str, t: i64) -> String {
+        (0..10).map(|i| format!("00000{i}")).find(|x| (-2..=2).all(|d| code(secret, t + d * 30) != *x)).unwrap()
+    }
+    /// Ann sets up an authenticator through her own session (as Studio's Security screen will); returns its secret and her recovery codes
+    fn ann_enrols(c: &Connection, k: &Keys, cfg: &Config, key: &SecretKey, now: i64) -> (String, Vec<String>) {
+        let s = ann_signs_in(c, k, cfg, now);
+        let token = s["accessToken"].as_str().unwrap();
+        let started = mfa_start(c, k, Some(key), token, None, now).unwrap();
+        let secret = started["secret"].as_str().unwrap().to_string();
+        let done = mfa_confirm(c, k, cfg, Some(key), token, &code(&secret, now), now).unwrap();
+        (secret, done["recoveryCodes"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect())
+    }
+    fn pending(b: Begun) -> String {
+        match b {
+            Begun::MfaRequired(v) => v["pendingId"].as_str().unwrap().to_string(),
+            Begun::Session(v) => panic!("expected a wait for the second factor, got a session: {v}"),
+        }
+    }
+
+    #[test]
+    fn a_person_with_a_second_factor_gives_it_before_any_session_exists() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        let (secret, recovery) = ann_enrols(&c, &k, &cfg, &key, T0);
+        let sessions_before = count(&c, "SELECT COUNT(*) FROM sessions");
+        let id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 60).unwrap());
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM sessions"), sessions_before, "no session yet");
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM auth_pending"), 1);
+        let stored: Vec<u8> = c.query_row("SELECT id_hash FROM auth_pending", [], |r| r.get(0)).unwrap();
+        assert_eq!(stored, sha(&id), "only the hash of the id is kept");
+        // a wrong code: refused, counted, on the record
+        let w = complete_mfa(&c, &k, &cfg, Some(&key), &id, &wrong(&secret, T0 + 61), T0 + 61).unwrap_err();
+        assert_eq!((w.status, w.reason), (401, "mfa_invalid"));
+        assert!(c.query_row("SELECT COUNT(*) FROM audit WHERE action='mfa_failed'", [], |r| r.get::<_, i64>(0)).unwrap() == 1);
+        // the right one: a session, multi-factor
+        let s = complete_mfa(&c, &k, &cfg, Some(&key), &id, &code(&secret, T0 + 62), T0 + 62).unwrap();
+        let claims = identity::verify(&c, &k, s["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 62).unwrap();
+        assert_eq!((claims["mfa"].clone(), claims["scope"].clone(), s["mfa"].clone()), (json!(true), json!("full"), json!(true)));
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM auth_pending"), 0, "used up");
+        assert_eq!(complete_mfa(&c, &k, &cfg, Some(&key), &id, &code(&secret, T0 + 90), T0 + 90).unwrap_err().reason, "mfa_pending_expired");
+        assert!(c.query_row("SELECT target_ref FROM audit WHERE action='sign_in' ORDER BY id DESC LIMIT 1", [], |r| r.get::<_, String>(0)).unwrap().contains("mfa=totp"));
+        // a recovery code does too, once
+        let id2 = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 120).unwrap());
+        assert!(complete_mfa(&c, &k, &cfg, Some(&key), &id2, &recovery[0], T0 + 121).is_ok());
+        let id3 = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 130).unwrap());
+        assert_eq!(complete_mfa(&c, &k, &cfg, Some(&key), &id3, &recovery[0], T0 + 131).unwrap_err().reason, "mfa_invalid");
+        // a guessed id is nothing
+        assert_eq!(complete_mfa(&c, &k, &cfg, Some(&key), "guess", "123456", T0 + 132).unwrap_err().reason, "mfa_pending_expired");
+    }
+
+    #[test]
+    fn a_waiting_sign_in_expires_and_is_decided_again_when_the_code_comes() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        let (secret, _) = ann_enrols(&c, &k, &cfg, &key, T0);
+        let id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 60).unwrap());
+        assert_eq!(complete_mfa(&c, &k, &cfg, Some(&key), &id, &code(&secret, T0 + 60 + PENDING_SECS), T0 + 60 + PENDING_SECS).unwrap_err().reason, "mfa_pending_expired");
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM auth_pending"), 0, "and it is gone");
+        // disabled in the minutes between: the code is right, the sign-in is not
+        let id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 1000).unwrap());
+        set_user(&c, "ann@example.org", json!({"disabled": true, "memberships": [{"tenantKey": "dga", "role": "editor"}]}), T0 + 1001);
+        assert_eq!(complete_mfa(&c, &k, &cfg, Some(&key), &id, &code(&secret, T0 + 1002), T0 + 1002).unwrap_err().reason, "user_disabled");
+        // without the secret key nothing can be checked
+        set_user(&c, "ann@example.org", json!({"memberships": [{"tenantKey": "dga", "role": "editor"}]}), T0 + 1003);
+        let id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 1004).unwrap());
+        assert_eq!(complete_mfa(&c, &k, &cfg, None, &id, &code(&secret, T0 + 1005), T0 + 1005).unwrap_err().reason, "mfa_unavailable");
+    }
+
+    #[test]
+    fn eight_wrong_codes_lock_the_sign_in_and_say_so() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        let (secret, _) = ann_enrols(&c, &k, &cfg, &key, T0);
+        let id = pending(super::sign_in(&c, &k, &cfg, &req("ann@example.org", "sub-ann", "dga"), T0 + 60).unwrap());
+        for i in 0..mfa::MAX_FAILURES {
+            assert_eq!(complete_mfa(&c, &k, &cfg, Some(&key), &id, &wrong(&secret, T0 + 61), T0 + 61 + i).unwrap_err().reason, "mfa_invalid");
+        }
+        let locked = complete_mfa(&c, &k, &cfg, Some(&key), &id, &code(&secret, T0 + 70), T0 + 70).unwrap_err();
+        assert_eq!((locked.status, locked.reason), (429, "mfa_locked"));
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM audit WHERE action='mfa_locked'"), 1);
+    }
+
+    #[test]
+    fn the_providers_second_factor_counts_where_the_workspace_believes_its_provider() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        ann_enrols(&c, &k, &cfg, &key, T0);
+        let mut r = req("ann@example.org", "sub-ann", "dga");
+        r.amr = vec!["pwd".into(), "mfa".into()];
+        // not believed until the workspace says so
+        assert!(matches!(super::sign_in(&c, &k, &cfg, &r, T0 + 60).unwrap(), Begun::MfaRequired(_)));
+        open(&c, "dga", DGA, json!({"acceptIdpMfa": true}), T0 + 60).unwrap();
+        let s = sign_in(&c, &k, &cfg, &r, T0 + 61).unwrap();
+        assert_eq!(s["mfa"], json!(true));
+        assert!(c.query_row("SELECT target_ref FROM audit WHERE action='sign_in' ORDER BY id DESC LIMIT 1", [], |r| r.get::<_, String>(0)).unwrap().contains("mfa=provider"));
+        // the provider has to say "mfa"
+        r.amr = vec!["pwd".into(), "otp".into()];
+        assert!(matches!(super::sign_in(&c, &k, &cfg, &r, T0 + 62).unwrap(), Begun::MfaRequired(_)));
+        // and only the workspace's own provider is believed: a super admin's platform provider is not dga's
+        identity::upsert(&c, "root@example.org", &json!({"superAdmin": true, "memberships": []}), &stamp(T0)).unwrap();
+        set_identities(&c, "root@example.org", &json!({"identities": [{"issuer": PEA, "subject": "sub-root"}]}), T0).unwrap();
+        open(&c, "dga", DGA, json!({"acceptIdpMfa": true, "mfaRequired": true, "mfaRequiredAt": "2020-01-01T00:00:00.000Z"}), T0 + 63).unwrap();
+        let mut root = req("root@example.org", "sub-root", "dga");
+        root.issuer = PEA.into();
+        root.amr = vec!["mfa".into()];
+        assert_eq!(sign_in(&c, &k, &cfg, &root, T0 + 64).unwrap()["scope"], json!("enroll"), "pea's provider is not believed about dga");
+    }
+
+    #[test]
+    fn after_the_grace_period_a_person_without_a_second_factor_may_only_set_one_up() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        // required since almost fourteen days: the deadline is 100 seconds away
+        let first_required = T0 - mfa::GRACE_SECS + 100;
+        open(&c, "dga", DGA, json!({"mfaRequired": true, "mfaRequiredAt": stamp(first_required)}), T0).unwrap();
+        assert_eq!(policy(&c, "dga").unwrap().unwrap().mfa_required_at, Some(stamp(first_required)));
+        // within the grace period: a full session, and the deadline to show
+        let early = ann_signs_in(&c, &k, &cfg, T0);
+        assert_eq!((early["scope"].clone(), early["mfaDeadline"].clone()), (json!("full"), json!(T0 + 100)));
+        let st = mfa_status(&c, &k, early["accessToken"].as_str().unwrap(), T0).unwrap();
+        assert_eq!((st["required"].clone(), st["overdue"].clone(), st["enrolled"].clone()), (json!(true), json!(false), json!(false)));
+        // the deadline passes while that session is open: it is over, and a refresh says so
+        let after = T0 + 200;
+        assert_eq!(status(&c, early["sessionId"].as_str().unwrap(), after).unwrap().unwrap()["reason"], json!("mfa_required"));
+        assert_eq!(reason(refresh(&c, &k, &cfg, early["refreshToken"].as_str().unwrap(), after)), "session_ended");
+        // signing in again: a session that may only set one up
+        let s = ann_signs_in(&c, &k, &cfg, after);
+        let sid = s["sessionId"].as_str().unwrap().to_string();
+        let token = s["accessToken"].as_str().unwrap().to_string();
+        assert_eq!(s["scope"], json!("enroll"));
+        assert_eq!(identity::verify(&c, &k, &token, AUD_STUDIO, after).unwrap()["scope"], json!("enroll"));
+        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Session { sid: &sid, tenant: None }, after).unwrap_err().reason, "mfa_enrolment_required");
+        assert_eq!(mfa_status(&c, &k, &token, after).unwrap()["overdue"], json!(true));
+        // it lives on as it is (refreshes keep the scope) until the person sets one up
+        let r = refresh(&c, &k, &cfg, s["refreshToken"].as_str().unwrap(), after + 5).unwrap();
+        assert_eq!(identity::verify(&c, &k, r["accessToken"].as_str().unwrap(), AUD_STUDIO, after + 5).unwrap()["scope"], json!("enroll"));
+        let started = mfa_start(&c, &k, Some(&key), &token, None, after + 10).unwrap();
+        let secret = started["secret"].as_str().unwrap();
+        let done = mfa_confirm(&c, &k, &cfg, Some(&key), &token, &code(secret, after + 20), after + 20).unwrap();
+        let claims = identity::verify(&c, &k, done["accessToken"].as_str().unwrap(), AUD_STUDIO, after + 20).unwrap();
+        assert_eq!((claims["scope"].clone(), claims["mfa"].clone()), (json!("full"), json!(true)), "the session has just seen the second factor");
+        assert!(engine_token(&c, &k, &cfg, &EngineRequest::Session { sid: &sid, tenant: None }, after + 21).is_ok());
+        assert_eq!(done["recoveryCodes"].as_array().unwrap().len(), 8);
+    }
+
+    #[test]
+    fn an_enroll_session_is_whole_again_once_the_workspace_stops_requiring_a_factor() {
+        let (c, k, cfg) = setup();
+        open(&c, "dga", DGA, json!({"mfaRequired": true, "mfaRequiredAt": "2020-01-01T00:00:00.000Z"}), T0).unwrap();
+        let s = ann_signs_in(&c, &k, &cfg, T0);
+        let sid = s["sessionId"].as_str().unwrap().to_string();
+        assert_eq!(s["scope"], json!("enroll"));
+        // the requirement is lifted (same provider, still `both`): nothing ends, and the next refresh gives the session its full scope
+        // back, without claiming a second factor it never saw
+        open(&c, "dga", DGA, json!({}), T0 + 10).unwrap();
+        assert_eq!(status(&c, &sid, T0 + 11).unwrap().unwrap()["active"], json!(true));
+        let r = refresh(&c, &k, &cfg, s["refreshToken"].as_str().unwrap(), T0 + 20).unwrap();
+        let claims = identity::verify(&c, &k, r["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 20).unwrap();
+        assert_eq!((claims["scope"].clone(), claims["mfa"].clone()), (json!("full"), json!(false)));
+        assert!(engine_token(&c, &k, &cfg, &EngineRequest::Session { sid: &sid, tenant: None }, T0 + 21).is_ok());
+    }
+
+    #[test]
+    fn a_person_who_has_a_factor_but_a_session_without_it_signs_in_again_once_it_is_required() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        let before = ann_signs_in(&c, &k, &cfg, T0);
+        // she sets one up in another session; the first one was made without it
+        ann_enrols_in_new_session_with_code(&c, &k, &cfg, &key);
+        open(&c, "dga", DGA, json!({"mfaRequired": true, "mfaRequiredAt": "2020-01-01T00:00:00.000Z"}), T0 + 300).unwrap();
+        assert_eq!(status(&c, before["sessionId"].as_str().unwrap(), T0 + 301).unwrap().unwrap()["reason"], json!("mfa_required"));
+        assert!(verify_access(&c, &k, before["accessToken"].as_str().unwrap(), T0 + 301).is_err());
+    }
+    /// enrol Ann in a session of its own (the code given at sign-in counts as that session's second factor afterwards)
+    fn ann_enrols_in_new_session_with_code(c: &Connection, k: &Keys, cfg: &Config, key: &SecretKey) {
+        let s = ann_signs_in(c, k, cfg, T0 + 100);
+        let t = s["accessToken"].as_str().unwrap();
+        let secret = mfa_start(c, k, Some(key), t, None, T0 + 100).unwrap()["secret"].as_str().unwrap().to_string();
+        mfa_confirm(c, k, cfg, Some(key), t, &code(&secret, T0 + 100), T0 + 100).unwrap();
+    }
+
+    #[test]
+    fn moving_takes_on_the_requirement_of_the_workspace_moved_to() {
+        let (c, k, cfg) = setup();
+        open(&c, "dga", DGA, json!({"mfaRequired": true, "mfaRequiredAt": "2020-01-01T00:00:00.000Z"}), T0).unwrap();
+        // pea and dga share a provider here, so the session may move
+        open(&c, "pea", DGA, json!({}), T0).unwrap();
+        let mut r = req("ann@example.org", "sub-ann", "pea");
+        r.issuer = DGA.into();
+        let s = sign_in(&c, &k, &cfg, &r, T0).unwrap();
+        let sid = s["sessionId"].as_str().unwrap().to_string();
+        assert_eq!(s["scope"], json!("full"));
+        let moved = switch(&c, &k, &cfg, &sid, "dga", T0 + 1).unwrap();
+        assert_eq!(identity::verify(&c, &k, moved["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 1).unwrap()["scope"], json!("enroll"), "into the workspace that requires it");
+        let back = switch(&c, &k, &cfg, &sid, "pea", T0 + 2).unwrap();
+        assert_eq!(identity::verify(&c, &k, back["accessToken"].as_str().unwrap(), AUD_STUDIO, T0 + 2).unwrap()["scope"], json!("full"), "and out of it");
+    }
+
+    #[test]
+    fn an_overdue_owners_jobs_wait_and_an_operator_can_take_a_factor_away() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        open(&c, "dga", DGA, json!({"mfaRequired": true, "mfaRequiredAt": "2020-01-01T00:00:00.000Z"}), T0).unwrap();
+        let job = |now| engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "ann@example.org", tenant: "dga", job: "job-1" }, now);
+        assert_eq!(job(T0).unwrap_err().reason, "owner_mfa_required");
+        // once she has one, they run
+        let s = ann_signs_in(&c, &k, &cfg, T0);
+        let t = s["accessToken"].as_str().unwrap();
+        let secret = mfa_start(&c, &k, Some(&key), t, None, T0).unwrap()["secret"].as_str().unwrap().to_string();
+        mfa_confirm(&c, &k, &cfg, Some(&key), t, &code(&secret, T0), T0).unwrap();
+        assert!(job(T0 + 1).is_ok());
+        // an operator takes it away (a lost phone): her sessions end and her jobs wait again
+        assert_eq!(mfa_reset(&c, "ann@example.org", T0 + 2).unwrap(), Some(true));
+        assert_eq!(status(&c, s["sessionId"].as_str().unwrap(), T0 + 3).unwrap().unwrap()["reason"], json!("revoked: mfa_reset"));
+        assert_eq!(job(T0 + 3).unwrap_err().reason, "owner_mfa_required");
+        assert_eq!(mfa_reset(&c, "ann@example.org", T0 + 4).unwrap(), Some(false));
+        assert_eq!(mfa_reset(&c, "nobody@example.org", T0 + 4).unwrap(), None);
+    }
+
+    #[test]
+    fn a_persons_own_mfa_needs_a_session_token() {
+        let (c, k, cfg) = setup();
+        let key = secret_key();
+        let (no_session, _) = identity::issue(&c, &k, "ann@example.org", Some("dga"), 900, T0).unwrap();
+        assert_eq!(mfa_status(&c, &k, &no_session, T0).unwrap_err().status, 401);
+        assert_eq!(mfa_start(&c, &k, Some(&key), "not a token", None, T0).unwrap_err().status, 401);
+        let s = ann_signs_in(&c, &k, &cfg, T0);
+        let t = s["accessToken"].as_str().unwrap();
+        logout(&c, s["sessionId"].as_str().unwrap(), T0 + 1).unwrap();
+        assert_eq!(mfa_start(&c, &k, Some(&key), t, None, T0 + 2).unwrap_err().status, 401, "a session that ended");
+        let s = ann_signs_in(&c, &k, &cfg, T0 + 3);
+        let t = s["accessToken"].as_str().unwrap();
+        assert_eq!(mfa_start(&c, &k, None, t, None, T0 + 3).unwrap_err().reason, "mfa_unavailable");
+        assert_eq!(mfa_confirm(&c, &k, &cfg, Some(&key), t, "123456", T0 + 3).unwrap_err().reason, "mfa_not_started");
+        assert_eq!(mfa_disable(&c, &k, Some(&key), t, "123456", T0 + 3).unwrap_err().reason, "mfa_not_enrolled");
+        // replacing a factor that is on needs a code; switching it off too
+        let secret = mfa_start(&c, &k, Some(&key), t, None, T0 + 3).unwrap()["secret"].as_str().unwrap().to_string();
+        mfa_confirm(&c, &k, &cfg, Some(&key), t, &code(&secret, T0 + 3), T0 + 3).unwrap();
+        assert_eq!(mfa_start(&c, &k, Some(&key), t, None, T0 + 40).unwrap_err().status, 400);
+        assert_eq!(mfa_disable(&c, &k, Some(&key), t, &wrong(&secret, T0 + 40), T0 + 40).unwrap_err().reason, "mfa_invalid");
+        assert_eq!(mfa_disable(&c, &k, Some(&key), t, &code(&secret, T0 + 40), T0 + 40).unwrap(), json!({"enrolled": false}));
+        let rows: Vec<String> = c.prepare("SELECT action FROM audit WHERE content_type='webx::mfa' ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+        assert_eq!(rows, ["mfa_enrolment_started", "mfa_enabled", "mfa_failed", "mfa_disabled"]);
     }
 
     #[test]

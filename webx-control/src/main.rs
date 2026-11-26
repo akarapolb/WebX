@@ -37,6 +37,7 @@ mod files;
 mod forms;
 mod llm;
 mod mailer;
+mod mfa;
 mod outbox;
 mod pii;
 mod captcha;
@@ -158,8 +159,35 @@ async fn me(State(app): State<Shared>, headers: HeaderMap) -> Response {
     };
     let conn = app.conn.lock().unwrap();
     match sessions::verify_access(&conn, &app.keys, t, now_secs()) {
-        Ok(c) => Json(json!({"data": {"email": c["sub"], "name": c["name"], "uid": c["uid"], "tenants": c["tenants"], "superAdmin": c["sa"], "tid": c["tid"], "sid": c["sid"], "role": c["role"], "crole": c["crole"], "mfa": c["mfa"], "amr": c["amr"], "exp": c["exp"]}})).into_response(),
+        Ok(c) => Json(json!({"data": {"email": c["sub"], "name": c["name"], "uid": c["uid"], "tenants": c["tenants"], "superAdmin": c["sa"], "tid": c["tid"], "sid": c["sid"], "role": c["role"], "crole": c["crole"], "mfa": c["mfa"], "amr": c["amr"], "scope": c["scope"], "exp": c["exp"]}})).into_response(),
         Err(m) => error(StatusCode::UNAUTHORIZED, "UnauthorizedError", &m),
+    }
+}
+
+/// /api/auth/mfa/<what> with the person's own access token (C4 step 4): their second factor. Studio calls these for the person; an
+/// `enroll` session (a workspace requires a second factor and its grace period is over) may call them and nothing else.
+///   GET  status            {enrolled, pendingEnrolment, recoveryCodesLeft, lockedUntil, required, deadline, overdue, scope, sessionMfa}
+///   POST start   {code?}   {secret, otpauthUri}; with a factor already set up, a code from it or a recovery code
+///   POST confirm {code}    {recoveryCodes, accessToken, accessExpiresAt}: the session is multi-factor and full from now
+///   POST disable {code}    {enrolled: false}
+async fn my_mfa(State(app): State<Shared>, method: Method, headers: HeaderMap, Path(what): Path<String>, body: Bytes) -> Response {
+    let Some(t) = headers.get("authorization").and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")) else {
+        return error(StatusCode::UNAUTHORIZED, "UnauthorizedError", "Missing or invalid token");
+    };
+    let code = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v.get("code").and_then(Value::as_str).map(String::from));
+    let conn = app.conn.lock().unwrap();
+    let now = now_secs();
+    let r = match (method.as_str(), what.as_str(), code) {
+        ("GET", "status", _) => sessions::mfa_status(&conn, &app.keys, t, now),
+        ("POST", "start", code) => sessions::mfa_start(&conn, &app.keys, app.secrets.as_ref(), t, code.as_deref(), now),
+        ("POST", "confirm", Some(c)) => sessions::mfa_confirm(&conn, &app.keys, &app.sessions, app.secrets.as_ref(), t, &c, now),
+        ("POST", "disable", Some(c)) => sessions::mfa_disable(&conn, &app.keys, app.secrets.as_ref(), t, &c, now),
+        ("POST", "confirm" | "disable", None) => return bad("code is required".into()),
+        _ => return not_found(),
+    };
+    match r {
+        Ok(j) => Json(json!({"data": j})).into_response(),
+        Err(r) => refused(r),
     }
 }
 
@@ -169,6 +197,10 @@ fn refused(r: sessions::Refusal) -> Response {
         400 => (StatusCode::BAD_REQUEST, "ValidationError"),
         401 => (StatusCode::UNAUTHORIZED, "UnauthorizedError"),
         403 => (StatusCode::FORBIDDEN, "ForbiddenError"),
+        404 => (StatusCode::NOT_FOUND, "NotFoundError"),
+        409 => (StatusCode::CONFLICT, "ConflictError"),
+        429 => (StatusCode::TOO_MANY_REQUESTS, "RateLimitError"),
+        503 => (StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable"),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, "InternalServerError"),
     };
     (status, Json(json!({"data": null, "error": {"status": status.as_u16(), "name": name, "message": r.message, "details": {"reason": r.reason}}}))).into_response()
@@ -814,6 +846,31 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
                 Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
             }
         }
+        // a person's second factor, as an operator sees it: whether there is one; a copy from Strapi (tools/migrate-mfa.mjs); taking it away
+        ("GET", ["users", email, "mfa"]) => match identity::get(&conn, email) {
+            Ok(Some(u)) => match mfa::status(&conn, u.id, now_secs()) {
+                Ok(j) => Json(json!({"data": j})).into_response(),
+                Err(m) => fail(m),
+            },
+            Ok(None) => not_found(),
+            Err(m) => fail(m),
+        },
+        ("PUT", ["users", email, "mfa"]) => {
+            let v: Value = match serde_json::from_slice(&body) {
+                Ok(v) => v,
+                Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON"),
+            };
+            match sessions::mfa_import(&conn, app.secrets.as_ref(), email, &v, now_secs()) {
+                Ok(Some(written)) => Json(json!({"data": {"imported": written}})).into_response(),
+                Ok(None) => not_found(),
+                Err(r) => refused(r),
+            }
+        }
+        ("DELETE", ["users", email, "mfa"]) => match sessions::mfa_reset(&conn, email, now_secs()) {
+            Ok(Some(true)) => Json(json!({"data": null})).into_response(),
+            Ok(_) => not_found(),
+            Err(m) => fail(m),
+        },
         // which provider a workspace's people sign in at, and whether a person it vouches for is made on the spot
         ("GET", ["tenants", key, "identity"]) => match sessions::policy(&conn, key) {
             Ok(Some(p)) => Json(json!({"data": p.to_json()})).into_response(),
@@ -1010,6 +1067,17 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
             let req = match sessions::SignIn::from_json(&v) { Ok(r) => r, Err(r) => return refused(r) };
             match sessions::sign_in(&conn, &app.keys, &app.sessions, &req, now_secs()) {
+                Ok(sessions::Begun::Session(j)) => (StatusCode::CREATED, Json(json!({"data": j}))).into_response(),
+                // the person has a second factor: 202 with a pending id; the session comes from POST /internal/sessions/mfa
+                Ok(sessions::Begun::MfaRequired(j)) => (StatusCode::ACCEPTED, Json(json!({"data": j}))).into_response(),
+                Err(r) => refused(r),
+            }
+        }
+        // {pendingId, code}: the second step of a sign-in that waited for the person's code (an authenticator's or a recovery code)
+        ("POST", ["sessions", "mfa"]) => {
+            let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
+            let (Some(id), Some(code)) = (v.get("pendingId").and_then(Value::as_str), v.get("code").and_then(Value::as_str)) else { return bad("pendingId and code are required".into()) };
+            match sessions::complete_mfa(&conn, &app.keys, &app.sessions, app.secrets.as_ref(), id, code, now_secs()) {
                 Ok(j) => (StatusCode::CREATED, Json(json!({"data": j}))).into_response(),
                 Err(r) => refused(r),
             }
@@ -1441,6 +1509,7 @@ async fn main() {
     identity::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(sessions::DDL).unwrap_or_else(|e| panic!("{e}"));
     sessions::migrate(&conn).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(mfa::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(jobs::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(schedules::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(search_stats::DDL).unwrap_or_else(|e| panic!("{e}"));
@@ -1515,6 +1584,7 @@ async fn main() {
         .route("/api/applications/track/:ref", get(application_track))
         .route("/.well-known/jwks.json", get(jwks))
         .route("/api/auth/me", get(me))
+        .route("/api/auth/mfa/:what", any(my_mfa).layer(axum::extract::DefaultBodyLimit::max(4 * 1024)))
         .route("/admin/*rest", any(admin))
         .route("/engine/*rest", any(engine))
         .route("/internal/*rest", any(internal).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))

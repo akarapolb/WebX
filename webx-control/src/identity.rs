@@ -15,6 +15,7 @@
 //!        none); crole the custom role there (null: none), which can only take away from what the base role allows
 //!   sa   the user is a super admin (tied to no workspace); `superAdmin` says the same, for what read the first version
 //!   mfa  control considers the session multi-factor; amr what the sign-in used. `amr` is informational: decide on `mfa`
+//!   scope "full", or "enroll": the session may only set up a second factor (C4 step 4); a verifier refuses everything else
 //!   tenants [{key, role}] (kept from the first version), iat nbf exp jti
 //! A job's acting token also has `purpose: "job"` and `job`.
 //!
@@ -321,6 +322,8 @@ pub struct Grant<'a> {
     pub sid: Option<&'a str>,
     pub mfa: bool,
     pub amr: &'a [String],
+    /// "full", or "enroll": a session that may only set up a second factor (a workspace requires one, its grace period is over)
+    pub scope: &'a str,
     pub ttl: i64,
     /// the background job this acting token is for
     pub job: Option<&'a str>,
@@ -354,7 +357,7 @@ pub fn issue_token(keys: &Keys, user: &User, grant: &Grant, now_secs: i64) -> Re
     let mut claims = json!({
         "iss": ISSUER, "aud": grant.aud, "sub": user.email, "uid": user.id.to_string(), "name": user.name,
         "sid": grant.sid, "tid": grant.tenant, "role": role, "crole": crole,
-        "sa": user.super_admin, "superAdmin": user.super_admin, "mfa": grant.mfa, "amr": grant.amr,
+        "sa": user.super_admin, "superAdmin": user.super_admin, "mfa": grant.mfa, "amr": grant.amr, "scope": grant.scope,
         "tenants": tenants, "iat": now_secs, "nbf": now_secs, "exp": exp, "jti": new_jti(),
     });
     if let Some(job) = grant.job {
@@ -370,7 +373,7 @@ pub fn issue_token(keys: &Keys, user: &User, grant: &Grant, now_secs: i64) -> Re
 /// carrying all of theirs. It belongs to no session, so it cannot be ended on its own.
 pub fn issue(conn: &Connection, keys: &Keys, email: &str, tenant: Option<&str>, ttl_secs: i64, now_secs: i64) -> Result<(String, i64), String> {
     let u = get(conn, email)?.ok_or("unknown user")?;
-    issue_token(keys, &u, &Grant { aud: AUD_STUDIO, tenant, sid: None, mfa: false, amr: &[], ttl: ttl_secs, job: None }, now_secs)
+    issue_token(keys, &u, &Grant { aud: AUD_STUDIO, tenant, sid: None, mfa: false, amr: &[], scope: "full", ttl: ttl_secs, job: None }, now_secs)
 }
 
 /// The checks every verifier makes, and nothing about the database: the algorithm, the key named by `kid`, the signature,
@@ -554,7 +557,7 @@ mod tests {
         editor(&c);
         let u = get(&c, "ann@example.org").unwrap().unwrap();
         let amr = vec!["oidc".to_string()];
-        let g = Grant { aud: AUD_ENGINE, tenant: Some("dga"), sid: Some("S1"), mfa: true, amr: &amr, ttl: 60, job: Some("job-9") };
+        let g = Grant { aud: AUD_ENGINE, tenant: Some("dga"), sid: Some("S1"), mfa: true, amr: &amr, scope: "full", ttl: 60, job: Some("job-9") };
         let (t, exp) = issue_token(&k, &u, &g, 5_000).unwrap();
         assert_eq!(exp, 5_060);
         let claims = verify_token(&k, &t, AUD_ENGINE, 5_000, 0).unwrap();

@@ -309,11 +309,11 @@ holding back its entry's publish) or release (a scheduled one would never run). 
 workspace's rows (`/api/tenants/keys`); one no workspace reaches (made before rows were stamped) is reported and left in Strapi, or filed under `--default-tenant`.
 `node tools/migrate-records-test.mjs` runs it against the real binary and a fake Strapi.
 
-## Identity (C4, steps 1 to 3)
+## Identity (C4, steps 1 to 4)
 
-Decisions D10, D11 and D22; the plan is `../docs/c4-identity-plan.md`. webx-control holds **users** and their **memberships**
-(workspace, base role, custom role), **how each workspace signs in**, the **sessions** of the people signed in, and issues the
-**tokens** that prove them. It stores no passwords: people sign in at their workspace's OIDC provider, Studio completes that exchange
+Decisions D10, D11, D20 and D22; the plan is `../docs/c4-identity-plan.md`. webx-control holds **users** and their **memberships**
+(workspace, base role, custom role), **how each workspace signs in**, people's **second factor**, the **sessions** of the people signed
+in, and issues the **tokens** that prove them. It stores no passwords: people sign in at their workspace's OIDC provider, Studio completes that exchange
 and hands control what the provider said, and control decides. **Nothing calls any of this yet** (Studio's session switch is step 6),
 and **a workspace has no sessions until an operator sets its `mode` to `both` or `control`**: every workspace is `legacy` until then,
 and with the credentials below unset every route behaves as it did before.
@@ -346,7 +346,8 @@ records or jobs. The service refuses to start if a new credential has the same v
 | Call | Meaning |
 |---|---|
 | `GET /internal/tenants/<key>/identity` | where to send a person to sign in: `{tenantKey, mode}`, and once the workspace is `both` or `control` also `{issuer, clientId, clientSecret}` (opened; 503 without the secret key). A `legacy` workspace shows nothing more: nothing should need control's copy of its client until it switches. 404 with no settings |
-| `POST /internal/sessions` body `{issuer, subject, email, emailVerified, tenantKey, amr?, ip?, userAgent?}` | sign a person in. 201 with `{sessionId, accessToken, accessExpiresAt, refreshToken, idleExpiresAt, absoluteExpiresAt}`, or 403 with `error.details.reason`: `workspace_not_configured` or `workspace_legacy` (it does not sign in through control), `issuer_mismatch` (not the workspace's own provider), `email_not_verified`, `unknown_user` (nobody made on the spot), `not_a_member`, `user_disabled`, `subject_changed` (that e-mail already signs in at this provider as someone else; an operator relinks it), `super_admin_needs_operator_link`. The first sign-in of a (provider, subject) links it to the member with that e-mail; after that the e-mail is not consulted |
+| `POST /internal/sessions` body `{issuer, subject, email, emailVerified, tenantKey, amr?, ip?, userAgent?}` | sign a person in. 201 with `{sessionId, accessToken, accessExpiresAt, refreshToken, idleExpiresAt, absoluteExpiresAt, scope, mfa, mfaDeadline}`; **202** with `{mfaRequired: true, pendingId, expiresAt}` when the person has a second factor (below); or 403 with `error.details.reason`: `workspace_not_configured` or `workspace_legacy` (it does not sign in through control), `issuer_mismatch` (not the workspace's own provider), `email_not_verified`, `unknown_user` (nobody made on the spot), `not_a_member`, `user_disabled`, `subject_changed` (that e-mail already signs in at this provider as someone else; an operator relinks it), `super_admin_needs_operator_link`. The first sign-in of a (provider, subject) links it to the member with that e-mail; after that the e-mail is not consulted |
+| `POST /internal/sessions/mfa` body `{pendingId, code}` | the second step of a sign-in that waited: the code from the person's authenticator, or a recovery code. 201 with the session (multi-factor); 401 `mfa_invalid` (counted), `mfa_pending_expired` (5 minutes, or used); 429 `mfa_locked`; 503 `mfa_unavailable` (no secret key). The sign-in is decided again, so a change in the minutes between counts |
 | `POST /internal/sessions/refresh` body `{refreshToken}` | a new access token and a new refresh token. The one just replaced still works for `--refresh-grace` seconds and gets an access token only (two tabs, two replicas); shown again after that it was copied, and the whole session ends (`refresh_reuse`). A wrong secret is a 401 and ends nothing |
 | `POST /internal/sessions/<id>/switch` body `{tenantKey}` | move the session to another workspace the person belongs to, that signs in through control, **and whose provider is the one the session was made with** (a super admin may go to any such workspace); a new access token |
 | `GET /internal/sessions/<id>` | `{active, reason, tenantKey, ...}` for the revocation check Studio keeps for a few seconds; 404 if unknown |
@@ -362,6 +363,43 @@ the audit table (`sign_in`, `sign_in_refused`, `identity_linked`, `user_provisio
 `/api/auth/me` at once. An operator's changes are rows too, in the same transaction: `user_created`, `user_saved`, `user_removed` (content
 type `webx::user`, with what the user became) and `workspace_identity_saved`, `workspace_identity_removed` (`webx::workspace-identity`,
 with the settings, the client secret only as `set`, `kept` or `removed`).
+
+### The second factor (step 4, decision D20)
+
+TOTP as every authenticator app does it (RFC 6238: HMAC-SHA-1, 30-second steps, 6 digits, one step either side) and eight single-use
+recovery codes, kept here: the secret sealed under `WEBX_CONTROL_SECRET_KEY` for its user, the recovery codes only as HMAC tags. A code
+once accepted is never accepted again (the last step used is kept). Wrong codes are counted in the database per person, wherever they are
+given: **8 within 10 minutes lock the person's codes for the rest of the 10 minutes**, on every replica. Replacing the authenticator or
+switching it off takes a current code or a recovery code, never a password, and a replacement keeps the old authenticator working until
+the new one is confirmed.
+
+At sign-in: a person who has a second factor gives it before any session exists (202, then `POST /internal/sessions/mfa`), unless the
+workspace sets `acceptIdpMfa` and its own provider says it checked one (`mfa` in `amr`; a provider is believed only about its own
+workspace). A workspace with `mfaRequired` gives its people 14 days from `mfaRequiredAt`; after that **a person without a second factor
+gets a session of scope `enroll`**: its tokens say `scope: "enroll"`, it gets no engine token, and it may only set up a second factor,
+which makes it whole (multi-factor, scope `full`). A session opened before the deadline ends when the deadline passes (`mfa_required`),
+and so does a session made without the second factor of a person who has one; moving a session takes on the requirement of the workspace
+it moves to. A background job of an overdue owner gets no engine token (`owner_mfa_required`).
+
+| Call | Meaning |
+|---|---|
+| `GET /api/auth/mfa/status` (the person's own access token) | `{enrolled, pendingEnrolment, recoveryCodesLeft, lockedUntil, required, deadline, overdue, scope, sessionMfa}` |
+| `POST /api/auth/mfa/start` body `{code?}` | `{secret, otpauthUri}` for a new authenticator; with one already set up, `code` from it (or a recovery code) |
+| `POST /api/auth/mfa/confirm` body `{code}` | a code from the new authenticator: `{recoveryCodes, accessToken, accessExpiresAt}` (the codes are shown this once; the session is multi-factor and whole from now) |
+| `POST /api/auth/mfa/disable` body `{code}` | switch it off |
+| `GET /admin/users/<email>/mfa`, `DELETE` | an operator sees whether a person has one (and a lock), or takes it away (a lost phone): their sessions end |
+| `PUT /admin/users/<email>/mfa` body `{secret, legacyRecoveryHashes?, replace?}` | copy a factor from Strapi (below); one already here is left alone unless `replace` |
+
+These routes take a session's token in either scope, and only that (a token from `/internal/token` has no session). Each step is a row in
+the audit table (content type `webx::mfa`): `mfa_enrolment_started`, `mfa_enabled`, `mfa_disabled`, `mfa_recovery_used`, `mfa_failed`,
+`mfa_locked`, `mfa_imported`, `mfa_reset`, and `sign_in_mfa_pending` for a sign-in that waits; a sign-in's own row says `mfa=totp`,
+`mfa=recovery`, `mfa=provider` or `scope=enroll`.
+
+**Copying Studio's MFA** (`api::mfa-enrollment` in Strapi): `node tools/migrate-mfa.mjs [--dry-run] [--replace]` (Strapi as for
+`migrate-users.mjs`, plus `WEBX_CONTROL_URL` and `WEBX_CONTROL_ADMIN_TOKEN`) copies each finished enrolment: the authenticator secret,
+so the app on the person's phone goes on working, and the hashes of the recovery codes they have not used, each accepted once (a new set of
+codes replaces them). Copy, not move: Studio keeps using Strapi's rows until a workspace signs in through control. People not in control
+yet are reported (run `migrate-users.mjs` first). `node tools/mfa-test.mjs` checks all of this on the real binary.
 
 ### Roles (step 3, decision D22)
 
@@ -396,8 +434,9 @@ A token is a JWT signed with EdDSA, header `{alg, typ, kid}`. Claims: `iss` `web
 `engine` (the 60-second token); `sub` the e-mail and `uid` the user's stable id (a user deleted and made again is a different `uid`, so
 inherits nothing); `sid` the session (null for `/internal/token`); `tid` the one workspace it acts in and `role` the base role there (null
 without); `crole` the custom role there (null: none); `sa` and `superAdmin` (a super admin); `mfa` (control considers the session
-multi-factor: always false until C4 step 4) and `amr` (what the sign-in used, as the provider said: informational, decide on `mfa`);
-`tenants` `[{key, role}]`; `iat`, `nbf`, `exp`, `jti`. A job's token adds `purpose` `job` and `job`.
+multi-factor: the person gave a second factor at sign-in or set one up in it, or the provider checked one the workspace believes) and `amr` (what the sign-in used, as the provider said: informational, decide on `mfa`);
+`tenants` `[{key, role}]`; `scope` (`full`, or `enroll`: the session may only set up a second factor, and a verifier refuses it everything
+else); `iat`, `nbf`, `exp`, `jti`. A job's token adds `purpose` `job` and `job`.
 
 **A verifier** (Studio, an engine) takes the key named by `kid` from the key set it fetched, and refuses a token whose `alg` is not
 `EdDSA`, that names no key it has, whose signature, `iss` or `aud` is wrong, that is not valid yet (`nbf`) or has expired (`exp`), or that
@@ -436,8 +475,8 @@ when a workspace already signs in through control. Today's SSO adds anyone the p
 the workspace sets `allowJit`. Its mapping is unit-tested (`node --test tools/users-map.test.mjs`) and `node tools/migrate-users-test.mjs`
 runs it against the real binary and a fake Strapi.
 
-**Not done yet, and the larger part of C4:** MFA here (step 4); Studio's session trusting these tokens, with engines called by a service
-credential plus the acting editor (steps 5 to 7); engines verifying them (steps 8 and 9); and the security review D10 and the plan
+**Not done yet, and the larger part of C4:** Studio's session trusting these tokens, with engines called by a service credential plus
+the acting editor (steps 6 and 7; step 5 put every engine call of Studio's behind one place, `webx-studio/lib/engineAuth.ts`); engines verifying them (steps 8 and 9); and the security review D10 and the plan
 require before any workspace switches.
 
 ## Job queue (C5)
@@ -485,6 +524,7 @@ node tools/migrate-records-test.mjs                        # moving Strapi's tem
 node tools/identity-test.mjs                               # tokens, keys and rotation, the broker and engine credentials
 node tools/sessions-test.mjs                               # sign-in decisions, refresh and theft, ending sessions, workspace mode, roles, the client secret
 node tools/migrate-users-test.mjs                          # copying Strapi's users, sign-in settings and custom roles here, against a fake Strapi
+node tools/mfa-test.mjs                                    # the second factor: enroll scope, codes at sign-in, replay, lock, recovery codes, copying Studio's
 node tools/assist-test.mjs                                 # the assistant: retrieval, answers with sources, the model's failures, simplify/translate/find
 ```
 
