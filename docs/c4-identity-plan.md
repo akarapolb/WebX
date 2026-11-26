@@ -336,7 +336,9 @@ The session routes are off (503) until `WEBX_CONTROL_AUTH_TOKEN` is set. Lifetim
   `PUT` are new.
 - **Not done:** a list of a user's sessions for a "your sessions" screen; IdP back-channel logout; the per-IP limit on sign-in attempts stays in Studio's
   middleware (control sees only the broker); the `enroll` scope and the MFA branch of the decision (step 4); the 30-second revocation cache and its
-  fail-closed rule are Studio's, in step 6.
+  fail-closed rule are Studio's, in step 6. **For step 6:** Studio's Audit Log screen (`components/AuditLog.tsx`) has no label or filter entry for the new
+  event names (`al.a_sign_in`, `al.a_refresh_reuse`, ... are not in its translations) and would show the content type `webx::session`; add them when the rows
+  can first exist. Rows from sign-ins carry the person's address (`ip=` in the detail); say so in the privacy notice for staff before a workspace switches.
 
 **Step 3 - workspace identity settings, roles, migration** (`webx-control`, `tools/`).
 - Table `workspace_identity` (workspace, `mode` `legacy|both|control`, issuer, client id, client secret encrypted under a new
