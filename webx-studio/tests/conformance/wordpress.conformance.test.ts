@@ -109,9 +109,9 @@ conformanceSuite(
     // What WordPress does not do yet, as its first run in CI showed (2026-11-27). Each still runs, as a TODO.
     gaps: {
       "update-draft": "WordPress keeps one copy of a post: an edit through the REST API changes a published post at once, where the contract keeps the edit as a draft until the next publish (section 8)",
-      list: "the adapter passes WordPress only the tenant, a search term, a status, a sort by title or date, and the page (contract section 8): field filters such as eq, ne and contains are dropped, so a list holds every entry of the tenant",
-      validation: "WordPress publishes an entry with no title: only Studio's own form asks for one",
-      // media-isolation was a gap until 2026-11-27, when custom-role-enforcement.php began scoping media writes by tenant
+      // closed on 2026-11-27, the day they were found: media-isolation (custom-role-enforcement.php scopes media writes by
+      // tenant), list (webx-list-filters.php applies field filters and sorts) and validation (webx-content-rules.php refuses
+      // to publish a post with no title)
     },
   },
   { skip: configured ? undefined : "set CONFORMANCE_WP_URL, CONFORMANCE_WP_MAIN_USER and CONFORMANCE_WP_MAIN_APP_PASSWORD to run against a live WordPress" },

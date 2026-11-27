@@ -190,7 +190,7 @@ HTTP status.
 | Method | Strapi | WordPress |
 |---|---|---|
 | `schema.listContentTypes()` → `ContentTypeInfo[]` (`uid, name, api, pluralName, attributes, localized`) | `GET /content-manager/content-types` (collection types under `api::`) | fixed registry (`POST_TYPES`), `localized: false` |
-| `entries.list(uid, {filter, sort, page, pageSize, status, q, locale})` → `{data, total, pageCount}` | `GET /content-manager/collection-types/<uid>?filters[a][b][$op]=v&sort&page&pageSize&status&_q&locale` | `GET /wp/v2/<restBase>?status&wtenant&search&page&per_page` (status `publish` ↔ `published`) |
+| `entries.list(uid, {filter, sort, page, pageSize, status, q, locale})` → `{data, total, pageCount}` | `GET /content-manager/collection-types/<uid>?filters[a][b][$op]=v&sort&page&pageSize&status&_q&locale` | `GET /wp/v2/<restBase>?status&wtenant&search&page&per_page` (status `publish` ↔ `published`), plus `webx_filter` and `webx_sort` for the title and the type's ACF fields (`wordpress/mu-plugins/webx-list-filters.php`) |
 | `entries.get(uid, documentId, {locale})` | `GET …/<uid>/<id>?locale=` | `GET /wp/v2/<restBase>/<id>` |
 | `entries.create(uid, data, {locale})` | `POST …/<uid>` (locale in body; new documentId) | `POST /wp/v2/<restBase>` (`tenant` → `wtenant` term) |
 | `entries.update(uid, id, data, {locale})` | `PUT …/<uid>/<id>?locale=` (also creates a missing locale) | `POST /wp/v2/<restBase>/<id>` |
@@ -258,10 +258,11 @@ An engine conforms when, for the same content:
    a gap that closes shows up as a pass. WordPress runs in CI too (the
    `conformance-wordpress` job: WordPress built from `wordpress/`, with the
    Strapi it asks which tenant an editor belongs to) and meets every case but
-   three, which its harness names: an edit of a published post goes live at
-   once, a list drops field filters, and a post with no title can be
-   published. Its media writes are scoped by tenant like its content (since
-   2026-11-27, `custom-role-enforcement.php`). Users and roles are not engine
+   one, which its harness names: an edit of a published post goes live at
+   once (WordPress keeps one copy of a post). Since 2026-11-27 its media
+   writes are scoped by tenant like its content (`custom-role-enforcement.php`),
+   its lists apply field filters and sorts (`webx-list-filters.php`), and a
+   post needs a title to be published (`webx-content-rules.php`). Users and roles are not engine
    cases: they move to webx-control (C4), whose step 8 adds the acting-token
    cases to this suite.
 4. **Isolation:** a cross-tenant request returns nothing (e2e

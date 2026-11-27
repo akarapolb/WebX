@@ -310,14 +310,19 @@ function tenantKeyToWtenant(data: Record<string, any>, terms: { byKey: Map<strin
   return id != null ? { ...rest, wtenant: [id] } : rest;
 }
 
-// Strapi-style "field:DIR" sort strings, best-effort translated to WP's
-// orderby/order params. Falls back to WP's default (date desc) if unknown.
+// Strapi-style "field:DIR" sort strings: the title and the dates go to WP's own
+// orderby/order params; any other field (an ACF field, such as `order`) goes as
+// webx_sort, which wordpress/mu-plugins/webx-list-filters.php sorts by (WP's
+// default, date desc, where that plugin is missing or the field is not one).
 const SORT_FIELD_MAP: Record<string, string> = { updatedAt: "modified", createdAt: "date", title: "title" };
 function applySort(params: URLSearchParams, sort?: string) {
   if (!sort) return;
   const [field, dir] = sort.split(":");
   const orderby = SORT_FIELD_MAP[field];
-  if (!orderby) return;
+  if (!orderby) {
+    if (field) params.set("webx_sort", field + ":" + (dir || "asc").toLowerCase());
+    return;
+  }
   params.set("orderby", orderby);
   if (dir) params.set("order", dir.toLowerCase());
 }
@@ -358,13 +363,17 @@ export const wordpressAdapter: CmsAdapter = {
       applySort(params, query?.sort);
       // governance.ts injects a {field:"tenant.key", op:"eq"} filter for
       // WP_SCOPED types (see WP_SCOPED there) — translate it to the wtenant
-      // taxonomy's native ?wtenant=<termId> REST filter. Any other filter is
-      // ignored, not errored (this adapter's scope is narrow by design).
+      // taxonomy's native ?wtenant=<termId> REST filter. Every other filter
+      // goes as webx_filter: wordpress/mu-plugins/webx-list-filters.php
+      // applies those on the title and the type's ACF fields and ignores the
+      // rest (as WordPress ignored them all before it, 2026-11-27).
       const tf = (query?.filter || []).find((f) => f.field === "tenant.key" && f.op === "eq");
       if (tf) {
         const id = terms.byKey.get(String(tf.value));
         params.set("wtenant", id != null ? String(id) : "-1"); // unknown tenant key -> no results, not "everything"
       }
+      const others = (query?.filter || []).filter((f) => f !== tf);
+      if (others.length) params.set("webx_filter", JSON.stringify(others.map(({ field, op, value }) => ({ field, op, value }))));
       const r = await fetch(BASE + "/wp/v2/" + restBase + "?" + params.toString(), { headers: await authHeaders(), cache: "no-store" });
       if (!r.ok) throw new CmsError("list failed", r.status);
       const rows = await json(r);
