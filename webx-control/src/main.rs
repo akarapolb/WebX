@@ -1137,7 +1137,8 @@ async fn internal(State(app): State<Shared>, method: axum::http::Method, headers
             Ok(None) => not_found(),
             Err(m) => fail(m),
         },
-        // the 60-second token an engine verifies: {sessionId, tenantKey?} for a person, {purpose: "job", ownerEmail, tenantKey, jobId} for a job
+        // the 60-second token an engine verifies: {sessionId, tenantKey?} for a person; {purpose: "job", jobId, ownerEmail?, tenantKey?} for a
+        // job a worker is running, made out to the stored job's owner and workspace (named ones have to be the same)
         ("POST", ["engine-token"]) => {
             let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
             let req = match sessions::EngineRequest::from_json(&v) { Ok(r) => r, Err(r) => return refused(r) };

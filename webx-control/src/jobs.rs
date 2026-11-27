@@ -154,6 +154,23 @@ fn text_of<'a>(v: &'a Value, k: &str) -> Option<&'a str> {
     v.get(k).and_then(Value::as_str).filter(|s| !s.trim().is_empty())
 }
 
+/// A job as an engine token for it is minted from (sessions.rs): its workspace and owner as stored, and whether a worker is running
+/// it now (it is `running` and the lease has not run out).
+pub struct JobRef {
+    pub tenant: String,
+    pub owner: String,
+    pub running: bool,
+}
+
+pub fn job_ref(conn: &Connection, document_id: &str, now_ms: i64) -> Result<Option<JobRef>, String> {
+    conn.query_row("SELECT tenant_key, owner_email, run_state, lease_expires_ms FROM agent_jobs WHERE document_id=?1", [document_id], |r| {
+        let (state, lease): (String, Option<i64>) = (r.get(2)?, r.get(3)?);
+        Ok(JobRef { tenant: r.get(0)?, owner: r.get(1)?, running: state == "running" && lease.is_some_and(|l| l > now_ms) })
+    })
+    .optional()
+    .map_err(e)
+}
+
 /// Queue a job. `tenantKey` and `ownerEmail` are required; the job starts `queued`, runnable at `notBefore` or now.
 pub fn create(conn: &Connection, v: &Value, now: i64) -> Result<Value, String> {
     let tenant = text_of(v, "tenantKey").ok_or("tenantKey is required")?;

@@ -72,6 +72,12 @@ const engineToken = (body) => call("POST", "/internal/engine-token", AUTH, body)
 const putUser = (email, body) => call("PUT", `/admin/users/${encodeURIComponent(email)}`, ADMIN, body);
 const audit = async (filter) => (await call("GET", `/internal/audit?pageSize=200&sort=${encodeURIComponent("at:asc")}&filter=${encodeURIComponent(filter)}`, SERVICE)).json.data;
 const reason = (r) => r.json?.error?.details?.reason;
+/** a job stored for `ownerEmail` in `tenantKey` and taken by a worker (the queue's own claim): its id */
+async function runningJob(tenantKey, ownerEmail) {
+  const id = (await call("POST", "/internal/jobs", SERVICE, { data: { tenantKey, ownerEmail, goal: "tidy the FAQ" } })).json.data.documentId;
+  await call("POST", "/internal/jobs/claim", SERVICE, { workerId: "worker-" + id, limit: 50 });
+  return id;
+}
 // a workspace that signs in through control (step 3: anything else is legacy, and has no sessions)
 const ws = (issuer, extra = {}) => ({ mode: "both", issuer, clientId: "webx-studio", ...extra });
 const ORST = "https://idp.example/realms/orst";
@@ -184,11 +190,17 @@ try {
   const sw = await call("POST", `/internal/sessions/${s3.sessionId}/switch`, AUTH, { tenantKey: "pea" });
   check("a session cannot move to a workspace whose provider is another one", sw.status === 403 && reason(sw) === "issuer_mismatch");
   check("an engine token needs the broker credential", (await call("POST", "/internal/engine-token", SERVICE, { sessionId: s3.sessionId })).status === 401);
-  const job = await engineToken({ purpose: "job", ownerEmail: "ann@example.org", tenantKey: "dga", jobId: "job-1" });
+  const jobId = await runningJob("dga", "ann@example.org");
+  const job = await engineToken({ purpose: "job", jobId });
   const jc = job.status === 200 ? await engineVerifies(job.json.data.token, "engine") : null;
-  check("a job's token names the job and belongs to no session", jc && jc.job === "job-1" && jc.purpose === "job" && jc.sid === null && jc.tid === "dga");
-  check("a job whose owner is not in that workspace gets none", (await engineToken({ purpose: "job", ownerEmail: "ann@example.org", tenantKey: "orst", jobId: "job-2" })).status === 403);
-  check("the job is in the audit table", (await audit("action:eq:engine_token_job")).some((r) => r.entryId === "job-1") && (await audit("action:eq:engine_token_refused")).some((r) => r.entryId === "job-2"));
+  check("a job's token is made from the job as stored: its owner and workspace, and no session", jc && jc.job === jobId && jc.purpose === "job" && jc.sid === null && jc.tid === "dga" && jc.sub === "ann@example.org", JSON.stringify(job.json));
+  const asBob = await engineToken({ purpose: "job", jobId, ownerEmail: "bob@example.org" });
+  check("the request cannot name another owner or workspace", asBob.status === 403 && reason(asBob) === "job_mismatch" && reason(await engineToken({ purpose: "job", jobId, tenantKey: "pea" })) === "job_mismatch");
+  const waiting = (await call("POST", "/internal/jobs", SERVICE, { data: { tenantKey: "dga", ownerEmail: "ann@example.org", goal: "later" } })).json.data.documentId;
+  check("a job that does not exist, or that no worker is running, gets none", reason(await engineToken({ purpose: "job", jobId: "no-such-job" })) === "job_unknown" && reason(await engineToken({ purpose: "job", jobId: waiting })) === "job_not_running");
+  const bobs = await runningJob("orst", "bob@example.org");
+  check("a job whose owner is not in its workspace gets none", reason(await engineToken({ purpose: "job", jobId: bobs })) === "owner_revoked");
+  check("the job is in the audit table", (await audit("action:eq:engine_token_job")).some((r) => r.entryId === jobId) && (await audit("action:eq:engine_token_refused")).some((r) => r.entryId === bobs));
 
   // ---- logout
   check("logout: 200", (await call("DELETE", `/internal/sessions/${s3.sessionId}`, AUTH)).status === 200);
@@ -202,7 +214,7 @@ try {
   const s4s = await status(s4.sessionId);
   check("disabling a user ends their sessions", s4s.json.data.active === false && /user_disabled/.test(s4s.json.data.reason));
   check("their access token, refresh token and engine tokens stop", (await me(s4.accessToken)).status === 401 && (await refresh(s4.refreshToken)).status === 401 && (await engineToken({ sessionId: s4.sessionId })).status === 401);
-  check("a job of theirs gets no token and they cannot sign in", (await engineToken({ purpose: "job", ownerEmail: "ann@example.org", tenantKey: "dga", jobId: "job-3" })).status === 403 && reason(await signIn()) === "user_disabled");
+  check("a job of theirs gets no token and they cannot sign in", reason(await engineToken({ purpose: "job", jobId })) === "owner_revoked" && reason(await signIn()) === "user_disabled");
   await putUser("ann@example.org", ANN());
   const s5 = await signIn();
   check("enabled again, they sign in again", s5.status === 201);

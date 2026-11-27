@@ -1259,22 +1259,22 @@ pub fn mfa_reset(conn: &Connection, email: &str, now: i64) -> Result<Option<bool
 pub enum EngineRequest<'a> {
     /// for a person's live session; the workspace, if named, has to be the session's own
     Session { sid: &'a str, tenant: Option<&'a str> },
-    /// for a background job running as its owner: no session, and a row in the audit table
-    Job { owner_email: &'a str, tenant: &'a str, job: &'a str },
+    /// for a background job running as its owner: no session, and a row in the audit table. Whose job it is and in which workspace
+    /// are the stored job's (jobs.rs); a request that names them as well has to name the same
+    Job { owner_email: Option<&'a str>, tenant: Option<&'a str>, job: &'a str },
 }
 
 impl EngineRequest<'_> {
-    /// From the broker's body: {sessionId, tenantKey?} or {purpose: "job", ownerEmail, tenantKey, jobId}.
+    /// From the broker's body: {sessionId, tenantKey?} or {purpose: "job", jobId, ownerEmail?, tenantKey?}.
     pub fn from_json(v: &Value) -> Result<EngineRequest<'_>, Refusal> {
         let text = |k: &str| v.get(k).and_then(Value::as_str);
         if text("purpose") == Some("job") {
-            let (Some(owner), Some(tenant), Some(job)) = (text("ownerEmail"), text("tenantKey"), text("jobId")) else {
-                return Err(Refusal::bad("a job's token needs ownerEmail, tenantKey and jobId"));
-            };
-            if !identity::valid_tenant(tenant) || !(1..=128).contains(&job.len()) || job.chars().any(char::is_control) {
+            let Some(job) = text("jobId") else { return Err(Refusal::bad("a job's token needs the jobId")) };
+            let tenant = text("tenantKey");
+            if tenant.is_some_and(|t| !identity::valid_tenant(t)) || !(1..=128).contains(&job.len()) || job.chars().any(char::is_control) {
                 return Err(Refusal::bad("tenantKey or jobId is not valid"));
             }
-            return Ok(EngineRequest::Job { owner_email: owner, tenant, job });
+            return Ok(EngineRequest::Job { owner_email: text("ownerEmail"), tenant, job });
         }
         let Some(sid) = text("sessionId") else { return Err(Refusal::bad("sessionId is required (or purpose \"job\")")) };
         if let Some(t) = text("tenantKey") {
@@ -1304,26 +1304,40 @@ pub fn engine_token(conn: &Connection, keys: &Keys, cfg: &Config, req: &EngineRe
             let (token, exp) = identity::issue_token(keys, &user, &Grant { aud: AUD_ENGINE, tenant: Some(active), sid: Some(&s.id), mfa: s.mfa_at.is_some(), amr: &s.amr, scope: "full", ttl: cfg.engine_secs, job: None }, now)?;
             Ok(json!({"token": token, "expiresAt": exp}))
         }
-        EngineRequest::Job { owner_email, tenant, job } => {
-            let refuse = |reason: &'static str, message: &str| -> Result<Value, Refusal> {
-                audit_event(conn, now, "engine_token_refused", Some(&owner_email.to_lowercase()), Some(tenant), Some(job), "job", reason)?;
+        EngineRequest::Job { owner_email, tenant: asked_tenant, job } => {
+            let refuse = |reason: &'static str, message: &str, email: Option<&str>, tenant: Option<&str>| -> Result<Value, Refusal> {
+                audit_event(conn, now, "engine_token_refused", email, tenant, Some(job), "job", reason)?;
                 Err(Refusal::denied(reason, message))
             };
-            let Some(user) = identity::get(conn, owner_email)? else { return refuse("owner_revoked", "the job's owner is not a user") };
+            // Whose job it is and where are taken from the job as stored, never from the request: whoever can write a job row or a
+            // request must not be able to choose whose authority a job runs with. Only a job a worker is running now gets a token.
+            let asked_owner = owner_email.map(str::to_lowercase);
+            let Some(stored) = jobs::job_ref(conn, job, now * 1000)? else {
+                return refuse("job_unknown", "there is no such job", asked_owner.as_deref(), *asked_tenant);
+            };
+            let owner = stored.owner.to_lowercase();
+            let tenant = stored.tenant.as_str();
+            if asked_owner.as_deref().is_some_and(|o| o != owner) || asked_tenant.is_some_and(|t| t != tenant) {
+                return refuse("job_mismatch", "that is not this job's owner or workspace", Some(&owner), Some(tenant));
+            }
+            if !stored.running {
+                return refuse("job_not_running", "only a job a worker is running gets a token", Some(&owner), Some(tenant));
+            }
+            let Some(user) = identity::get(conn, &owner)? else { return refuse("owner_revoked", "the job's owner is not a user", Some(&owner), Some(tenant)) };
             if user.disabled {
-                return refuse("owner_revoked", "the job's owner is disabled");
+                return refuse("owner_revoked", "the job's owner is disabled", Some(&owner), Some(tenant));
             }
             if !user.may_act_in(tenant) {
-                return refuse("owner_revoked", "the job's owner is no longer a member of that workspace");
+                return refuse("owner_revoked", "the job's owner is no longer a member of that workspace", Some(&owner), Some(tenant));
             }
             // control acts for nobody in a workspace that does not sign in through it: its jobs run the old way
             let p = match open_for_sessions(policy(conn, tenant)?) {
                 Ok(p) => p,
-                Err((reason, message)) => return refuse(reason, message),
+                Err((reason, message)) => return refuse(reason, message, Some(&owner), Some(tenant)),
             };
             // nor for an owner who is overdue with the second factor the workspace requires: their work waits until they have one
             if mfa::requirement(p.mfa_required, p.mfa_required_at.as_deref(), now).is_some_and(|(_, overdue)| overdue) && !mfa::enrolled(conn, user.id)? {
-                return refuse("owner_mfa_required", "the job's owner has not set up the second factor this workspace requires");
+                return refuse("owner_mfa_required", "the job's owner has not set up the second factor this workspace requires", Some(&owner), Some(tenant));
             }
             let (token, exp) = identity::issue_token(keys, &user, &Grant { aud: AUD_ENGINE, tenant: Some(tenant), sid: None, mfa: false, amr: &[], scope: "full", ttl: cfg.engine_secs, job: Some(job) }, now)?;
             audit_event(conn, now, "engine_token_job", Some(&user.email), Some(tenant), Some(job), "job", "minted")?;
@@ -1375,6 +1389,7 @@ mod tests {
         c.execute_batch(DDL).unwrap();
         migrate(&c).unwrap();
         c.execute_batch(mfa::DDL).unwrap();
+        c.execute_batch(jobs::DDL).unwrap();
         c
     }
     fn setup() -> (Connection, Keys, Config) {
@@ -1867,29 +1882,71 @@ mod tests {
         assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Session { sid: &sid, tenant: None }, T0 + 1).unwrap_err().reason, "session_ended");
     }
 
+    /// A job stored for `owner` in `tenant`, and taken by a worker (running, its lease good for jobs::LEASE_MS); its id.
+    fn running_job(c: &Connection, tenant: &str, owner: &str, now: i64) -> String {
+        let id = queued_job(c, tenant, owner, now);
+        c.execute("UPDATE agent_jobs SET run_state='running', lease_owner='worker-1', lease_token='lease', lease_expires_ms=?2 WHERE document_id=?1", params![id, now * 1000 + jobs::LEASE_MS]).unwrap();
+        id
+    }
+    fn queued_job(c: &Connection, tenant: &str, owner: &str, now: i64) -> String {
+        jobs::create(c, &json!({"tenantKey": tenant, "ownerEmail": owner, "goal": "tidy the FAQ"}), now * 1000).unwrap()["documentId"].as_str().unwrap().to_string()
+    }
+    fn job_req(job: &str) -> EngineRequest<'_> {
+        EngineRequest::Job { owner_email: None, tenant: None, job }
+    }
+
     #[test]
     fn a_job_gets_a_token_while_its_owner_may_still_act_and_the_job_is_on_the_record() {
         let (c, k, cfg) = setup();
-        let ok = engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "Ann@Example.org", tenant: "dga", job: "job-1" }, T0).unwrap();
+        let id = running_job(&c, "dga", "Ann@Example.org", T0);
+        let ok = engine_token(&c, &k, &cfg, &job_req(&id), T0).unwrap();
         let claims = identity::verify_token(&k, ok["token"].as_str().unwrap(), AUD_ENGINE, T0, 0).unwrap();
-        assert_eq!((claims["job"].clone(), claims["purpose"].clone(), claims["sid"].clone(), claims["tid"].clone()), (json!("job-1"), json!("job"), Value::Null, json!("dga")));
-        assert!(actions(&c).contains(&("engine_token_job".to_string(), Some("job-1".to_string()))));
-        // a workspace the owner is not in, a user who is not one, a disabled owner
-        for (who, tenant) in [("ann@example.org", "orst"), ("nobody@example.org", "dga")] {
-            let e = engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: who, tenant, job: "job-2" }, T0).unwrap_err();
+        assert_eq!((claims["job"].clone(), claims["purpose"].clone(), claims["sid"].clone(), claims["tid"].clone(), claims["sub"].clone()), (json!(id), json!("job"), Value::Null, json!("dga"), json!("ann@example.org")));
+        assert!(actions(&c).contains(&("engine_token_job".to_string(), Some(id.clone()))));
+        // naming the owner and workspace too is fine when they are the job's
+        assert!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: Some("ANN@example.org"), tenant: Some("dga"), job: &id }, T0).is_ok());
+        // a user who is not one, a workspace the owner is not in (the job rows are what they are: whoever wrote them)
+        for (who, tenant) in [("nobody@example.org", "dga"), ("ann@example.org", "orst")] {
+            open(&c, "orst", DGA, json!({}), T0).unwrap();
+            let j = running_job(&c, tenant, who, T0);
+            let e = engine_token(&c, &k, &cfg, &job_req(&j), T0).unwrap_err();
             assert_eq!((e.status, e.reason), (403, "owner_revoked"), "{who} {tenant}");
         }
         // a workspace that does not sign in through control: its jobs run the old way, control makes them no token
-        identity::upsert(&c, "bo@example.org", &json!({"memberships": [{"tenantKey": "orst", "role": "editor"}]}), &stamp(T0)).unwrap();
-        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "bo@example.org", tenant: "orst", job: "job-4" }, T0).unwrap_err().reason, "workspace_not_configured");
-        put_policy(&c, None, "orst", &json!({"issuer": DGA}), T0).unwrap();
-        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "bo@example.org", tenant: "orst", job: "job-5" }, T0).unwrap_err().reason, "workspace_legacy");
+        identity::upsert(&c, "bo@example.org", &json!({"memberships": [{"tenantKey": "nsm", "role": "editor"}]}), &stamp(T0)).unwrap();
+        let bo = running_job(&c, "nsm", "bo@example.org", T0);
+        assert_eq!(engine_token(&c, &k, &cfg, &job_req(&bo), T0).unwrap_err().reason, "workspace_not_configured");
+        put_policy(&c, None, "nsm", &json!({"issuer": DGA}), T0).unwrap();
+        assert_eq!(engine_token(&c, &k, &cfg, &job_req(&bo), T0).unwrap_err().reason, "workspace_legacy");
         set_user(&c, "ann@example.org", json!({"disabled": true, "memberships": [{"tenantKey": "dga", "role": "editor"}]}), T0 + 1);
-        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "ann@example.org", tenant: "dga", job: "job-3" }, T0 + 2).unwrap_err().reason, "owner_revoked");
+        assert_eq!(engine_token(&c, &k, &cfg, &job_req(&id), T0 + 2).unwrap_err().reason, "owner_revoked");
         let refused = actions(&c).iter().filter(|(a, j)| a == "engine_token_refused" && j.is_some()).count();
         assert_eq!(refused, 5, "each refusal is on the record with the job's id");
         // no session was made for any of it
         assert_eq!(count(&c, "SELECT COUNT(*) FROM sessions"), 0);
+    }
+
+    #[test]
+    fn a_jobs_token_is_made_from_the_job_as_stored_and_only_while_a_worker_runs_it() {
+        let (c, k, cfg) = setup();
+        identity::upsert(&c, "boss@example.org", &json!({"memberships": [{"tenantKey": "dga", "role": "admin"}]}), &stamp(T0)).unwrap();
+        let mine = running_job(&c, "dga", "ann@example.org", T0);
+        // the request cannot pick whose authority the job runs with, nor where
+        let as_boss = engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: Some("boss@example.org"), tenant: None, job: &mine }, T0).unwrap_err();
+        assert_eq!((as_boss.status, as_boss.reason), (403, "job_mismatch"));
+        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: None, tenant: Some("pea"), job: &mine }, T0).unwrap_err().reason, "job_mismatch");
+        // a job that does not exist, one waiting in the queue, one whose worker's lease ran out
+        assert_eq!(engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: Some("boss@example.org"), tenant: Some("dga"), job: "no-such-job" }, T0).unwrap_err().reason, "job_unknown");
+        let waiting = queued_job(&c, "dga", "ann@example.org", T0);
+        assert_eq!(engine_token(&c, &k, &cfg, &job_req(&waiting), T0).unwrap_err().reason, "job_not_running");
+        assert!(engine_token(&c, &k, &cfg, &job_req(&mine), T0 + 89).is_ok(), "inside its lease");
+        assert_eq!(engine_token(&c, &k, &cfg, &job_req(&mine), T0 + 91).unwrap_err().reason, "job_not_running", "the lease ran out");
+        // a job that ended
+        let done = running_job(&c, "dga", "ann@example.org", T0);
+        c.execute("UPDATE agent_jobs SET run_state='done' WHERE document_id=?1", [&done]).unwrap();
+        assert_eq!(engine_token(&c, &k, &cfg, &job_req(&done), T0).unwrap_err().reason, "job_not_running");
+        let rows: Vec<String> = c.prepare("SELECT target_ref FROM audit WHERE action='engine_token_refused' ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+        assert_eq!(rows, ["job_mismatch", "job_mismatch", "job_unknown", "job_not_running", "job_not_running", "job_not_running"]);
     }
 
     #[test]
@@ -1898,7 +1955,8 @@ mod tests {
             assert_eq!(EngineRequest::from_json(&bad).err().map(|r| r.status), Some(400), "{bad}");
         }
         assert!(matches!(EngineRequest::from_json(&json!({"sessionId": "s"})), Ok(EngineRequest::Session { tenant: None, .. })));
-        assert!(matches!(EngineRequest::from_json(&json!({"purpose": "job", "ownerEmail": "a@b.co", "tenantKey": "dga", "jobId": "j"})), Ok(EngineRequest::Job { .. })));
+        assert!(matches!(EngineRequest::from_json(&json!({"purpose": "job", "ownerEmail": "a@b.co", "tenantKey": "dga", "jobId": "j"})), Ok(EngineRequest::Job { owner_email: Some(_), tenant: Some("dga"), .. })));
+        assert!(matches!(EngineRequest::from_json(&json!({"purpose": "job", "jobId": "j"})), Ok(EngineRequest::Job { owner_email: None, tenant: None, job: "j" })), "the job alone is enough");
     }
 
     // ---- operators
@@ -2356,7 +2414,8 @@ mod tests {
         let (c, k, cfg) = setup();
         let key = secret_key();
         open(&c, "dga", DGA, json!({"mfaRequired": true, "mfaRequiredAt": "2020-01-01T00:00:00.000Z"}), T0).unwrap();
-        let job = |now| engine_token(&c, &k, &cfg, &EngineRequest::Job { owner_email: "ann@example.org", tenant: "dga", job: "job-1" }, now);
+        let running = running_job(&c, "dga", "ann@example.org", T0);
+        let job = |now| engine_token(&c, &k, &cfg, &job_req(&running), now);
         assert_eq!(job(T0).unwrap_err().reason, "owner_mfa_required");
         // once she has one, they run
         let s = ann_signs_in(&c, &k, &cfg, T0);

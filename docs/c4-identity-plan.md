@@ -481,8 +481,9 @@ a test and a deliberate breakage of it that the tests catch:
   outside the sign-in routes**); an engine outage looked like "signed out" (**502 now, from both adapters' user lookup**); credentials differing only
   by spaces at their ends counted as different (**trimmed**) and were compared with `==` (**constant time**); `"disabled": "true"` (text) left a
   user enabled (**refused**).
-- **Deferred to step 7:** a job's engine token (`/internal/engine-token` with `purpose: job`) is not tied to a stored job and its owner. Nothing calls
-  it today; before step 7 makes a caller, the token has to be minted from the job row (owner, workspace, runnable state), not from the request.
+- *Low, fixed on 2026-11-27 (first deferred to step 7):* a job's engine token was not tied to a stored job and its owner. **It is now made out to the
+  stored job's owner and workspace (a request may only repeat them), and only while a worker is running the job (`running`, lease not run out)**:
+  whoever can write a job row or a request can no longer choose whose authority a job runs with. Nothing called it yet.
 
 **Step 6 - sign in through webx-control, next to the old session** (Studio).
 - New `lib/identity.ts` (control client, JWKS cache, verify, revocation cache, one in-flight refresh per session) and config
