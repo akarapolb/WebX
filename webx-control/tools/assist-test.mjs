@@ -104,8 +104,9 @@ try {
   await ask("what is the EGDI", { locale: "en" });
   await ask("what is the EGDI", { locale: "en" });
   check("a run of questions does not read the engine each time (the corpus is kept for a minute)", engineRequests.length === before, `${engineRequests.length - before} more engine requests`);
+  const asked = engineRequests.length;
   const unknown = await ask("what is the EGDI", { tenant: "nobody", locale: "en" });
-  check("an unregistered workspace is answered as the first one, as Strapi does", unknown.status === 200 && engineRequests.some((u) => u.includes("tenant=dga")), JSON.stringify(unknown.json));
+  check("an unregistered workspace is refused: 404, with no engine read for it or any other (decision D9)", unknown.status === 404 && engineRequests.length === asked, JSON.stringify(unknown.json));
   for (const path of ["/api/assist/simplify", "/api/assist/translate", "/api/assist/find"]) {
     const r = await post(path, { text: "x", q: "x" });
     check(`${path} without a model: 503 AI not configured`, r.status === 503 && r.json.error === "AI not configured", JSON.stringify(r));

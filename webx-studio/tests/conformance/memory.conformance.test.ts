@@ -17,5 +17,8 @@ conformanceSuite({
   main: side("dga"),
   other: side("pea"),
   readPublished: async (u, locale, prefix) => engine.readPublished("dga", u, locale ?? "th", "question", prefix),
+  // the reference has no registry: a key nobody has simply has no rows (decision D9)
+  readPublishedAs: async (key, u, locale, prefix) => engine.readPublished(key, u, locale ?? "th", "question", prefix),
+  mainKey: "dga",
   media: { fetchFile: async (url) => engine.serve(url) },
 });

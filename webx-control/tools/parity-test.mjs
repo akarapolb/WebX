@@ -75,7 +75,8 @@ try {
   check("resolve with no tenant: the first tenant", canon((await get(BASE, "/api/tenants/resolve")).json) === canon(resolveBy[keys.json.data[0].key]));
   const refUnknown = await get(REF, "/api/tenants/resolve?tenant=nosuch&locale=th");
   const myUnknown = await get(BASE, "/api/tenants/resolve?tenant=nosuch&locale=th");
-  check("resolve of an unknown tenant: same as the reference (today: the first tenant's answer)", refUnknown.status === myUnknown.status && canon(refUnknown.json) === canon(myUnknown.json), `${refUnknown.status}/${myUnknown.status}`);
+  check("resolve of an unknown tenant: a 404, the same as the reference (decision D9)", refUnknown.status === 404 && myUnknown.status === 404 && canon(refUnknown.json) === canon(myUnknown.json), `${refUnknown.status}/${myUnknown.status} ${JSON.stringify(refUnknown.json)} ${JSON.stringify(myUnknown.json)}`);
+  check("a known key in capitals resolves to that tenant, as in the reference", (await get(BASE, `/api/tenants/resolve?tenant=${keys.json.data[0].key.toUpperCase()}`)).json?.data?.key === keys.json.data[0].key);
 
   // --- admin API
   check("admin without a token: 401", (await send("GET", "/admin/tenants")).status === 401);
@@ -95,14 +96,6 @@ try {
   check("admin deletes it: 200, then 404", (await send("DELETE", "/admin/tenants/newco", TOKEN)).status === 200 && (await send("DELETE", "/admin/tenants/newco", TOKEN)).status === 404);
   check("gone from the public list", !(await get(BASE, "/api/tenants/keys")).json.data.some((t) => t.key === "newco"));
 
-  // --- strict mode (decision D9): an unknown key is a 404, never another tenant's data
-  const strict = spawn(exe, ["--port", String(Number(PORT) + 1), "--db", db, "--strict-tenants"], { stdio: ["ignore", "ignore", "inherit"] });
-  strict.done = new Promise((ok) => strict.on("exit", ok));
-  for (let n = 0; ; n++) { try { if ((await fetch(`http://localhost:${Number(PORT) + 1}/_health`)).ok) break; } catch {} if (n > 100) throw new Error("strict instance failed"); await new Promise((r) => setTimeout(r, 100)); }
-  const sKnown = await get(`http://localhost:${Number(PORT) + 1}`, `/api/tenants/resolve?tenant=${keys.json.data[0].key}`);
-  const sUnknown = await get(`http://localhost:${Number(PORT) + 1}`, "/api/tenants/resolve?tenant=nosuch");
-  check("--strict-tenants: a known tenant still resolves, an unknown key is 404", sKnown.status === 200 && sUnknown.status === 404, `${sKnown.status}/${sUnknown.status}`);
-  strict.kill("SIGTERM"); await strict.done;
 
   // --- the registry is durable
   server.kill("SIGTERM"); await server.done;

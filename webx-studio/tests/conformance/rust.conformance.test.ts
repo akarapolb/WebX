@@ -23,6 +23,14 @@ const configured = Boolean(url && token);
 // the engine takes the token on every call, so there is no ambient session to switch
 const side = (t: string): Side => ({ adapter: createRustAdapter({ baseUrl: url, token: () => t }), as: (fn) => fn() });
 
+/** The public read API, as the build calls it (contract section 6), for any tenant key; no prefix reads every row. */
+async function readAs(key: string, locale: string | undefined, prefix: string) {
+  const q = `tenant=${encodeURIComponent(key)}&locale=${locale}&pagination[pageSize]=100` + (prefix ? `&filters[question][$startsWith]=${encodeURIComponent(prefix)}` : "");
+  const r = await fetch(`${url}/api/faqs?${q}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`read API returned ${r.status}`);
+  return (await r.json()).data ?? [];
+}
+
 conformanceSuite(
   {
     name: `Rust engine at ${url || "(not configured)"}`,
@@ -32,13 +40,9 @@ conformanceSuite(
     locales: ["th", "en"],
     main: side(token),
     other: otherToken ? side(otherToken) : undefined,
-    async readPublished(_uid, locale, prefix) {
-      // the public read API, as the build calls it (contract section 6)
-      const q = `tenant=${tenant}&locale=${locale}&pagination[pageSize]=100&filters[question][$startsWith]=${encodeURIComponent(prefix)}`;
-      const r = await fetch(`${url}/api/faqs?${q}`, { cache: "no-store" });
-      if (!r.ok) throw new Error(`read API returned ${r.status}`);
-      return (await r.json()).data ?? [];
-    },
+    readPublished: (_uid, locale, prefix) => readAs(tenant, locale, prefix),
+    readPublishedAs: (key, _uid, locale, prefix) => readAs(key, locale, prefix),
+    mainKey: tenant,
     // the media library (R4); files are served under the engine's own /uploads
     media: { fetchFile: (u) => fetch(u.startsWith("http") ? u : url + u, { cache: "no-store" }) },
   },

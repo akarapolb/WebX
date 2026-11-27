@@ -3,7 +3,8 @@
 // One engine-neutral set of tests for the content part of the CmsAdapter
 // contract (docs/engine-contract.md sections 2, 3, 4 and 8): create, update,
 // draft and publish, locales, list/filter/sort/paginate, errors, tenant
-// isolation and the media library. Every engine (Strapi, WordPress, the Rust
+// isolation, what a tenant key nobody has reads (decision D9) and the media
+// library. Every engine (Strapi, WordPress, the Rust
 // engine) is run through the same cases by supplying a Harness; the in-memory
 // engine in memory-adapter.ts runs it too, which tests the suite itself with
 // no CMS.
@@ -38,7 +39,7 @@ export type Side = {
 /** Every case, by the id a harness uses to name a gap. */
 export type CaseId =
   | "schema" | "create-get" | "publish" | "update-draft" | "locale-add" | "locale-missing" | "list" | "remove" | "errors"
-  | "validation" | "isolation" | "media-upload" | "media-update" | "media-isolation" | "media-remove";
+  | "validation" | "unknown-tenant" | "isolation" | "media-upload" | "media-update" | "media-isolation" | "media-remove";
 
 export type Harness = {
   name: string;
@@ -60,6 +61,13 @@ export type Harness = {
    * (in this locale, for an engine with locales), whose text field starts
    * with prefix. */
   readPublished(uid: string, locale: string | undefined, prefix: string): Promise<Record<string, any>[]>;
+  /** The same read for any tenant key, named the way a public site names its
+   * tenant (contract section 2). With mainKey, it enables the unknown-tenant
+   * case: the main tenant's key reads its entry, and a key no tenant has reads
+   * nothing at all (decision D9). */
+  readPublishedAs?(tenantKey: string, uid: string, locale: string | undefined, prefix: string): Promise<Record<string, any>[]>;
+  /** The main tenant's key, as readPublishedAs takes it. */
+  mainKey?: string;
   /** The media library (contract section 8), when the engine has one. */
   media?: {
     /** The tenant key given to upload and list. WordPress needs it; the other
@@ -257,6 +265,17 @@ export function conformanceSuite(h: Harness, opts: { skip?: string } = {}): void
       const err = await rejection(publish(id), "publish without the required field");
       assert.equal(err.status, 400);
     });
+
+    test("unknown-tenant", "unknown tenant: a read that names a tenant key nobody has returns nothing, never another tenant's rows (D9)", async () => {
+      const read = h.readPublishedAs!;
+      const e = await create("d9");
+      await publish(e.documentId);
+      assert.ok(textsOf(await read(h.mainKey!, h.uid, L1, run)).includes(`${run}-d9`), "the main tenant's own key reads the published entry");
+      // Read with no prefix: a key that fell back to any tenant, the main one or the default, would show that tenant's rows.
+      for (const key of [`${run}-nobody`, `${h.mainKey}x`]) {
+        assert.deepEqual(await read(key, h.uid, L1, ""), [], `"${key}" is no tenant's key, so it reads nothing at all`);
+      }
+    }, h.readPublishedAs && h.mainKey ? undefined : "this harness cannot name the tenant in a public read");
 
     const denied = (s: number | undefined, what: string) => assert.ok(s === 403 || s === 404, `${what}: expected 403 or 404, got ${s}`);
 

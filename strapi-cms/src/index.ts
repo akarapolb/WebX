@@ -144,7 +144,8 @@ async function stripPolicyFields(strapi: any, user: any, uid: string, data: any)
 async function effectiveTenant(strapi: any) {
   const reqCtx: any = strapi.requestContext?.get?.();
   if (!reqCtx) return null;
-  if (reqCtx.state?.tenantKey) return { key: reqCtx.state.tenantKey, id: reqCtx.state.tenantId };
+  // unknown: the request named a tenant that does not exist (decision D9, src/middlewares/tenant.ts)
+  if (reqCtx.state?.tenantKey) return { key: reqCtx.state.tenantKey, id: reqCtx.state.tenantId, unknown: reqCtx.state.tenantUnknown === true };
   const email = reqCtx.state?.user?.email;
   if (email) return await adminTenantFor(strapi, email);
   return null;
@@ -234,6 +235,12 @@ export default {
       }
 
       if (eff) {
+        // Decision D9: the request named a tenant that does not exist. It has no rows, so a list reads empty
+        // (the tenant filter below matches nothing) and anything aimed at one document, or any write, is a 404.
+        // Never the default tenant's rows, and never a row stamped with no tenant.
+        if (eff.unknown && !(READS.has(action) && !context.params.documentId)) {
+          throw new errors.NotFoundError('Unknown tenant');
+        }
         // Single-document reads (findOne, by documentId) need an explicit
         // ownership check BEFORE falling through to the generic filter
         // merge below — found live writing this session's cross-tenant

@@ -49,15 +49,24 @@ Rules every engine must keep:
   `X-Tenant`, or the Host). Studio requests are scoped by the editor's
   membership (`adminEmails`); super admins are unscoped and must filter
   explicitly (`filter: [{ field: "tenant.key", op: "eq", value }]`).
-- **Unknown or missing tenant.** Strapi resolves the tenant in this order:
-  `?tenant=<key>`, then `X-Tenant`, then a Host that matches a tenant's
-  `domains`, and otherwise falls back to the default tenant (`dga`, or the
-  first active tenant). So an unknown key reads the default tenant's rows in
-  every route, never "everything" and never an empty result. The Rust read
-  engine copies this (the contract test replays it). A stricter rule for the
-  target (an explicit unknown key returns an empty result, and only a request
-  naming no tenant falls back) is open decision D9 in
-  `target-architecture.md`; until it is taken, engines keep Strapi's behaviour.
+- **Unknown or missing tenant (decision D9, since 2026-11-27).** A request
+  that names a tenant (`?tenant=<key>`, or `X-Tenant`; keys are matched
+  lower-cased) gets that tenant or nothing. For a key that no active tenant
+  has, a list is empty, one document or any write is a 404, and the tenant
+  lookup (`/api/tenants/resolve`) is a 404 `NotFoundError`, so a typo never
+  serves another organisation's content. Only a request that names no tenant
+  falls back: to a Host that matches a tenant's `domains`, then to the default
+  tenant (`dga`, or the first active tenant). Strapi does this in its tenant
+  middleware and document middleware (`strapi-cms/src/middlewares/tenant.ts`,
+  `src/index.ts`), the Rust read engine and webx-control's tenant and
+  visitors' routes do the same, and WordPress reads nothing for a key it has
+  no `wtenant` term for (public-site looks the term up first); its own public
+  form routes (`public-forms-api.php`, which D6 moves to webx-control) keep a
+  submission for such a key with no tenant, in no workspace's inbox. The
+  conformance suite's `unknown-tenant` case checks every engine (section 9).
+  public-site renders a page asked for a key that is not registered (the hub's
+  `dgahub` in a CMS without the hub, a static export's `_` placeholder) under
+  that key, with no brand (`getTenant` in `public-site/lib/cms.ts`).
 
 ## 3. Locales
 
@@ -249,8 +258,8 @@ An engine conforms when, for the same content:
 3. **Write API (only for a full engine):** the e2e `studio-roundtrip` and
    `user-management` tests pass against it, and so does the adapter
    conformance suite (`webx-studio/tests/conformance/`: entries, draft and
-   publish, locales, list, errors, validation, tenant isolation and the media
-   library). It passes on the in-memory reference engine, on Strapi (in CI, the
+   publish, locales, list, errors, validation, tenant isolation, a tenant key
+   nobody has (section 2) and the media library). It passes on the in-memory reference engine, on Strapi (in CI, the
    `e2e-cross-tenant-isolation` job runs it against that job's freshly seeded
    Strapi) and on the Rust engine (`rust-engine/tools/conformance.mjs`, in
    CI). An engine that does not meet a case yet names it as a gap in its

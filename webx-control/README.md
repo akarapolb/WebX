@@ -33,13 +33,13 @@ Strapi answers them:
 | `GET /api/tenants/keys` | `{data: [{key, engine, publicTemplate}]}`, in the order the tenants were created |
 | `GET /api/tenants/resolve?tenant=<key>` | `{data: {key, name, brand, contact, social, footerColumns, ...}}` |
 
-A request that names no tenant gets the first one created. An unknown key gets
-the first tenant's answer too, which is what Strapi and every engine do today
-(`../docs/engine-contract.md` section 2) and what public-site's builds rely on
-(its `/dgahub/...` routes ask for a tenant this registry may not list). Start
-with `--strict-tenants` for decision D9: an unknown key is then a **404**, never
-another tenant's data. D9 becomes the default once every engine and the build
-agree. Point a public-site build at it with `WEBX_CONTROL_URL=http://host:1400`;
+A request that names no tenant gets the first one created. A key that no tenant
+has is a **404**, never another tenant's data (decision D9, since 2026-11-27,
+`../docs/engine-contract.md` section 2), as in Strapi and the Rust engine; keys
+are matched lower-cased. public-site renders a page asked for such a key (its
+`/dgahub/...` routes, when this registry has no hub) under that key, with no
+brand. The `--strict-tenants` switch that turned this on is gone; it is the
+only behaviour, and the flag is ignored. Point a public-site build at it with `WEBX_CONTROL_URL=http://host:1400`;
 without that variable public-site reads the tenant routes from the content
 engine as before. The browser's own tenant lookup (`useTenantContact`) follows
 public-site's `PUBLIC_CONTROL_URL` when that is set (it is a visitors' route, below), and the CMS address until then.
@@ -47,7 +47,7 @@ public-site's `PUBLIC_CONTROL_URL` when that is set (it is a visitors' route, be
 ## Configuration
 
 Flags: `--db control.db` (the SQLite file), `--port 1400`, `--host 127.0.0.1` (the address it listens on: loopback unless told
-otherwise, so give `0.0.0.0` in a container or when a proxy on another host reaches it), `--strict-tenants` (decision D9),
+otherwise, so give `0.0.0.0` in a container or when a proxy on another host reaches it),
 `--token-ttl 900` (seconds a signed-in user's token lives), and for sessions `--session-idle 28800` (a session nobody refreshed for this long
 ends), `--session-max 86400` (a session ends this long after it began, however busy), `--refresh-grace 20` (the refresh token that was just
 replaced still works this long) and `--engine-token-ttl 60` (an engine's acting token). `webx-control keygen` prints 32 random bytes in
@@ -94,8 +94,8 @@ What a visitor's browser calls without signing in. Anonymous, rate-limited per a
 
 The choice is stored as given in the `consent-log` records collection, stamped with the workspace; text is cut at its limit
 (`path` and `userAgent` at 512 characters), unknown fields are dropped, `categories` must be an object of at most 2 KB, an
-`action` is required, and a body past 16 KB is refused (413). A tenant that is not registered is filed under the first one, as
-Strapi does, or refused (404) with `--strict-tenants`. One address may log 30 times a minute (429 after that). The address is the
+`action` is required, and a body past 16 KB is refused (413). A tenant that is not registered is refused (404, decision D9); a
+choice that names none is filed under the first. One address may log 30 times a minute (429 after that). The address is the
 one your own proxy added to `X-Forwarded-For` (the last entry when one proxy stands in front; see `WEBX_TRUSTED_PROXIES`), else the
 connecting address; an entry the caller wrote to its left is never believed, and an IPv6 address counts as its /64.
 **Search statistics** (a port of `strapi-cms/src/api/search-stat`): one row per workspace, language and normalised query, with
@@ -131,7 +131,7 @@ services with their slugs. Test: `node tools/assist-test.mjs` (a fake engine and
 and rules). A post is rate-limited (30 a minute per address, its own allowance), checked against the captcha (a 400 named
 `CaptchaError`, the name the public site looks for; `WEBX_CAPTCHA=off` turns it off for development), then cut to the fields the
 form has (text at its limit, e-mail checked, `extra` an object of at most 4 KB, a body past 64 KB refused) and stored under the
-workspace in the URL (an unregistered one is filed under the first, or refused with `--strict-tenants`). **What the server owns
+workspace in the URL (an unregistered one is refused with a 404, decision D9). **What the server owns
 cannot be set by a visitor:** a complaint's or application's `stage` (always 0) and `steps`, its reference `DGA-CMP-<Buddhist year>-<6
 digits>` (an application's `DGA-JOB-...`), a registration's `verified` (always false) and `username` (made from the e-mail's local
 part and 4 digits; a password is never stored), a contact message's `handled`. An anonymous complaint is stored with no name, e-mail

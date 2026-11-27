@@ -27,6 +27,14 @@ async function login(email: string, password: string): Promise<string> {
   if (!r.ok) throw new Error(`conformance login failed for ${email}: ${"status" in r ? r.status : "Strapi unreachable"}`);
   return r.token;
 }
+/** The public read API, as the build calls it (contract section 6), for any tenant key; no prefix reads every row. */
+async function readAs(key: string, locale: string | undefined, prefix: string) {
+  const q = `tenant=${encodeURIComponent(key)}&locale=${locale}&pagination[pageSize]=100` + (prefix ? `&filters[question][$startsWith]=${encodeURIComponent(prefix)}` : "");
+  const r = await fetch(`${url}/api/faqs?${q}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`read API returned ${r.status}`);
+  return (await r.json()).data ?? [];
+}
+
 const side = (which: "main" | "other"): Side => ({
   adapter: strapiAdapter,
   as: (fn) => {
@@ -49,13 +57,9 @@ conformanceSuite(
       tokens.main = await login(env("CONFORMANCE_MAIN_EMAIL"), env("CONFORMANCE_MAIN_PASSWORD"));
       if (env("CONFORMANCE_OTHER_EMAIL")) tokens.other = await login(env("CONFORMANCE_OTHER_EMAIL"), env("CONFORMANCE_OTHER_PASSWORD"));
     },
-    async readPublished(_uid, locale, prefix) {
-      // The public read API, as the build calls it (contract section 6).
-      const q = `tenant=${tenant}&locale=${locale}&pagination[pageSize]=100&filters[question][$startsWith]=${encodeURIComponent(prefix)}`;
-      const r = await fetch(`${url}/api/faqs?${q}`, { cache: "no-store" });
-      if (!r.ok) throw new Error(`read API returned ${r.status}`);
-      return (await r.json()).data ?? [];
-    },
+    readPublished: (_uid, locale, prefix) => readAs(tenant, locale, prefix),
+    readPublishedAs: (key, _uid, locale, prefix) => readAs(key, locale, prefix),
+    mainKey: tenant,
     // the media library: Strapi's Upload plugin plus media-meta for the tenant; files are served under /uploads
     media: { fetchFile: (u) => fetch(u.startsWith("http") ? u : url + u, { cache: "no-store" }) },
   },

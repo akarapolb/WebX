@@ -4,14 +4,14 @@
 //! and /api/tenants/resolve served, and has an admin API to manage tenants.
 //! Identity, bookkeeping and the visitors' runtime routes come in C3 to C5.
 //!
-//!   webx-control [--db control.db] [--port 1400] [--host 127.0.0.1] [--strict-tenants]   (admin API needs WEBX_CONTROL_ADMIN_TOKEN)
+//!   webx-control [--db control.db] [--port 1400] [--host 127.0.0.1]   (admin API needs WEBX_CONTROL_ADMIN_TOKEN)
 //!   webx-control import --snapshot ../rust-engine/snapshot/snapshot.json [--db control.db]
 //!
 //! Public (no auth):
 //!   GET /api/tenants/keys                        -> {data: [{key, engine, publicTemplate}]}
 //!   GET /api/tenants/resolve?tenant=<key>        -> {data: {key, name, brand, contact, ...}}
-//!       no tenant named: the first tenant. An unknown key gets the first tenant's answer too
-//!       (what Strapi does today), or a 404 with --strict-tenants (decision D9)
+//!       no tenant named: the first tenant. A key no tenant has is a 404, never another tenant's answer (decision D9;
+//!       the same for every visitors' route below that names a tenant)
 //!   POST /api/consent-logs?tenant=<key>          -> 201; a visitor's cookie choice, rate-limited (see visitors.rs)
 //!   POST /api/search-stats/log?tenant=<key>      -> 204; what a visitor searched for, counted anonymously (see search_stats.rs)
 //!   GET  /api/captcha                            -> {data: {id, question}}; a sum the form routes ask to be answered (see captcha.rs)
@@ -74,9 +74,6 @@ struct App {
     service: Option<[u8; 32]>,
     /// public tenant requests answered (shown by /_health, so a test can tell it was used)
     served: std::sync::atomic::AtomicU64,
-    /// --strict-tenants: an unknown tenant key is a 404 (decision D9); otherwise it gets the
-    /// first tenant's answer, as Strapi and every engine do today (engine-contract.md, section 2)
-    strict: bool,
     /// signs the tokens issued for signed-in users, and the key before it while a rotation settles (decisions D10, D11)
     keys: identity::Keys,
     /// SHA-256 of the broker credential (WEBX_CONTROL_AUTH_TOKEN), held by Studio alone: it makes tokens and sessions. None: the
@@ -224,11 +221,10 @@ async fn public(State(app): State<Shared>, Path(what): Path<String>, RawQuery(ra
             Err(m) => fail(m),
         },
         "resolve" => {
-            let asked = query_param(raw.as_deref(), "tenant").filter(|t| !t.is_empty());
-            let known = match &asked { Some(k) => matches!(registry::get(&conn, k), Ok(Some(_))), None => false };
-            let key = match asked {
-                Some(k) if known || app.strict => k,
-                _ => match registry::default_key(&conn) { Some(k) => k, None => return not_found() },
+            // decision D9: a key no tenant has resolves to nothing (registry::resolve finds no row: 404)
+            let key = match query_param(raw.as_deref(), "tenant").filter(|t| !t.is_empty()) {
+                Some(k) => k.to_lowercase(), // as Strapi matches it
+                None => match registry::default_key(&conn) { Some(k) => k, None => return not_found() },
             };
             match registry::resolve(&conn, &key) {
                 Ok(Some(v)) => Json(json!({"data": v})).into_response(),
@@ -242,14 +238,14 @@ async fn public(State(app): State<Shared>, Path(what): Path<String>, RawQuery(ra
 
 /// POST /api/consent-logs?tenant=<key>: a visitor's cookie choice, kept as evidence (decision D12). Anonymous and
 /// rate-limited per address (visitors::client_ip: the connecting address, or what our own proxy put in X-Forwarded-For). A tenant that is not registered
-/// is filed under the first tenant, as Strapi does, or refused with --strict-tenants.
+/// is refused (404, decision D9); a request that names none is filed under the first tenant.
 async fn consent_log(State(app): State<Shared>, headers: HeaderMap, RawQuery(raw): RawQuery, body: Bytes) -> Response {
     if let Err(r) = rate_limited(&app, "consent", &headers) {
         return r;
     }
     let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
     let conn = app.conn.lock().unwrap();
-    let key = match tenant_for(&app, &conn, raw.as_deref()) { Ok(k) => k, Err(r) => return r };
+    let key = match tenant_for(&conn, raw.as_deref()) { Ok(k) => k, Err(r) => return r };
     let doc = match visitors::consent_document(&v, &key) { Ok(d) => d, Err(m) => return bad(m) };
     match records::create(&conn, "consent-log", &doc, &now_iso()) {
         Ok(row) => (StatusCode::CREATED, Json(json!({"data": {"documentId": row["documentId"], "createdAt": row["createdAt"]}}))).into_response(),
@@ -286,7 +282,7 @@ async fn search_stat_log(State(app): State<Shared>, headers: HeaderMap, RawQuery
     }
     let v: Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => return bad("body is not JSON".into()) };
     let conn = app.conn.lock().unwrap();
-    let key = match tenant_for(&app, &conn, raw.as_deref()) { Ok(k) => k, Err(r) => return r };
+    let key = match tenant_for(&conn, raw.as_deref()) { Ok(k) => k, Err(r) => return r };
     let Some(query) = search_stats::normalise_query(v.get("q").and_then(Value::as_str).unwrap_or("")) else { return StatusCode::NO_CONTENT.into_response() };
     let locale = if v.get("locale").and_then(Value::as_str) == Some("en") { "en" } else { "th" };
     let results = match v.get("results") {
@@ -367,7 +363,7 @@ fn form_submit(app: &App, collection: &'static str, headers: &HeaderMap, raw: Op
     }
     let cipher = match cipher_for(app, collection) { Ok(Some(p)) => p, Ok(None) => return fail("no cipher for a form collection".into()), Err(r) => return r };
     let conn = app.conn.lock().unwrap();
-    let key = match tenant_for(app, &conn, raw) { Ok(k) => k, Err(r) => return r };
+    let key = match tenant_for(&conn, raw) { Ok(k) => k, Err(r) => return r };
     let mut doc = match forms::clean(collection, &v) { Ok(d) => d, Err(m) => return bad(m) };
     doc.insert("tenantKey".into(), json!(key));
     let plain = doc.clone();
@@ -469,7 +465,7 @@ async fn form_submit_file(app: &App, collection: &'static str, field: &str, file
         None => Value::Object(text.iter().filter(|(k, _)| k.as_str() != "captchaId" && k.as_str() != "captchaAnswer").map(|(k, v)| (k.clone(), json!(v))).collect()),
     };
     let conn = app.conn.lock().unwrap();
-    let key = match tenant_for(app, &conn, raw) { Ok(k) => k, Err(r) => return r };
+    let key = match tenant_for(&conn, raw) { Ok(k) => k, Err(r) => return r };
     let mut doc = match forms::clean(collection, &data) { Ok(d) => d, Err(m) => return bad(m) };
     doc.insert("tenantKey".into(), json!(key));
     let plain = doc.clone();
@@ -559,7 +555,7 @@ fn form_track(app: &App, collection: &'static str, headers: &HeaderMap, raw: Opt
         return bad("ref is required".into());
     }
     let conn = app.conn.lock().unwrap();
-    let key = match tenant_for(app, &conn, raw) { Ok(k) => k, Err(r) => return r };
+    let key = match tenant_for(&conn, raw) { Ok(k) => k, Err(r) => return r };
     let shown: &[&str] = if collection == "complaint" { &["ref", "type", "subject", "date", "stage", "steps"] } else { &["ref", "jobId", "position", "date", "stage"] };
     match records::find_by_ref(&conn, collection, &key, &reference) {
         Ok(Some(row)) => {
@@ -592,11 +588,11 @@ fn body_text(v: &Value, key: &str, max: usize) -> String {
     v.get(key).and_then(Value::as_str).unwrap_or("").trim().chars().take(max).collect()
 }
 
-/// The engine and address of the workspace a visitors' route is for: the one named in ?tenant= (the first when it names none or
-/// an unregistered one, as Strapi does; a 404 with --strict-tenants), read under the database lock which is then let go.
+/// The engine and address of the workspace a visitors' route is for: the one named in ?tenant= (the first when it names none; a
+/// 404 when it names one that is not registered, decision D9), read under the database lock which is then let go.
 fn engine_of(app: &App, raw: Option<&str>) -> Result<(String, String, Option<String>), Response> {
     let conn = app.conn.lock().unwrap();
-    let key = tenant_for(app, &conn, raw)?;
+    let key = tenant_for(&conn, raw)?;
     match registry::get(&conn, &key) {
         Ok(Some(t)) => Ok((key, t.engine, t.engine_url)),
         // the tenant fallback found a key the registry then lost, or the registry is empty
@@ -741,15 +737,14 @@ fn rate_limited_to(app: &App, route: &str, headers: &HeaderMap, limit: u32) -> R
     }
 }
 
-/// The workspace a visitors' route files its data under: the one named by ?tenant= when it is registered; otherwise the first
-/// tenant, as Strapi does, or a 404 with --strict-tenants (decision D9).
-fn tenant_for(app: &App, conn: &rusqlite::Connection, raw: Option<&str>) -> Result<String, Response> {
-    let asked = query_param_exact(raw, "tenant").filter(|t| !t.is_empty());
-    let known = match &asked { Some(k) => matches!(registry::get(conn, k), Ok(Some(_))), None => false };
-    match asked {
-        Some(k) if known => Ok(k),
-        Some(_) if app.strict => Err(not_found()),
-        _ => registry::default_key(conn).ok_or_else(not_found),
+/// The workspace a visitors' route files its data under, or reads it from: the one named by ?tenant= (matched lower-cased, as
+/// Strapi does), and the first tenant when the request names none. A key no tenant has is a 404 (decision D9): never filed under,
+/// or answered from, another workspace.
+fn tenant_for(conn: &rusqlite::Connection, raw: Option<&str>) -> Result<String, Response> {
+    match query_param_exact(raw, "tenant").filter(|t| !t.is_empty()).map(|t| t.to_lowercase()) {
+        Some(k) if matches!(registry::get(conn, &k), Ok(Some(_))) => Ok(k),
+        Some(_) => Err(not_found()),
+        None => registry::default_key(conn).ok_or_else(not_found),
     }
 }
 
@@ -1566,7 +1561,7 @@ async fn main() {
     let pii_on = pii.is_some();
     let mailer = mailer::Mailer::from_env().unwrap_or_else(|e| panic!("{e}"));
     let mail_on = mailer.is_some();
-    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), strict: std::env::args().any(|a| a == "--strict-tenants"), keys, auth: auth_hash, engine: engine_hash, sessions: session_config, secrets, limiter: Default::default(), proxies: std::env::var("WEBX_TRUSTED_PROXIES").ok().filter(|v| !v.trim().is_empty()).map_or(1, |v| v.trim().parse().unwrap_or_else(|_| panic!("WEBX_TRUSTED_PROXIES must be a number (0 when no proxy is in front)"))), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
+    let state: Shared = Arc::new(App { conn: Mutex::new(conn), admin: admin_hash, service: service_hash, served: Default::default(), keys, auth: auth_hash, engine: engine_hash, sessions: session_config, secrets, limiter: Default::default(), proxies: std::env::var("WEBX_TRUSTED_PROXIES").ok().filter(|v| !v.trim().is_empty()).map_or(1, |v| v.trim().parse().unwrap_or_else(|_| panic!("WEBX_TRUSTED_PROXIES must be a number (0 when no proxy is in front)"))), origins: visitors::allowed_origins(&std::env::var("WEBX_PUBLIC_SITE_ORIGINS").unwrap_or_default()), captchas: Default::default(), captcha_on: std::env::var("WEBX_CAPTCHA").map_or(true, |v| v != "off"), pii, notify_to: std::env::var("WEBX_COMPLAINT_NOTIFY_EMAIL").ok().filter(|t| !t.trim().is_empty()), assist: Arc::new(assist::Settings::from_env()) });
     let state_for_log = state.clone();
     {
         let k = &state.keys;

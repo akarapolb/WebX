@@ -138,16 +138,16 @@ export async function listTenants(): Promise<TenantKeyInfo[]> {
  * site under DGA's name/logo/colors, with the build still exiting 0. Found
  * in a full-codebase audit (2026-09-12).
  *
- * Strapi's own /api/tenants/resolve controller (strapi-cms's tenant
- * controller) already falls back to the "dga" tenant itself when a
- * requested key doesn't match any tenant, and only 404s if there are
- * literally zero active tenants configured system-wide — so in practice a
- * null here has only ever meant "the request to Strapi itself failed"
- * (network error, non-2xx, malformed JSON), never a legitimate "this key
- * doesn't exist" signal from a healthy Strapi. Throwing here instead is
- * safe for exactly that reason: it can't accidentally turn a real
- * unknown-tenant case into a broken build, because that case was never
- * routed through here to begin with. */
+ * A key that no tenant has is different since decision D9 (2026-11-27):
+ * the tenant routes (Strapi's tenant controller, webx-control, the Rust
+ * engine) answer it with a 404 NotFoundError instead of the "dga" tenant's
+ * record, and some pages do ask for one: the hub's /dgahub pages ask for
+ * "dgahub" in a CMS that may not have it (WebX's own CI, any WebX without
+ * the hub), and a static export's "_" placeholder path asks for "_". Such
+ * a key gets a bare record, its key as its name and no brand or contact,
+ * so the page renders under its own name, never another organisation's.
+ * Anything else (network error, any other status, a 404 that is not the
+ * CMS's NotFoundError) still throws, as above. */
 export async function getTenant(key: string): Promise<Tenant> {
   const url = TENANTS + "/api/tenants/resolve?tenant=" + encodeURIComponent(key) + "&locale=th";
   let r: Response;
@@ -155,6 +155,10 @@ export async function getTenant(key: string): Promise<Tenant> {
     r = await fetch(url, { headers: { Accept: "application/json" } });
   } catch (e) {
     throw new Error("[cms] getTenant(" + key + "): Strapi unreachable at " + STRAPI + " — " + (e as Error).message);
+  }
+  if (r.status === 404) {
+    const body = await r.json().catch(() => null);
+    if (body?.error?.name === "NotFoundError") return { key, name: key };
   }
   if (!r.ok) throw new Error("[cms] getTenant(" + key + "): Strapi returned HTTP " + r.status);
   const j = await r.json();

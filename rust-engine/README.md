@@ -120,7 +120,7 @@ this change has no `unique` list: export again. The Studio conformance suite
 ### A tenant that lives on this engine (R5)
 
 A tenant with a token is a tenant of the engine: the read API serves its rows
-instead of falling back to the default tenant. `tools/rust-tenant-test.mjs`
+(a key that no tenant has reads nothing, decision D9). `tools/rust-tenant-test.mjs`
 runs the whole story: the hub tenant `dgahub` gets its pages (Thai and English),
 FAQs and a news article through `/write` only, is registered in
 `../webx-control` with engine `rust`, and a public-site build (tenants from
@@ -134,8 +134,10 @@ Each entry is exported with "one level inside" populated (media, relations,
 and components / dynamic zones with `populate=*` inside), which is the
 deepest shape public-site asks for. Per request the engine:
 
-1. picks the rows for `?tenant` and `?locale` (unknown or missing tenant →
-   the default tenant, `dga`, exactly like Strapi's tenant middleware);
+1. picks the rows for `?tenant` and `?locale` (keys lower-cased; a missing
+   tenant → the default tenant, `dga`; a key that no tenant has → no rows, and
+   `/api/tenants/resolve` → 404, exactly like Strapi's tenant middleware since
+   decision D9);
 2. applies `filters` (`$eq`, `$ne`, `$null`, `$notNull`, `$or`, `$and`,
    relation paths such as `tenant.key`), compared like SQLite does;
 3. sorts (`sort=field:asc|desc`, several allowed; NULL first ascending),

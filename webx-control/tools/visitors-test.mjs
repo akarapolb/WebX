@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // C5, the visitors' routes (decision D12): the real webx-control binary, over HTTP, called the way a visitor's
-// browser calls it. A cookie choice is logged for a registered workspace, an unknown one is filed under the
-// first tenant (or refused with --strict-tenants), bad bodies are refused, an address that logs too much is
+// browser calls it. A cookie choice is logged for a registered workspace, an unknown one is refused (404, decision
+// D9) and one with no workspace is filed under the first tenant, bad bodies are refused, an address that logs too much is
 // slowed, and what was logged can be read back by the control plane's records API.
 //
 //   node tools/visitors-test.mjs [--port 1407]
@@ -54,8 +54,8 @@ try {
   check("it is stored as given, for the workspace in the URL", stored.tenantKey === "pea" && stored.consentId === "c-1" && stored.action === "accept_all" && stored.categories.analytics === true && stored.path === "/pea" && stored.createdAt, JSON.stringify(stored));
 
   const u = await call("POST", "/api/consent-logs?tenant=nobody", { body: consent, headers: { "x-forwarded-for": "10.0.0.2" } });
-  const filed = (await call("GET", `/internal/records/consent-log/${u.json.data.documentId}`, { token: SERVICE })).json.data;
-  check("an unregistered tenant is filed under the first one, as Strapi does", u.status === 201 && filed.tenantKey === "dga", JSON.stringify(filed));
+  check("an unregistered tenant is refused: 404, never filed under another (decision D9)", u.status === 404 && u.json?.error?.name === "NotFoundError", JSON.stringify(u.json));
+  check("the tenant lookup refuses it the same way, and reads a key in capitals as that workspace", (await call("GET", "/api/tenants/resolve?tenant=nobody")).status === 404 && (await call("GET", "/api/tenants/resolve?tenant=PEA")).json?.data?.key === "pea");
   check("no tenant named: the first one too", (await call("POST", "/api/consent-logs", { body: consent, headers: { "x-forwarded-for": "10.0.0.2" } })).status === 201);
 
   const long = "x".repeat(3000);
@@ -113,8 +113,8 @@ try {
   check("it filters by language", (await peaStats(`&filter=${encodeURIComponent("locale:eq:en")}`)).data.every((r) => r.locale === "en"));
   check("and pages with a total", (await stats(`&filter=${encodeURIComponent("tenantKey:eq:pea")}&page=2&pageSize=2`)).meta.pagination.pageSize === 2);
   check("a search with no tenant is filed under the first workspace", (await search(null, { q: "no tenant", results: 1 })).status === 204 && (await stats(`&filter=${encodeURIComponent("tenantKey:eq:dga")}`)).data.some((r) => r.query === "no tenant"));
-  check("an unregistered tenant too, as Strapi does", (await search("nobody", { q: "stranger", results: 1 })).status === 204 && (await stats(`&filter=${encodeURIComponent("tenantKey:eq:dga")}`)).data.some((r) => r.query === "stranger"));
-  check("another workspace's statistics are separate", !(await stats(`&filter=${encodeURIComponent("tenantKey:eq:pea")}`)).data.some((r) => r.query === "stranger"));
+  check("an unregistered tenant is refused: 404, as Strapi does (decision D9)", (await search("nobody", { q: "stranger", results: 1 })).status === 404);
+  check("and its search is counted nowhere", !(await stats()).data.some((r) => r.query === "stranger"));
   check("a body that is not JSON: 400", (await call("POST", "/api/search-stats/log?tenant=pea", { body: "nope", headers: { "x-forwarded-for": "10.1.0.2" } })).status === 400);
   check("a body past 4 KB is refused: 413", (await search("pea", { q: "x", pad: "y".repeat(5000) }, "10.1.0.3")).status === 413);
   check("the statistics cannot be changed through the records API: 404", (await call("POST", "/internal/records/search-stat", { token: SERVICE, body: { data: { query: "forged" } } })).status === 404);
@@ -157,21 +157,20 @@ try {
   const pea = (await sum("?tenant=pea")).json.data;
   check("the consent summary counts a workspace's choices by kind", pea.total === 3 && pea.accept === 3 && pea.reject === 0 && pea.custom === 0, JSON.stringify(pea));
   const dga = (await sum("?tenant=dga")).json.data;
-  check("the other workspace has its own numbers", dga.total === 35 && dga.accept === 34 && dga.custom === 1, JSON.stringify(dga));
+  check("the other workspace has its own numbers", dga.total === 34 && dga.accept === 33 && dga.custom === 1, JSON.stringify(dga));
   check("no tenant: every workspace together", (await sum()).json.data.total === pea.total + dga.total);
   check("a window that has not started yet has none", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 0);
   check("a window that ended before has none", (await sum("?before=2020-01-01T00:00:00Z")).json.data.total === 0);
-  check("a window around now has them all", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&before=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 35);
+  check("a window around now has them all", (await sum(`?tenant=dga&from=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&before=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`)).json.data.total === 34);
   check("a bad time is refused: 400", (await sum("?from=yesterday")).status === 400);
   check("an unknown parameter is refused: 400", (await sum("?colour=red")).status === 400);
   check("the summary needs the service token: 401", (await call("GET", "/internal/consent/summary")).status === 401);
 
-  // the same log survives a restart, and --strict-tenants refuses an unknown workspace
+  // the same log survives a restart
   await down();
-  await up(["--strict-tenants"]);
+  await up();
   check("the log is still there after a restart", (await logs()).meta.pagination.total >= 4);
-  check("with --strict-tenants an unknown workspace is refused: 404", (await call("POST", "/api/consent-logs?tenant=nobody", { body: consent, headers: { "x-forwarded-for": "10.0.1.1" } })).status === 404);
-  check("a registered one is still accepted", (await call("POST", "/api/consent-logs?tenant=dga", { body: consent, headers: { "x-forwarded-for": "10.0.1.1" } })).status === 201);
+  check("a registered workspace is still accepted", (await call("POST", "/api/consent-logs?tenant=dga", { body: consent, headers: { "x-forwarded-for": "10.0.1.1" } })).status === 201);
 
   // a deployment names its public sites in WEBX_PUBLIC_SITE_ORIGINS (a trailing slash is ignored), or "*" for any
   await down();

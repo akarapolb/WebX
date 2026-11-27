@@ -21,6 +21,8 @@ const warn = (what: string) => (e: any) => {
 export default {
   async summary(ctx: any) {
     const strapi = (global as any).strapi;
+    // a tenant key nobody has: nothing to count (D9), and never "every tenant", which is what no tenant id means here
+    if (ctx.state?.tenantUnknown) return ctx.notFound('unknown tenant');
     const tenantId: number | undefined = ctx.state?.tenantId;
     const tenantKey: string | undefined = ctx.state?.tenantKey;
     const scope = tenantId ? { tenant: tenantId } : {};
@@ -132,6 +134,7 @@ export default {
   async report(ctx: any) {
     const strapi = (global as any).strapi;
     const XLSX = require('xlsx');
+    if (ctx.state?.tenantUnknown) return ctx.notFound('unknown tenant'); // as in summary (D9)
     const tenantId: number | undefined = ctx.state?.tenantId;
     const tenantKey: string | undefined = ctx.state?.tenantKey;
     const scope = tenantId ? { tenant: tenantId } : {};

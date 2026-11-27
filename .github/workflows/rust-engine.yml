@@ -123,8 +123,9 @@ jobs:
       # No WordPress here: the ORST and Royal Society pages build from their
       # fallbacks, the same way in both builds.
       # --no-check-export: the DGA hub's content is seeded by DGA-WebPublic,
-      # not here, so in this fresh Strapi the hub routes render "not found"
-      # pages and fall back to other tenants' rows, which check-export rejects.
+      # not here, so in this fresh Strapi the hub's home pages render "not
+      # found" (since decision D9 the hub reads nothing rather than other
+      # tenants' rows), which check-export rejects.
       # check-export still runs in the hub's own builds; this job compares the
       # engine's build with Strapi's.
       - name: Build test (record, export, contract test, build, diff)

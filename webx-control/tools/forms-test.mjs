@@ -210,7 +210,8 @@ try {
   check("a body that is not JSON: 400", (await call("POST", "/api/complaints?tenant=pea", { body: "nope", headers: { "x-forwarded-for": ip() } })).status === 400);
   check("a body past 64 KB is refused: 413", (await call("POST", "/api/complaints?tenant=pea", { body: { data: { detail: "x".repeat(70_000) } }, headers: { "x-forwarded-for": ip() } })).status === 413);
   check("long text is cut at its limit", (await read("complaint", (await submit("complaints", { detail: "ก".repeat(12_000) })).json.data.documentId)).detail.length === 10_000);
-  check("an unregistered workspace is filed under the first, as Strapi does", (await read("complaint", (await submit("complaints", { subject: "stranger" }, { tenant: "nobody" })).json.data.documentId)).tenantKey === "dga");
+  check("an unregistered workspace is refused: 404, never filed under another (decision D9)", (await submit("complaints", { subject: "stranger" }, { tenant: "nobody" })).status === 404);
+  check("a registered one is filed under its own key", (await read("complaint", (await submit("complaints", { subject: "for dga" }, { tenant: "dga" })).json.data.documentId)).tenantKey === "dga");
 
   // ---- Studio's records API: edit, create, import, filter
   const upd = await admin("PUT", `complaint/${c1.json.data.documentId}`, { data: { stage: 2, steps: [{ at: "2026-11-26", note: "รับเรื่อง" }], name: "สมชาย แก้ไข" } });

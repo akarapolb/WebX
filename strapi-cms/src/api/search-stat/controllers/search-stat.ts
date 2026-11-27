@@ -21,6 +21,8 @@ export default factories.createCoreController('api::search-stat.search-stat', ({
       rec.n++;
     } else hits.set(ip, { n: 1, t: now });
 
+    // a tenant key nobody has is a 404, as in webx-control (decision D9); never counted under another tenant
+    if (ctx.state?.tenantUnknown) { ctx.status = 404; ctx.body = { error: 'unknown tenant' }; return; }
     const tenantId = ctx.state?.tenantId;
     if (!tenantId) { ctx.status = 400; ctx.body = { error: 'tenant required' }; return; }
     const b = ctx.request.body || {};

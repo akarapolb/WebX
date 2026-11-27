@@ -72,12 +72,25 @@ const side = (which: "main" | "other", tenant: string): Side => ({
 });
 
 let mainTerm: number | undefined;
-/** The main tenant's wtenant term id, as the public site looks it up. */
-async function termOf(tenant: string): Promise<number> {
+/** A tenant key's wtenant term id, as the public site looks it up; null when WordPress has no such term. */
+async function termId(tenant: string): Promise<number | null> {
   const r = await fetch(`${url}/wp/v2/wtenant?slug=${encodeURIComponent(tenant)}`, { cache: "no-store" });
-  const [t] = r.ok ? await r.json() : [];
-  if (!t?.id) throw new Error(`no wtenant term for ${tenant} (status ${r.status})`);
-  return t.id;
+  if (!r.ok) throw new Error(`wtenant lookup for ${tenant} returned ${r.status}`);
+  const [t] = await r.json();
+  return t?.id ?? null;
+}
+async function termOf(tenant: string): Promise<number> {
+  const id = await termId(tenant);
+  if (id == null) throw new Error(`no wtenant term for ${tenant}`);
+  return id;
+}
+
+/** What a visitor's request gets for a tenant key: published posts only, no credential. */
+async function readAs(term: number, prefix: string) {
+  const q = `wtenant=${term}&per_page=100` + (prefix ? `&search=${encodeURIComponent(prefix)}` : "");
+  const r = await fetch(`${url}/wp/v2/${REST_BASE}?${q}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`read API returned ${r.status}`);
+  return ((await r.json()) as any[]).map((p) => ({ ...p, title: p.title?.rendered ?? "" }));
 }
 
 conformanceSuite(
@@ -94,13 +107,14 @@ conformanceSuite(
       if (env("CONFORMANCE_WP_OTHER_USER")) tokens.other = await login(env("CONFORMANCE_WP_OTHER_USER"), env("CONFORMANCE_WP_OTHER_APP_PASSWORD"));
       mainTerm = await termOf(MAIN);
     },
-    async readPublished(_uid, _locale, prefix) {
-      // what a visitor's request gets: published posts only, no credential
-      const q = `wtenant=${mainTerm}&per_page=100&search=${encodeURIComponent(prefix)}`;
-      const r = await fetch(`${url}/wp/v2/${REST_BASE}?${q}`, { cache: "no-store" });
-      if (!r.ok) throw new Error(`read API returned ${r.status}`);
-      return ((await r.json()) as any[]).map((p) => ({ ...p, title: p.title?.rendered ?? "" }));
+    readPublished: (_uid, _locale, prefix) => readAs(mainTerm!, prefix),
+    // WordPress has no tenant lookup of its own: public-site turns a key into a wtenant term and reads nothing when there is
+    // none (public-site/lib/cms.ts, getWpEntries), so a key WordPress has no term for reads nothing here too
+    async readPublishedAs(key, _uid, _locale, prefix) {
+      const term = await termId(key);
+      return term == null ? [] : readAs(term, prefix);
     },
+    mainKey: MAIN,
     media: {
       tenantKey: MAIN,
       otherTenantKey: OTHER,

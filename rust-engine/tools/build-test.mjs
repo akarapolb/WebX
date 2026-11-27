@@ -58,9 +58,10 @@ async function stop(p) { p.kill("SIGTERM"); await p.done; }
 // says, keyed by URL; both builds use the same URL, so without clearing it the
 // second build would be served the first build's (Strapi's) answers.
 // --no-check-export: build without public-site's check-export step. For a
-// Strapi with no DGA hub content (CI): the hub routes then render "not found"
-// pages and fall back to other tenants' rows, which check-export rightly
-// rejects. The comparison with Strapi's build is what this test is for.
+// Strapi with no DGA hub content (CI): the hub's home pages then render as
+// "not found", which check-export rightly rejects (before decision D9 the hub
+// also showed other tenants' rows; now it reads nothing). The comparison with
+// Strapi's build is what this test is for.
 const NO_CHECK = process.argv.includes("--no-check-export");
 const build = async (dist) => {
   rmSync(join(site, dist), { recursive: true, force: true });

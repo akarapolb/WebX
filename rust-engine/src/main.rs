@@ -47,10 +47,11 @@ impl Snapshot {
         Ok(Snapshot { doc, default_tenant, tenants })
     }
 
-    /// Strapi's tenant middleware: ?tenant=<key> when it is a known tenant,
-    /// otherwise the default ("dga").
+    /// Strapi's tenant middleware under decision D9 (engine-contract.md, section 2): the tenant ?tenant=<key>
+    /// names, even one no tenant has, whose rows are then none, so the read is empty and never another
+    /// tenant's; the default ("dga") only when the request names no tenant.
     fn tenant(&self, asked: Option<&str>) -> String {
-        match asked { Some(t) if self.tenants.iter().any(|k| k == t) => t.to_string(), _ => self.default_tenant.clone() }
+        match asked { Some(t) if !t.is_empty() => t.to_string(), _ => self.default_tenant.clone() }
     }
 
     fn attrs_of_type(&self, plural: &str) -> Option<&Map<String, Value>> {
@@ -374,7 +375,7 @@ mod tests {
             "data": {"pages": {"hub": {"th": [
                 {"id": 1, "documentId": "a", "slug": "home", "cover": {"url": "/uploads/c.png"},
                  "blocks": [{"__component": "block.hero", "id": 1, "heading": "Hi", "image": {"url": "/uploads/h.png"}, "items": [{"id": 2, "t": "x"}]}]}
-            ]}}}
+            ]}, "dga": {"th": [{"id": 9, "documentId": "d", "slug": "dga-home"}]}}}
         }).to_string()).unwrap()
     }
 
@@ -400,9 +401,16 @@ mod tests {
     }
 
     #[test]
-    fn unknown_tenant_falls_back_to_default() {
+    fn an_unknown_tenant_reads_nothing_and_only_no_tenant_falls_back() {
         let s = snap();
-        assert_eq!(s.tenant(Some("nope")), "dga");
+        // D9: a key no tenant has is that (empty) tenant, not the default
+        assert_eq!(s.tenant(Some("nope")), "nope");
         assert!(s.rows("pages", &query::parse("tenant=nope").unwrap()).unwrap().is_empty());
+        assert!(s.rows("pages", &query::parse("tenant=hubb").unwrap()).unwrap().is_empty(), "a typo of a real key reads nothing");
+        assert_eq!(s.rows("pages", &query::parse("tenant=HUB").unwrap()).unwrap().len(), 1, "keys are matched lower-cased, as Strapi does");
+        // a request that names no tenant still gets the default, whose rows the unknown keys above did not see
+        assert_eq!(s.tenant(None), "dga");
+        assert_eq!(s.tenant(Some("")), "dga");
+        assert_eq!(s.rows("pages", &query::parse("").unwrap()).unwrap()[0]["slug"], "dga-home");
     }
 }

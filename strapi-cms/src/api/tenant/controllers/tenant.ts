@@ -12,6 +12,9 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
 
     let t: any = null;
     if (key) t = all.find((x: any) => x.key === key);
+    // Decision D9: a request that names a tenant gets that tenant or a 404, never the default one (the same
+    // body as webx-control's and the Rust engine's 404, which webx-control/tools/parity-test.mjs compares)
+    if (key && !t) return ctx.notFound('Not Found');
     if (!t && host) t = all.find((x: any) => Array.isArray(x.domains) && x.domains.map((d: any) => String(d).toLowerCase()).includes(host));
     if (!t) t = all.find((x: any) => x.key === 'dga') || all[0];
     if (!t) return ctx.notFound('no tenant configured');
