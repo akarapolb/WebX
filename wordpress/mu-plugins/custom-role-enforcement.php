@@ -6,7 +6,8 @@
 // native WP editor/administrator account provisioned for one tenant writing
 // content into ANOTHER tenant's wtenant scope. This plugin closes both the
 // same way strapi-cms/src/index.ts's own write hook closes them for
-// direct-to-Strapi access.
+// direct-to-Strapi access. Media writes get the tenant scoping too (since
+// 2026-11-27, webx_crp_scope_media_write), not the custom-role part.
 //
 // Both are WebX/Strapi-side concepts — nothing in WordPress's own
 // user/capability system reflects a "tenant" or a "custom role" at all, so
@@ -130,7 +131,9 @@ add_action('init', function () {
     // uploaded files by tenant (for the media library UI), but attachment
     // writes go through a completely different capability model
     // (upload_files / the REST media endpoint), not this plugin's
-    // post-content governance at all.
+    // post-content governance (custom roles do not cover media). Their
+    // tenant is still enforced: see webx_crp_scope_media_write() and the
+    // attachment branch of the map_meta_cap filter below.
     $missing = array_diff($tax->object_type, $governed, ['attachment']);
     if ($missing) {
         add_action('admin_notices', function () use ($missing) {
@@ -297,6 +300,9 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
     if (!in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) return $response;
 
     $route = $request->get_route(); // e.g. "/wp/v2/service/123" or "/wp/v2/posts"
+    if (preg_match('#^/wp/v2/media(?:/(\d+)(?:/(?:edit|post-process))?)?/?$#', $route, $mm)) {
+        return webx_crp_scope_media_write($response, $request, isset($mm[1]) ? (int) $mm[1] : null);
+    }
     if (!preg_match('#^/wp/v2/([a-z-]+)(?:/(\d+))?/?$#', $route, $m)) return $response;
     $map = webx_crp_post_type_uid_map();
     if (!isset($map[$m[1]])) return $response; // media, users, comments, wtenant terms, etc. — never governed by custom roles
@@ -388,8 +394,47 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
 // The end of the one REST write the filter above scoped (WordPress applies this filter after the callback, or after an
 // error that stopped it, for every request and for each request of a batch).
 add_filter('rest_request_after_callbacks', function ($response) {
-    unset($GLOBALS['webx_crp_rest_scoped']);
+    unset($GLOBALS['webx_crp_rest_scoped'], $GLOBALS['webx_crp_media_tenant']);
     return $response;
+}, 10, 1);
+
+/** Media writes through REST (/wp/v2/media, an image's own route, and its edit and post-process routes), scoped by
+ * tenant as content is: a WebX-provisioned editor may change or remove only their own tenant's image (or one no tenant
+ * has claimed), and may tag an image with their own tenant only. Custom roles do not cover media, so this is the tenant
+ * check alone. Until 2026-11-27 media had none: the engine conformance suite's WordPress run showed another tenant's
+ * editor changing an image's caption. Fails open like every other check here when the lookup is unavailable. */
+function webx_crp_scope_media_write($response, WP_REST_Request $request, ?int $id)
+{
+    $user = wp_get_current_user();
+    if (!$user || !$user->exists() || empty($user->user_email)) return $response; // anonymous/invalid — WP's own auth handles this
+    $perms = webx_crp_fetch(strtolower($user->user_email), 'wp:media');
+    if ($perms === null) return $response; // lookup unavailable — fail open, same posture as the content filter above
+    $caller_tenant = $perms['tenantKey'] ?? null;
+    if ($caller_tenant === null) return $response; // not a WebX-provisioned admin of any tenant — nothing to scope against
+
+    if ($id !== null) {
+        $target_tenant = webx_crp_post_tenant_key($id);
+        if ($target_tenant !== null && $target_tenant !== $caller_tenant) {
+            return new WP_Error('webx_forbidden', 'Cross-tenant operation not permitted', ['status' => 403]);
+        }
+    }
+    // a tag in the request, the only way an image changes tenant through REST, has to be the caller's own (an empty list,
+    // which would leave the image for any tenant to claim, is refused too)
+    if ($request->get_param('wtenant') !== null && webx_crp_submitted_tenant_key($request) !== $caller_tenant) {
+        return new WP_Error('webx_forbidden', 'Media can only be tagged with your own tenant', ['status' => 403]);
+    }
+    // an upload (or an edited copy) is stamped with this tenant as WordPress makes it, see add_attachment below
+    $GLOBALS['webx_crp_media_tenant'] = $caller_tenant;
+    return $response;
+}
+
+// A new image made by a REST media write scoped above belongs to the uploader's tenant from the start: Studio's adapter
+// tags it in a second request, and until then (or if that request fails) it would be unclaimed, which any tenant may change.
+add_action('add_attachment', function (int $post_id) {
+    $tenant = $GLOBALS['webx_crp_media_tenant'] ?? null;
+    if (!$tenant) return;
+    $term = get_term_by('slug', $tenant, 'wtenant');
+    if ($term && !is_wp_error($term)) wp_set_object_terms($post_id, [(int) $term->term_id], 'wtenant');
 }, 10, 1);
 
 // --- non-REST write backstop (classic editor / Quick Edit / bulk edit / WP-CLI) ---
@@ -418,12 +463,15 @@ add_filter('map_meta_cap', function (array $caps, string $cap, int $user_id, arr
     $post_id = (int) ($args[0] ?? 0);
     if (!$post_id) return $caps; // no post id yet (e.g. the "Add New" screen) — nothing to scope against here, see the save_post hook below for create
     $post = get_post($post_id);
-    if (!$post || !in_array($post->post_type, webx_crp_governed_post_types(), true)) return $caps;
+    // an attachment gets the tenant check only (custom roles do not cover media): wp-admin's media library edits and
+    // deletes through here, and so do REST's own permission checks for an image
+    $is_media = $post && $post->post_type === 'attachment';
+    if (!$post || (!$is_media && !in_array($post->post_type, webx_crp_governed_post_types(), true))) return $caps;
 
     $user = get_userdata($user_id);
     if (!$user || empty($user->user_email)) return $caps;
     $email = strtolower($user->user_email);
-    $uid = webx_crp_post_type_uid_map()[webx_crp_post_type_to_rest_base($post->post_type)] ?? null;
+    $uid = $is_media ? 'wp:media' : (webx_crp_post_type_uid_map()[webx_crp_post_type_to_rest_base($post->post_type)] ?? null);
     if (!$uid) return $caps;
 
     $perms = webx_crp_fetch($email, $uid);
@@ -435,6 +483,7 @@ add_filter('map_meta_cap', function (array $caps, string $cap, int $user_id, arr
     if ($target_tenant !== null && $target_tenant !== $caller_tenant) {
         return ['do_not_allow'];
     }
+    if ($is_media) return $caps;
 
     if (!empty($perms['hasCustomRole'])) {
         $action = $cap === 'delete_post' ? 'delete' : ($cap === 'publish_post' ? 'publish' : 'update');

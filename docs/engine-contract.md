@@ -258,9 +258,10 @@ An engine conforms when, for the same content:
    a gap that closes shows up as a pass. WordPress runs in CI too (the
    `conformance-wordpress` job: WordPress built from `wordpress/`, with the
    Strapi it asks which tenant an editor belongs to) and meets every case but
-   four, which its harness names: an edit of a published post goes live at
-   once, a list drops field filters, a post with no title can be published,
-   and media writes are not scoped by tenant. Users and roles are not engine
+   three, which its harness names: an edit of a published post goes live at
+   once, a list drops field filters, and a post with no title can be
+   published. Its media writes are scoped by tenant like its content (since
+   2026-11-27, `custom-role-enforcement.php`). Users and roles are not engine
    cases: they move to webx-control (C4), whose step 8 adds the acting-token
    cases to this suite.
 4. **Isolation:** a cross-tenant request returns nothing (e2e

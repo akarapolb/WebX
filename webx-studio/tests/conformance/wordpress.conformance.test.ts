@@ -20,7 +20,9 @@
 // media calls. Each side below does the same, so the suite sees the adapter as
 // Studio uses it; what WordPress itself does not enforce shows up as a gap.
 import "./wordpress-env";
-import { conformanceSuite } from "./suite";
+import { describe, it, before } from "node:test";
+import assert from "node:assert/strict";
+import { conformanceSuite, PNG_1X1 } from "./suite";
 import type { Side } from "./suite";
 import type { CmsAdapter } from "../../lib/cms/types";
 import { wordpressAdapter } from "../../lib/cms/wordpress";
@@ -109,8 +111,34 @@ conformanceSuite(
       "update-draft": "WordPress keeps one copy of a post: an edit through the REST API changes a published post at once, where the contract keeps the edit as a draft until the next publish (section 8)",
       list: "the adapter passes WordPress only the tenant, a search term, a status, a sort by title or date, and the page (contract section 8): field filters such as eq, ne and contains are dropped, so a list holds every entry of the tenant",
       validation: "WordPress publishes an entry with no title: only Studio's own form asks for one",
-      "media-isolation": "WordPress does not scope media writes by tenant: custom-role-enforcement.php governs post types only, and another tenant's editor could change an image's caption; only Studio's governance stops it",
+      // media-isolation was a gap until 2026-11-27, when custom-role-enforcement.php began scoping media writes by tenant
     },
   },
   { skip: configured ? undefined : "set CONFORMANCE_WP_URL, CONFORMANCE_WP_MAIN_USER and CONFORMANCE_WP_MAIN_APP_PASSWORD to run against a live WordPress" },
 );
+
+// WordPress only (the shared suite has no way to ask): an image's tenant is its uploader's. WordPress stamps it as the
+// upload is made, and refuses a tag naming another tenant, so an editor cannot put an image into someone else's library.
+describe("WordPress media: an image stays in its uploader's tenant", {
+  skip: configured && env("CONFORMANCE_WP_OTHER_USER") ? undefined : "needs a live WordPress and both editors",
+}, () => {
+  before(async () => {
+    tokens.main ??= await login(env("CONFORMANCE_WP_MAIN_USER"), env("CONFORMANCE_WP_MAIN_APP_PASSWORD"));
+    tokens.other ??= await login(env("CONFORMANCE_WP_OTHER_USER"), env("CONFORMANCE_WP_OTHER_APP_PASSWORD"));
+  });
+
+  it("an upload asked to be tagged for another tenant still belongs to the uploader's", async () => {
+    const run = `confwp${Date.now().toString(36)}`;
+    const as = <T>(who: "main" | "other", fn: () => Promise<T>) => withServiceToken(tokens[who]!, fn);
+    // the adapter uploads, then tags the image with the tenant it is given: here the other one
+    const a = await as("main", () => wordpressAdapter.media.upload(new File([PNG_1X1], `${run}.png`, { type: "image/png" }), OTHER));
+    try {
+      const mine = await as("main", () => wordpressAdapter.media.list({ search: run, tenantKey: MAIN }));
+      const theirs = await as("other", () => wordpressAdapter.media.list({ search: run, tenantKey: OTHER }));
+      assert.equal(mine.total, 1, "the image is in the uploader's library");
+      assert.equal(theirs.total, 0, "and not in the tenant the request named");
+    } finally {
+      await as("main", () => wordpressAdapter.media.remove(String(a.id))).catch(() => {});
+    }
+  });
+});

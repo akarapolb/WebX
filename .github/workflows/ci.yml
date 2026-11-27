@@ -371,6 +371,8 @@ jobs:
             if [ "$i" = 60 ]; then echo "the bootstrap did not finish"; $WP_COMPOSE logs --tail 80; exit 1; fi
             sleep 5
           done
+          # every mu-plugin parses: one that does not takes WordPress down with it, and says so less clearly than this
+          for f in wordpress/mu-plugins/*.php; do $WP_COMPOSE exec -T wordpress php -l "/var/www/html/wp-content/mu-plugins/$(basename "$f")"; done
           wp() { $WP_COMPOSE exec -T -e WP_ALLOW_HTTP_APP_PASSWORDS=1 wp-cli wp --path=/var/www/html "$@"; }
           for t in orst royalsociety; do
             wp term create wtenant "$t" --slug="$t"
