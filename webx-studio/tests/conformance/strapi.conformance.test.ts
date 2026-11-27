@@ -7,7 +7,9 @@
 //   CONFORMANCE_OTHER_EMAIL=pea-editor@pea.local  CONFORMANCE_OTHER_PASSWORD=...
 //   CONFORMANCE_MAIN_TENANT=dga   (the main editor's tenant; the default)
 //
-// It writes FAQ entries prefixed "conf<time>" and removes them afterwards.
+// It writes FAQ entries and an image prefixed "conf<time>" and removes them
+// afterwards. CI runs it in the e2e-cross-tenant-isolation job, against that
+// job's freshly seeded Strapi.
 import "./strapi-env";
 import { conformanceSuite } from "./suite";
 import type { Side } from "./suite";
@@ -54,6 +56,8 @@ conformanceSuite(
       if (!r.ok) throw new Error(`read API returned ${r.status}`);
       return (await r.json()).data ?? [];
     },
+    // the media library: Strapi's Upload plugin plus media-meta for the tenant; files are served under /uploads
+    media: { fetchFile: (u) => fetch(u.startsWith("http") ? u : url + u, { cache: "no-store" }) },
   },
   { skip: configured ? undefined : "set CONFORMANCE_STRAPI_URL, CONFORMANCE_MAIN_EMAIL and CONFORMANCE_MAIN_PASSWORD to run against a live Strapi" },
 );

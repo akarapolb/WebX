@@ -249,8 +249,14 @@ An engine conforms when, for the same content:
 3. **Write API (only for a full engine):** the e2e `studio-roundtrip` and
    `user-management` tests pass against it, and so does the adapter
    conformance suite (`webx-studio/tests/conformance/`: entries, draft and
-   publish, locales, list, errors, validation and tenant isolation; it passes
-   on the in-memory reference engine and on Strapi; WordPress and Rust
-   harnesses, and media and user cases, are still to be added).
+   publish, locales, list, errors, validation, tenant isolation and the media
+   library). It passes on the in-memory reference engine, on Strapi (in CI, the
+   `e2e-cross-tenant-isolation` job runs it against that job's freshly seeded
+   Strapi) and on the Rust engine (`rust-engine/tools/conformance.mjs`, in
+   CI). An engine that does not meet a case yet names it as a gap in its
+   harness, with the reason: the case still runs and is reported as a TODO, so
+   a gap that closes shows up as a pass. A WordPress harness is still to be
+   added. Users and roles are not engine cases: they move to webx-control
+   (C4), whose step 8 adds the acting-token cases to this suite.
 4. **Isolation:** a cross-tenant request returns nothing (e2e
    `cross-tenant-isolation`).

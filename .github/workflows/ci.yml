@@ -197,6 +197,19 @@ jobs:
           DGA_EDITOR_PASSWORD: ci-dga-pw-${{ github.run_id }}
           PEA_EDITOR_PASSWORD: ci-pea-pw-${{ github.run_id }}
         run: npx playwright test tests/cross-tenant-isolation.spec.ts
+      # Track C1: the engine conformance suite (webx-studio/tests/conformance) against this job's Strapi, through the real
+      # strapiAdapter, as two seeded editors of different tenants. It writes FAQ entries and an image and removes them after.
+      # Runs even when the spec above failed, so both results are seen.
+      - name: Engine conformance suite against Strapi
+        if: ${{ !cancelled() }}
+        working-directory: webx-studio
+        env:
+          CONFORMANCE_STRAPI_URL: http://localhost:1337
+          CONFORMANCE_MAIN_EMAIL: dga-editor@dga.local
+          CONFORMANCE_MAIN_PASSWORD: ci-dga-pw-${{ github.run_id }}
+          CONFORMANCE_OTHER_EMAIL: pea-editor@pea.local
+          CONFORMANCE_OTHER_PASSWORD: ci-pea-pw-${{ github.run_id }}
+        run: node --import ./tests/setup/register.mjs --import tsx --test tests/conformance/strapi.conformance.test.ts
 
   # Track C3: with the audit log in webx-control, a real editor's governed changes
   # land there (scoped, append-only), and none reach Strapi's own audit table.

@@ -16,5 +16,6 @@ conformanceSuite({
   locales: ["th", "en"],
   main: side("dga"),
   other: side("pea"),
-  readPublished: async (u, locale, prefix) => engine.readPublished("dga", u, locale, "question", prefix),
+  readPublished: async (u, locale, prefix) => engine.readPublished("dga", u, locale ?? "th", "question", prefix),
+  media: { fetchFile: async (url) => engine.serve(url) },
 });

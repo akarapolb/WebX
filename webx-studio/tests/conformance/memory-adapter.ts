@@ -3,11 +3,12 @@
 // the conformance suite itself without any CMS, and as a readable statement of
 // the semantics every real engine must match. It is not a product.
 import { CmsError } from "../../lib/cms/types";
-import type { CmsAdapter, ContentTypeInfo, EntryList, EntryQuery } from "../../lib/cms/types";
+import type { CmsAdapter, ContentTypeInfo, EntryList, EntryQuery, MediaAsset, MediaAssetList } from "../../lib/cms/types";
 
 type Row = Record<string, any>;
 type Version = { draft: Row; published: Row | null };
 type Doc = { uid: string; documentId: string; tenant: string; id: number; versions: Map<string, Version> };
+type Stored = { tenant: string; asset: MediaAsset; bytes: Uint8Array; seq: number };
 
 export type MemoryOptions = {
   uid: string;
@@ -19,6 +20,7 @@ export type MemoryOptions = {
 
 export function createMemoryEngine(o: MemoryOptions) {
   const docs: Doc[] = [];
+  const files: Stored[] = [];
   let counter = 0;
   const defaultLocale = o.locales[0];
 
@@ -36,6 +38,13 @@ export function createMemoryEngine(o: MemoryOptions) {
     const d = docs.find((x) => x.uid === uid && x.documentId === documentId && x.tenant === tenant);
     if (!d) throw new CmsError("Not Found", 404);
     return d;
+  }
+
+  function findFile(tenant: string, id: string): Stored {
+    // Isolation again: another tenant's file is indistinguishable from a missing one.
+    const f = files.find((x) => x.asset.documentId === id && x.tenant === tenant);
+    if (!f) throw new CmsError("Not Found", 404);
+    return f;
   }
 
   function matches(row: Row, f: NonNullable<EntryQuery["filter"]>[number]): boolean {
@@ -120,8 +129,33 @@ export function createMemoryEngine(o: MemoryOptions) {
         },
       },
       media: {
-        upload: notModelled("media.upload"), list: notModelled("media.list"),
-        update: notModelled("media.update"), remove: notModelled("media.remove"),
+        async upload(file: File): Promise<MediaAsset> {
+          counter += 1;
+          const documentId = `file${counter.toString().padStart(20, "0")}`;
+          const asset: MediaAsset = { id: counter, documentId, url: `/uploads/${documentId}-${file.name}`, mime: file.type, name: file.name };
+          files.push({ tenant, asset, bytes: new Uint8Array(await file.arrayBuffer()), seq: counter });
+          return { ...asset };
+        },
+        async list(q = {}): Promise<MediaAssetList> {
+          // newest first; the search matches name, caption, alt text and tags
+          const term = (q.search ?? "").toLowerCase();
+          const hit = (f: Stored) => !term || [f.asset.name, f.asset.caption, f.asset.alt, f.asset.tags].some((v) => (v ?? "").toLowerCase().includes(term));
+          const rows = files.filter((f) => f.tenant === tenant && hit(f)).sort((a, b) => b.seq - a.seq);
+          const page = q.page ?? 1;
+          const pageSize = q.pageSize ?? 30;
+          return { data: rows.slice((page - 1) * pageSize, page * pageSize).map((f) => ({ ...f.asset })), total: rows.length, page, pageSize };
+        },
+        async update(id: string, patch: { caption?: string | null; alt?: string | null; tags?: string | null }): Promise<MediaAsset> {
+          const f = findFile(tenant, id);
+          for (const k of ["caption", "alt", "tags"] as const) {
+            if (patch[k] === null) delete f.asset[k]; // null clears
+            else if (patch[k] !== undefined) f.asset[k] = patch[k]; // a field left out stays
+          }
+          return { ...f.asset };
+        },
+        async remove(id: string): Promise<void> {
+          files.splice(files.indexOf(findFile(tenant, id)), 1);
+        },
       },
       auth: {
         me: async () => null,
@@ -143,5 +177,11 @@ export function createMemoryEngine(o: MemoryOptions) {
       });
   }
 
-  return { adapterFor, readPublished };
+  /** What a visitor's browser gets for an asset's url. */
+  function serve(url: string): Response {
+    const f = files.find((x) => x.asset.url === url);
+    return f ? new Response(f.bytes, { status: 200, headers: { "Content-Type": f.asset.mime ?? "application/octet-stream" } }) : new Response(null, { status: 404 });
+  }
+
+  return { adapterFor, readPublished, serve };
 }
