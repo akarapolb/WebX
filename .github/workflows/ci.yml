@@ -326,6 +326,87 @@ jobs:
           grep -vE '^ (GET|POST|PUT|DELETE|OPTIONS|HEAD) ' /tmp/webx-studio.log | tail -n 150
           tail -n 50 /tmp/control.log
 
+  # Track C1: the engine conformance suite against WordPress (webx-studio/tests/conformance/wordpress.conformance.test.ts),
+  # with the Strapi that WordPress asks which tenant an editor belongs to (mu-plugins/custom-role-enforcement.php).
+  # WordPress is built from wordpress/ and installed by wordpress/bootstrap.sh, as docker-compose.wordpress.yml does for
+  # development; wp-cli adds the two tenants' terms and an editor of each with an application password. Strapi's seed
+  # already lists those editors as the two tenants' admins.
+  conformance-wordpress:
+    runs-on: ubuntu-latest
+    env:
+      WP_COMPOSE: docker compose -f docker-compose.wordpress.yml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start WordPress (MySQL, the WebX image, wp-cli running wordpress/bootstrap.sh)
+        env:
+          STRAPI_INTERNAL_SECRET: ci-internal-secret
+          WP_DEV_ADMIN_PASSWORD: ci-wp-admin-pw-${{ github.run_id }}
+        run: $WP_COMPOSE up -d --build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: strapi-cms/package-lock.json
+      - working-directory: strapi-cms
+        run: npm ci
+      - name: Boot a freshly-seeded Strapi (ephemeral secrets, throwaway DB)
+        working-directory: strapi-cms
+        env:
+          DATABASE_FILENAME: .tmp/ci.db
+          APP_KEYS: ci-key-a,ci-key-b
+          API_TOKEN_SALT: ci-api-token-salt
+          ADMIN_JWT_SECRET: ci-admin-jwt-secret
+          TRANSFER_TOKEN_SALT: ci-transfer-token-salt
+          JWT_SECRET: ci-jwt-secret
+          ENCRYPTION_KEY: ci-encryption-key
+          PII_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          STRAPI_SCHEDULER_PASSWORD: ci-scheduler-pw
+          WEBX_INTERNAL_SECRET: ci-internal-secret
+          MFA_ENABLED: "false"
+        run: npx strapi develop > /tmp/strapi.log 2>&1 &
+      - name: Wait for wp-cli's bootstrap, then add the tenants' terms and two editors with application passwords
+        run: |
+          for i in $(seq 1 60); do
+            if $WP_COMPOSE logs wp-cli 2>/dev/null | grep -q '\[wp-bootstrap\] done'; then break; fi
+            if [ "$i" = 60 ]; then echo "the bootstrap did not finish"; $WP_COMPOSE logs --tail 80; exit 1; fi
+            sleep 5
+          done
+          wp() { $WP_COMPOSE exec -T -e WP_ALLOW_HTTP_APP_PASSWORDS=1 wp-cli wp --path=/var/www/html "$@"; }
+          for t in orst royalsociety; do
+            wp term create wtenant "$t" --slug="$t"
+            wp user create "$t-editor" "$t-editor@$t.local" --role=editor --user_pass="ci-wp-$t-${{ github.run_id }}"
+            pw=$(wp user application-password create "$t-editor" conformance --porcelain | tr -d '\r\n')
+            echo "::add-mask::$pw"
+            echo "WP_APP_PASSWORD_${t^^}=$pw" >> "$GITHUB_ENV"
+          done
+      - name: Wait for Strapi to finish booting and seeding
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:1337/api/tenants/keys > /dev/null; then echo "Strapi is up"; exit 0; fi
+            sleep 10
+          done
+          echo "Strapi did not become ready in time"; cat /tmp/strapi.log; exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webx-studio/package-lock.json
+      - working-directory: webx-studio
+        run: npm ci
+      - name: Engine conformance suite against WordPress
+        working-directory: webx-studio
+        env:
+          CONFORMANCE_WP_URL: http://localhost:8081/wp-json
+          CONFORMANCE_WP_MAIN_USER: orst-editor
+          CONFORMANCE_WP_MAIN_APP_PASSWORD: ${{ env.WP_APP_PASSWORD_ORST }}
+          CONFORMANCE_WP_OTHER_USER: royalsociety-editor
+          CONFORMANCE_WP_OTHER_APP_PASSWORD: ${{ env.WP_APP_PASSWORD_ROYALSOCIETY }}
+        run: node --import ./tests/setup/register.mjs --import tsx --test tests/conformance/wordpress.conformance.test.ts
+      - if: failure()
+        run: |
+          $WP_COMPOSE logs --tail 120 wordpress wp-cli
+          tail -n 60 /tmp/strapi.log
+
   # NOT wired into CI, deliberately — this is the honest half of the same
   # 2026-09-12 fix: the rest of e2e/'s suites (SSO/agent/wp-admin/user-
   # management) need a live WordPress + Keycloak + a real LLM key, which is

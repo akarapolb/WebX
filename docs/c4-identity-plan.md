@@ -549,8 +549,8 @@ a test and a deliberate breakage of it that the tests catch:
 - Done means: `user-management`, `mfa-enforcement` and `cross-tenant-isolation` pass for a Strapi and a WordPress workspace.
   The login helper (`e2e/tests/_helpers.ts:62-71`) goes through the mock IdP; `mfa-enforcement` backdates the grace period
   through control, not Strapi's tenant row. A CI job `e2e-identity` copies `e2e-audit-control-plane` (`ci.yml:199-293`).
-  WordPress is not in CI today (`ci.yml:295-301`, `e2e/README.md:155-165`): add it or record a manual release gate (**unverified** whether a
-  runner can build the image, which downloads ACF at build time, `wordpress/Dockerfile`).
+  WordPress runs in CI since C1 (2026-11-27): the `conformance-wordpress` job builds the image on a runner (ACF download included), installs
+  it with `wordpress/bootstrap.sh` and makes editors with application passwords with wp-cli, so `e2e-identity` can start it the same way.
 - Irreversible parts run behind an explicit operator command with a dry run. Rollback after this step is a restore from backup.
 
 **Cutover gates.** A Strapi workspace may go to `both` after step 7 and to `control` after step 8; a WordPress workspace

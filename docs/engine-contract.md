@@ -255,8 +255,13 @@ An engine conforms when, for the same content:
    Strapi) and on the Rust engine (`rust-engine/tools/conformance.mjs`, in
    CI). An engine that does not meet a case yet names it as a gap in its
    harness, with the reason: the case still runs and is reported as a TODO, so
-   a gap that closes shows up as a pass. A WordPress harness is still to be
-   added. Users and roles are not engine cases: they move to webx-control
-   (C4), whose step 8 adds the acting-token cases to this suite.
+   a gap that closes shows up as a pass. WordPress runs in CI too (the
+   `conformance-wordpress` job: WordPress built from `wordpress/`, with the
+   Strapi it asks which tenant an editor belongs to) and meets every case but
+   four, which its harness names: an edit of a published post goes live at
+   once, a list drops field filters, a post with no title can be published,
+   and media writes are not scoped by tenant. Users and roles are not engine
+   cases: they move to webx-control (C4), whose step 8 adds the acting-token
+   cases to this suite.
 4. **Isolation:** a cross-tenant request returns nothing (e2e
    `cross-tenant-isolation`).

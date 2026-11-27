@@ -102,6 +102,10 @@ services:
       - wp-content-data:/var/www/html
     ports:
       - "8081:80"
+    # host.docker.internal (STRAPI_INTERNAL_URL, WEBX_STUDIO_INTERNAL_URL above) is built into Docker Desktop; on Linux,
+    # CI's conformance-wordpress job among them, it has to be mapped to the host's gateway. Harmless where it is built in.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   wp-cli:
     image: wordpress:cli

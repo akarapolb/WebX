@@ -348,6 +348,11 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
     if ($target_tenant !== null && $target_tenant !== $caller_tenant) {
         return new WP_Error('webx_forbidden', 'Cross-tenant operation not permitted', ['status' => 403]);
     }
+    // This write is scoped: the save_post backstop below stands aside for it until the route's callback has run (cleared in
+    // rest_request_after_callbacks). It has to: WordPress's REST controller calls wp_insert_post(), which fires save_post,
+    // before it attaches the request's terms, so a REST-created post has no wtenant yet when save_post sees it, and the
+    // backstop deleted every one (found by the engine conformance suite's WordPress run, 2026-11-27).
+    $GLOBALS['webx_crp_rest_scoped'] = true;
 
     // Everything past this point is custom-role-specific — a plain
     // editor/administrator's native WP capabilities are the only
@@ -379,6 +384,13 @@ add_filter('rest_request_before_callbacks', function ($response, $handler, WP_RE
 
     return $response; // unchanged (null) — proceed to the route's own callback
 }, 10, 3);
+
+// The end of the one REST write the filter above scoped (WordPress applies this filter after the callback, or after an
+// error that stopped it, for every request and for each request of a batch).
+add_filter('rest_request_after_callbacks', function ($response) {
+    unset($GLOBALS['webx_crp_rest_scoped']);
+    return $response;
+}, 10, 1);
 
 // --- non-REST write backstop (classic editor / Quick Edit / bulk edit / WP-CLI) ---
 // The filter above only fires for rest_request_before_callbacks, i.e. only
@@ -463,6 +475,7 @@ add_action('pre_post_update', function (int $post_id) {
 add_action('save_post', function (int $post_id, WP_Post $post, bool $update) {
     static $reverting = [];
     if (!empty($reverting[$post_id])) return; // this save_post firing is our OWN revert call below — don't re-enter
+    if (!empty($GLOBALS['webx_crp_rest_scoped'])) return; // a REST write the filter above has already scoped, before it was written
     if (wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) return;
     if (!in_array($post->post_type, webx_crp_governed_post_types(), true)) return;
 

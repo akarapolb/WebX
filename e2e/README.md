@@ -162,7 +162,9 @@ fix once the audit itself noticed the docs called suites like this "CI
 gates" when none of them were wired in at all). The other 6 suites below
 still need a live WordPress/Keycloak/real LLM key this project doesn't
 stand up per-PR, so they stay manual-only for now — run them yourself per
-this file before a release that touches those surfaces.
+this file before a release that touches those surfaces. (WordPress itself
+does run in CI since 2026-11-27, in the `conformance-wordpress` job, which
+shows how to stand it up there.)
 
 Logs in as both seeded demo-tenant editors (`dga-editor@dga.local`,
 `pea-editor@pea.local`) and confirms, through webx-studio's real governed

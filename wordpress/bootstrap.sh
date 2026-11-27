@@ -19,7 +19,14 @@ echo "[wp-bootstrap] waiting for wp-config.php (written by the wordpress service
 until [ -f /var/www/html/wp-config.php ]; do sleep 2; done
 
 echo "[wp-bootstrap] waiting for the database..."
-until $WP db check >/dev/null 2>&1; do sleep 3; done
+# Through PHP's own connection, the one WordPress makes. `wp db check` runs the client programs instead, and the
+# wordpress:cli image's newer MariaDB client refuses MySQL 8's self-signed certificate ("TLS/SSL error: self-signed
+# certificate in certificate chain", seen in CI), so it never succeeded and this wait never ended.
+db_up() {
+  php -r 'mysqli_report(MYSQLI_REPORT_OFF); [$h, $p] = array_pad(explode(":", (string) getenv("WORDPRESS_DB_HOST"), 2), 2, 3306);
+    exit(@mysqli_connect($h, getenv("WORDPRESS_DB_USER"), getenv("WORDPRESS_DB_PASSWORD"), getenv("WORDPRESS_DB_NAME"), (int) $p) ? 0 : 1);'
+}
+until db_up; do sleep 3; done
 
 if $WP core is-installed >/dev/null 2>&1; then
   echo "[wp-bootstrap] already installed — skipping core install."
