@@ -6,8 +6,9 @@
 //
 //   node tools/forms-test.mjs [--port 1408]
 //
-// Also: a file attached to a complaint or an application, kept encrypted and only ever downloaded through the internal API; and
-// the mail a form calls for, queued in an outbox and sent over SMTP to a fake mail server started here.
+// Also: a file attached to a complaint or an application, kept encrypted and only ever downloaded through the internal API;
+// the mail a form calls for, queued in an outbox and sent over SMTP to a fake mail server started here; and a workspace's own
+// reference prefix and staff address (decision D6: a WordPress tenant keeps the ones WordPress gave it).
 //
 // Needs the release build.
 import { spawn } from "node:child_process";
@@ -363,6 +364,30 @@ try {
   const refused = after.recent.find((m) => m.kind === "complaint-ack" && m.lastError);
   check("a mail the server refuses stays queued, counted, with the reason; the rest are sent", after.sent >= 3 + expected - 1 && after.pending >= 1 && refused && refused.attempts === 1 && /550|no such user/i.test(refused.lastError), JSON.stringify(after).slice(0, 400));
   check("it is not retried straight away (it waits a minute)", smtp.got.slice(early).filter((g) => g.to.includes("bounce@example.com")).length === 0);
+
+  // ---- decision D6: a workspace's own reference prefix and staff address (a WordPress tenant keeps what WordPress gave it)
+  const settings = (method, key, body, token = ADMIN) => call(method, `/admin/tenants/${key}/forms`, { token, body });
+  check("form settings of an unregistered workspace: 404", (await settings("PUT", "nobody", { refPrefix: "NB" })).status === 404);
+  check("form settings need the admin token: 401", (await settings("PUT", "pea", { refPrefix: "PEA" }, null)).status === 401);
+  check("a prefix that is not capitals and digits is refused: 400", (await settings("PUT", "pea", { refPrefix: "pea" })).status === 400);
+  check("so is an address that is not one: 400", (await settings("PUT", "pea", { notifyEmail: "staff" })).status === 400);
+  const set = await settings("PUT", "pea", { refPrefix: "PEA", notifyEmail: "staff@pea.example" });
+  check("a workspace sets its own prefix and staff address: 201", set.status === 201 && set.json.data.refPrefix === "PEA" && set.json.data.notifyEmail === "staff@pea.example", JSON.stringify(set.json));
+  check("and they read back", (await settings("GET", "pea")).json?.data?.notifyEmail === "staff@pea.example");
+  const before = smtp.got.length;
+  const own = await submit("complaints", { subject: "ของ PEA", name: "ผู้แจ้ง", email: "" });
+  const ownJob = await submit("applications", { position: "p", name: "N" });
+  check("its complaints and applications carry its prefix", /^PEA-CMP-\d{4}-\d{6}$/.test(own.json?.data?.ref) && /^PEA-JOB-\d{4}-\d{6}$/.test(ownJob.json?.data?.ref), `${own.json?.data?.ref} ${ownJob.json?.data?.ref}`);
+  check("and a complaint is tracked by it", (await track("complaints", own.json.data.ref)).json?.data?.subject === "ของ PEA");
+  const dgaRef = (await submit("complaints", { subject: "ของ DGA" }, { tenant: "dga" })).json?.data?.ref;
+  check("a workspace with no prefix of its own keeps DGA", /^DGA-CMP-\d{4}-\d{6}$/.test(dgaRef), dgaRef);
+  const subjectOf = (g) => decodeMail(g.data).subject;
+  await waitFor(() => smtp.got.slice(before).some((g) => subjectOf(g).includes("ของ PEA")) && smtp.got.slice(before).some((g) => subjectOf(g).includes("ของ DGA")), 20000);
+  const sent = smtp.got.slice(before).map((g) => ({ to: g.to.join(","), subject: subjectOf(g) }));
+  check("its staff notice goes to its own address, and only there", sent.some((m) => m.to === "staff@pea.example" && m.subject.includes("ของ PEA")) && !sent.some((m) => m.to !== "staff@pea.example" && m.subject.includes("ของ PEA")), JSON.stringify(sent));
+  check("another workspace's still goes to the deployment's address", sent.some((m) => m.to === "staff@dga.or.th" && m.subject.includes("ของ DGA")), JSON.stringify(sent));
+  check("the settings go when deleted: 200, then 404", (await settings("DELETE", "pea")).status === 200 && (await settings("DELETE", "pea")).status === 404);
+  check("and the workspace's next complaint is DGA's again", /^DGA-CMP-/.test((await submit("complaints", { subject: "หลังลบ" })).json?.data?.ref));
   await smtp.close();
 } catch (e) {
   console.error(e);

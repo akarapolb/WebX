@@ -38,7 +38,7 @@ fn spec(collection: &str) -> &'static [(&'static str, Kind, bool)] {
     }
 }
 
-fn email_ok(s: &str) -> bool {
+pub(crate) fn email_ok(s: &str) -> bool {
     let Some((local, domain)) = s.split_once('@') else { return false };
     s.len() <= 254 && !s.chars().any(char::is_whitespace) && !local.is_empty() && !domain.contains('@') && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
@@ -104,11 +104,12 @@ pub fn clean(collection: &str, body: &Value) -> Result<Map<String, Value>, Strin
     Ok(out)
 }
 
-/// The prefix of a collection's reference numbers (`DGA-CMP-2569-123456`), or None when it has none.
-fn ref_prefix(collection: &str) -> Option<&'static str> {
+/// The kind a collection's reference numbers name (the CMP of `DGA-CMP-2569-123456`), or None when it has none. The part
+/// before it is the workspace's own prefix (form_settings.rs: DGA unless it has one, ORST or RS for a WordPress tenant).
+fn ref_kind(collection: &str) -> Option<&'static str> {
     match collection {
-        "complaint" => Some("DGA-CMP"),
-        "application" => Some("DGA-JOB"),
+        "complaint" => Some("CMP"),
+        "application" => Some("JOB"),
         _ => None,
     }
 }
@@ -126,7 +127,8 @@ fn random_below(n: u32) -> u32 {
     }
 }
 
-/// `DGA-CMP-<Buddhist year>-<6 digits>`, as Strapi makes them.
+/// `DGA-CMP-<Buddhist year>-<6 digits>`, as Strapi makes them (`prefix` is `DGA-CMP` there; `ORST-CMP` for a workspace whose
+/// own prefix is ORST).
 pub fn gen_ref(prefix: &str, year_be: i64) -> String {
     format!("{prefix}-{year_be}-{}", 100_000 + random_below(899_999))
 }
@@ -145,7 +147,7 @@ pub fn year_be(iso: &str) -> i64 {
 /// Store a form row: the server's defaults (a reference number, a starting stage, a username), the personal data
 /// encrypted, and a retry with a new reference when the random one is taken. Returns the stored row, still encrypted.
 pub fn create(conn: &Connection, p: &Pii, collection: &str, mut doc: Map<String, Value>, now_iso: &str) -> Result<Value, String> {
-    if !doc.contains_key("stage") && ref_prefix(collection).is_some() {
+    if !doc.contains_key("stage") && ref_kind(collection).is_some() {
         doc.insert("stage".into(), json!(0));
     }
     if collection == "registration" && doc.get("username").and_then(Value::as_str).map_or(true, str::is_empty) {
@@ -155,11 +157,15 @@ pub fn create(conn: &Connection, p: &Pii, collection: &str, mut doc: Map<String,
     // a password never reaches the database, whoever sent it
     doc.remove("password");
     doc.remove("password2");
-    let generate = ref_prefix(collection).filter(|_| doc.get("ref").and_then(Value::as_str).map_or(true, str::is_empty));
+    // the workspace's own prefix (form_settings.rs), then the kind: ORST-CMP-2569-123456
+    let generate = ref_kind(collection).filter(|_| doc.get("ref").and_then(Value::as_str).map_or(true, str::is_empty)).map(|kind| {
+        let workspace = doc.get("tenantKey").and_then(Value::as_str).unwrap_or("");
+        format!("{}-{kind}", crate::form_settings::ref_prefix(conn, workspace))
+    });
     let mut last = String::new();
     for _ in 0..8 {
         let mut row = doc.clone();
-        if let Some(prefix) = generate {
+        if let Some(prefix) = &generate {
             row.insert("ref".into(), json!(gen_ref(prefix, year_be(now_iso))));
         }
         pii::seal(p, collection, &mut row, false)?;
@@ -250,6 +256,23 @@ mod tests {
 
     fn regex_like(s: &str, prefix: &str, digits: usize) -> bool {
         s.strip_prefix(prefix).is_some_and(|rest| rest.len() == digits && rest.bytes().all(|b| b.is_ascii_digit()))
+    }
+
+    #[test]
+    fn a_workspace_with_its_own_prefix_gets_its_own_reference_numbers() {
+        // decision D6: a WordPress tenant keeps the prefix WordPress gave it (form_settings.rs); the others keep DGA
+        let c = db();
+        c.execute_batch(crate::form_settings::DDL).unwrap();
+        crate::form_settings::put(&c, "royalsociety", &json!({"refPrefix": "RS"}), NOW).unwrap();
+        let p = Pii::from_base64(KEY).unwrap();
+        let stored = |collection: &str, workspace: &str| {
+            let mut doc = clean(collection, &json!({"subject": "s", "position": "p", "name": "N"})).unwrap();
+            doc.insert("tenantKey".into(), json!(workspace));
+            create(&c, &p, collection, doc, NOW).unwrap()["ref"].as_str().unwrap().to_string()
+        };
+        assert!(regex_like(&stored("complaint", "royalsociety"), "RS-CMP-2569-", 6));
+        assert!(regex_like(&stored("application", "royalsociety"), "RS-JOB-2569-", 6));
+        assert!(regex_like(&stored("complaint", "pea"), "DGA-CMP-2569-", 6), "no prefix of its own: Strapi's");
     }
 
     #[test]

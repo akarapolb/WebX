@@ -7,8 +7,8 @@
 // Personal data is encrypted in the control plane, so what is filtered or sorted on there is limited to the fields below.
 //
 // No "server-only" import: it is plain code, so tests can load it.
-import type { EntryQuery } from "./types";
-import { scopedControlQuery } from "./consent-merge";
+import type { CmsAdapter, EntryList, EntryQuery } from "./types";
+import { mergedList, scopedControlQuery, type ListFn } from "./consent-merge";
 
 /** The form types by their control-plane collection name -> their content type uid. */
 export const FORM_UID_OF_COLLECTION: Record<string, string> = {
@@ -18,7 +18,20 @@ export const FORM_UID_OF_COLLECTION: Record<string, string> = {
   "contact-message": "api::contact-message.contact-message",
 };
 
-export const FORM_UIDS: ReadonlySet<string> = new Set(Object.values(FORM_UID_OF_COLLECTION));
+/** A WordPress tenant's form types by the same collection names (decision D6). WordPress has no registrations. */
+export const WP_FORM_UID_OF_COLLECTION: Record<string, string> = {
+  complaint: "wp:complaint",
+  application: "wp:application",
+  "contact-message": "wp:contact-message",
+};
+
+/** Every form type whose inbox also lists what the control plane has taken: a Strapi tenant's and a WordPress tenant's. */
+export const FORM_UIDS: ReadonlySet<string> = new Set([...Object.values(FORM_UID_OF_COLLECTION), ...Object.values(WP_FORM_UID_OF_COLLECTION)]);
+
+/** The form type a control-plane collection is, in a workspace on `engine`: what custom roles and the screens call it. */
+export function formUidOf(collection: string, engine?: string | null): string | undefined {
+  return (engine === "wordpress" ? WP_FORM_UID_OF_COLLECTION : FORM_UID_OF_COLLECTION)[collection];
+}
 
 /** What a list of the control plane's submissions may be filtered on: not name, email, phone, firstname or lastname, which are encrypted. */
 export const FORM_FILTER_FIELDS: ReadonlySet<string> = new Set(["createdAt", "ref", "subject", "type", "stage", "handled", "verified", "utype", "position", "jobId", "anonymous", "agency", "username"]);
@@ -26,6 +39,20 @@ export const FORM_FILTER_FIELDS: ReadonlySet<string> = new Set(["createdAt", "re
 /** A query for the control plane's submissions: the filters it can apply, and the workspace by key (never the caller's). */
 export function controlFormQuery(query: EntryQuery | undefined, tenantKey: string | null): EntryQuery {
   return scopedControlQuery(query, tenantKey, FORM_FILTER_FIELDS);
+}
+
+/** A form inbox, read from both places and listed as one: `own` lists the engine's submissions (already scoped to the caller's
+ *  workspace, as each engine scopes them), and the control plane's are read through `control`, scoped here to `workspaceKey`
+ *  (null: every workspace, for an unscoped caller) and shown as the screens expect. Strapi's and WordPress's inboxes both. */
+export function formInbox(uid: string, query: EntryQuery | undefined, workspaceKey: string | null, own: ListFn<any>, control: CmsAdapter): Promise<EntryList<any>> {
+  return mergedList<any>(
+    own,
+    async (q) => {
+      const r = await control.entries.list<any>(uid, controlFormQuery(q, workspaceKey));
+      return { ...r, data: r.data.map(decorateFormRow) };
+    },
+    query,
+  );
 }
 
 /** A submission from the control plane as the editor screens expect it: a file it holds gets a `url` that Studio serves

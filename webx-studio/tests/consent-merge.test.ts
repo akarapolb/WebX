@@ -108,6 +108,8 @@ describe("the consent log in the control plane's collections", () => {
     assert.deepEqual(CONTROL_READ_COLLECTIONS, {
       "api::consent-log.consent-log": "consent-log", "api::search-stat.search-stat": "search-stat",
       "api::complaint.complaint": "complaint", "api::application.application": "application", "api::registration.registration": "registration", "api::contact-message.contact-message": "contact-message",
+      // a WordPress tenant's inboxes read the same collections (decision D6)
+      "wp:complaint": "complaint", "wp:application": "application", "wp:contact-message": "contact-message",
     });
     assert.equal(CONTROL_RECORD_COLLECTIONS["api::consent-log.consent-log"], undefined, "writes and the engine's old rows stay where they are");
     assert.equal(CONTROL_RECORD_COLLECTIONS["api::search-stat.search-stat"], undefined);

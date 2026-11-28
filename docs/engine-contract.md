@@ -61,8 +61,9 @@ Rules every engine must keep:
   `src/index.ts`), the Rust read engine and webx-control's tenant and
   visitors' routes do the same, and WordPress reads nothing for a key it has
   no `wtenant` term for (public-site looks the term up first); its own public
-  form routes (`public-forms-api.php`, which D6 moves to webx-control) keep a
-  submission for such a key with no tenant, in no workspace's inbox. The
+  form routes (`public-forms-api.php`, which public-site uses only while
+  `PUBLIC_CONTROL_URL` is unset, decision D6) keep a submission for such a
+  key with no tenant, in no workspace's inbox. The
   conformance suite's `unknown-tenant` case checks every engine (section 9).
   public-site renders a page asked for a key that is not registered (the hub's
   `dgahub` in a CMS without the hub, a static export's `_` placeholder) under

@@ -133,7 +133,7 @@ and rules). A post is rate-limited (30 a minute per address, its own allowance),
 form has (text at its limit, e-mail checked, `extra` an object of at most 4 KB, a body past 64 KB refused) and stored under the
 workspace in the URL (an unregistered one is refused with a 404, decision D9). **What the server owns
 cannot be set by a visitor:** a complaint's or application's `stage` (always 0) and `steps`, its reference `DGA-CMP-<Buddhist year>-<6
-digits>` (an application's `DGA-JOB-...`), a registration's `verified` (always false) and `username` (made from the e-mail's local
+digits>` (an application's `DGA-JOB-...`; `DGA` is the workspace's own prefix when it has one, see `/admin/tenants/<key>/forms`), a registration's `verified` (always false) and `username` (made from the e-mail's local
 part and 4 digits; a password is never stored), a contact message's `handled`. An anonymous complaint is stored with no name, e-mail
 or phone. A reference is unique in its collection (a taken random one is retried), and tracking finds it by that alone, inside the
 workspace named, answering only the fields shown above and never personal data; it has its own allowance (30 a minute), since a
@@ -164,8 +164,8 @@ file, through the internal API with the service token: `GET /internal/files/<doc
 body is the file; no type check, for a migration) and `DELETE /internal/files/<documentId>` complete it. Deleting a complaint or an
 application through the records API deletes its file.
 
-**Mail** (decision D15; the texts and the cases are the ones Strapi's lifecycles had). A new complaint tells staff (to
-`WEBX_COMPLAINT_NOTIFY_EMAIL`, when set) and, unless it is anonymous or has no address, acknowledges the citizen; a new application and a
+**Mail** (decision D15; the texts and the cases are the ones Strapi's lifecycles had). A new complaint tells staff (at the workspace's own address,
+else `WEBX_COMPLAINT_NOTIFY_EMAIL`, when set) and, unless it is anonymous or has no address, acknowledges the citizen; a new application and a
 new registration confirm to their address; a contact message sends nothing. The mail is written to an **outbox first**, so a slow or
 absent mail server never delays or fails a visitor's submission, and sent by a loop in the background every couple of seconds. While it
 waits, its recipient, subject and text are **encrypted**; once it is sent they are **wiped** (the kind, workspace and times stay). A
@@ -340,6 +340,8 @@ spaces at either end (HTTP drops them from a header, so they cannot be part of o
 | `GET /admin/users`, `GET /admin/users/<email>`, `DELETE /admin/users/<email>` | the users; deleting ends their sessions (the audit rows stay) |
 | `PUT /admin/tenants/<key>/identity` body `{mode?, issuer?, clientId?, clientSecret?, allowJit?, jitRole?, requireVerifiedEmail?, mfaRequired?, mfaRequiredAt?, acceptIdpMfa?}` | how a workspace signs in. `mode`: `legacy` (the default: Studio's old way only, and **no session here, a super admin's included**), `both` or `control`; the last two need `issuer` (an `https` URL, matched exactly; `http` only for a provider on this machine) and `clientId`. `clientSecret` is sealed under `WEBX_CONTROL_SECRET_KEY`, never shown again (the view says `hasClientSecret`); left out it is kept, `null` removes it. `allowJit` lets a person with no account yet whom the provider vouches for be made on the spot with `jitRole` (needed with it, never a role that manages people; off by default); an account that exists is never adopted this way, it needs a membership first. The e-mail must be verified unless `requireVerifiedEmail` is false. `mfaRequired` asks everyone for a second factor (step 4), counting the grace period from `mfaRequiredAt` (kept while it stays on; a migration may give it); `acceptIdpMfa` lets a second factor the provider checked count. Every other field left out takes its default. Setting `legacy` again ends every session in the workspace (a rollback); a new provider ends the sessions made with the old one |
 | `GET`, `DELETE /admin/tenants/<key>/identity` | read, or forget the settings: the same as `legacy`, every session in the workspace ends |
+| `PUT /admin/tenants/<key>/forms` body `{refPrefix?, notifyEmail?}` | a registered workspace's own settings for its form inboxes (decision D6): the prefix its reference numbers start with (a capital, then capitals or digits, 2 to 12 characters, e.g. `ORST`, `RS`) and the address a new complaint is reported to. WordPress gave each tenant its own; Strapi used `DGA-` and one address for all, which is what a workspace without settings gets (`DGA`, `WEBX_COMPLAINT_NOTIFY_EMAIL`), so a WordPress workspace sets them before its forms move here. `PUT` replaces both (a field left out is unset): 201 when new, 200 after |
+| `GET`, `DELETE /admin/tenants/<key>/forms` | read, or forget them (back to `DGA` and the deployment's address); deleting the workspace forgets them too |
 | `GET /admin/identities` | every workspace's sign-in settings (the copy from Strapi reads it to refuse running once any workspace has switched) |
 | `GET /admin/users/<email>/identities`, `PUT` body `{identities: [{issuer, subject}]}` | how a person signs in: the (provider, subject) pairs that are them, one per provider. `PUT` replaces the list, and is the only way a **super admin** gets one: no workspace's provider can vouch for a super admin, so they sign in only through an identity an operator linked. Anything removed or changed ends the user's sessions |
 

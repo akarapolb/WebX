@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { useCaptcha, WORDPRESS } from "@/lib/useCaptcha";
+import { useCaptcha } from "@/lib/useCaptcha";
+import { isCaptchaRefusal, wpFormRequest } from "@/lib/wpForms";
 
 /* =============================================================================
    ContactInteractive.tsx — the genuinely-JS-dependent slivers of ContactPage.tsx
@@ -12,7 +13,9 @@ import { useCaptcha, WORDPRESS } from "@/lib/useCaptcha";
    wired to Strapi's public write path; Phase 7 moved complaint/contact-message
    storage natively into WordPress (wordpress/mu-plugins/public-forms-api.php)
    — same captcha-guarded shape, same routing-by-topic logic, different base
-   URL and a WP-flavored error-code check. */
+   URL and a WP-flavored error-code check. Decision D6 sends them to the WebX
+   control plane instead when PUBLIC_CONTROL_URL is set, as every other
+   tenant's forms go; lib/wpForms.ts picks the service and its envelope. */
 
 export function CopyButton({ text, label, copiedLabel = "คัดลอกแล้ว", className = "mini-action" }: {
   text: string;
@@ -72,9 +75,6 @@ export function ContactForm({ tenant, children }: { tenant: string; children: (c
     // notification" requirement). Every other subject keeps going to
     // contact-messages, unchanged.
     const isComplaint = fd.get("subject") === "complaint";
-    const endpoint = isComplaint
-      ? `${WORDPRESS}/webx/v1/complaints/submit?tenant=${encodeURIComponent(tenant)}`
-      : `${WORDPRESS}/webx/v1/contact-messages?tenant=${encodeURIComponent(tenant)}`;
     const data = isComplaint
       ? {
           type: "รับเรื่องออนไลน์",
@@ -94,14 +94,13 @@ export function ContactForm({ tenant, children }: { tenant: string; children: (c
           message: fd.get("message"),
         };
     try {
-      const r = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, captchaId: captcha.id, captchaAnswer: fd.get("captchaAnswer") }),
-      });
+      // to webx-control when PUBLIC_CONTROL_URL is set (decision D6), else to WordPress (lib/wpForms.ts)
+      const { url, init } = wpFormRequest(isComplaint ? "complaint" : "contact-message", tenant, data,
+        { id: captcha.id, answer: String(fd.get("captchaAnswer") || "") });
+      const r = await fetch(url, init);
       if (!r.ok) {
         const body = await r.json().catch(() => null);
-        const wrongCaptcha = body?.code === "captcha_error";
+        const wrongCaptcha = isCaptchaRefusal(body);
         setStatus("error");
         setError(wrongCaptcha
           ? "คำตอบยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่"

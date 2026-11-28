@@ -34,7 +34,7 @@ import { controlAuditConfig, createControlAuditAdapter } from "./audit-store";
 import { CONTROL_READ_COLLECTIONS, CONTROL_RECORD_COLLECTIONS, createControlRecordsAdapter, fetchControlFile } from "./records-store";
 import { controlConsentQuery, mergedList } from "./consent-merge";
 import { controlStatQuery, mergedStats, tenantKeyOf } from "./stat-merge";
-import { controlFormQuery, decorateFormRow, editableFormFields, FORM_UIDS, FORM_UID_OF_COLLECTION } from "./form-merge";
+import { decorateFormRow, editableFormFields, FORM_UIDS, formInbox, formUidOf } from "./form-merge";
 import { controlQueueConfig, createControlQueueAdapter, QUEUE_COLLECTIONS } from "./queue-store";
 import type { AdminUser, CmsAdapter, ContentTypeInfo, EntryQuery, EntryList, CurrentUser, NewUserInput, RemoveUserResult, MediaAsset, MediaAssetList, FilterOp } from "./types";
 import { digestContentType, wordpressAttributes, type ContentTypeSchema } from "@/lib/agent/schemaDigest";
@@ -3071,8 +3071,13 @@ export const governed = {
         // withTenantFilter (see its own comment) strips any client-supplied
         // condition on this same field first — a naive spread-and-append
         // here is not actually safe against a crafted duplicate filter.
-        const filter = withTenantFilter(query?.filter, "tenant.key", "eq", eff?.key ?? "__unscoped__");
-        return cms.entries.list<T>(uid, { ...query, filter });
+        const scope = (q?: EntryQuery): EntryQuery => ({ ...q, filter: withTenantFilter(q?.filter, "tenant.key", "eq", eff?.key ?? "__unscoped__") });
+        const ctl = FORM_UIDS.has(uid) ? controlReadAdapter() : null;
+        if (!ctl) return cms.entries.list<T>(uid, scope(query));
+        // Decision D6: a WordPress tenant's forms move to the control plane as well, so its inbox lists WordPress's submissions
+        // and the ones the control plane has taken since, as one (lib/cms/form-merge.ts), each side scoped to the workspace
+        // and failing closed alike when none resolved.
+        return formInbox(uid, query, eff?.key ?? "__unscoped__", (q) => cms.entries.list<any>(uid, scope(q)), ctl) as Promise<EntryList<T>>;
       }
       if (uid === REVIEW_UID) {
         // Same fail-closed convention as WP_SCOPED above, against the
@@ -3168,14 +3173,7 @@ export const governed = {
         // ones it has taken, scoped here by the workspace key; listed as one (lib/cms/form-merge.ts).
         const ctl = controlReadAdapter();
         if (!ctl) return cms.entries.list<T>(uid, query);
-        return mergedList<any>(
-          (q) => cms.entries.list<any>(uid, q),
-          async (q) => {
-            const r = await ctl.entries.list<any>(uid, controlFormQuery(q, eff?.key ?? null));
-            return { ...r, data: r.data.map(decorateFormRow) };
-          },
-          query,
-        ) as Promise<EntryList<T>>;
+        return formInbox(uid, query, eff?.key ?? null, (q) => cms.entries.list<any>(uid, q), ctl) as Promise<EntryList<T>>;
       }
       return cms.entries.list<T>(uid, query);
     });
@@ -3266,7 +3264,8 @@ export const governed = {
     if (r.status === 404) throw new CmsError("Not Found", 404);
     if (!r.ok) throw new CmsError("The file could not be read", 502);
     if (eff && (r.headers.get("x-file-tenant") || "") !== eff.key) throw new CmsError("Cross-tenant operation not permitted", 403);
-    const uid = FORM_UID_OF_COLLECTION[r.headers.get("x-file-collection") || ""];
+    // what the workspace's custom roles call this form: wp:complaint in a WordPress workspace (decision D6)
+    const uid = formUidOf(r.headers.get("x-file-collection") || "", eff?.engine);
     if (!uid) throw new CmsError("Not Found", 404);
     const crp = await resolveCustomRolePermissions(user, eff, uid);
     if (crp && !crp.view) throw new CmsError("Your role does not permit viewing this content", 403);

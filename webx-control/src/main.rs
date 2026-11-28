@@ -23,6 +23,7 @@
 //! Admin (Authorization: Bearer <WEBX_CONTROL_ADMIN_TOKEN>):
 //!   GET /admin/tenants, GET|PUT|DELETE /admin/tenants/<key>
 //!   GET|PUT|DELETE /admin/tenants/<key>/identity   how a workspace signs in: mode, provider, client, MFA policy (see sessions.rs)
+//!   GET|PUT|DELETE /admin/tenants/<key>/forms      a workspace's own reference prefix and staff address (see form_settings.rs)
 //!   GET /admin/users, GET|PUT|DELETE /admin/users/<email>, GET|PUT /admin/users/<email>/identities
 //! Identity, in steps (docs/c4-identity-plan.md): tokens and keys are identity.rs, sessions are sessions.rs, roles are roles.rs.
 //!   GET /.well-known/jwks.json, GET /api/auth/me          public / with a token
@@ -34,6 +35,7 @@
 mod assist;
 mod audit;
 mod files;
+mod form_settings;
 mod forms;
 mod llm;
 mod mailer;
@@ -399,7 +401,10 @@ fn queue_mail(app: &App, conn: &rusqlite::Connection, cipher: &pii::Pii, collect
             row.insert(f.into(), v.clone());
         }
     }
-    for m in outbox::notices(collection, &Value::Object(row), app.notify_to.as_deref()) {
+    // the staff notice goes to the workspace's own address when it has one (form_settings.rs, decision D6)
+    let workspace = row.get("tenantKey").and_then(Value::as_str).unwrap_or("").to_string();
+    let staff = form_settings::notify_email(conn, &workspace, app.notify_to.as_deref());
+    for m in outbox::notices(collection, &Value::Object(row), staff.as_deref()) {
         if let Err(e) = outbox::enqueue(conn, cipher, &m, now_ms()) {
             eprintln!("[webx-control] could not queue a {} mail: {e}", m.kind);
         }
@@ -895,7 +900,40 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
             Ok(false) => not_found(),
             Err(m) => fail(m),
         },
-        // the workspace, its sign-in settings and every session in it go together, or none of them does
+        // a registered workspace's own settings for its form inboxes: reference prefix and staff address (form_settings.rs, D6)
+        (method @ ("GET" | "PUT" | "DELETE"), ["tenants", key, "forms"]) => {
+            match registry::get(&conn, key) {
+                Ok(Some(_)) => {}
+                Ok(None) => return not_found(),
+                Err(m) => return fail(m),
+            }
+            let show = |conn: &rusqlite::Connection| match form_settings::get(conn, key) {
+                Ok(s) => Json(json!({"data": s.to_json()})).into_response(),
+                Err(m) => fail(m),
+            };
+            match method {
+                "GET" => show(&conn),
+                "PUT" => {
+                    let v: Value = match serde_json::from_slice(&body) {
+                        Ok(v) => v,
+                        Err(_) => return error(StatusCode::BAD_REQUEST, "ValidationError", "body is not JSON"),
+                    };
+                    match form_settings::put(&conn, key, &v, &now_iso()) {
+                        Ok(created) => {
+                            let r = show(&conn);
+                            if created { (StatusCode::CREATED, r).into_response() } else { r }
+                        }
+                        Err(m) => error(StatusCode::BAD_REQUEST, "ValidationError", &m),
+                    }
+                }
+                _ => match form_settings::delete(&conn, key) {
+                    Ok(true) => Json(json!({"data": null})).into_response(),
+                    Ok(false) => not_found(),
+                    Err(m) => fail(m),
+                },
+            }
+        }
+        // the workspace, its sign-in settings, its form settings and every session in it go together, or none of them does
         ("DELETE", ["tenants", key]) => {
             let removed = (|| -> Result<bool, String> {
                 let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -903,6 +941,7 @@ async fn admin(State(app): State<Shared>, method: axum::http::Method, headers: H
                     return Ok(false);
                 }
                 sessions::workspace_removed(&tx, key, now_secs())?;
+                form_settings::delete(&tx, key)?;
                 tx.commit().map_err(|e| e.to_string())?;
                 Ok(true)
             })();
@@ -1526,6 +1565,7 @@ async fn main() {
     conn.execute_batch(search_stats::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(files::DDL).unwrap_or_else(|e| panic!("{e}"));
     conn.execute_batch(outbox::DDL).unwrap_or_else(|e| panic!("{e}"));
+    conn.execute_batch(form_settings::DDL).unwrap_or_else(|e| panic!("{e}"));
     let keys = identity::Keys::load(&conn, env_nonempty("WEBX_CONTROL_SIGNING_KEY").as_deref(), env_nonempty("WEBX_CONTROL_SIGNING_KEY_PREVIOUS").as_deref()).unwrap_or_else(|e| panic!("{e}"));
     // trimmed: spaces at either end can never be sent (HTTP drops them from a header), so they are not part of a credential, and two
     // values that differ only there are the same credential

@@ -40,6 +40,10 @@ export const CONTROL_READ_COLLECTIONS: Record<string, string> = {
   "api::application.application": "application",
   "api::registration.registration": "registration",
   "api::contact-message.contact-message": "contact-message",
+  // a WordPress tenant's form inboxes (decision D6): the same collections, read next to WordPress's own posts
+  "wp:complaint": "complaint",
+  "wp:application": "application",
+  "wp:contact-message": "contact-message",
 };
 
 /** A file the control plane keeps for a form (a complaint's attachment, an application's résumé), as the response it gives: the

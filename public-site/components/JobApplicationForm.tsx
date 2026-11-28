@@ -9,9 +9,12 @@
 // submit route runs entirely in trusted server PHP — no public REST upload
 // capability needed — so resume upload is now safe to add for real, and the
 // reference number is generated server-side (dropping the old client-side
-// refNumber() helper, which could collide or be spoofed).
+// refNumber() helper, which could collide or be spoofed). Decision D6 sends
+// it to the WebX control plane instead when PUBLIC_CONTROL_URL is set
+// (lib/wpForms.ts), where the resume is kept encrypted like Strapi tenants' files.
 import { useState, type FormEvent } from "react";
-import { useCaptcha, WORDPRESS } from "@/lib/useCaptcha";
+import { useCaptcha } from "@/lib/useCaptcha";
+import { isCaptchaRefusal, wpFormRequest } from "@/lib/wpForms";
 import type { JobPosting } from "@/lib/cms";
 
 type Status = "idle" | "sending" | "sent" | "error";
@@ -37,25 +40,22 @@ export default function JobApplicationForm({ tenant, jobs }: { tenant: string; j
     setStatus("sending");
     setError("");
     try {
-      const body = new FormData();
-      body.set("jobId", jobId);
-      body.set("position", position);
-      body.set("name", String(fd.get("name") || ""));
-      body.set("email", String(fd.get("email") || ""));
-      if (fd.get("phone")) body.set("phone", String(fd.get("phone")));
-      if (fd.get("note")) body.set("note", String(fd.get("note")));
-      body.set("captchaId", captcha.id);
-      body.set("captchaAnswer", String(fd.get("captchaAnswer") || ""));
+      // to webx-control when PUBLIC_CONTROL_URL is set (decision D6), else to WordPress (lib/wpForms.ts); WordPress dates
+      // an application itself, webx-control keeps the date it is sent
       const resume = fd.get("resume");
-      if (resume instanceof File && resume.size > 0) body.set("resume", resume);
-
-      const r = await fetch(`${WORDPRESS}/webx/v1/applications?tenant=${encodeURIComponent(tenant)}`, {
-        method: "POST",
-        body,
-      });
+      const { url, init } = wpFormRequest("application", tenant, {
+        jobId,
+        position,
+        name: String(fd.get("name") || ""),
+        email: String(fd.get("email") || ""),
+        phone: String(fd.get("phone") || ""),
+        note: String(fd.get("note") || ""),
+        date: new Date().toISOString(),
+      }, { id: captcha.id, answer: String(fd.get("captchaAnswer") || "") }, resume instanceof File ? resume : null);
+      const r = await fetch(url, init);
       if (!r.ok) {
         const respBody = await r.json().catch(() => null);
-        const wrongCaptcha = respBody?.code === "captcha_error";
+        const wrongCaptcha = isCaptchaRefusal(respBody);
         setStatus("error");
         setError(wrongCaptcha
           ? "คำตอบยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่"

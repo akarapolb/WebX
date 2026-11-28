@@ -8,10 +8,13 @@
 // challenge shape at its own URL — so useCaptcha() takes which engine to
 // hit rather than becoming two near-identical hooks. Default stays "strapi"
 // so FormBlock.tsx's existing `useCaptcha()` call (no args) is completely
-// unaffected by this.
+// unaffected by this. Since decision D6 a WordPress tenant's forms go to the
+// control plane too when PUBLIC_CONTROL_URL is set, and so does their
+// captcha (lib/wpForms.ts decides both).
 import { useEffect, useState, useCallback } from "react";
 
 import { PUBLIC_RUNTIME, PUBLIC_WP } from "@/lib/publicCms";
+import { wpCaptchaUrl, wpFormsBase } from "@/lib/wpForms";
 /** Where the forms and their captcha are: the WebX control plane when PUBLIC_CONTROL_URL is set (webx-control's forms.rs and
  *  captcha.rs), the CMS as before otherwise. The captcha and the form it guards must be one service, so both use this. */
 export const FORMS = PUBLIC_RUNTIME;
@@ -22,13 +25,13 @@ export type Captcha = { id: string; question: string };
 export type CaptchaEngine = "strapi" | "wordpress";
 
 function captchaUrl(engine: CaptchaEngine): string {
-  return engine === "wordpress" ? `${WORDPRESS}/webx/v1/captcha` : `${FORMS}/api/captcha`;
+  return engine === "wordpress" ? wpCaptchaUrl() : `${FORMS}/api/captcha`;
 }
 
 export function useCaptcha(engine: CaptchaEngine = "strapi") {
   const [captcha, setCaptcha] = useState<Captcha | null>(null);
   const refreshCaptcha = useCallback(async () => {
-    if (engine === "strapi" ? !FORMS : !WORDPRESS) return; // no CMS behind this copy
+    if (!(engine === "strapi" ? FORMS : wpFormsBase())) return; // nothing behind this copy to send the form to
     try {
       const r = await fetch(captchaUrl(engine), { cache: "no-store" });
       if (!r.ok) return;
