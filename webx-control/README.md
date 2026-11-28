@@ -231,7 +231,32 @@ Strapi hands over the personal data decrypted and this service encrypts it again
 `--dry-run` writes nothing; `--move` deletes each row from Strapi once it is verified here (without it a migrated row would be listed
 twice by Studio until Strapi's copy is deleted). `node tools/migrate-forms-test.mjs` runs it against the real binary and a fake Strapi.
 
-Not here yet: the WordPress-native forms (decision D6). Strapi's own `console/export` still reads only Strapi's table.
+**Moving WordPress's old submissions** (decision D6: ORST's and the Royal Society's complaints, job applications and contact
+messages) is optional too, for the day WordPress's copies are retired:
+
+```
+WORDPRESS_URL=.../wp-json WP_USER=... WP_APP_PASSWORD=... WEBX_WP_PII_KEY=... WEBX_CONTROL_URL=... WEBX_CONTROL_SERVICE_TOKEN=... \
+  node tools/migrate-wp-forms.mjs [--dry-run] [--move] [--default-tenant <key>]
+```
+
+It reads the `complaint`, `application` and `contact-message` posts over WordPress's REST API (an administrator's application
+password, not a tenant admin's: WordPress lets a tenant's admin delete only that tenant's posts; every status but trash) and writes each
+as a row of the collection of the same name: its ACF fields with the reference number, stage, steps (JSON text in WordPress, JSON here)
+and date, the post's times, and for a contact message the post's title as the sender's name. A row's workspace is the slug of its post's
+`wtenant` term (a post with none is reported, and filed under `--default-tenant` if given). WordPress keeps the name, e-mail and phone
+encrypted under its own key (`wordpress/mu-plugins/pii-crypto.php`): the tool decrypts them with `WEBX_WP_PII_KEY` and this service
+encrypts them again under `WEBX_PII_KEY`. A value WordPress never encrypted goes as it is; one that does not decrypt (the wrong key)
+stops the run, naming the post, before anything is written. Each complaint attachment and application résumé is downloaded from
+WordPress's media library and stored here, encrypted. A row's id is `wp-<collection>-<post id>`, not the bare post id Studio gives
+WordPress's copy (Studio looks an id up here first), so the tool can be run again: what is here is skipped, and a post whose id another
+submission holds here stops its form rather than be skipped or deleted. `--dry-run` reads and decrypts and writes nothing; `--move`
+deletes each post from WordPress for good once its row is verified here, and then its file from WordPress's media library (WordPress
+serves an upload to anyone who has its URL; a file it refuses to delete is reported, to be deleted there). At the end it prints each
+workspace's reference prefix (`orst: ORST`, `royalsociety: RS`) and the `PUT /admin/tenants/<key>/forms` that keeps it for new
+submissions; WordPress's application references read `<prefix>-APP-...` where new ones here read `<prefix>-JOB-...`.
+`node tools/migrate-wp-forms-test.mjs` runs it against the real binary and a fake WordPress.
+
+Strapi's own `console/export` still reads only Strapi's table.
 
 ## Admin API
 
@@ -533,6 +558,7 @@ node tools/build-test.mjs --no-check-export                # a site build readin
 node tools/visitors-test.mjs                               # the consent route: stored as given, limits, rate limit, CORS, summary, restart
 node tools/forms-test.mjs                                  # the form inboxes: encryption at rest, references, tracking, captcha, attachments, mail over SMTP
 node tools/migrate-forms-test.mjs                          # moving Strapi's submissions and their files here, against a fake Strapi
+node tools/migrate-wp-forms-test.mjs                       # moving WordPress's submissions and their files here (personal data decrypted from its key), against a fake WordPress
 node tools/migrate-records-test.mjs                        # moving Strapi's templates, versions, threads, reviews (workspace key from the relation) and releases here
 node tools/identity-test.mjs                               # tokens, keys and rotation, the broker and engine credentials
 node tools/sessions-test.mjs                               # sign-in decisions, refresh and theft, ending sessions, workspace mode, roles, the client secret

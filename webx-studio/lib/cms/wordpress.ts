@@ -34,10 +34,14 @@ const BASE = WORDPRESS_URL;
 // needs to decrypt, mirroring Strapi's own transparent afterFindOne/
 // afterFindMany decryption so FormsInbox/EntryEditor never see ciphertext.
 const PII_ALGO = "aes-256-gcm";
+/** Exactly what webx_pii_encrypt() writes: a 12-byte IV (16 base64 characters), the ciphertext, a 16-byte tag (22 and "==").
+ * WordPress's own test before encrypting is looser (any three base64-looking parts), so a plain value such as the phone number
+ * 02.123.4567 passed it and was stored as sent, unencrypted: read as plain here, where trying to decrypt it would fail the
+ * whole list. A value of this exact shape that does not decrypt (the wrong key, damaged data) still throws. */
 function looksEncrypted(v: unknown): v is string {
   if (typeof v !== "string") return false;
-  const parts = v.split(".");
-  return parts.length === 3 && parts.every((p) => p.length > 0 && /^[A-Za-z0-9+/]+=*$/.test(p));
+  const p = v.split(".");
+  return p.length === 3 && /^[A-Za-z0-9+/]{16}$/.test(p[0]) && /^[A-Za-z0-9+/]+={0,2}$/.test(p[1]) && p[1].length % 4 === 0 && /^[A-Za-z0-9+/]{22}==$/.test(p[2]);
 }
 function decryptPii(value: string): string {
   if (!looksEncrypted(value)) return value; // legacy/plaintext row, or genuinely empty — never throw on those
@@ -54,6 +58,8 @@ function decryptPii(value: string): string {
 const PII_FIELDS: Record<string, string[]> = {
   "wp:complaint": ["name", "email", "phone"],
   "wp:application": ["name", "email", "phone"],
+  // the sender's name is the post title, kept plain; e-mail and phone are encrypted (they were shown as ciphertext until 2026-11-28)
+  "wp:contact-message": ["email", "phone"],
 };
 function decryptPiiFields(uid: string, entry: any): any {
   const fields = PII_FIELDS[uid];
